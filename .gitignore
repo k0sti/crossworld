@@ -1,0 +1,15 @@
+# Reference projects (not part of repo)
+ref
+
+# Dependencies
+node_modules
+
+# Build outputs
+target/
+dist/
+packages/quad/
+
+# Environment
+.env
+.env.local
+
