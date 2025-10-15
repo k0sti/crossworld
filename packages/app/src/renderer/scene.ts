@@ -236,6 +236,39 @@ export class SceneManager {
   }
 
   /**
+   * Create a voxel avatar from a .vox file
+   */
+  async createVoxelAvatarFromVoxFile(voxUrl: string, userNpub: string, scale: number = 1.0): Promise<void> {
+    // Import the loadVoxFromUrl function
+    const { loadVoxFromUrl } = await import('../utils/voxLoader');
+
+    try {
+      // Load .vox file and get geometry
+      const geometryData = await loadVoxFromUrl(voxUrl, userNpub);
+
+      // Remove existing voxel avatar
+      if (this.voxelAvatar) {
+        this.scene.remove(this.voxelAvatar.getObject3D());
+        this.voxelAvatar.dispose();
+      }
+
+      // Create new voxel avatar
+      this.voxelAvatar = new VoxelAvatar({ userNpub, scale }, 4, 4);
+
+      // Apply geometry from .vox file
+      this.voxelAvatar.applyGeometry(geometryData);
+
+      // Add to scene
+      this.scene.add(this.voxelAvatar.getObject3D());
+
+      console.log(`Created voxel avatar from .vox file: ${voxUrl}`);
+    } catch (error) {
+      console.error('Failed to load .vox avatar:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Remove voxel avatar from scene
    */
   removeVoxelAvatar(): void {

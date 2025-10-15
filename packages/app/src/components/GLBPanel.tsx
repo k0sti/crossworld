@@ -2,13 +2,12 @@ import { useState, useRef } from 'react';
 import { Box, Input, Button, VStack, Text, Heading, Divider } from '@chakra-ui/react';
 import { ReadyPlayerMeService } from '../services/ready-player-me';
 
-interface AvatarDebugPanelProps {
+interface GLBPanelProps {
   onAvatarUrlChange: (url: string) => void;
-  onCreateVoxelAvatar?: () => void;
   currentUrl?: string;
 }
 
-export function AvatarDebugPanel({ onAvatarUrlChange, currentUrl }: AvatarDebugPanelProps) {
+export function GLBPanel({ onAvatarUrlChange, currentUrl }: GLBPanelProps) {
   const [inputUrl, setInputUrl] = useState(currentUrl || '');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -114,9 +113,6 @@ export function AvatarDebugPanel({ onAvatarUrlChange, currentUrl }: AvatarDebugP
           </Button>
         </VStack>
 
-        <Text fontSize="2xs" color="gray.500" textAlign="center">
-          💡 Toggle to voxel mode in settings
-        </Text>
       </VStack>
     </Box>
   );
