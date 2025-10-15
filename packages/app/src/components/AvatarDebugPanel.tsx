@@ -1,13 +1,14 @@
 import { useState } from 'react';
-import { Box, Input, Button, VStack, Text, Heading } from '@chakra-ui/react';
+import { Box, Input, Button, VStack, Text, Heading, Divider } from '@chakra-ui/react';
 import { ReadyPlayerMeService } from '../services/ready-player-me';
 
 interface AvatarDebugPanelProps {
   onAvatarUrlChange: (url: string) => void;
+  onCreateVoxelAvatar?: () => void;
   currentUrl?: string;
 }
 
-export function AvatarDebugPanel({ onAvatarUrlChange, currentUrl }: AvatarDebugPanelProps) {
+export function AvatarDebugPanel({ onAvatarUrlChange, onCreateVoxelAvatar, currentUrl }: AvatarDebugPanelProps) {
   const [inputUrl, setInputUrl] = useState(currentUrl || '');
 
   const handleLoadAvatar = () => {
@@ -79,6 +80,28 @@ export function AvatarDebugPanel({ onAvatarUrlChange, currentUrl }: AvatarDebugP
 
         <Text fontSize="2xs" color="gray.500">
           💡 readyplayer.me
+        </Text>
+
+        <Divider borderColor="rgba(255, 255, 255, 0.1)" />
+
+        <VStack align="stretch" spacing={1.5}>
+          <Text fontSize="2xs" color="gray.400">
+            Voxel Avatar:
+          </Text>
+
+          <Button
+            size="xs"
+            fontSize="2xs"
+            colorScheme="green"
+            onClick={onCreateVoxelAvatar}
+            width="100%"
+          >
+            Create Voxel Avatar
+          </Button>
+        </VStack>
+
+        <Text fontSize="2xs" color="gray.500">
+          🎮 Procedural voxel character
         </Text>
       </VStack>
     </Box>

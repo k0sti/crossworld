@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { Avatar } from './avatar';
+import { VoxelAvatar } from './voxel-avatar';
+import type { AvatarEngine } from '@workspace/wasm';
 
 export class SceneManager {
   private scene: THREE.Scene;
@@ -7,6 +9,8 @@ export class SceneManager {
   private renderer: THREE.WebGLRenderer;
   private geometryMesh: THREE.Mesh | null = null;
   private avatar: Avatar | null = null;
+  private voxelAvatar: VoxelAvatar | null = null;
+  private avatarEngine: AvatarEngine | null = null;
   private raycaster: THREE.Raycaster;
   private mouse: THREE.Vector2;
   private cameraOffset: THREE.Vector3;
@@ -51,7 +55,8 @@ export class SceneManager {
 
   private setupMouseListener(canvas: HTMLCanvasElement): void {
     canvas.addEventListener('click', (event) => {
-      if (!this.avatar || !this.geometryMesh) return;
+      // Need either avatar and geometry mesh to handle clicks
+      if ((!this.avatar && !this.voxelAvatar) || !this.geometryMesh) return;
 
       // Calculate mouse position in normalized device coordinates (-1 to +1)
       const rect = canvas.getBoundingClientRect();
@@ -69,7 +74,14 @@ export class SceneManager {
         // Clamp to ground bounds (0-8 range)
         const clampedX = Math.max(0.5, Math.min(7.5, point.x));
         const clampedZ = Math.max(0.5, Math.min(7.5, point.z));
-        this.avatar.setTargetPosition(clampedX, clampedZ);
+
+        // Move whichever avatar exists
+        if (this.avatar) {
+          this.avatar.setTargetPosition(clampedX, clampedZ);
+        }
+        if (this.voxelAvatar) {
+          this.voxelAvatar.setTargetPosition(clampedX, clampedZ);
+        }
       }
     });
   }
@@ -138,6 +150,11 @@ export class SceneManager {
       this.avatar.update(deltaTime_s);
     }
 
+    // Update voxel avatar
+    if (this.voxelAvatar) {
+      this.voxelAvatar.update(deltaTime_s);
+    }
+
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -178,6 +195,65 @@ export class SceneManager {
   }
 
   hasAvatar(): boolean {
-    return this.avatar !== null;
+    return this.avatar !== null || this.voxelAvatar !== null;
+  }
+
+  /**
+   * Initialize the avatar engine for voxel avatars
+   */
+  setAvatarEngine(engine: AvatarEngine): void {
+    this.avatarEngine = engine;
+  }
+
+  /**
+   * Create a voxel avatar for a user
+   */
+  createVoxelAvatar(userNpub: string, scale: number = 1.0): void {
+    if (!this.avatarEngine) {
+      console.error('Avatar engine not initialized');
+      return;
+    }
+
+    // Remove existing voxel avatar
+    if (this.voxelAvatar) {
+      this.scene.remove(this.voxelAvatar.getObject3D());
+      this.voxelAvatar.dispose();
+    }
+
+    // Create new voxel avatar
+    this.voxelAvatar = new VoxelAvatar({ userNpub, scale }, 4, 4);
+
+    // Generate geometry from Rust
+    const geometryData = this.avatarEngine.generate_avatar(userNpub);
+
+    // Apply geometry to avatar
+    this.voxelAvatar.applyGeometry(geometryData);
+
+    // Add to scene
+    this.scene.add(this.voxelAvatar.getObject3D());
+
+    console.log(`Created voxel avatar for ${userNpub}`);
+  }
+
+  /**
+   * Remove voxel avatar from scene
+   */
+  removeVoxelAvatar(): void {
+    if (this.voxelAvatar) {
+      this.scene.remove(this.voxelAvatar.getObject3D());
+      this.voxelAvatar.dispose();
+      this.voxelAvatar = null;
+
+      // Reset camera to default position
+      this.camera.position.set(8, 6, 8);
+      this.camera.lookAt(4, 0, 4);
+    }
+  }
+
+  /**
+   * Get the current voxel avatar
+   */
+  getVoxelAvatar(): VoxelAvatar | null {
+    return this.voxelAvatar;
   }
 }
