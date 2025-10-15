@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Box, Input, Button, VStack, Text, Heading, Divider } from '@chakra-ui/react';
+import { Box, Input, Button, VStack, Text, Divider } from '@chakra-ui/react';
 import { ReadyPlayerMeService } from '../services/ready-player-me';
 
 interface GLBPanelProps {
@@ -33,20 +33,40 @@ export function GLBPanel({ onAvatarUrlChange, currentUrl }: GLBPanelProps) {
   return (
     <Box
       position="fixed"
-      bottom={3}
-      left={3}
-      bg="rgba(0, 0, 0, 0.8)"
+      top="60px"
+      right="20px"
+      zIndex={1500}
+      bg="rgba(0, 0, 0, 0.1)"
       backdropFilter="blur(8px)"
-      border="1px solid rgba(255, 255, 255, 0.1)"
-      p={3}
-      borderRadius="md"
-      maxW="280px"
-      zIndex={1000}
+      p={4}
+      minW="280px"
+      maxW="320px"
+      _before={{
+        content: '""',
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: `
+          radial-gradient(ellipse at 20% 30%, rgba(255, 255, 255, 0.03) 0%, transparent 50%),
+          radial-gradient(ellipse at 80% 70%, rgba(255, 255, 255, 0.03) 0%, transparent 50%),
+          repeating-linear-gradient(
+            45deg,
+            transparent,
+            transparent 10px,
+            rgba(255, 255, 255, 0.01) 10px,
+            rgba(255, 255, 255, 0.01) 20px
+          )
+        `,
+        pointerEvents: 'none',
+        zIndex: -1,
+      }}
     >
-      <VStack align="stretch" spacing={2}>
-        <Heading size="xs" color="white" fontWeight="semibold">
-          GLB Avatar Loader
-        </Heading>
+      <VStack align="stretch" spacing={3}>
+        <Text fontSize="md" fontWeight="semibold" color="white">
+          🎭 GLB Avatar
+        </Text>
 
         <VStack align="stretch" spacing={1.5}>
           <Text fontSize="2xs" color="gray.400">

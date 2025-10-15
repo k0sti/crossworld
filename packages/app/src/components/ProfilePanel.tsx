@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
-import { Box, VStack, Text, Avatar, HStack, Divider, Flex } from '@chakra-ui/react'
-import { FiUser } from 'react-icons/fi'
+import { Box, VStack, Text, Avatar, HStack, Divider, Flex, IconButton, Tooltip, useToast, SimpleGrid } from '@chakra-ui/react'
+import { FiUser, FiCopy } from 'react-icons/fi'
 import { npubEncode } from 'nostr-tools/nip19'
 import { Relay } from 'applesauce-relay'
+import { pubkey_to_emoji } from '@workspace/wasm'
 import { DEFAULT_RELAYS } from '../config'
 
 interface ProfileMetadata {
@@ -19,8 +20,21 @@ interface ProfilePanelProps {
 
 export function ProfilePanel({ pubkey, onClose }: ProfilePanelProps) {
   const [profile, setProfile] = useState<ProfileMetadata | null>(null)
+  const toast = useToast()
   const npub = pubkey ? npubEncode(pubkey) : ''
   const displayNpub = npub ? `${npub.slice(0, 12)}...${npub.slice(-8)}` : ''
+  const emojiHash = pubkey ? pubkey_to_emoji(pubkey) : ''
+  const emojiArray = Array.from(emojiHash)
+
+  const copyNpub = () => {
+    navigator.clipboard.writeText(npub)
+    toast({
+      title: 'npub copied',
+      status: 'success',
+      duration: 2000,
+      isClosable: true,
+    })
+  }
 
   useEffect(() => {
     if (pubkey) {
@@ -86,9 +100,8 @@ export function ProfilePanel({ pubkey, onClose }: ProfilePanelProps) {
   return (
     <Box
       position="fixed"
-      top="220px"
-      left="50%"
-      transform="translateX(-50%)"
+      top="60px"
+      left="68px"
       zIndex={1500}
       bg="rgba(0, 0, 0, 0.1)"
       backdropFilter="blur(8px)"
@@ -134,28 +147,44 @@ export function ProfilePanel({ pubkey, onClose }: ProfilePanelProps) {
               {displayName}
             </Text>
 
-            <VStack align="stretch" gap={2}>
-              <HStack>
-                <Text fontSize="sm" color="whiteAlpha.600" minW="100px">Public Key:</Text>
-                <Text fontSize="sm" color="white" fontFamily="monospace">{displayNpub}</Text>
-              </HStack>
+            <Flex justify="center" py={2}>
+              <SimpleGrid columns={9} gap={1}>
+                {emojiArray.map((emoji, index) => (
+                  <Text key={index} fontSize="2xl" lineHeight="1">
+                    {emoji}
+                  </Text>
+                ))}
+              </SimpleGrid>
+            </Flex>
 
-              <Divider borderColor="whiteAlpha.200" />
+            <VStack align="stretch" gap={2}>
+              <HStack justify="space-between">
+                <Text fontSize="sm" color="whiteAlpha.600">Public Key:</Text>
+                <HStack>
+                  <Text fontSize="xs" color="white" fontFamily="monospace">{displayNpub}</Text>
+                  <Tooltip label="Copy npub">
+                    <IconButton
+                      aria-label="Copy npub"
+                      icon={<FiCopy />}
+                      size="xs"
+                      variant="ghost"
+                      onClick={copyNpub}
+                      color="whiteAlpha.700"
+                      _hover={{ color: 'white' }}
+                    />
+                  </Tooltip>
+                </HStack>
+              </HStack>
 
               {profile?.about && (
                 <>
+                  <Divider borderColor="whiteAlpha.200" />
                   <VStack align="stretch" gap={1}>
                     <Text fontSize="sm" color="whiteAlpha.600">About:</Text>
                     <Text fontSize="sm" color="white">{profile.about}</Text>
                   </VStack>
-                  <Divider borderColor="whiteAlpha.200" />
                 </>
               )}
-
-              <VStack align="stretch" gap={1}>
-                <Text fontSize="sm" color="whiteAlpha.600">Avatar Model:</Text>
-                <Text fontSize="sm" color="white">Voxel-based procedural avatar</Text>
-              </VStack>
             </VStack>
           </>
         ) : (

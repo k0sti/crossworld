@@ -1,21 +1,16 @@
 import { useState, useEffect } from 'react'
 import {
   HStack,
-  VStack,
   Avatar,
   Text,
   IconButton,
   useToast,
-  Tooltip,
-  SimpleGrid,
 } from '@chakra-ui/react'
-import { FiLogIn, FiLogOut, FiUser, FiCopy } from 'react-icons/fi'
+import { FiLogIn, FiUser } from 'react-icons/fi'
 import { ExtensionAccount } from 'applesauce-accounts/accounts'
 import { ExtensionSigner } from 'applesauce-signers'
 import { useAccountManager } from 'applesauce-react/hooks'
 import { Relay } from 'applesauce-relay'
-import { nip19 } from 'nostr-tools'
-import { pubkey_to_emoji } from '@workspace/wasm'
 import { DEFAULT_RELAYS } from '../config'
 
 interface ProfileMetadata {
@@ -155,41 +150,16 @@ export function ProfileButton({ pubkey, onLogin, onLogout }: ProfileButtonProps)
     )
   }
 
-  const npub = nip19.npubEncode(pubkey)
-  const emojiHash = pubkey_to_emoji(pubkey)
   const displayName = profile?.display_name || profile?.name || null
-
-  // Split emoji hash into array (4 emojis)
-  const emojiArray = Array.from(emojiHash)
-
-  const copyNpub = () => {
-    navigator.clipboard.writeText(npub)
-    toast({
-      title: 'npub copied',
-      status: 'success',
-      duration: 2000,
-      isClosable: true,
-    })
-  }
 
   return (
     <HStack gap={2}>
-      <Avatar src={profile?.picture} icon={<FiUser />} name={displayName || emojiHash} size="sm" />
+      <Avatar src={profile?.picture} icon={<FiUser />} name={displayName || pubkey} size="sm" />
       {displayName && (
         <Text fontSize="sm" fontWeight="medium" color="white" lineHeight="1">
           {displayName}
         </Text>
       )}
-      <SimpleGrid columns={2} gap={0} w="32px">
-        {emojiArray.map((emoji, index) => (
-          <Text key={index} fontSize="sm" lineHeight="1">
-            {emoji}
-          </Text>
-        ))}
-      </SimpleGrid>
-      <Tooltip label="Copy npub">
-        <IconButton aria-label="Copy npub" icon={<FiCopy />} size="sm" variant="ghost" onClick={copyNpub} />
-      </Tooltip>
     </HStack>
   )
 }

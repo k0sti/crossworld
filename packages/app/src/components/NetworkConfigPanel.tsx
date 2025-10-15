@@ -241,9 +241,8 @@ export function NetworkConfigPanel({ onClose }: NetworkConfigPanelProps) {
   return (
     <Box
       position="fixed"
-      top="220px"
-      left="50%"
-      transform="translateX(-50%)"
+      top="60px"
+      left="68px"
       zIndex={1500}
       bg="rgba(0, 0, 0, 0.1)"
       backdropFilter="blur(8px)"

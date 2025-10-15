@@ -10,9 +10,10 @@ interface WorldCanvasProps {
   isLoggedIn: boolean;
   useVoxelAvatar: boolean;
   onToggleAvatarType: (useVoxel: boolean) => void;
+  isEditMode: boolean;
 }
 
-export function WorldCanvas({ isLoggedIn, useVoxelAvatar, onToggleAvatarType }: WorldCanvasProps) {
+export function WorldCanvas({ isLoggedIn, useVoxelAvatar, onToggleAvatarType, isEditMode }: WorldCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneManagerRef = useRef<SceneManager | null>(null);
   const geometryControllerRef = useRef<GeometryController | null>(null);
@@ -21,6 +22,8 @@ export function WorldCanvas({ isLoggedIn, useVoxelAvatar, onToggleAvatarType }: 
   const [avatarUrl, setAvatarUrl] = useState<string | undefined>();
   const [voxelModel, setVoxelModel] = useState<VoxelModelType>('boy');
   const [useVoxFile, setUseVoxFile] = useState(false);
+  const [useOriginalColors, setUseOriginalColors] = useState(false);
+  const [colorSeed, setColorSeed] = useState(() => Math.random().toString(36).substring(7));
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -80,31 +83,42 @@ export function WorldCanvas({ isLoggedIn, useVoxelAvatar, onToggleAvatarType }: 
     };
   }, []);
 
+  // Handle edit mode changes
+  useEffect(() => {
+    const sceneManager = sceneManagerRef.current;
+    if (!sceneManager) return;
+
+    sceneManager.setEditMode(isEditMode);
+  }, [isEditMode]);
+
   // Handle login state changes and avatar updates
   useEffect(() => {
     const sceneManager = sceneManagerRef.current;
     if (!sceneManager) return;
 
-    console.log('Avatar update triggered:', { isLoggedIn, useVoxelAvatar, voxelModel, useVoxFile });
+    console.log('Avatar update triggered:', { isLoggedIn, useVoxelAvatar, voxelModel, useVoxFile, useOriginalColors });
 
     if (isLoggedIn) {
       if (useVoxelAvatar) {
         // Remove old GLB avatar if exists
         sceneManager.removeAvatar();
 
-        // Create voxel avatar
-        const testNpub = 'npub1test' + Math.random().toString(36).substring(7);
+        // Create voxel avatar with color customization
+        // Use undefined for npub to get original colors, or a seed for randomized colors
+        const npubForColors = useOriginalColors ? undefined : `npub1seed${colorSeed}`;
+        // For generated avatars, always use a npub for color variation
+        const npubForGenerated = npubForColors || 'npub1default';
 
         if (useVoxFile) {
-          // Load from .vox file
+          // Load from .vox file - can use undefined for original colors
           const voxFilename = voxelModel === 'boy'
             ? 'chr_peasant_guy_blackhair.vox'
             : 'chr_peasant_girl_orangehair.vox';
           const voxUrl = `/assets/models/vox/${voxFilename}`;
 
-          console.log('Loading voxel avatar from file:', voxUrl);
+          console.log('Loading voxel avatar from file:', voxUrl, 'with colors:', useOriginalColors ? 'original' : 'randomized');
 
-          sceneManager.createVoxelAvatarFromVoxFile(voxUrl, testNpub, 1.0)
+          sceneManager.createVoxelAvatarFromVoxFile(voxUrl, npubForColors, 1.0)
             .then(() => {
               console.log('Successfully loaded voxel avatar from file');
             })
@@ -112,12 +126,12 @@ export function WorldCanvas({ isLoggedIn, useVoxelAvatar, onToggleAvatarType }: 
               console.error('Failed to load voxel avatar from file:', error);
               // Fallback to generated model
               console.log('Falling back to generated model');
-              sceneManager.createVoxelAvatar(testNpub, 1.0);
+              sceneManager.createVoxelAvatar(npubForGenerated, 1.0);
             });
         } else {
           // Use procedurally generated model
-          console.log('Creating procedurally generated voxel avatar');
-          sceneManager.createVoxelAvatar(testNpub, 1.0);
+          console.log('Creating procedurally generated voxel avatar with npub:', npubForGenerated);
+          sceneManager.createVoxelAvatar(npubForGenerated, 1.0);
         }
       } else {
         // Remove voxel avatar if exists
@@ -129,7 +143,7 @@ export function WorldCanvas({ isLoggedIn, useVoxelAvatar, onToggleAvatarType }: 
       sceneManager.removeAvatar();
       sceneManager.removeVoxelAvatar();
     }
-  }, [isLoggedIn, avatarUrl, useVoxelAvatar, voxelModel, useVoxFile]);
+  }, [isLoggedIn, avatarUrl, useVoxelAvatar, voxelModel, useVoxFile, useOriginalColors, colorSeed]);
 
   const handleAvatarUrlChange = (url: string) => {
     setAvatarUrl(url);
@@ -147,6 +161,19 @@ export function WorldCanvas({ isLoggedIn, useVoxelAvatar, onToggleAvatarType }: 
 
   const handleVoxelSourceChange = (useVox: boolean) => {
     setUseVoxFile(useVox);
+  };
+
+  const handleColorModeChange = (useOriginal: boolean) => {
+    setUseOriginalColors(useOriginal);
+  };
+
+  const handleRandomizeColors = () => {
+    setColorSeed(Math.random().toString(36).substring(7));
+  };
+
+  const handleCustomColor = (color: string) => {
+    // Convert hex color to RGB and create a seed from it
+    setColorSeed(`custom_${color}`);
   };
 
   return (
@@ -173,6 +200,10 @@ export function WorldCanvas({ isLoggedIn, useVoxelAvatar, onToggleAvatarType }: 
           onModelChange={handleVoxelModelChange}
           useVoxFile={useVoxFile}
           onSourceChange={handleVoxelSourceChange}
+          useOriginalColors={useOriginalColors}
+          onColorModeChange={handleColorModeChange}
+          onRandomizeColors={handleRandomizeColors}
+          onCustomColor={handleCustomColor}
         />
       )}
     </>

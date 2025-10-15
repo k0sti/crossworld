@@ -115,7 +115,8 @@ export class VoxelAvatar {
       .normalize();
 
     if (direction.length() > 0.01) {
-      const angle = Math.atan2(direction.x, direction.z);
+      // Add π to flip 180° because MagicaVoxel models face opposite direction
+      const angle = Math.atan2(direction.x, direction.z) + Math.PI;
       this.group.rotation.y = angle;
     }
   }
