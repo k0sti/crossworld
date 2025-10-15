@@ -7,16 +7,17 @@ import init, { AvatarEngine } from '@workspace/wasm';
 
 interface WorldCanvasProps {
   isLoggedIn: boolean;
+  useVoxelAvatar: boolean;
+  onToggleAvatarType: (useVoxel: boolean) => void;
 }
 
-export function WorldCanvas({ isLoggedIn }: WorldCanvasProps) {
+export function WorldCanvas({ isLoggedIn, useVoxelAvatar, onToggleAvatarType }: WorldCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneManagerRef = useRef<SceneManager | null>(null);
   const geometryControllerRef = useRef<GeometryController | null>(null);
   const avatarEngineRef = useRef<AvatarEngine | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | undefined>();
-  const [useVoxelAvatar, setUseVoxelAvatar] = useState(false);
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -83,10 +84,14 @@ export function WorldCanvas({ isLoggedIn }: WorldCanvasProps) {
 
     if (isLoggedIn) {
       if (useVoxelAvatar) {
+        // Remove old GLB avatar if exists
+        sceneManager.removeAvatar();
         // Create voxel avatar using a test npub
         const testNpub = 'npub1test' + Math.random().toString(36).substring(7);
         sceneManager.createVoxelAvatar(testNpub, 1.0);
       } else {
+        // Remove voxel avatar if exists
+        sceneManager.removeVoxelAvatar();
         sceneManager.createAvatar(avatarUrl, 1.0);
       }
     } else {
@@ -97,11 +102,11 @@ export function WorldCanvas({ isLoggedIn }: WorldCanvasProps) {
 
   const handleAvatarUrlChange = (url: string) => {
     setAvatarUrl(url);
-    setUseVoxelAvatar(false);
+    onToggleAvatarType(false);
   };
 
   const handleCreateVoxelAvatar = () => {
-    setUseVoxelAvatar(true);
+    onToggleAvatarType(true);
     setAvatarUrl(undefined);
   };
 
@@ -117,7 +122,7 @@ export function WorldCanvas({ isLoggedIn }: WorldCanvasProps) {
       >
         <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: '100%' }} />
       </Box>
-      {isLoggedIn && (
+      {isLoggedIn && !useVoxelAvatar && (
         <AvatarDebugPanel
           onAvatarUrlChange={handleAvatarUrlChange}
           onCreateVoxelAvatar={handleCreateVoxelAvatar}

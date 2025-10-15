@@ -67,6 +67,7 @@ export class VoxelAvatar {
       flatShading: true, // Maintains blocky voxel look
       specular: 0x111111,
       shininess: 30,
+      side: THREE.DoubleSide, // Render both sides to avoid holes
     });
 
     this.mesh = new THREE.Mesh(geometry, material);
@@ -77,22 +78,27 @@ export class VoxelAvatar {
     const scale = this.config.scale || 1.0;
     this.mesh.scale.set(scale, scale, scale);
 
-    // Center the mesh - voxel coordinates start at (0,0,0)
-    // We want the avatar centered and feet on ground
-    const box = new THREE.Box3().setFromObject(this.mesh);
-    const size = box.getSize(new THREE.Vector3());
+    // Calculate geometry bounds before adding to group
+    geometry.computeBoundingBox();
+    const bbox = geometry.boundingBox!;
 
-    // Center horizontally but keep feet on ground
-    this.mesh.position.x = -size.x / 2;
-    this.mesh.position.z = -size.z / 2;
-    this.mesh.position.y = 0; // Feet at y=0
+    // Center the mesh horizontally and place feet at y=0
+    // The voxel model is generated with (0,0,0) at one corner
+    // We need to offset so the model is centered at (0, 0, 0) in local space
+    // with feet touching y=0
+    this.mesh.position.x = -(bbox.min.x + bbox.max.x) / 2;
+    this.mesh.position.z = -(bbox.min.z + bbox.max.z) / 2;
+    this.mesh.position.y = -bbox.min.y; // Move up so bottom is at y=0
 
     this.group.add(this.mesh);
+
+    const size = new THREE.Vector3();
+    bbox.getSize(size);
 
     console.log(`VoxelAvatar created for ${this.config.userNpub}:`, {
       vertices: vertices.length / 3,
       triangles: indices.length / 3,
-      size
+      size: { x: size.x, y: size.y, z: size.z }
     });
   }
 

@@ -1,9 +1,11 @@
 mod geometry;
 mod avatar;
+mod emoji_hash;
 
 use wasm_bindgen::prelude::*;
 use geometry::GeometryEngine as GeometryEngineInternal;
 use avatar::AvatarManager;
+use emoji_hash::pubkey_to_emoji_hash;
 
 #[wasm_bindgen(start)]
 pub fn init() {
@@ -149,4 +151,10 @@ impl AvatarEngine {
     pub fn cache_size(&self) -> usize {
         self.manager.cache_size()
     }
+}
+
+/// Convert a hex pubkey to a 5-emoji hash for display
+#[wasm_bindgen]
+pub fn pubkey_to_emoji(pubkey_hex: String) -> String {
+    pubkey_to_emoji_hash(&pubkey_hex)
 }

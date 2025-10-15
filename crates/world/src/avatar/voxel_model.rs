@@ -92,6 +92,13 @@ impl VoxelModel {
     }
 
     /// Create a simple humanoid voxel model for testing
+    ///
+    /// Model specifications:
+    /// - Grid size: 16x32x16 voxels (width, height, depth)
+    /// - World size: 1.6 x 3.2 x 1.6 units (at 0.1 voxel size)
+    /// - Origin: (0, 0, 0) at grid corner, model centered at (8, 0, 8)
+    /// - Height: 28 voxels from feet (y=0) to head top (y=28)
+    /// - Colors: skin, shirt, pants, shoes
     pub fn create_simple_humanoid() -> Self {
         let mut model = Self::new(16, 32, 16);
 
