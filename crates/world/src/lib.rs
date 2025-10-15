@@ -1,7 +1,9 @@
 mod geometry;
+mod avatar;
 
 use wasm_bindgen::prelude::*;
 use geometry::GeometryEngine as GeometryEngineInternal;
+use avatar::AvatarManager;
 
 #[wasm_bindgen(start)]
 pub fn init() {
@@ -112,5 +114,39 @@ impl NetworkClient {
     pub async fn send_chat(&self, _message: String) -> Result<(), JsValue> {
         tracing::debug!("NetworkClient::send_chat called");
         Ok(())
+    }
+}
+
+#[wasm_bindgen]
+pub struct AvatarEngine {
+    manager: AvatarManager,
+}
+
+#[wasm_bindgen]
+impl AvatarEngine {
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> Self {
+        web_sys::console::log_1(&"AvatarEngine initialized".into());
+        Self {
+            manager: AvatarManager::new(),
+        }
+    }
+
+    /// Generate avatar geometry for a specific user
+    #[wasm_bindgen]
+    pub fn generate_avatar(&mut self, user_npub: String) -> GeometryData {
+        self.manager.generate_avatar_geometry(&user_npub)
+    }
+
+    /// Clear the avatar cache
+    #[wasm_bindgen]
+    pub fn clear_cache(&mut self) {
+        self.manager.clear_cache();
+    }
+
+    /// Get the number of cached avatars
+    #[wasm_bindgen]
+    pub fn cache_size(&self) -> usize {
+        self.manager.cache_size()
     }
 }
