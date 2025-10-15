@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Box } from '@chakra-ui/react';
 import { SceneManager } from '../renderer/scene';
 import { GeometryController } from '../geometry/geometry-controller';
-import { AvatarDebugPanel } from './AvatarDebugPanel';
+import { GLBPanel } from './GLBPanel';
+import { VoxelModelPanel, type VoxelModelType } from './VoxelModelPanel';
 import init, { AvatarEngine } from '@workspace/wasm';
 
 interface WorldCanvasProps {
@@ -18,6 +19,8 @@ export function WorldCanvas({ isLoggedIn, useVoxelAvatar, onToggleAvatarType }: 
   const avatarEngineRef = useRef<AvatarEngine | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | undefined>();
+  const [voxelModel, setVoxelModel] = useState<VoxelModelType>('boy');
+  const [useVoxFile, setUseVoxFile] = useState(false);
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -77,28 +80,56 @@ export function WorldCanvas({ isLoggedIn, useVoxelAvatar, onToggleAvatarType }: 
     };
   }, []);
 
-  // Handle login state changes
+  // Handle login state changes and avatar updates
   useEffect(() => {
     const sceneManager = sceneManagerRef.current;
     if (!sceneManager) return;
+
+    console.log('Avatar update triggered:', { isLoggedIn, useVoxelAvatar, voxelModel, useVoxFile });
 
     if (isLoggedIn) {
       if (useVoxelAvatar) {
         // Remove old GLB avatar if exists
         sceneManager.removeAvatar();
-        // Create voxel avatar using a test npub
+
+        // Create voxel avatar
         const testNpub = 'npub1test' + Math.random().toString(36).substring(7);
-        sceneManager.createVoxelAvatar(testNpub, 1.0);
+
+        if (useVoxFile) {
+          // Load from .vox file
+          const voxFilename = voxelModel === 'boy'
+            ? 'chr_peasant_guy_blackhair.vox'
+            : 'chr_peasant_girl_orangehair.vox';
+          const voxUrl = `/assets/models/vox/${voxFilename}`;
+
+          console.log('Loading voxel avatar from file:', voxUrl);
+
+          sceneManager.createVoxelAvatarFromVoxFile(voxUrl, testNpub, 1.0)
+            .then(() => {
+              console.log('Successfully loaded voxel avatar from file');
+            })
+            .catch(error => {
+              console.error('Failed to load voxel avatar from file:', error);
+              // Fallback to generated model
+              console.log('Falling back to generated model');
+              sceneManager.createVoxelAvatar(testNpub, 1.0);
+            });
+        } else {
+          // Use procedurally generated model
+          console.log('Creating procedurally generated voxel avatar');
+          sceneManager.createVoxelAvatar(testNpub, 1.0);
+        }
       } else {
         // Remove voxel avatar if exists
         sceneManager.removeVoxelAvatar();
+        console.log('Creating GLB avatar:', avatarUrl);
         sceneManager.createAvatar(avatarUrl, 1.0);
       }
     } else {
       sceneManager.removeAvatar();
       sceneManager.removeVoxelAvatar();
     }
-  }, [isLoggedIn, avatarUrl, useVoxelAvatar]);
+  }, [isLoggedIn, avatarUrl, useVoxelAvatar, voxelModel, useVoxFile]);
 
   const handleAvatarUrlChange = (url: string) => {
     setAvatarUrl(url);
@@ -108,6 +139,14 @@ export function WorldCanvas({ isLoggedIn, useVoxelAvatar, onToggleAvatarType }: 
   const handleCreateVoxelAvatar = () => {
     onToggleAvatarType(true);
     setAvatarUrl(undefined);
+  };
+
+  const handleVoxelModelChange = (model: VoxelModelType) => {
+    setVoxelModel(model);
+  };
+
+  const handleVoxelSourceChange = (useVox: boolean) => {
+    setUseVoxFile(useVox);
   };
 
   return (
@@ -123,10 +162,17 @@ export function WorldCanvas({ isLoggedIn, useVoxelAvatar, onToggleAvatarType }: 
         <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: '100%' }} />
       </Box>
       {isLoggedIn && !useVoxelAvatar && (
-        <AvatarDebugPanel
+        <GLBPanel
           onAvatarUrlChange={handleAvatarUrlChange}
-          onCreateVoxelAvatar={handleCreateVoxelAvatar}
           currentUrl={avatarUrl}
+        />
+      )}
+      {isLoggedIn && useVoxelAvatar && (
+        <VoxelModelPanel
+          currentModel={voxelModel}
+          onModelChange={handleVoxelModelChange}
+          useVoxFile={useVoxFile}
+          onSourceChange={handleVoxelSourceChange}
         />
       )}
     </>
