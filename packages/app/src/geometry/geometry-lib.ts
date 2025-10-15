@@ -1,0 +1,35 @@
+import init, { GeometryEngine, GeometryData } from 'crossworld-world';
+
+let wasmInitialized = false;
+let initPromise: Promise<void> | null = null;
+
+export async function initializeWasm(): Promise<void> {
+  if (wasmInitialized) return;
+  if (initPromise) return initPromise;
+
+  initPromise = init().then(() => {
+    wasmInitialized = true;
+    console.log('WASM module initialized');
+  });
+
+  return initPromise;
+}
+
+export class GeometryGenerator {
+  private engine: GeometryEngine | null = null;
+
+  async initialize(): Promise<void> {
+    await initializeWasm();
+    this.engine = new GeometryEngine();
+  }
+
+  generateFrame(): GeometryData | null {
+    if (!this.engine) {
+      console.error('GeometryEngine not initialized');
+      return null;
+    }
+    return this.engine.generate_frame();
+  }
+}
+
+export { GeometryEngine, GeometryData };

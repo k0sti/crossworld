@@ -7,7 +7,7 @@ node_modules
 # Build outputs
 target/
 dist/
-packages/quad/
+packages/wasm/
 
 # Environment
 .env
