@@ -20,7 +20,7 @@ function App() {
   return (
     <AccountsProvider manager={accountManager}>
       <ChakraProvider>
-        <WorldCanvas />
+        <WorldCanvas isLoggedIn={pubkey !== null} />
         <TopBar pubkey={pubkey} onLogin={handleLogin} onLogout={handleLogout} />
       </ChakraProvider>
     </AccountsProvider>

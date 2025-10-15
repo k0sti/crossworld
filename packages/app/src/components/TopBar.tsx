@@ -16,14 +16,14 @@ export function TopBar({ pubkey, onLogin, onLogout }: TopBarProps) {
       left={0}
       right={0}
       zIndex={1000}
-      bg="rgba(255, 255, 255, 0.9)"
-      backdropFilter="blur(10px)"
-      px={4}
+      bg="rgba(0, 0, 0, 0.5)"
+      backdropFilter="blur(8px)"
+      borderBottom="1px solid rgba(255, 255, 255, 0.1)"
+      px={3}
       py={2}
-      boxShadow="sm"
     >
       <Flex justify="space-between" align="center">
-        <Box fontSize="xl" fontWeight="bold">Crossworld</Box>
+        <Box fontSize="sm" fontWeight="semibold" color="white">Crossworld</Box>
         <ProfileButton pubkey={pubkey} onLogin={onLogin} onLogout={onLogout} />
       </Flex>
     </Box>
