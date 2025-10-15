@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Box, Input, Button, VStack, Text, Heading, Divider } from '@chakra-ui/react';
 import { ReadyPlayerMeService } from '../services/ready-player-me';
 
@@ -8,8 +8,9 @@ interface AvatarDebugPanelProps {
   currentUrl?: string;
 }
 
-export function AvatarDebugPanel({ onAvatarUrlChange, onCreateVoxelAvatar, currentUrl }: AvatarDebugPanelProps) {
+export function AvatarDebugPanel({ onAvatarUrlChange, currentUrl }: AvatarDebugPanelProps) {
   const [inputUrl, setInputUrl] = useState(currentUrl || '');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleLoadAvatar = () => {
     if (inputUrl.trim()) {
@@ -21,12 +22,21 @@ export function AvatarDebugPanel({ onAvatarUrlChange, onCreateVoxelAvatar, curre
     ReadyPlayerMeService.openAvatarCreator();
   };
 
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file && file.name.endsWith('.glb')) {
+      const url = URL.createObjectURL(file);
+      onAvatarUrlChange(url);
+      setInputUrl(file.name);
+    }
+  };
+
   return (
     <Box
       position="fixed"
       bottom={3}
       left={3}
-      bg="rgba(0, 0, 0, 0.6)"
+      bg="rgba(0, 0, 0, 0.8)"
       backdropFilter="blur(8px)"
       border="1px solid rgba(255, 255, 255, 0.1)"
       p={3}
@@ -36,7 +46,7 @@ export function AvatarDebugPanel({ onAvatarUrlChange, onCreateVoxelAvatar, curre
     >
       <VStack align="stretch" spacing={2}>
         <Heading size="xs" color="white" fontWeight="semibold">
-          Avatar Debug
+          GLB Avatar Loader
         </Heading>
 
         <VStack align="stretch" spacing={1.5}>
@@ -64,7 +74,7 @@ export function AvatarDebugPanel({ onAvatarUrlChange, onCreateVoxelAvatar, curre
             width="100%"
             isDisabled={!inputUrl.trim()}
           >
-            Load Avatar
+            Load from URL
           </Button>
 
           <Button
@@ -74,34 +84,38 @@ export function AvatarDebugPanel({ onAvatarUrlChange, onCreateVoxelAvatar, curre
             onClick={handleOpenCreator}
             width="100%"
           >
-            Create New
+            Create New (RPM)
           </Button>
         </VStack>
-
-        <Text fontSize="2xs" color="gray.500">
-          💡 readyplayer.me
-        </Text>
 
         <Divider borderColor="rgba(255, 255, 255, 0.1)" />
 
         <VStack align="stretch" spacing={1.5}>
           <Text fontSize="2xs" color="gray.400">
-            Voxel Avatar:
+            Load from Disk:
           </Text>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".glb"
+            onChange={handleFileSelect}
+            style={{ display: 'none' }}
+          />
 
           <Button
             size="xs"
             fontSize="2xs"
             colorScheme="green"
-            onClick={onCreateVoxelAvatar}
+            onClick={() => fileInputRef.current?.click()}
             width="100%"
           >
-            Create Voxel Avatar
+            Choose GLB File
           </Button>
         </VStack>
 
-        <Text fontSize="2xs" color="gray.500">
-          🎮 Procedural voxel character
+        <Text fontSize="2xs" color="gray.500" textAlign="center">
+          💡 Toggle to voxel mode in settings
         </Text>
       </VStack>
     </Box>

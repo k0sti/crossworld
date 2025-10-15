@@ -7,6 +7,7 @@ import { WorldCanvas } from './components/WorldCanvas'
 
 function App() {
   const [pubkey, setPubkey] = useState<string | null>(null)
+  const [useVoxelAvatar, setUseVoxelAvatar] = useState(true)
   const accountManager = useMemo(() => new AccountManager(), [])
 
   const handleLogin = (publicKey: string) => {
@@ -20,8 +21,18 @@ function App() {
   return (
     <AccountsProvider manager={accountManager}>
       <ChakraProvider>
-        <WorldCanvas isLoggedIn={pubkey !== null} />
-        <TopBar pubkey={pubkey} onLogin={handleLogin} onLogout={handleLogout} />
+        <WorldCanvas
+          isLoggedIn={pubkey !== null}
+          useVoxelAvatar={useVoxelAvatar}
+          onToggleAvatarType={setUseVoxelAvatar}
+        />
+        <TopBar
+          pubkey={pubkey}
+          onLogin={handleLogin}
+          onLogout={handleLogout}
+          useVoxelAvatar={useVoxelAvatar}
+          onToggleAvatarType={setUseVoxelAvatar}
+        />
       </ChakraProvider>
     </AccountsProvider>
   )
