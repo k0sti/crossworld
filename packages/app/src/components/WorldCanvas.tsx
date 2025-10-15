@@ -3,7 +3,7 @@ import { Box } from '@chakra-ui/react';
 import { SceneManager } from '../renderer/scene';
 import { GeometryController } from '../geometry/geometry-controller';
 import { AvatarDebugPanel } from './AvatarDebugPanel';
-import { AvatarEngine } from '@workspace/wasm';
+import init, { AvatarEngine } from '@workspace/wasm';
 
 interface WorldCanvasProps {
   isLoggedIn: boolean;
@@ -31,11 +31,15 @@ export function WorldCanvas({ isLoggedIn }: WorldCanvasProps) {
     // Initialize scene
     sceneManager.initialize(canvas);
 
-    // Initialize avatar engine
-    const avatarEngine = new AvatarEngine();
-    avatarEngineRef.current = avatarEngine;
-    sceneManager.setAvatarEngine(avatarEngine);
-    console.log('Avatar engine initialized');
+    // Initialize WASM and avatar engine
+    init().then(() => {
+      const avatarEngine = new AvatarEngine();
+      avatarEngineRef.current = avatarEngine;
+      sceneManager.setAvatarEngine(avatarEngine);
+      console.log('Avatar engine initialized');
+    }).catch((error) => {
+      console.error('Failed to initialize WASM/Avatar engine:', error);
+    });
 
     // Initialize geometry controller
     geometryController.initialize((geometry) => {
