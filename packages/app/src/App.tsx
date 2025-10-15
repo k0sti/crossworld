@@ -3,6 +3,7 @@ import { ChakraProvider } from '@chakra-ui/react'
 import { AccountsProvider } from 'applesauce-react/providers'
 import { AccountManager } from 'applesauce-accounts'
 import { TopBar } from './components/TopBar'
+import { WorldCanvas } from './components/WorldCanvas'
 
 function App() {
   const [pubkey, setPubkey] = useState<string | null>(null)
@@ -19,6 +20,7 @@ function App() {
   return (
     <AccountsProvider manager={accountManager}>
       <ChakraProvider>
+        <WorldCanvas />
         <TopBar pubkey={pubkey} onLogin={handleLogin} onLogout={handleLogout} />
       </ChakraProvider>
     </AccountsProvider>

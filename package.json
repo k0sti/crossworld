@@ -1,0 +1,7 @@
+{
+  "name": "crossworld",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ]
+}
