@@ -158,3 +158,23 @@ impl AvatarEngine {
 pub fn pubkey_to_emoji(pubkey_hex: String) -> String {
     pubkey_to_emoji_hash(&pubkey_hex)
 }
+
+/// Load a .vox file from bytes and generate geometry
+#[wasm_bindgen]
+pub fn load_vox_from_bytes(bytes: &[u8], user_npub: Option<String>) -> Result<GeometryData, JsValue> {
+    let voxel_model = avatar::load_vox_from_bytes(bytes)
+        .map_err(|e| JsValue::from_str(&format!("Failed to load .vox file: {}", e)))?;
+
+    // Apply user-specific color customization if npub provided
+    let customized_palette = if let Some(npub) = user_npub {
+        voxel_model.palette.customize_for_user(&npub)
+    } else {
+        voxel_model.palette.clone()
+    };
+
+    // Generate mesh from voxel model
+    let mesher = avatar::VoxelMesher::new(&voxel_model);
+    let (vertices, indices, normals, colors) = mesher.generate_mesh(&customized_palette);
+
+    Ok(GeometryData::new(vertices, indices, normals, colors))
+}

@@ -51,5 +51,14 @@ console_error_panic_hook = "0.1"
 # Async
 futures = "0.3"
 
+# Voxel model loading
+dot_vox = "5.1"
+
+# Getrandom (required for WASM)
+getrandom = { version = "0.3", features = ["wasm_js"] }
+
+# HTTP client (for loading .vox from URLs) - disabled for now, will implement with fetch API
+# reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+
 [dev-dependencies]
 wasm-bindgen-test = "0.3"
