@@ -15,6 +15,10 @@ export class SceneManager {
   private mouse: THREE.Vector2;
   private cameraOffset: THREE.Vector3;
   private lastTime: number = 0;
+  private isEditMode: boolean = false;
+  private gridHelper: THREE.GridHelper | null = null;
+  private previewCube: THREE.Mesh | null = null;
+  private currentGridPosition: THREE.Vector3 = new THREE.Vector3();
 
   constructor() {
     this.scene = new THREE.Scene();
@@ -50,11 +54,16 @@ export class SceneManager {
 
     this.setupLights();
     this.setupMouseListener(canvas);
+    this.setupMouseMoveListener(canvas);
+    this.setupEditModeHelpers();
     this.lastTime = performance.now();
   }
 
   private setupMouseListener(canvas: HTMLCanvasElement): void {
     canvas.addEventListener('click', (event) => {
+      // Don't move avatar in edit mode
+      if (this.isEditMode) return;
+
       // Need either avatar and geometry mesh to handle clicks
       if ((!this.avatar && !this.voxelAvatar) || !this.geometryMesh) return;
 
@@ -103,6 +112,68 @@ export class SceneManager {
 
     const hemisphereLight = new THREE.HemisphereLight(0x87ceeb, 0x080820, 0.5);
     this.scene.add(hemisphereLight);
+  }
+
+  private setupEditModeHelpers(): void {
+    // Create grid helper (8x8 grid to match ground)
+    this.gridHelper = new THREE.GridHelper(8, 8, 0xffffff, 0xffffff);
+    this.gridHelper.position.set(4, 0.01, 4); // Slightly above ground
+    this.gridHelper.material = new THREE.LineBasicMaterial({
+      color: 0xffffff,
+      opacity: 0.3,
+      transparent: true
+    });
+    this.gridHelper.visible = false;
+    this.scene.add(this.gridHelper);
+
+    // Create preview cube (1x1x1 cube wireframe)
+    const cubeGeometry = new THREE.BoxGeometry(1, 1, 1);
+    const edges = new THREE.EdgesGeometry(cubeGeometry);
+    const lineMaterial = new THREE.LineBasicMaterial({
+      color: 0x00ff00,
+      linewidth: 2,
+      opacity: 0.7,
+      transparent: true
+    });
+    this.previewCube = new THREE.LineSegments(edges, lineMaterial);
+    this.previewCube.visible = false;
+    this.scene.add(this.previewCube);
+  }
+
+  private setupMouseMoveListener(canvas: HTMLCanvasElement): void {
+    canvas.addEventListener('mousemove', (event) => {
+      if (!this.isEditMode || !this.geometryMesh || !this.previewCube) return;
+
+      // Calculate mouse position in normalized device coordinates
+      const rect = canvas.getBoundingClientRect();
+      this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+      // Update raycaster
+      this.raycaster.setFromCamera(this.mouse, this.camera);
+
+      // Check intersection with ground plane
+      const intersects = this.raycaster.intersectObject(this.geometryMesh);
+
+      if (intersects.length > 0) {
+        const point = intersects[0].point;
+
+        // Snap to grid (1 unit grid)
+        const snappedX = Math.floor(point.x) + 0.5;
+        const snappedZ = Math.floor(point.z) + 0.5;
+
+        // Clamp to ground bounds (0-8 range)
+        const clampedX = Math.max(0.5, Math.min(7.5, snappedX));
+        const clampedZ = Math.max(0.5, Math.min(7.5, snappedZ));
+
+        // Position preview cube at ground level
+        this.currentGridPosition.set(clampedX, 0.5, clampedZ);
+        this.previewCube.position.copy(this.currentGridPosition);
+        this.previewCube.visible = true;
+      } else {
+        this.previewCube.visible = false;
+      }
+    });
   }
 
   updateGeometry(vertices: Float32Array, indices: Uint32Array, normals: Float32Array, colors?: Float32Array): void {
@@ -238,12 +309,12 @@ export class SceneManager {
   /**
    * Create a voxel avatar from a .vox file
    */
-  async createVoxelAvatarFromVoxFile(voxUrl: string, userNpub: string, scale: number = 1.0): Promise<void> {
+  async createVoxelAvatarFromVoxFile(voxUrl: string, userNpub: string | undefined, scale: number = 1.0): Promise<void> {
     // Import the loadVoxFromUrl function
     const { loadVoxFromUrl } = await import('../utils/voxLoader');
 
     try {
-      // Load .vox file and get geometry
+      // Load .vox file and get geometry (pass undefined for original colors)
       const geometryData = await loadVoxFromUrl(voxUrl, userNpub);
 
       // Remove existing voxel avatar
@@ -288,5 +359,20 @@ export class SceneManager {
    */
   getVoxelAvatar(): VoxelAvatar | null {
     return this.voxelAvatar;
+  }
+
+  /**
+   * Set edit mode to show/hide grid helpers
+   */
+  setEditMode(isEditMode: boolean): void {
+    this.isEditMode = isEditMode;
+
+    if (this.gridHelper) {
+      this.gridHelper.visible = isEditMode;
+    }
+
+    if (this.previewCube && !isEditMode) {
+      this.previewCube.visible = false;
+    }
   }
 }

@@ -1,7 +1,6 @@
-import { Box, Flex, IconButton, Text } from '@chakra-ui/react'
-import { useState } from 'react'
+import { Box, Flex } from '@chakra-ui/react'
 import { ProfileButton } from './ProfileButton'
-import { ConfigPanel, ConfigPanelType } from './ConfigPanel'
+import { ConfigPanelType } from './ConfigPanel'
 import { NetworkConfigPanel } from './NetworkConfigPanel'
 import { ProfilePanel } from './ProfilePanel'
 
@@ -9,23 +8,11 @@ interface TopBarProps {
   pubkey: string | null
   onLogin: (pubkey: string) => void
   onLogout: () => void
-  useVoxelAvatar: boolean
-  onToggleAvatarType: (useVoxel: boolean) => void
+  activePanelType: ConfigPanelType
+  onCloseAllPanels: () => void
 }
 
-export function TopBar({ pubkey, onLogin, onLogout, useVoxelAvatar, onToggleAvatarType }: TopBarProps) {
-  const [showConfigPanel, setShowConfigPanel] = useState(false)
-  const [activePanelType, setActivePanelType] = useState<ConfigPanelType>(null)
-
-  const handleOpenPanel = (type: ConfigPanelType) => {
-    setActivePanelType(type)
-  }
-
-  const handleCloseAllPanels = () => {
-    setShowConfigPanel(false)
-    setActivePanelType(null)
-  }
-
+export function TopBar({ pubkey, onLogin, onLogout, activePanelType, onCloseAllPanels }: TopBarProps) {
   return (
     <>
       <Box
@@ -43,39 +30,17 @@ export function TopBar({ pubkey, onLogin, onLogout, useVoxelAvatar, onToggleAvat
       >
         <Flex justify="space-between" align="center">
           <ProfileButton pubkey={pubkey} onLogin={onLogin} onLogout={onLogout} />
-          <IconButton
-            aria-label="Open configuration"
-            icon={<Text fontSize="xl">⚙️</Text>}
-            size="md"
-            variant="ghost"
-            colorScheme="whiteAlpha"
-            color="white"
-            _hover={{ bg: 'rgba(255, 255, 255, 0.1)' }}
-            onClick={() => setShowConfigPanel(true)}
-          />
         </Flex>
       </Box>
 
-      {/* Config Panel */}
-      {showConfigPanel && (
-        <ConfigPanel
-          onClose={handleCloseAllPanels}
-          onOpenPanel={handleOpenPanel}
-          useVoxelAvatar={useVoxelAvatar}
-          onToggleAvatarType={onToggleAvatarType}
-          onLogout={onLogout}
-          activePanelType={activePanelType}
-        />
-      )}
-
       {/* Network Config Panel */}
       {activePanelType === 'network' && (
-        <NetworkConfigPanel onClose={handleCloseAllPanels} />
+        <NetworkConfigPanel onClose={onCloseAllPanels} />
       )}
 
       {/* Profile Panel */}
       {activePanelType === 'profile' && (
-        <ProfilePanel pubkey={pubkey} onClose={handleCloseAllPanels} />
+        <ProfilePanel pubkey={pubkey} onClose={onCloseAllPanels} />
       )}
     </>
   )

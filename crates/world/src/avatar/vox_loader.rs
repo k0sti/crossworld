@@ -19,10 +19,11 @@ fn convert_dotvox_to_model(vox_data: &DotVoxData) -> Result<VoxelModel, String> 
     let dot_vox_model = &vox_data.models[0];
 
     // Get model size
+    // MagicaVoxel uses Z-up, we use Y-up, so swap dimensions
     let size = dot_vox_model.size;
     let size_x = size.x as u8;
-    let size_y = size.y as u8;
-    let size_z = size.z as u8;
+    let size_y = size.z as u8;  // MagicaVoxel's Z becomes our Y (height)
+    let size_z = size.y as u8;  // MagicaVoxel's Y becomes our Z (depth)
 
     // Create our model
     let mut model = VoxelModel::new(size_x, size_y, size_z);
@@ -31,14 +32,16 @@ fn convert_dotvox_to_model(vox_data: &DotVoxData) -> Result<VoxelModel, String> 
     model.palette = convert_palette(&vox_data.palette);
 
     // Convert voxels
+    // MagicaVoxel uses Z-up coordinate system, we use Y-up
+    // So we swap Y and Z: MagicaVoxel (x, y, z) -> Our system (x, z, y)
     for voxel in &dot_vox_model.voxels {
         // MagicaVoxel uses 1-based indexing for colors, we use 0-based
         let color_index = if voxel.i > 0 { voxel.i - 1 } else { 0 };
 
         model.add_voxel(Voxel {
             x: voxel.x,
-            y: voxel.y,
-            z: voxel.z,
+            y: voxel.z,  // MagicaVoxel's Z becomes our Y (up)
+            z: voxel.y,  // MagicaVoxel's Y becomes our Z (depth)
             color_index,
         });
     }
