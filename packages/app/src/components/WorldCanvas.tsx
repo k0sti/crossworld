@@ -1,13 +1,19 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Box } from '@chakra-ui/react';
 import { SceneManager } from '../renderer/scene';
 import { GeometryController } from '../geometry/geometry-controller';
+import { AvatarDebugPanel } from './AvatarDebugPanel';
 
-export function WorldCanvas() {
+interface WorldCanvasProps {
+  isLoggedIn: boolean;
+}
+
+export function WorldCanvas({ isLoggedIn }: WorldCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneManagerRef = useRef<SceneManager | null>(null);
   const geometryControllerRef = useRef<GeometryController | null>(null);
   const animationFrameRef = useRef<number | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | undefined>();
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -57,16 +63,40 @@ export function WorldCanvas() {
     };
   }, []);
 
+  // Handle login state changes
+  useEffect(() => {
+    const sceneManager = sceneManagerRef.current;
+    if (!sceneManager) return;
+
+    if (isLoggedIn) {
+      sceneManager.createAvatar(avatarUrl, 1.0);
+    } else {
+      sceneManager.removeAvatar();
+    }
+  }, [isLoggedIn, avatarUrl]);
+
+  const handleAvatarUrlChange = (url: string) => {
+    setAvatarUrl(url);
+  };
+
   return (
-    <Box
-      position="fixed"
-      top={0}
-      left={0}
-      width="100vw"
-      height="100vh"
-      zIndex={0}
-    >
-      <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: '100%' }} />
-    </Box>
+    <>
+      <Box
+        position="fixed"
+        top={0}
+        left={0}
+        width="100vw"
+        height="100vh"
+        zIndex={0}
+      >
+        <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: '100%' }} />
+      </Box>
+      {isLoggedIn && (
+        <AvatarDebugPanel
+          onAvatarUrlChange={handleAvatarUrlChange}
+          currentUrl={avatarUrl}
+        />
+      )}
+    </>
   );
 }

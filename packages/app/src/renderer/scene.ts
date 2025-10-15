@@ -1,10 +1,16 @@
 import * as THREE from 'three';
+import { Avatar } from './avatar';
 
 export class SceneManager {
   private scene: THREE.Scene;
   private camera: THREE.PerspectiveCamera;
   private renderer: THREE.WebGLRenderer;
   private geometryMesh: THREE.Mesh | null = null;
+  private avatar: Avatar | null = null;
+  private raycaster: THREE.Raycaster;
+  private mouse: THREE.Vector2;
+  private cameraOffset: THREE.Vector3;
+  private lastTime: number = 0;
 
   constructor() {
     this.scene = new THREE.Scene();
@@ -15,6 +21,9 @@ export class SceneManager {
       1000
     );
     this.renderer = new THREE.WebGLRenderer();
+    this.raycaster = new THREE.Raycaster();
+    this.mouse = new THREE.Vector2();
+    this.cameraOffset = new THREE.Vector3(4, 6, 4);
   }
 
   initialize(canvas: HTMLCanvasElement): void {
@@ -36,6 +45,33 @@ export class SceneManager {
     this.scene.fog = new THREE.Fog(0x87ceeb, 10, 50);
 
     this.setupLights();
+    this.setupMouseListener(canvas);
+    this.lastTime = performance.now();
+  }
+
+  private setupMouseListener(canvas: HTMLCanvasElement): void {
+    canvas.addEventListener('click', (event) => {
+      if (!this.avatar || !this.geometryMesh) return;
+
+      // Calculate mouse position in normalized device coordinates (-1 to +1)
+      const rect = canvas.getBoundingClientRect();
+      this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+      // Update raycaster
+      this.raycaster.setFromCamera(this.mouse, this.camera);
+
+      // Check intersection with ground plane
+      const intersects = this.raycaster.intersectObject(this.geometryMesh);
+
+      if (intersects.length > 0) {
+        const point = intersects[0].point;
+        // Clamp to ground bounds (0-8 range)
+        const clampedX = Math.max(0.5, Math.min(7.5, point.x));
+        const clampedZ = Math.max(0.5, Math.min(7.5, point.z));
+        this.avatar.setTargetPosition(clampedX, clampedZ);
+      }
+    });
   }
 
   private setupLights(): void {
@@ -93,6 +129,15 @@ export class SceneManager {
   }
 
   render(): void {
+    const currentTime = performance.now();
+    const deltaTime_s = (currentTime - this.lastTime) / 1000;
+    this.lastTime = currentTime;
+
+    // Update avatar
+    if (this.avatar) {
+      this.avatar.update(deltaTime_s);
+    }
+
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -111,5 +156,28 @@ export class SceneManager {
 
   getScene(): THREE.Scene {
     return this.scene;
+  }
+
+  createAvatar(modelUrl?: string, scale?: number): void {
+    if (this.avatar) {
+      this.scene.remove(this.avatar.getObject3D());
+    }
+    this.avatar = new Avatar(4, 4, { modelUrl, scale });
+    this.scene.add(this.avatar.getObject3D());
+  }
+
+  removeAvatar(): void {
+    if (this.avatar) {
+      this.scene.remove(this.avatar.getObject3D());
+      this.avatar = null;
+
+      // Reset camera to default position
+      this.camera.position.set(8, 6, 8);
+      this.camera.lookAt(4, 0, 4);
+    }
+  }
+
+  hasAvatar(): boolean {
+    return this.avatar !== null;
   }
 }
