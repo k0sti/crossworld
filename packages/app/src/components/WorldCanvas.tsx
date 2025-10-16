@@ -2,28 +2,49 @@ import { useEffect, useRef, useState } from 'react';
 import { Box } from '@chakra-ui/react';
 import { SceneManager } from '../renderer/scene';
 import { GeometryController } from '../geometry/geometry-controller';
-import { GLBPanel } from './GLBPanel';
-import { VoxelModelPanel, type VoxelModelType } from './VoxelModelPanel';
 import init, { AvatarEngine } from '@workspace/wasm';
+
+export type VoxelModelType = 'boy' | 'girl';
 
 interface WorldCanvasProps {
   isLoggedIn: boolean;
   useVoxelAvatar: boolean;
   onToggleAvatarType: (useVoxel: boolean) => void;
   isEditMode: boolean;
+  voxelModel: VoxelModelType;
+  onVoxelModelChange: (model: VoxelModelType) => void;
+  useVoxFile: boolean;
+  onVoxFileChange: (useVox: boolean) => void;
+  useOriginalColors: boolean;
+  onColorModeChange: (useOriginal: boolean) => void;
+  onAvatarUrlChange: (url: string) => void;
+  avatarUrl?: string;
+  colorChangeCounter?: number;
 }
 
-export function WorldCanvas({ isLoggedIn, useVoxelAvatar, onToggleAvatarType, isEditMode }: WorldCanvasProps) {
+export function WorldCanvas({
+  isLoggedIn,
+  useVoxelAvatar,
+  isEditMode,
+  voxelModel,
+  useVoxFile,
+  useOriginalColors,
+  avatarUrl,
+  colorChangeCounter
+}: WorldCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneManagerRef = useRef<SceneManager | null>(null);
   const geometryControllerRef = useRef<GeometryController | null>(null);
   const avatarEngineRef = useRef<AvatarEngine | null>(null);
   const animationFrameRef = useRef<number | null>(null);
-  const [avatarUrl, setAvatarUrl] = useState<string | undefined>();
-  const [voxelModel, setVoxelModel] = useState<VoxelModelType>('boy');
-  const [useVoxFile, setUseVoxFile] = useState(false);
-  const [useOriginalColors, setUseOriginalColors] = useState(false);
   const [colorSeed, setColorSeed] = useState(() => Math.random().toString(36).substring(7));
+
+  // Update color seed when counter changes
+  useEffect(() => {
+    if (colorChangeCounter !== undefined && colorChangeCounter > 0) {
+      setColorSeed(Math.random().toString(36).substring(7));
+    }
+  }, [colorChangeCounter]);
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -145,62 +166,16 @@ export function WorldCanvas({ isLoggedIn, useVoxelAvatar, onToggleAvatarType, is
     }
   }, [isLoggedIn, avatarUrl, useVoxelAvatar, voxelModel, useVoxFile, useOriginalColors, colorSeed]);
 
-  const handleAvatarUrlChange = (url: string) => {
-    setAvatarUrl(url);
-    onToggleAvatarType(false);
-  };
-
-  const handleVoxelModelChange = (model: VoxelModelType) => {
-    setVoxelModel(model);
-  };
-
-  const handleVoxelSourceChange = (useVox: boolean) => {
-    setUseVoxFile(useVox);
-  };
-
-  const handleColorModeChange = (useOriginal: boolean) => {
-    setUseOriginalColors(useOriginal);
-  };
-
-  const handleRandomizeColors = () => {
-    setColorSeed(Math.random().toString(36).substring(7));
-  };
-
-  const handleCustomColor = (color: string) => {
-    // Convert hex color to RGB and create a seed from it
-    setColorSeed(`custom_${color}`);
-  };
-
   return (
-    <>
-      <Box
-        position="fixed"
-        top={0}
-        left={0}
-        width="100vw"
-        height="100vh"
-        zIndex={0}
-      >
-        <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: '100%' }} />
-      </Box>
-      {isLoggedIn && !useVoxelAvatar && (
-        <GLBPanel
-          onAvatarUrlChange={handleAvatarUrlChange}
-          currentUrl={avatarUrl}
-        />
-      )}
-      {isLoggedIn && useVoxelAvatar && (
-        <VoxelModelPanel
-          currentModel={voxelModel}
-          onModelChange={handleVoxelModelChange}
-          useVoxFile={useVoxFile}
-          onSourceChange={handleVoxelSourceChange}
-          useOriginalColors={useOriginalColors}
-          onColorModeChange={handleColorModeChange}
-          onRandomizeColors={handleRandomizeColors}
-          onCustomColor={handleCustomColor}
-        />
-      )}
-    </>
+    <Box
+      position="fixed"
+      top={0}
+      left={0}
+      width="100vw"
+      height="100vh"
+      zIndex={0}
+    >
+      <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: '100%' }} />
+    </Box>
   );
 }
