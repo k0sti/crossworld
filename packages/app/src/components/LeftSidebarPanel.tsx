@@ -36,8 +36,6 @@ function SidebarIcon({ icon, onClick, isActive }: SidebarIconProps) {
 
 interface LeftSidebarPanelProps {
   onOpenPanel: (type: ConfigPanelType) => void
-  useVoxelAvatar: boolean
-  onToggleAvatarType: (useVoxel: boolean) => void
   onLogout: () => void
   activePanelType: ConfigPanelType
   isEditMode: boolean
@@ -46,8 +44,6 @@ interface LeftSidebarPanelProps {
 
 export function LeftSidebarPanel({
   onOpenPanel,
-  useVoxelAvatar,
-  onToggleAvatarType,
   onLogout,
   activePanelType,
   isEditMode,
@@ -56,11 +52,6 @@ export function LeftSidebarPanel({
   const handleLogout = () => {
     onOpenPanel(null)
     onLogout()
-  }
-
-  const handleToggleAvatar = () => {
-    onOpenPanel(null)
-    onToggleAvatarType(!useVoxelAvatar)
   }
 
   const handleOpenPanel = (type: ConfigPanelType) => {
@@ -106,8 +97,9 @@ export function LeftSidebarPanel({
           isActive={activePanelType === 'profile'}
         />
         <SidebarIcon
-          icon={useVoxelAvatar ? "🧱" : "🎭"}
-          onClick={handleToggleAvatar}
+          icon="🎭"
+          onClick={() => handleOpenPanel('avatar')}
+          isActive={activePanelType === 'avatar'}
         />
         <SidebarIcon
           icon="🚪"
