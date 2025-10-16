@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Box, VStack, Text, Avatar, HStack, Divider, Flex, IconButton, Tooltip, useToast, SimpleGrid } from '@chakra-ui/react'
-import { FiUser, FiCopy } from 'react-icons/fi'
+import { FiUser, FiCopy, FiExternalLink } from 'react-icons/fi'
 import { npubEncode } from 'nostr-tools/nip19'
 import { Relay } from 'applesauce-relay'
 import { pubkey_to_emoji } from '@workspace/wasm'
@@ -13,17 +13,57 @@ interface ProfileMetadata {
   about?: string
 }
 
+interface RelayConfig {
+  url: string
+  enabledForProfile: boolean
+  enabledForChat: boolean
+  status: 'connected' | 'connecting' | 'error' | 'disconnected'
+}
+
 interface ProfilePanelProps {
   pubkey: string | null
 }
 
 export function ProfilePanel({ pubkey }: ProfilePanelProps) {
   const [profile, setProfile] = useState<ProfileMetadata | null>(null)
+  const [enabledRelays, setEnabledRelays] = useState<string[]>([])
   const toast = useToast()
   const npub = pubkey ? npubEncode(pubkey) : ''
   const displayNpub = npub ? `${npub.slice(0, 12)}...${npub.slice(-8)}` : ''
   const emojiHash = pubkey ? pubkey_to_emoji(pubkey) : ''
   const emojiArray = Array.from(emojiHash)
+
+  // Load enabled relays from localStorage
+  useEffect(() => {
+    const loadEnabledRelays = () => {
+      try {
+        const savedRelays = localStorage.getItem('crossworld_relays')
+        if (savedRelays) {
+          const relays = JSON.parse(savedRelays) as RelayConfig[]
+          const enabled = relays.filter(r => r.enabledForProfile).map(r => r.url)
+          setEnabledRelays(enabled)
+        } else {
+          setEnabledRelays(DEFAULT_RELAYS)
+        }
+      } catch (error) {
+        console.error('Failed to load relay config:', error)
+        setEnabledRelays(DEFAULT_RELAYS)
+      }
+    }
+
+    loadEnabledRelays()
+
+    // Listen for relay config changes
+    const handleRelayConfigChanged = () => {
+      loadEnabledRelays()
+    }
+
+    window.addEventListener('relayConfigChanged', handleRelayConfigChanged)
+
+    return () => {
+      window.removeEventListener('relayConfigChanged', handleRelayConfigChanged)
+    }
+  }, [])
 
   const copyNpub = () => {
     navigator.clipboard.writeText(npub)
@@ -35,16 +75,20 @@ export function ProfilePanel({ pubkey }: ProfilePanelProps) {
     })
   }
 
+  const openExternal = () => {
+    window.open(`https://nostr.eu/${npub}`, '_blank', 'noopener,noreferrer')
+  }
+
   useEffect(() => {
-    if (pubkey) {
+    if (pubkey && enabledRelays.length > 0) {
       fetchProfile(pubkey)
     } else {
       setProfile(null)
     }
-  }, [pubkey])
+  }, [pubkey, enabledRelays])
 
   const fetchProfile = async (pubkey: string) => {
-    for (const relayUrl of DEFAULT_RELAYS) {
+    for (const relayUrl of enabledRelays) {
       try {
         const relay = new Relay(relayUrl)
         const events = await new Promise<any[]>((resolve) => {
@@ -168,6 +212,17 @@ export function ProfilePanel({ pubkey }: ProfilePanelProps) {
                       size="xs"
                       variant="ghost"
                       onClick={copyNpub}
+                      color="whiteAlpha.700"
+                      _hover={{ color: 'white' }}
+                    />
+                  </Tooltip>
+                  <Tooltip label="Open on nostr.eu">
+                    <IconButton
+                      aria-label="Open profile"
+                      icon={<FiExternalLink />}
+                      size="xs"
+                      variant="ghost"
+                      onClick={openExternal}
                       color="whiteAlpha.700"
                       _hover={{ color: 'white' }}
                     />

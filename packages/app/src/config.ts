@@ -1,8 +1,37 @@
 export const DEFAULT_RELAYS = [
+  'wss://strfry.atlantislabs.space/',
   'wss://relay.damus.io',
   'wss://nos.lol',
   'wss://relay.primal.net',
 ]
+
+export const DEFAULT_RELAY_STATES = {
+  'wss://strfry.atlantislabs.space/': { enabledForProfile: false, enabledForChat: true },
+  'wss://relay.damus.io': { enabledForProfile: true, enabledForChat: false },
+  'wss://nos.lol': { enabledForProfile: true, enabledForChat: false },
+  'wss://relay.primal.net': { enabledForProfile: true, enabledForChat: false },
+}
+
+// Crossworld app identity
+export const APP_NPUB = 'npub1ga6mzn7ygwuxpytr264uw09huwef9ypzfda767088gv83ypgtjtsxf25vh'
+export const APP_PUBKEY = 'e9aeccc7e11ce384c2c6ad6e1e7cee9c889294ad1213da7e1f18636c0c8149ac'
+
+// Live chat event (NIP-53)
+export const LIVE_CHAT_D_TAG = 'crossworld-dev'
+
+// Chat history configuration
+export const CHAT_HISTORY_CONFIG = {
+  // Maximum number of old messages to fetch
+  MAX_MESSAGES: 100,
+  // Maximum time range for old messages (in seconds)
+  // Default: 24 hours = 24 * 60 * 60 = 86400 seconds
+  MAX_TIME_RANGE_S: 24 * 60 * 60,
+}
+
+// Generate live chat a-tag dynamically from components
+export function getLiveChatATag(): string {
+  return `30311:${APP_PUBKEY}:${LIVE_CHAT_D_TAG}`
+}
 
 // Avatar voxel model constants
 export const AVATAR_VOXEL_CONSTANTS = {
