@@ -13,11 +13,10 @@ export class SceneManager {
   private avatarEngine: AvatarEngine | null = null;
   private raycaster: THREE.Raycaster;
   private mouse: THREE.Vector2;
-  private cameraOffset: THREE.Vector3;
   private lastTime: number = 0;
   private isEditMode: boolean = false;
   private gridHelper: THREE.GridHelper | null = null;
-  private previewCube: THREE.Mesh | null = null;
+  private previewCube: THREE.LineSegments | null = null;
   private currentGridPosition: THREE.Vector3 = new THREE.Vector3();
 
   constructor() {
@@ -31,7 +30,6 @@ export class SceneManager {
     this.renderer = new THREE.WebGLRenderer();
     this.raycaster = new THREE.Raycaster();
     this.mouse = new THREE.Vector2();
-    this.cameraOffset = new THREE.Vector3(4, 6, 4);
   }
 
   initialize(canvas: HTMLCanvasElement): void {
@@ -292,7 +290,7 @@ export class SceneManager {
     }
 
     // Create new voxel avatar
-    this.voxelAvatar = new VoxelAvatar({ userNpub, scale }, 4, 4);
+    this.voxelAvatar = new VoxelAvatar({ userNpub: userNpub || '', scale }, 4, 4);
 
     // Generate geometry from Rust
     const geometryData = this.avatarEngine.generate_avatar(userNpub);
@@ -309,13 +307,13 @@ export class SceneManager {
   /**
    * Create a voxel avatar from a .vox file
    */
-  async createVoxelAvatarFromVoxFile(voxUrl: string, userNpub: string | undefined, scale: number = 1.0): Promise<void> {
+  async createVoxelAvatarFromVoxFile(voxUrl: string, userNpub: string | undefined = undefined, scale: number = 1.0): Promise<void> {
     // Import the loadVoxFromUrl function
     const { loadVoxFromUrl } = await import('../utils/voxLoader');
 
     try {
       // Load .vox file and get geometry (pass undefined for original colors)
-      const geometryData = await loadVoxFromUrl(voxUrl, userNpub);
+      const geometryData = await loadVoxFromUrl(voxUrl, userNpub ?? undefined);
 
       // Remove existing voxel avatar
       if (this.voxelAvatar) {
@@ -324,7 +322,7 @@ export class SceneManager {
       }
 
       // Create new voxel avatar
-      this.voxelAvatar = new VoxelAvatar({ userNpub, scale }, 4, 4);
+      this.voxelAvatar = new VoxelAvatar({ userNpub: userNpub ?? '', scale }, 4, 4);
 
       // Apply geometry from .vox file
       this.voxelAvatar.applyGeometry(geometryData);

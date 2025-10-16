@@ -15,10 +15,9 @@ interface ProfileMetadata {
 
 interface ProfilePanelProps {
   pubkey: string | null
-  onClose: () => void
 }
 
-export function ProfilePanel({ pubkey, onClose }: ProfilePanelProps) {
+export function ProfilePanel({ pubkey }: ProfilePanelProps) {
   const [profile, setProfile] = useState<ProfileMetadata | null>(null)
   const toast = useToast()
   const npub = pubkey ? npubEncode(pubkey) : ''
@@ -151,7 +150,7 @@ export function ProfilePanel({ pubkey, onClose }: ProfilePanelProps) {
               <SimpleGrid columns={9} gap={1}>
                 {emojiArray.map((emoji, index) => (
                   <Text key={index} fontSize="2xl" lineHeight="1">
-                    {emoji}
+                    {String(emoji)}
                   </Text>
                 ))}
               </SimpleGrid>

@@ -11,10 +11,10 @@ interface RelayConfig {
 }
 
 interface NetworkConfigPanelProps {
-  onClose: () => void
+  // Panel can be closed via sidebar
 }
 
-export function NetworkConfigPanel({ onClose }: NetworkConfigPanelProps) {
+export function NetworkConfigPanel(_props: NetworkConfigPanelProps) {
   const toast = useToast()
   const [relays, setRelays] = useState<RelayConfig[]>([])
   const [newRelay, setNewRelay] = useState('')
