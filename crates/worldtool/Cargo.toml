@@ -1,0 +1,28 @@
+[package]
+name = "worldtool"
+version = "0.0.1"
+edition = "2024"
+
+[[bin]]
+name = "worldtool"
+path = "src/main.rs"
+
+[dependencies]
+# Nostr
+nostr-sdk = "0.37"
+
+# CLI
+clap = { version = "4", features = ["derive"] }
+
+# Async runtime
+tokio = { version = "1.41", features = ["full"] }
+
+# Environment
+dotenvy = "0.15"
+
+# Utilities
+anyhow = "1.0"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }

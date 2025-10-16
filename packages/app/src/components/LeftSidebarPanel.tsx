@@ -40,6 +40,8 @@ interface LeftSidebarPanelProps {
   activePanelType: ConfigPanelType
   isEditMode: boolean
   onToggleEditMode: (isEditMode: boolean) => void
+  isChatOpen: boolean
+  onToggleChat: () => void
 }
 
 export function LeftSidebarPanel({
@@ -47,7 +49,9 @@ export function LeftSidebarPanel({
   onLogout,
   activePanelType,
   isEditMode,
-  onToggleEditMode
+  onToggleEditMode,
+  isChatOpen,
+  onToggleChat
 }: LeftSidebarPanelProps) {
   const handleLogout = () => {
     onOpenPanel(null)
@@ -100,6 +104,11 @@ export function LeftSidebarPanel({
           icon="🎭"
           onClick={() => handleOpenPanel('avatar')}
           isActive={activePanelType === 'avatar'}
+        />
+        <SidebarIcon
+          icon="💬"
+          onClick={onToggleChat}
+          isActive={isChatOpen}
         />
         <SidebarIcon
           icon="🚪"
