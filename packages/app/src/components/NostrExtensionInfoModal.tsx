@@ -13,7 +13,11 @@ import {
   Input,
   Button,
   HStack,
+  Badge,
 } from '@chakra-ui/react'
+
+// Check if we're on Android
+const IS_WEB_ANDROID = /android/i.test(navigator.userAgent)
 
 interface NostrExtensionInfoModalProps {
   isOpen: boolean
@@ -85,6 +89,30 @@ export function NostrExtensionInfoModal({ isOpen, onClose, onGuestLogin }: Nostr
                 start.nostr.net
               </Link>
             </Box>
+
+            {IS_WEB_ANDROID && (
+              <Box>
+                <HStack mb={2}>
+                  <Text fontSize="md" fontWeight="semibold">
+                    Amber Signer
+                  </Text>
+                  <Badge colorScheme="yellow">Android</Badge>
+                </HStack>
+                <Text fontSize="md" mb={2}>
+                  Amber is a secure key management app for Android. If you have Amber installed,
+                  the app should have opened automatically.
+                </Text>
+                <Link
+                  href="https://github.com/greenart7c3/Amber"
+                  isExternal
+                  color="blue.500"
+                  fontWeight="medium"
+                  _hover={{ textDecoration: 'underline' }}
+                >
+                  Get Amber from GitHub
+                </Link>
+              </Box>
+            )}
 
             <Box>
               <Text fontSize="md" fontWeight="semibold" mb={2}>
