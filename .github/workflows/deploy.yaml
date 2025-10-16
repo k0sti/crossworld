@@ -46,11 +46,14 @@ jobs:
       run: |
         curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/local/bin
 
+    - name: Build WASM module
+      run: just build-wasm
+
     - name: Install dependencies
       run: just install
 
-    - name: Build WASM and project
-      run: just build
+    - name: Build application
+      run: cd packages/app && bun run build
 
     - name: Setup Pages
       uses: actions/configure-pages@v4

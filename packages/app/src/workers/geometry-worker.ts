@@ -70,12 +70,14 @@ class GeometryWorkerManager {
       };
 
       // Transfer ownership of the buffers to main thread
-      self.postMessage({ type: 'geometry', data: result }, [
-        vertices.buffer,
-        indices.buffer,
-        normals.buffer,
-        colors.buffer
-      ]);
+      self.postMessage({ type: 'geometry', data: result }, {
+        transfer: [
+          vertices.buffer,
+          indices.buffer,
+          normals.buffer,
+          colors.buffer
+        ]
+      });
     }
   }
 

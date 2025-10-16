@@ -44,7 +44,7 @@ export function WorldCanvas({ isLoggedIn, useVoxelAvatar, onToggleAvatarType, is
       avatarEngineRef.current = avatarEngine;
       sceneManager.setAvatarEngine(avatarEngine);
       console.log('Avatar engine initialized');
-    }).catch((error) => {
+    }).catch((error: unknown) => {
       console.error('Failed to initialize WASM/Avatar engine:', error);
     });
 
@@ -114,7 +114,7 @@ export function WorldCanvas({ isLoggedIn, useVoxelAvatar, onToggleAvatarType, is
           const voxFilename = voxelModel === 'boy'
             ? 'chr_peasant_guy_blackhair.vox'
             : 'chr_peasant_girl_orangehair.vox';
-          const voxUrl = `/assets/models/vox/${voxFilename}`;
+          const voxUrl = `${import.meta.env.BASE_URL}assets/models/vox/${voxFilename}`;
 
           console.log('Loading voxel avatar from file:', voxUrl, 'with colors:', useOriginalColors ? 'original' : 'randomized');
 
@@ -148,11 +148,6 @@ export function WorldCanvas({ isLoggedIn, useVoxelAvatar, onToggleAvatarType, is
   const handleAvatarUrlChange = (url: string) => {
     setAvatarUrl(url);
     onToggleAvatarType(false);
-  };
-
-  const handleCreateVoxelAvatar = () => {
-    onToggleAvatarType(true);
-    setAvatarUrl(undefined);
   };
 
   const handleVoxelModelChange = (model: VoxelModelType) => {

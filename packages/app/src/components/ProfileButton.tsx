@@ -22,10 +22,9 @@ interface ProfileMetadata {
 interface ProfileButtonProps {
   pubkey: string | null
   onLogin: (pubkey: string) => void
-  onLogout: () => void
 }
 
-export function ProfileButton({ pubkey, onLogin, onLogout }: ProfileButtonProps) {
+export function ProfileButton({ pubkey, onLogin }: ProfileButtonProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [profile, setProfile] = useState<ProfileMetadata | null>(null)
   const toast = useToast()

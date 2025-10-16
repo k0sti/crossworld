@@ -32,7 +32,7 @@ export class Avatar {
 
   private loadModel() {
     const loader = new GLTFLoader();
-    const modelUrl = this.config.modelUrl || '/models/avatar.glb';
+    const modelUrl = this.config.modelUrl || `${import.meta.env.BASE_URL}models/avatar.glb`;
 
     console.log('Loading avatar model from:', modelUrl);
 

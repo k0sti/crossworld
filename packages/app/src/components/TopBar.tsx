@@ -12,7 +12,7 @@ interface TopBarProps {
   onCloseAllPanels: () => void
 }
 
-export function TopBar({ pubkey, onLogin, onLogout, activePanelType, onCloseAllPanels }: TopBarProps) {
+export function TopBar({ pubkey, onLogin, activePanelType }: TopBarProps) {
   return (
     <>
       <Box
@@ -29,18 +29,18 @@ export function TopBar({ pubkey, onLogin, onLogout, activePanelType, onCloseAllP
         py={2}
       >
         <Flex justify="space-between" align="center">
-          <ProfileButton pubkey={pubkey} onLogin={onLogin} onLogout={onLogout} />
+          <ProfileButton pubkey={pubkey} onLogin={onLogin} />
         </Flex>
       </Box>
 
       {/* Network Config Panel */}
       {activePanelType === 'network' && (
-        <NetworkConfigPanel onClose={onCloseAllPanels} />
+        <NetworkConfigPanel />
       )}
 
       {/* Profile Panel */}
       {activePanelType === 'profile' && (
-        <ProfilePanel pubkey={pubkey} onClose={onCloseAllPanels} />
+        <ProfilePanel pubkey={pubkey} />
       )}
     </>
   )
