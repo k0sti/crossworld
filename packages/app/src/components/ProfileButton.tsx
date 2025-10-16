@@ -5,13 +5,15 @@ import {
   Text,
   IconButton,
   useToast,
+  useDisclosure,
 } from '@chakra-ui/react'
 import { FiLogIn, FiUser } from 'react-icons/fi'
-import { ExtensionAccount } from 'applesauce-accounts/accounts'
+import { ExtensionAccount, SimpleAccount } from 'applesauce-accounts/accounts'
 import { ExtensionSigner } from 'applesauce-signers'
 import { useAccountManager } from 'applesauce-react/hooks'
 import { Relay } from 'applesauce-relay'
 import { DEFAULT_RELAYS } from '../config'
+import { NostrExtensionInfoModal } from './NostrExtensionInfoModal'
 
 interface ProfileMetadata {
   name?: string
@@ -29,6 +31,7 @@ export function ProfileButton({ pubkey, onLogin }: ProfileButtonProps) {
   const [profile, setProfile] = useState<ProfileMetadata | null>(null)
   const toast = useToast()
   const manager = useAccountManager()
+  const { isOpen, onOpen, onClose } = useDisclosure()
 
   useEffect(() => {
     if (pubkey) {
@@ -89,17 +92,67 @@ export function ProfileButton({ pubkey, onLogin }: ProfileButtonProps) {
     }
   }
 
+  const handleGuestLogin = async (name: string) => {
+    setIsLoading(true)
+    try {
+      const account = SimpleAccount.generateNew()
+      manager.addAccount(account)
+
+      const metadata: ProfileMetadata = {
+        name,
+        display_name: name,
+      }
+
+      const metadataEvent = {
+        kind: 0,
+        tags: [],
+        content: JSON.stringify(metadata),
+        created_at: Math.floor(Date.now() / 1000),
+      }
+
+      const signedEvent = await account.signer.signEvent(metadataEvent)
+
+      for (const relayUrl of DEFAULT_RELAYS) {
+        try {
+          const relay = new Relay(relayUrl)
+          relay.publish(signedEvent)
+          setTimeout(() => {
+            try { relay.close() } catch (e) {}
+          }, 1000)
+        } catch (error) {
+          console.error(`Failed to publish to ${relayUrl}:`, error)
+        }
+      }
+
+      toast({
+        title: 'Guest login successful',
+        description: `Welcome, ${name}!`,
+        status: 'success',
+        duration: 3000,
+        isClosable: true,
+      })
+
+      onLogin(account.pubkey)
+    } catch (error) {
+      console.error('Guest login error:', error)
+      toast({
+        title: 'Login failed',
+        description: error instanceof Error ? error.message : 'Failed to create guest account',
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   const handleExtensionLogin = async () => {
     setIsLoading(true)
     try {
       if (!window.nostr) {
-        toast({
-          title: 'Extension not found',
-          description: 'Please install a Nostr browser extension like Alby, nos2x, or Flamingo',
-          status: 'warning',
-          duration: 5000,
-          isClosable: true,
-        })
+        setIsLoading(false)
+        onOpen()
         return
       }
 
@@ -140,12 +193,19 @@ export function ProfileButton({ pubkey, onLogin }: ProfileButtonProps) {
 
   if (!pubkey) {
     return (
-      <IconButton
-        aria-label="Login"
-        icon={<FiLogIn />}
-        onClick={handleExtensionLogin}
-        isLoading={isLoading}
-      />
+      <>
+        <IconButton
+          aria-label="Login"
+          icon={<FiLogIn />}
+          onClick={handleExtensionLogin}
+          isLoading={isLoading}
+        />
+        <NostrExtensionInfoModal
+          isOpen={isOpen}
+          onClose={onClose}
+          onGuestLogin={handleGuestLogin}
+        />
+      </>
     )
   }
 
