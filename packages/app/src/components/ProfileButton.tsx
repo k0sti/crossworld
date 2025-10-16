@@ -8,12 +8,15 @@ import {
   useDisclosure,
 } from '@chakra-ui/react'
 import { FiLogIn, FiUser } from 'react-icons/fi'
-import { ExtensionAccount, SimpleAccount } from 'applesauce-accounts/accounts'
-import { ExtensionSigner } from 'applesauce-signers'
+import { ExtensionAccount, SimpleAccount, NostrConnectAccount } from 'applesauce-accounts/accounts'
+import { ExtensionSigner, NostrConnectSigner } from 'applesauce-signers'
 import { useAccountManager } from 'applesauce-react/hooks'
 import { Relay } from 'applesauce-relay'
 import { DEFAULT_RELAYS } from '../config'
 import { NostrExtensionInfoModal } from './NostrExtensionInfoModal'
+
+// Check if we're on Android
+const IS_WEB_ANDROID = /android/i.test(navigator.userAgent)
 
 interface ProfileMetadata {
   name?: string
@@ -147,10 +150,83 @@ export function ProfileButton({ pubkey, onLogin }: ProfileButtonProps) {
     }
   }
 
+  const tryAmberLogin = async () => {
+    try {
+      // Create NostrConnect signer for Amber
+      const signer = new NostrConnectSigner({
+        relays: ['wss://relay.nsec.app', 'wss://relay.damus.io']
+      })
+
+      // Generate connection URI for Amber
+      const connectionURI = signer.getNostrConnectURI({
+        name: 'Crossworld',
+        url: window.location.origin,
+        image: new URL('/favicon.ico', window.location.origin).toString(),
+      })
+
+      // Try to open Amber app directly
+      window.location.href = connectionURI
+
+      // Wait a moment for Amber to connect
+      toast({
+        title: 'Opening Amber',
+        description: 'Waiting for Amber connection...',
+        status: 'info',
+        duration: 3000,
+        isClosable: true,
+      })
+
+      // Start listening for connection (with timeout)
+      const timeout_ms = 30000
+      const connectionPromise = signer.waitForSigner()
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Amber connection timeout')), timeout_ms)
+      )
+
+      await Promise.race([connectionPromise, timeoutPromise])
+
+      const publicKey = await signer.getPublicKey()
+
+      const existingAccount = manager.accounts.find(
+        (a) => a.type === NostrConnectAccount.type && a.pubkey === publicKey
+      )
+
+      if (!existingAccount) {
+        const account = new NostrConnectAccount(publicKey, signer)
+        account.metadata = { _isAmber: true }
+        manager.addAccount(account)
+      }
+
+      toast({
+        title: 'Amber connected',
+        description: 'Successfully connected to Amber',
+        status: 'success',
+        duration: 3000,
+        isClosable: true,
+      })
+
+      onLogin(publicKey)
+      return true
+    } catch (error) {
+      console.error('Amber connection error:', error)
+      return false
+    }
+  }
+
   const handleExtensionLogin = async () => {
     setIsLoading(true)
     try {
       if (!window.nostr) {
+        // If on Android, try Amber first
+        if (IS_WEB_ANDROID) {
+          const amberSuccess = await tryAmberLogin()
+          if (amberSuccess) {
+            setIsLoading(false)
+            return
+          }
+        }
+
+        // If not Android or Amber failed, show modal
         setIsLoading(false)
         onOpen()
         return
