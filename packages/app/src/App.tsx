@@ -9,12 +9,15 @@ import { ConfigPanelType } from './components/ConfigPanel'
 import { NetworkConfigPanel } from './components/NetworkConfigPanel'
 import { ProfilePanel } from './components/ProfilePanel'
 import { AvatarPanel } from './components/AvatarPanel'
+import { ChatPanel } from './components/ChatPanel'
 
 function App() {
   const [pubkey, setPubkey] = useState<string | null>(null)
   const [useVoxelAvatar, setUseVoxelAvatar] = useState(true)
   const [isEditMode, setIsEditMode] = useState(false)
   const [activePanelType, setActivePanelType] = useState<ConfigPanelType>(null)
+  const [isChatOpen, setIsChatOpen] = useState(false)
+  const [viewedProfilePubkey, setViewedProfilePubkey] = useState<string | null>(null)
   const accountManager = useMemo(() => new AccountManager(), [])
 
   // Avatar state
@@ -30,6 +33,7 @@ function App() {
 
   const handleLogout = () => {
     setPubkey(null)
+    setIsChatOpen(false)
   }
 
   const handleAvatarUrlChange = (url: string) => {
@@ -43,6 +47,11 @@ function App() {
 
   const handleCustomColor = (_color: string) => {
     setColorChangeCounter(c => c + 1)
+  }
+
+  const handleViewProfile = (profilePubkey: string) => {
+    setViewedProfilePubkey(profilePubkey)
+    setActivePanelType('profile')
   }
 
   return (
@@ -74,12 +83,14 @@ function App() {
             activePanelType={activePanelType}
             isEditMode={isEditMode}
             onToggleEditMode={setIsEditMode}
+            isChatOpen={isChatOpen}
+            onToggleChat={() => setIsChatOpen(!isChatOpen)}
           />
         )}
 
         {/* Config Panels */}
         {activePanelType === 'network' && <NetworkConfigPanel />}
-        {activePanelType === 'profile' && <ProfilePanel pubkey={pubkey} />}
+        {activePanelType === 'profile' && <ProfilePanel pubkey={viewedProfilePubkey || pubkey} />}
         {activePanelType === 'avatar' && (
           <AvatarPanel
             useVoxelAvatar={useVoxelAvatar}
@@ -96,6 +107,9 @@ function App() {
             currentUrl={avatarUrl}
           />
         )}
+
+        {/* Chat Panel */}
+        <ChatPanel isOpen={isChatOpen} currentPubkey={pubkey} onViewProfile={handleViewProfile} />
       </ChakraProvider>
     </AccountsProvider>
   )
