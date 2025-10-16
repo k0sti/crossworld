@@ -1,6 +1,6 @@
 import { Box, SimpleGrid, Text } from '@chakra-ui/react'
 
-export type ConfigPanelType = 'network' | 'profile' | null
+export type ConfigPanelType = 'network' | 'profile' | 'avatar' | null
 
 interface ConfigIconProps {
   icon: string
@@ -36,22 +36,15 @@ function ConfigIcon({ icon, onClick }: ConfigIconProps) {
 interface ConfigPanelProps {
   onClose: () => void
   onOpenPanel: (type: ConfigPanelType) => void
-  useVoxelAvatar: boolean
-  onToggleAvatarType: (useVoxel: boolean) => void
   onLogout: () => void
   activePanelType: ConfigPanelType
 }
 
-export function ConfigPanel({ onClose, onOpenPanel, useVoxelAvatar, onToggleAvatarType, onLogout, activePanelType }: ConfigPanelProps) {
+export function ConfigPanel({ onClose, onOpenPanel, onLogout, activePanelType }: ConfigPanelProps) {
   const handleLogout = () => {
     onOpenPanel(null)
     onLogout()
     onClose()
-  }
-
-  const handleToggleAvatar = () => {
-    onOpenPanel(null)
-    onToggleAvatarType(!useVoxelAvatar)
   }
 
   const handleOpenPanel = (type: ConfigPanelType) => {
@@ -104,8 +97,8 @@ export function ConfigPanel({ onClose, onOpenPanel, useVoxelAvatar, onToggleAvat
           onClick={() => handleOpenPanel('profile')}
         />
         <ConfigIcon
-          icon={useVoxelAvatar ? "🧱" : "🎭"}
-          onClick={handleToggleAvatar}
+          icon="🎭"
+          onClick={() => handleOpenPanel('avatar')}
         />
         <ConfigIcon
           icon="🚪"
