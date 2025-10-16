@@ -1,13 +1,21 @@
-import { Box, VStack, Text, Input, Button, HStack, IconButton, useToast, Switch, Tooltip, Badge, InputGroup, InputRightElement } from '@chakra-ui/react'
-import { useState, useEffect } from 'react'
-import { FiPlus, FiTrash2, FiRefreshCw, FiCheck, FiAlertCircle, FiLoader } from 'react-icons/fi'
-import { DEFAULT_RELAYS } from '../config'
+import { Box, VStack, Text, Input, Button, HStack, IconButton, useToast, Tooltip, InputGroup, InputRightElement, Badge } from '@chakra-ui/react'
+import { useState, useEffect, useRef } from 'react'
+import { FiPlus, FiTrash2, FiRefreshCw } from 'react-icons/fi'
+import { Relay } from 'applesauce-relay'
+import { DEFAULT_RELAYS, DEFAULT_RELAY_STATES } from '../config'
+
+interface RelayStats {
+  sent: number
+  received: number
+}
 
 interface RelayConfig {
   url: string
-  enabled: boolean
+  enabledForProfile: boolean
+  enabledForChat: boolean
   status: 'connected' | 'connecting' | 'error' | 'disconnected'
   errorMessage?: string
+  stats?: RelayStats
 }
 
 interface NetworkConfigPanelProps {
@@ -19,42 +27,178 @@ export function NetworkConfigPanel(_props: NetworkConfigPanelProps) {
   const [relays, setRelays] = useState<RelayConfig[]>([])
   const [newRelay, setNewRelay] = useState('')
   const [editingRelays, setEditingRelays] = useState<Set<string>>(new Set())
+  const relayInstances = useRef<Map<string, Relay>>(new Map())
 
   useEffect(() => {
     const loadRelays = () => {
       const savedRelays = localStorage.getItem('crossworld_relays')
 
       if (savedRelays) {
-        setRelays(JSON.parse(savedRelays) as RelayConfig[])
+        const loaded = JSON.parse(savedRelays) as RelayConfig[]
+        // Reset status to disconnected on load
+        setRelays(loaded.map(r => ({ ...r, status: 'disconnected' as const, stats: { sent: 0, received: 0 } })))
       } else {
-        const defaultConfigs: RelayConfig[] = DEFAULT_RELAYS.map(url => ({
-          url,
-          enabled: true,
-          status: 'disconnected' as const
-        }))
+        const defaultConfigs: RelayConfig[] = DEFAULT_RELAYS.map(url => {
+          const defaults = DEFAULT_RELAY_STATES[url as keyof typeof DEFAULT_RELAY_STATES]
+          return {
+            url,
+            enabledForProfile: defaults?.enabledForProfile ?? true,
+            enabledForChat: defaults?.enabledForChat ?? true,
+            status: 'disconnected' as const,
+            stats: { sent: 0, received: 0 }
+          }
+        })
         setRelays(defaultConfigs)
         localStorage.setItem('crossworld_relays', JSON.stringify(defaultConfigs))
       }
     }
 
     loadRelays()
+
+    // Cleanup on unmount
+    return () => {
+      relayInstances.current.forEach(relay => {
+        try {
+          relay.close()
+        } catch (e) {
+          console.error('Error closing relay:', e)
+        }
+      })
+      relayInstances.current.clear()
+    }
   }, [])
+
+  // Connect/disconnect relays based on enabled state (enabled if either profile or chat is enabled)
+  useEffect(() => {
+    relays.forEach(relay => {
+      const instance = relayInstances.current.get(relay.url)
+      const shouldBeEnabled = relay.enabledForProfile || relay.enabledForChat
+
+      if (shouldBeEnabled && !instance) {
+        // Connect
+        connectRelay(relay.url)
+      } else if (!shouldBeEnabled && instance) {
+        // Disconnect
+        disconnectRelay(relay.url)
+      }
+    })
+  }, [relays])
+
+  const connectRelay = async (url: string) => {
+    setRelays(prev => prev.map(r =>
+      r.url === url ? { ...r, status: 'connecting' as const } : r
+    ))
+
+    try {
+      const relay = new Relay(url)
+      relayInstances.current.set(url, relay)
+
+      // Test connection with a simple subscription
+      const sub = relay.request({ kinds: [1], limit: 1 }).subscribe({
+        next: () => {
+          setRelays(prev => prev.map(r =>
+            r.url === url ? {
+              ...r,
+              status: 'connected' as const,
+              stats: { sent: r.stats?.sent || 0, received: (r.stats?.received || 0) + 1 }
+            } : r
+          ))
+          // Unsubscribe after first event
+          try { sub.unsubscribe() } catch (e) {}
+        },
+        error: (err: any) => {
+          const errorMsg = err?.message || String(err) || 'Connection failed'
+          setRelays(prev => prev.map(r =>
+            r.url === url ? {
+              ...r,
+              status: 'error' as const,
+              errorMessage: errorMsg
+            } : r
+          ))
+        }
+      })
+
+      // Set timeout for connection
+      setTimeout(() => {
+        setRelays(prev => {
+          const current = prev.find(r => r.url === url)
+          if (current && current.status === 'connecting') {
+            return prev.map(r =>
+              r.url === url ? {
+                ...r,
+                status: 'connected' as const
+              } : r
+            )
+          }
+          return prev
+        })
+      }, 2000)
+
+    } catch (error: any) {
+      const errorMsg = error?.message || String(error) || 'Connection failed'
+      setRelays(prev => prev.map(r =>
+        r.url === url ? {
+          ...r,
+          status: 'error' as const,
+          errorMessage: errorMsg
+        } : r
+      ))
+    }
+  }
+
+  const disconnectRelay = (url: string) => {
+    const instance = relayInstances.current.get(url)
+    if (instance) {
+      try {
+        instance.close()
+      } catch (e) {
+        console.error(`Error closing relay ${url}:`, e)
+      }
+      relayInstances.current.delete(url)
+    }
+
+    setRelays(prev => prev.map(r =>
+      r.url === url ? { ...r, status: 'disconnected' as const } : r
+    ))
+  }
 
   const saveRelays = (relays: RelayConfig[]) => {
     localStorage.setItem('crossworld_relays', JSON.stringify(relays))
+    // Dispatch custom event to notify other components (like ChatPanel)
+    window.dispatchEvent(new Event('relayConfigChanged'))
   }
 
-  const handleToggleRelay = (relay: RelayConfig) => {
-    const newStatus: RelayConfig['status'] = relay.enabled ? 'disconnected' : 'connected'
-    const updatedRelay: RelayConfig = { ...relay, enabled: !relay.enabled, status: newStatus }
+  const handleToggleProfile = (relay: RelayConfig) => {
+    const updatedRelay: RelayConfig = {
+      ...relay,
+      enabledForProfile: !relay.enabledForProfile,
+    }
 
     const updated = relays.map(r => r.url === relay.url ? updatedRelay : r)
     setRelays(updated)
     saveRelays(updated)
 
     toast({
-      title: relay.enabled ? 'Relay Disabled' : 'Relay Enabled',
-      description: `${relay.url} ${relay.enabled ? 'disabled' : 'enabled'}`,
+      title: relay.enabledForProfile ? 'Profile Disabled' : 'Profile Enabled',
+      description: `${relay.url} ${relay.enabledForProfile ? 'disabled' : 'enabled'} for profiles`,
+      status: 'info',
+      duration: 2000,
+    })
+  }
+
+  const handleToggleChat = (relay: RelayConfig) => {
+    const updatedRelay: RelayConfig = {
+      ...relay,
+      enabledForChat: !relay.enabledForChat,
+    }
+
+    const updated = relays.map(r => r.url === relay.url ? updatedRelay : r)
+    setRelays(updated)
+    saveRelays(updated)
+
+    toast({
+      title: relay.enabledForChat ? 'Chat Disabled' : 'Chat Enabled',
+      description: `${relay.url} ${relay.enabledForChat ? 'disabled' : 'enabled'} for chat`,
       status: 'info',
       duration: 2000,
     })
@@ -70,8 +214,11 @@ export function NetworkConfigPanel(_props: NetworkConfigPanelProps) {
       return
     }
 
+    // Disconnect old relay
+    disconnectRelay(oldUrl)
+
     const updated = relays.map(r =>
-      r.url === oldUrl ? { ...r, url: newUrl } : r
+      r.url === oldUrl ? { ...r, url: newUrl, status: 'disconnected' as const } : r
     )
 
     setRelays(updated)
@@ -92,6 +239,7 @@ export function NetworkConfigPanel(_props: NetworkConfigPanelProps) {
   }
 
   const handleDeleteRelay = (url: string) => {
+    disconnectRelay(url)
     const updated = relays.filter(r => r.url !== url)
     setRelays(updated)
     saveRelays(updated)
@@ -117,8 +265,10 @@ export function NetworkConfigPanel(_props: NetworkConfigPanelProps) {
 
     const newRelayConfig: RelayConfig = {
       url: newRelay,
-      enabled: true,
-      status: 'disconnected'
+      enabledForProfile: true,
+      enabledForChat: true,
+      status: 'disconnected',
+      stats: { sent: 0, received: 0 }
     }
 
     const updated = [...relays, newRelayConfig]
@@ -135,11 +285,26 @@ export function NetworkConfigPanel(_props: NetworkConfigPanelProps) {
   }
 
   const handleResetDefaults = () => {
-    const defaultConfigs: RelayConfig[] = DEFAULT_RELAYS.map(url => ({
-      url,
-      enabled: true,
-      status: 'disconnected' as const
-    }))
+    // Disconnect all current relays
+    relayInstances.current.forEach((relay, url) => {
+      try {
+        relay.close()
+      } catch (e) {
+        console.error(`Error closing relay ${url}:`, e)
+      }
+    })
+    relayInstances.current.clear()
+
+    const defaultConfigs: RelayConfig[] = DEFAULT_RELAYS.map(url => {
+      const defaults = DEFAULT_RELAY_STATES[url as keyof typeof DEFAULT_RELAY_STATES]
+      return {
+        url,
+        enabledForProfile: defaults?.enabledForProfile ?? true,
+        enabledForChat: defaults?.enabledForChat ?? true,
+        status: 'disconnected' as const,
+        stats: { sent: 0, received: 0 }
+      }
+    })
 
     setRelays(defaultConfigs)
     saveRelays(defaultConfigs)
@@ -152,33 +317,79 @@ export function NetworkConfigPanel(_props: NetworkConfigPanelProps) {
     })
   }
 
+  const getStatusColor = (status: RelayConfig['status']) => {
+    switch (status) {
+      case 'connected': return '#48bb78' // green
+      case 'connecting': return '#ed8936' // orange
+      case 'error': return '#f56565' // red
+      case 'disconnected': return '#718096' // gray
+      default: return '#718096'
+    }
+  }
+
+  const getTooltipLabel = (relay: RelayConfig) => {
+    switch (relay.status) {
+      case 'connected':
+        return `Connected - Sent: ${relay.stats?.sent || 0}, Received: ${relay.stats?.received || 0}`
+      case 'error':
+        return relay.errorMessage || 'Connection error'
+      case 'connecting':
+        return 'Connecting...'
+      case 'disconnected':
+        return 'Not connected'
+      default:
+        return relay.status
+    }
+  }
+
   const renderRelayRow = (relay: RelayConfig) => {
     const isEditing = editingRelays.has(relay.url)
-    const statusColor = relay.status === 'connected' ? 'green' :
-                       relay.status === 'error' ? 'red' :
-                       relay.status === 'connecting' ? 'yellow' : 'gray'
-
-    const statusIcon = relay.status === 'connected' ? <FiCheck /> :
-                      relay.status === 'error' ? <FiAlertCircle /> :
-                      relay.status === 'connecting' ? <FiLoader /> : null
+    const statusColor = getStatusColor(relay.status)
 
     return (
-      <HStack key={relay.url} p={2} bg="rgba(255, 255, 255, 0.03)" borderRadius="md">
-        <Switch
-          size="sm"
-          isChecked={relay.enabled}
-          onChange={() => handleToggleRelay(relay)}
-        />
-
+      <HStack key={relay.url} p={2} bg="rgba(255, 255, 255, 0.03)" borderRadius="md" spacing={2}>
         <Tooltip
-          label={relay.status === 'error' ? relay.errorMessage : relay.status}
+          label={getTooltipLabel(relay)}
           placement="top"
         >
-          <Badge colorScheme={statusColor} display="flex" alignItems="center" gap={1}>
-            {statusIcon}
-            <Text fontSize="2xs">{relay.status}</Text>
-          </Badge>
+          <Box
+            w="12px"
+            h="12px"
+            borderRadius="full"
+            bg={statusColor}
+            cursor="help"
+            flexShrink={0}
+          />
         </Tooltip>
+
+        <HStack spacing={1} flexShrink={0}>
+          <Badge
+            cursor="pointer"
+            onClick={() => handleToggleProfile(relay)}
+            fontSize="2xs"
+            px={2}
+            py={0.5}
+            borderRadius="md"
+            bg={relay.enabledForProfile ? "blue.500" : "rgba(255, 255, 255, 0.1)"}
+            color={relay.enabledForProfile ? "white" : "whiteAlpha.600"}
+            _hover={{ opacity: 0.8 }}
+          >
+            profile
+          </Badge>
+          <Badge
+            cursor="pointer"
+            onClick={() => handleToggleChat(relay)}
+            fontSize="2xs"
+            px={2}
+            py={0.5}
+            borderRadius="md"
+            bg={relay.enabledForChat ? "green.500" : "rgba(255, 255, 255, 0.1)"}
+            color={relay.enabledForChat ? "white" : "whiteAlpha.600"}
+            _hover={{ opacity: 0.8 }}
+          >
+            chat
+          </Badge>
+        </HStack>
 
         <Box flex={1}>
           {isEditing ? (
@@ -272,7 +483,7 @@ export function NetworkConfigPanel(_props: NetworkConfigPanelProps) {
       }}
     >
       <VStack align="stretch" gap={3}>
-        <Text fontSize="md" fontWeight="semibold" color="white">🌐 Network</Text>
+        <Text fontSize="md" fontWeight="semibold" color="white">🌐 Relays</Text>
 
         {relays.map(relay => renderRelayRow(relay))}
 
@@ -310,7 +521,7 @@ export function NetworkConfigPanel(_props: NetworkConfigPanelProps) {
             Reset to Defaults
           </Button>
           <Text fontSize="xs" color="whiteAlpha.600">
-            Changes take effect on reconnect
+            {relays.filter(r => r.status === 'connected').length} connected
           </Text>
         </HStack>
       </VStack>
