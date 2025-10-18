@@ -76,6 +76,9 @@ export class VoiceManager {
       // Connect to MoQ relay
       await this.connection.connect(streamingUrl)
 
+      // Set own npub so subscriber can filter it out
+      this.subscriber.setOwnNpub(npub)
+
       // Start listening for participants
       await this.subscriber.startListening()
 
