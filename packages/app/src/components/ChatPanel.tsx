@@ -21,7 +21,7 @@ interface ProfileMetadata {
 interface RelayConfig {
   url: string
   enabledForProfile: boolean
-  enabledForChat: boolean
+  enabledForWorld: boolean
   status: 'connected' | 'connecting' | 'error' | 'disconnected'
 }
 
@@ -57,7 +57,7 @@ export function ChatPanel({ isOpen, currentPubkey, onViewProfile }: ChatPanelPro
         const savedRelays = localStorage.getItem('crossworld_relays')
         if (savedRelays) {
           const relays = JSON.parse(savedRelays) as RelayConfig[]
-          const chatEnabled = relays.filter(r => r.enabledForChat).map(r => r.url)
+          const chatEnabled = relays.filter(r => r.enabledForWorld).map(r => r.url)
           const profileEnabled = relays.filter(r => r.enabledForProfile).map(r => r.url)
           setEnabledRelays(chatEnabled)
           setProfileRelays(profileEnabled)

@@ -2,6 +2,7 @@ import { Signal } from '@kixelated/signals'
 import { MoqConnectionManager, moqConnection } from './connection'
 import { AudioPublisher } from './publisher'
 import { AudioSubscriber, type Participant } from './subscriber'
+import type { ClientStatusService } from '../client-status'
 
 export type VoiceStatus = 'disconnected' | 'connecting' | 'connected' | 'error'
 
@@ -61,6 +62,10 @@ export class VoiceManager {
         this.error.set(err)
       }
     })
+  }
+
+  setClientStatusService(service: ClientStatusService): void {
+    this.subscriber.setClientStatusService(service)
   }
 
   async connect(streamingUrl: string, npub: string): Promise<void> {
@@ -140,6 +145,10 @@ export class VoiceManager {
 
   isSpeaking(): boolean {
     return this.speaking.peek()
+  }
+
+  getConnectionStatus(npub: string): import('./subscriber').ConnectionStatus {
+    return this.subscriber.getConnectionStatus(npub)
   }
 
   getParticipants(): Participant[] {

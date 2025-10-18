@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { ChakraProvider, useToast } from '@chakra-ui/react'
 import { AccountsProvider } from 'applesauce-react/providers'
 import { AccountManager } from 'applesauce-accounts'
@@ -10,7 +10,9 @@ import { NetworkConfigPanel } from './components/NetworkConfigPanel'
 import { ProfilePanel } from './components/ProfilePanel'
 import { AvatarPanel } from './components/AvatarPanel'
 import { ChatPanel } from './components/ChatPanel'
+import { ClientListPanel } from './components/ClientListPanel'
 import { fetchLiveEvent } from './services/live-event'
+import { ClientStatusService } from './services/client-status'
 import { useVoice } from './hooks/useVoice'
 import { npubEncode } from 'nostr-tools/nip19'
 
@@ -20,13 +22,19 @@ function App() {
   const [isEditMode, setIsEditMode] = useState(false)
   const [activePanelType, setActivePanelType] = useState<ConfigPanelType>(null)
   const [isChatOpen, setIsChatOpen] = useState(false)
+  const [isClientListOpen, setIsClientListOpen] = useState(false)
   const [viewedProfilePubkey, setViewedProfilePubkey] = useState<string | null>(null)
   const [streamingUrl, setStreamingUrl] = useState<string | null>(null)
   const accountManager = useMemo(() => new AccountManager(), [])
+  const clientStatusService = useMemo(() => new ClientStatusService(accountManager), [accountManager])
   const toast = useToast()
 
   // Voice chat
   const voice = useVoice()
+
+  // Activity tracking
+  const [isExploring, setIsExploring] = useState(false)
+  const exploringTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // Avatar state
   const [avatarUrl, setAvatarUrl] = useState<string | undefined>()
@@ -53,6 +61,102 @@ function App() {
     loadLiveEvent()
   }, [])
 
+  // Start client status subscription on mount
+  useEffect(() => {
+    clientStatusService.startSubscription()
+
+    return () => {
+      clientStatusService.stopSubscription()
+    }
+  }, [clientStatusService])
+
+  // Publish client status when logged in
+  useEffect(() => {
+    if (!pubkey) return
+
+    // Set client status service on voice manager
+    voice.setClientStatusService?.(clientStatusService)
+
+    // Start publishing status updates
+    clientStatusService.startStatusUpdates({
+      status: 'active',
+      clientName: 'Crossworld Web',
+      clientVersion: '0.1.0',
+    })
+
+    return () => {
+      clientStatusService.stopStatusUpdates()
+    }
+  }, [pubkey, clientStatusService, voice])
+
+  // Update client status when voice or activity state changes
+  useEffect(() => {
+    if (!pubkey) return
+
+    // Publish immediately for UI actions (voice, mic, chat, edit mode)
+    const isUIAction = true
+
+    clientStatusService.publishStatus({
+      voiceConnected: voice.isConnected,
+      micEnabled: voice.micEnabled,
+      isChatting: isChatOpen,
+      isExploring,
+      isEditing: isEditMode,
+    }, isUIAction).catch(console.error)
+  }, [pubkey, voice.isConnected, voice.micEnabled, isChatOpen, isExploring, isEditMode, clientStatusService])
+
+  // Track exploring activity with keyboard events
+  useEffect(() => {
+    if (!pubkey || isEditMode) return
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // WASD or Arrow keys indicate exploring
+      if (['w', 'a', 's', 'd', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key.toLowerCase())) {
+        const wasExploring = isExploring
+        setIsExploring(true)
+
+        // Publish immediately when exploring starts
+        if (!wasExploring) {
+          clientStatusService.publishStatus({
+            voiceConnected: voice.isConnected,
+            micEnabled: voice.micEnabled,
+            isChatting: isChatOpen,
+            isExploring: true,
+            isEditing: isEditMode,
+          }, true).catch(console.error)
+        }
+
+        // Clear any existing timeout
+        if (exploringTimeoutRef.current) {
+          clearTimeout(exploringTimeoutRef.current)
+        }
+
+        // Set timeout to clear exploring after 5 seconds of inactivity
+        exploringTimeoutRef.current = setTimeout(() => {
+          setIsExploring(false)
+
+          // Publish immediately when exploring stops
+          clientStatusService.publishStatus({
+            voiceConnected: voice.isConnected,
+            micEnabled: voice.micEnabled,
+            isChatting: isChatOpen,
+            isExploring: false,
+            isEditing: isEditMode,
+          }, true).catch(console.error)
+        }, 5000)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      if (exploringTimeoutRef.current) {
+        clearTimeout(exploringTimeoutRef.current)
+      }
+    }
+  }, [pubkey, isEditMode, isExploring, clientStatusService, voice.isConnected, voice.micEnabled, isChatOpen])
+
   const handleLogin = (publicKey: string) => {
     setPubkey(publicKey)
   }
@@ -62,8 +166,11 @@ function App() {
     if (voice.isConnected) {
       await voice.disconnect()
     }
+    // Stop client status updates
+    clientStatusService.stopStatusUpdates()
     setPubkey(null)
     setIsChatOpen(false)
+    setIsClientListOpen(false)
   }
 
   const handleAvatarUrlChange = (url: string) => {
@@ -179,6 +286,8 @@ function App() {
             onToggleEditMode={setIsEditMode}
             isChatOpen={isChatOpen}
             onToggleChat={() => setIsChatOpen(!isChatOpen)}
+            isClientListOpen={isClientListOpen}
+            onToggleClientList={() => setIsClientListOpen(!isClientListOpen)}
             voiceConnected={voice.isConnected}
             voiceConnecting={voice.status === 'connecting'}
             micEnabled={voice.micEnabled}
@@ -211,6 +320,13 @@ function App() {
 
         {/* Chat Panel */}
         <ChatPanel isOpen={isChatOpen} currentPubkey={pubkey} onViewProfile={handleViewProfile} />
+
+        {/* Client List Panel */}
+        <ClientListPanel
+          isOpen={isClientListOpen}
+          statusService={clientStatusService}
+          getConnectionStatus={voice.getConnectionStatus}
+        />
       </ChakraProvider>
     </AccountsProvider>
   )

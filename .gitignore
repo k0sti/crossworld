@@ -1,5 +1,6 @@
 # Reference projects (not part of repo)
 ref
+moq-relay
 
 # Dependencies
 node_modules
