@@ -9,6 +9,7 @@ default:
     @echo "  just install          - Install dependencies"
     @echo "  just preview          - Preview production build"
     @echo "  just clean            - Clean build artifacts"
+    @echo "  just start-live       - Initialize live event with default parameters"
     @echo ""
 
 # Build WASM module in development mode
@@ -39,3 +40,7 @@ install:
 # Preview production build
 preview:
     cd packages/app && bun run preview
+
+# Initialize Crossworld Nostr live event
+start-live:
+    cd crates/worldtool && cargo run -- init-live --streaming
