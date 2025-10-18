@@ -1,126 +1,192 @@
 import * as Hang from '@kixelated/hang'
 import * as Moq from '@kixelated/moq'
-import { Signal } from '@kixelated/signals'
+import { Effect, Signal } from '@kixelated/signals'
 import { MoqConnectionManager } from './connection'
 import { LIVE_CHAT_D_TAG } from '../../config'
 
+/**
+ * Audio publisher using hang library patterns
+ * Based on ref/moq/js/hang/src/publish/element.ts
+ */
 export class AudioPublisher {
-  private broadcast: Hang.Publish.Broadcast | null = null
   private connection: MoqConnectionManager
-  private mediaStream: MediaStream | null = null
+  private signals = new Effect()
 
-  public micEnabled: Signal<boolean> = new Signal(false)
-  public speaking: Signal<boolean> = new Signal(false)
-  public error: Signal<string | null> = new Signal(null)
+  // Input signals
+  private enabledSignal: Signal<boolean> = new Signal(false)
+  private npubSignal: Signal<string | undefined> = new Signal(undefined)
+
+  // Microphone source (similar to ref/moq/js/hang/src/publish/element.ts:240-244)
+  private microphoneSource: Signal<MediaStreamTrack | undefined> = new Signal(undefined)
+
+  // Output signals
+  public readonly micEnabled: Signal<boolean> = new Signal(false)
+  public readonly speaking: Signal<boolean> = new Signal(false)
+  public readonly error: Signal<string | null> = new Signal(null)
 
   constructor(connection: MoqConnectionManager) {
     this.connection = connection
+
+    // Setup reactive broadcast creation (ref: ref/moq/js/hang/src/publish/element.ts:180-199)
+    this.signals.effect(this.#runBroadcast.bind(this))
+
+    // Setup microphone acquisition (ref: ref/moq/js/hang/src/publish/element.ts:230-252)
+    this.signals.effect(this.#runMicrophone.bind(this))
   }
 
+  /**
+   * Enable microphone and start broadcasting
+   */
   async enableMic(npub: string): Promise<void> {
-    if (this.broadcast) {
+    if (this.enabledSignal.peek()) {
       console.log('Microphone already enabled')
       return
     }
 
-    const conn = this.connection.getConnection()
-    if (!conn) {
-      throw new Error('Not connected to MoQ relay')
-    }
-
-    try {
-      console.log('Requesting microphone permission...')
-
-      // Request microphone access
-      this.mediaStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        }
-      })
-
-      // Get audio track from stream
-      const audioTrack = this.mediaStream.getAudioTracks()[0]
-      if (!audioTrack) {
-        throw new Error('No audio track found in media stream')
-      }
-
-      // Ensure it's an audio track
-      if (audioTrack.kind !== 'audio') {
-        throw new Error('Track is not an audio track')
-      }
-
-      // Create broadcast path: crossworld/voice/<d-tag>/<npub>
-      const broadcastName = `crossworld/voice/${LIVE_CHAT_D_TAG}/${npub}`
-
-      console.log('Creating audio broadcast:', broadcastName)
-
-      // Create Hang broadcast
-      // Note: TypeScript can't properly narrow MediaStreamTrack.kind type
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      this.broadcast = new Hang.Publish.Broadcast({
-        connection: conn,
-        path: Moq.Path.from(broadcastName),
-        enabled: true, // CRITICAL: Must enable broadcast for it to announce itself
-        audio: {
-          enabled: true,
-          source: audioTrack as any,
-        },
-      })
-
-      // Subscribe to speaking detection
-      this.broadcast.audio.speaking.active.subscribe((isSpeaking) => {
-        this.speaking.set(isSpeaking)
-      })
-
-      this.micEnabled.set(true)
-      this.error.set(null)
-      console.log('Microphone enabled, broadcasting at:', broadcastName)
-    } catch (err) {
-      console.error('Failed to enable microphone:', err)
-      this.error.set(err instanceof Error ? err.message : 'Microphone access failed')
-      throw err
-    }
+    console.log('Enabling microphone for:', npub)
+    this.npubSignal.set(npub)
+    this.enabledSignal.set(true)
   }
 
+  /**
+   * Disable microphone and stop broadcasting
+   */
   async disableMic(): Promise<void> {
-    if (!this.broadcast) {
+    if (!this.enabledSignal.peek()) {
       return
     }
 
-    try {
-      console.log('Disabling microphone...')
-
-      // Properly close the broadcast to clean up resources
-      this.broadcast.close()
-
-      // Stop all media tracks to remove recording indicator
-      if (this.mediaStream) {
-        this.mediaStream.getTracks().forEach(track => {
-          track.stop()
-          console.log('Stopped media track:', track.kind)
-        })
-        this.mediaStream = null
-      }
-
-      // Clean up
-      this.broadcast = null
-      this.micEnabled.set(false)
-      this.speaking.set(false)
-      this.error.set(null)
-
-      console.log('Microphone disabled')
-    } catch (err) {
-      console.error('Error disabling microphone:', err)
-    }
+    console.log('Disabling microphone')
+    this.enabledSignal.set(false)
+    this.npubSignal.set(undefined)
   }
 
+  /**
+   * Acquire microphone and set up audio source
+   * Ref: ref/moq/js/hang/src/publish/source/microphone.ts
+   */
+  #runMicrophone(effect: Effect): void {
+    const enabled = effect.get(this.enabledSignal)
+    if (!enabled) {
+      this.microphoneSource.set(undefined)
+      this.micEnabled.set(false)
+      return
+    }
+
+    // Spawn async microphone acquisition
+    effect.spawn(async () => {
+      try {
+        console.log('Requesting microphone permission...')
+
+        // Request microphone access (ref: ref/moq/js/hang/src/publish/source/microphone.ts:43-56)
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+        })
+
+        // Check if effect was cancelled while waiting
+        const cancelled = await Promise.race([
+          Promise.resolve(false),
+          effect.cancel.then(() => true),
+        ])
+        if (cancelled) {
+          stream.getTracks().forEach(track => track.stop())
+          return
+        }
+
+        const track = stream.getAudioTracks()[0]
+        if (!track) {
+          throw new Error('No audio track found')
+        }
+
+        console.log('Microphone acquired:', track.label)
+
+        // Set the track - this will trigger broadcast creation
+        this.microphoneSource.set(track)
+        this.micEnabled.set(true)
+        this.error.set(null)
+
+        // Cleanup: stop track when effect is cancelled
+        effect.cleanup(() => {
+          console.log('Stopping microphone track')
+          track.stop()
+        })
+      } catch (err) {
+        console.error('Failed to acquire microphone:', err)
+        this.error.set(err instanceof Error ? err.message : 'Microphone access failed')
+        this.enabledSignal.set(false)
+      }
+    })
+  }
+
+  /**
+   * Create and manage broadcast
+   * Ref: ref/moq/js/hang/src/publish/broadcast.ts
+   */
+  #runBroadcast(effect: Effect): void {
+    const conn = effect.get(this.connection.established)
+    if (!conn) return
+
+    const npub = effect.get(this.npubSignal)
+    if (!npub) return
+
+    const audioSource = effect.get(this.microphoneSource)
+    if (!audioSource) return
+
+    // Create broadcast path
+    const path = Moq.Path.from(`crossworld/voice/${LIVE_CHAT_D_TAG}/${npub}`)
+    console.log('Creating broadcast:', String(path))
+
+    // Create broadcast (ref: ref/moq/js/hang/src/publish/element.ts:180-199)
+    const broadcast = new Hang.Publish.Broadcast({
+      connection: conn,
+      path,
+      enabled: true, // Must be enabled for announcement
+      audio: {
+        enabled: true,
+        source: audioSource as Hang.Publish.Audio.AudioStreamTrack,
+        speaking: {
+          enabled: true, // Enable speaking detection
+        },
+      },
+    })
+
+    // Subscribe to speaking state
+    effect.effect((innerEffect) => {
+      const isSpeaking = innerEffect.get(broadcast.audio.speaking.active)
+      this.speaking.set(isSpeaking)
+    })
+
+    console.log('Broadcast created and publishing')
+
+    // Cleanup: close broadcast when effect ends
+    effect.cleanup(() => {
+      console.log('Closing broadcast')
+      broadcast.close()
+    })
+  }
+
+  /**
+   * Check if microphone is enabled
+   */
   isMicEnabled(): boolean {
     return this.micEnabled.peek()
   }
 
+  /**
+   * Check if currently speaking
+   */
   isSpeaking(): boolean {
     return this.speaking.peek()
+  }
+
+  /**
+   * Clean up all resources
+   */
+  close(): void {
+    this.signals.close()
   }
 }
