@@ -1,64 +1,77 @@
 import * as Moq from '@kixelated/moq'
-import { Signal } from '@kixelated/signals'
+import { Effect, Signal, type Getter } from '@kixelated/signals'
 
-export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error'
+export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected'
 
+/**
+ * MoQ connection manager with automatic reconnection
+ * Based on ref/moq/js/hang/src/publish/element.ts:175-178
+ */
 export class MoqConnectionManager {
-  private connection: Moq.Connection.Established | null = null
-  private relayUrl: string | null = null
+  // Input signals
+  private urlSignal: Signal<URL | undefined> = new Signal(undefined)
+  private enabledSignal: Signal<boolean> = new Signal(false)
 
-  public status: Signal<ConnectionStatus> = new Signal('disconnected')
-  public error: Signal<string | null> = new Signal(null)
+  // Connection with auto-reconnect
+  private connection: Moq.Connection.Reload
 
-  async connect(url: string): Promise<void> {
-    if (this.connection && this.relayUrl === url) {
-      console.log('Already connected to', url)
-      return
-    }
+  // Expose status directly from Connection.Reload
+  public readonly status: Getter<ConnectionStatus>
+  public readonly established: Getter<Moq.Connection.Established | undefined>
 
-    if (this.connection) {
-      await this.disconnect()
-    }
+  private signals = new Effect()
 
-    this.status.set('connecting')
-    this.error.set(null)
-    this.relayUrl = url
+  constructor() {
+    // Create auto-reconnecting connection (ref: ref/moq/js/hang/src/publish/element.ts:175-178)
+    this.connection = new Moq.Connection.Reload({
+      enabled: this.enabledSignal,
+      url: this.urlSignal,
+    })
 
-    try {
-      console.log('Connecting to MoQ relay:', url)
-      this.connection = await Moq.Connection.connect(new URL(url))
-      this.status.set('connected')
-      console.log('Connected to MoQ relay')
-    } catch (err) {
-      console.error('Failed to connect to MoQ relay:', err)
-      this.status.set('error')
-      this.error.set(err instanceof Error ? err.message : 'Connection failed')
-      this.connection = null
-      this.relayUrl = null
-      throw err
-    }
+    // Expose connection status
+    this.status = this.connection.status
+    this.established = this.connection.established
   }
 
-  async disconnect(): Promise<void> {
-    if (this.connection) {
-      try {
-        await this.connection.close()
-      } catch (err) {
-        console.error('Error closing MoQ connection:', err)
-      }
-      this.connection = null
-      this.relayUrl = null
-    }
-    this.status.set('disconnected')
-    this.error.set(null)
+  /**
+   * Connect to MoQ relay (or change URL)
+   * Connection.Reload handles reconnection automatically
+   */
+  connect(url: string): void {
+    console.log('Connecting to MoQ relay:', url)
+    this.urlSignal.set(new URL(url))
+    this.enabledSignal.set(true)
   }
 
-  getConnection(): Moq.Connection.Established | null {
-    return this.connection
+  /**
+   * Disconnect from MoQ relay
+   */
+  disconnect(): void {
+    console.log('Disconnecting from MoQ relay')
+    this.enabledSignal.set(false)
+    this.urlSignal.set(undefined)
   }
 
+  /**
+   * Get the established connection (if connected)
+   */
+  getConnection(): Moq.Connection.Established | undefined {
+    return this.connection.established.peek()
+  }
+
+  /**
+   * Check if currently connected
+   */
   isConnected(): boolean {
-    return this.status.peek() === 'connected' && this.connection !== null
+    return this.connection.status.peek() === 'connected'
+  }
+
+  /**
+   * Clean up resources
+   */
+  close(): void {
+    this.signals.close()
+    this.connection.close()
   }
 }
 
