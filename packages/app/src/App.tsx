@@ -47,6 +47,16 @@ function App() {
   useEffect(() => {
     const loadLiveEvent = async () => {
       try {
+        // TEMP: Use local relay (confirmed working)
+        // const localRelay = 'http://localhost:4443/anon'
+        // setStreamingUrl(localRelay)
+        // console.log('MoQ streaming URL (local relay):', localRelay)
+
+        // Other relays to test later:
+        // const hangRelay = 'https://relay.moq.dev/anon'
+        // const cfRelay = 'https://relay.cloudflare.mediaoverquic.com/crossworld-dev'
+
+        // Original live event fetching (commented out):
         const liveEvent = await fetchLiveEvent()
         if (liveEvent?.streaming_url) {
           setStreamingUrl(liveEvent.streaming_url)
@@ -325,7 +335,6 @@ function App() {
         <ClientListPanel
           isOpen={isClientListOpen}
           statusService={clientStatusService}
-          getConnectionStatus={voice.getConnectionStatus}
         />
       </ChakraProvider>
     </AccountsProvider>

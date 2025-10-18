@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
-import { voiceManager } from '../services/voice/manager'
-import type { Participant, ConnectionStatus } from '../services/voice/subscriber'
+import { voiceManager, type VoiceStatus } from '../services/voice/manager'
+import type { Participant } from '../services/voice/subscriber'
 
 export function useVoice() {
-  const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected')
+  const [status, setStatus] = useState<VoiceStatus>('disconnected')
   const [micEnabled, setMicEnabled] = useState(false)
   const [speaking, setSpeaking] = useState(false)
   const [participants, setParticipants] = useState<Participant[]>([])
@@ -52,8 +52,12 @@ export function useVoice() {
     }
   }
 
-  const getConnectionStatus = (npub: string): ConnectionStatus => {
-    return voiceManager.getConnectionStatus(npub)
+  const setParticipantVolume = (npub: string, volume: number) => {
+    voiceManager.setParticipantVolume(npub, volume)
+  }
+
+  const setParticipantMuted = (npub: string, muted: boolean) => {
+    voiceManager.setParticipantMuted(npub, muted)
   }
 
   return {
@@ -66,8 +70,9 @@ export function useVoice() {
     connect,
     disconnect,
     toggleMic,
+    setParticipantVolume,
+    setParticipantMuted,
     isConnected: status === 'connected',
     setClientStatusService: voiceManager.setClientStatusService.bind(voiceManager),
-    getConnectionStatus,
   }
 }
