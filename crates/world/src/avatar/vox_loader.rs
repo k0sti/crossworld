@@ -3,8 +3,8 @@ use dot_vox::DotVoxData;
 
 /// Load a .vox file from bytes and convert to VoxelModel
 pub fn load_vox_from_bytes(bytes: &[u8]) -> Result<VoxelModel, String> {
-    let vox_data = dot_vox::load_bytes(bytes)
-        .map_err(|e| format!("Failed to parse .vox file: {}", e))?;
+    let vox_data =
+        dot_vox::load_bytes(bytes).map_err(|e| format!("Failed to parse .vox file: {}", e))?;
 
     convert_dotvox_to_model(&vox_data)
 }
@@ -22,8 +22,8 @@ fn convert_dotvox_to_model(vox_data: &DotVoxData) -> Result<VoxelModel, String> 
     // MagicaVoxel uses Z-up, we use Y-up, so swap dimensions
     let size = dot_vox_model.size;
     let size_x = size.x as u8;
-    let size_y = size.z as u8;  // MagicaVoxel's Z becomes our Y (height)
-    let size_z = size.y as u8;  // MagicaVoxel's Y becomes our Z (depth)
+    let size_y = size.z as u8; // MagicaVoxel's Z becomes our Y (height)
+    let size_z = size.y as u8; // MagicaVoxel's Y becomes our Z (depth)
 
     // Create our model
     let mut model = VoxelModel::new(size_x, size_y, size_z);
@@ -40,8 +40,8 @@ fn convert_dotvox_to_model(vox_data: &DotVoxData) -> Result<VoxelModel, String> 
 
         model.add_voxel(Voxel {
             x: voxel.x,
-            y: voxel.z,  // MagicaVoxel's Z becomes our Y (up)
-            z: voxel.y,  // MagicaVoxel's Y becomes our Z (depth)
+            y: voxel.z, // MagicaVoxel's Z becomes our Y (up)
+            z: voxel.y, // MagicaVoxel's Y becomes our Z (depth)
             color_index,
         });
     }

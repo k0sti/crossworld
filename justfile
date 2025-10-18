@@ -9,6 +9,8 @@ default:
     @echo "  just install          - Install dependencies"
     @echo "  just preview          - Preview production build"
     @echo "  just clean            - Clean build artifacts"
+    @echo "  just test             - Run all tests (Rust + TypeScript)"
+    @echo "  just check            - Check everything before deployment"
     @echo "  just start-live       - Initialize live event with default parameters"
     @echo ""
 
@@ -44,3 +46,22 @@ preview:
 # Initialize Crossworld Nostr live event
 start-live:
     cd crates/worldtool && cargo run -- init-live --streaming
+
+# Run all tests
+test:
+    @echo "Running Rust tests..."
+    cargo test --workspace
+    @echo "\nRunning TypeScript type check..."
+    cd packages/app && bun run build
+
+# Check everything before deployment
+check:
+    @echo "=== Checking Rust code ==="
+    cargo check --workspace
+    cargo clippy --workspace -- -D warnings
+    cargo fmt --check
+    @echo "\n=== Building WASM ==="
+    just build-wasm
+    @echo "\n=== Building TypeScript app ==="
+    cd packages/app && bun run build
+    @echo "\n✅ All checks passed! Ready for deployment."

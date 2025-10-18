@@ -1,11 +1,11 @@
-mod geometry;
 mod avatar;
 mod emoji_hash;
+mod geometry;
 
-use wasm_bindgen::prelude::*;
-use geometry::GeometryEngine as GeometryEngineInternal;
 use avatar::AvatarManager;
 use emoji_hash::pubkey_to_emoji_hash;
+use geometry::GeometryEngine as GeometryEngineInternal;
+use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen(start)]
 pub fn init() {
@@ -31,6 +31,12 @@ impl GeometryEngine {
     #[wasm_bindgen]
     pub fn generate_frame(&self) -> GeometryData {
         self.engine.generate_frame()
+    }
+}
+
+impl Default for GeometryEngine {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -86,6 +92,7 @@ impl NetworkClient {
         Self {}
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn connect(
         &mut self,
         _server_url: String,
@@ -100,22 +107,20 @@ impl NetworkClient {
         Ok(())
     }
 
-    pub fn send_position(
-        &self,
-        _x: f32,
-        _y: f32,
-        _z: f32,
-        _rx: f32,
-        _ry: f32,
-        _rz: f32,
-        _rw: f32,
-    ) {
+    #[allow(clippy::too_many_arguments)]
+    pub fn send_position(&self, _x: f32, _y: f32, _z: f32, _rx: f32, _ry: f32, _rz: f32, _rw: f32) {
         tracing::debug!("NetworkClient::send_position called");
     }
 
     pub async fn send_chat(&self, _message: String) -> Result<(), JsValue> {
         tracing::debug!("NetworkClient::send_chat called");
         Ok(())
+    }
+}
+
+impl Default for NetworkClient {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -145,7 +150,16 @@ impl AvatarEngine {
     pub fn clear_cache(&mut self) {
         self.manager.clear_cache();
     }
+}
 
+impl Default for AvatarEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[wasm_bindgen]
+impl AvatarEngine {
     /// Get the number of cached avatars
     #[wasm_bindgen]
     pub fn cache_size(&self) -> usize {
@@ -161,7 +175,10 @@ pub fn pubkey_to_emoji(pubkey_hex: String) -> String {
 
 /// Load a .vox file from bytes and generate geometry
 #[wasm_bindgen]
-pub fn load_vox_from_bytes(bytes: &[u8], user_npub: Option<String>) -> Result<GeometryData, JsValue> {
+pub fn load_vox_from_bytes(
+    bytes: &[u8],
+    user_npub: Option<String>,
+) -> Result<GeometryData, JsValue> {
     let voxel_model = avatar::load_vox_from_bytes(bytes)
         .map_err(|e| JsValue::from_str(&format!("Failed to load .vox file: {}", e)))?;
 
