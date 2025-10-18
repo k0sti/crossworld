@@ -1,15 +1,13 @@
-import { Box, VStack, HStack, Text, Avatar, Tooltip, Badge, Wrap, Circle } from '@chakra-ui/react'
+import { Box, VStack, HStack, Text, Avatar, Tooltip, Badge, Wrap } from '@chakra-ui/react'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { FiMapPin, FiMessageSquare, FiCompass, FiEdit3, FiMic, FiHeadphones } from 'react-icons/fi'
 import { type ClientStatusService, type ClientStatus } from '../services/client-status'
 import { Relay } from 'applesauce-relay'
 import { DEFAULT_RELAYS } from '../config'
-import type { ConnectionStatus } from '../services/voice/subscriber'
 
 interface ClientListPanelProps {
   isOpen: boolean
   statusService: ClientStatusService
-  getConnectionStatus: (npub: string) => ConnectionStatus
 }
 
 interface ProfileMetadata {
@@ -25,7 +23,7 @@ interface RelayConfig {
   status: 'connected' | 'connecting' | 'error' | 'disconnected'
 }
 
-export function ClientListPanel({ isOpen, statusService, getConnectionStatus }: ClientListPanelProps) {
+export function ClientListPanel({ isOpen, statusService }: ClientListPanelProps) {
   const [clients, setClients] = useState<Map<string, ClientStatus>>(new Map())
   const [profiles, setProfiles] = useState<Map<string, ProfileMetadata>>(new Map())
   const [enabledRelays, setEnabledRelays] = useState<string[]>([])
@@ -170,16 +168,6 @@ export function ClientListPanel({ isOpen, statusService, getConnectionStatus }: 
     return `${Math.floor(diff / 86400)}d ago`
   }
 
-  const getConnectionStatusColor = (status: ConnectionStatus): string => {
-    switch (status) {
-      case 'connected': return 'green.400'
-      case 'connecting': return 'orange.400'
-      case 'error': return 'red.400'
-      case 'disconnected': return 'gray.500'
-      default: return 'gray.500'
-    }
-  }
-
   if (!isOpen) return null
 
   return (
@@ -266,19 +254,6 @@ export function ClientListPanel({ isOpen, statusService, getConnectionStatus }: 
                 transition="background 0.2s"
                 position="relative"
               >
-                {/* Connection Status Indicator */}
-                {client.voiceConnected && (
-                  <Circle
-                    size="8px"
-                    bg={getConnectionStatusColor(getConnectionStatus(client.npub))}
-                    position="absolute"
-                    bottom="8px"
-                    right="8px"
-                    border="2px solid"
-                    borderColor="rgba(0, 0, 0, 0.85)"
-                  />
-                )}
-
                 <HStack spacing={3} align="start">
                   {/* Avatar */}
                   <Avatar
