@@ -210,6 +210,15 @@ export class SceneManager {
   }
 
   render(): void {
+    if (!this.renderer || !this.scene || !this.camera) {
+      console.error('[SceneManager] render() called but missing:', {
+        renderer: !!this.renderer,
+        scene: !!this.scene,
+        camera: !!this.camera
+      })
+      return
+    }
+
     const currentTime = performance.now();
     const deltaTime_s = (currentTime - this.lastTime) / 1000;
     this.lastTime = currentTime;
@@ -371,6 +380,25 @@ export class SceneManager {
 
     if (this.previewCube && !isEditMode) {
       this.previewCube.visible = false;
+    }
+  }
+
+  /**
+   * Move avatar relative to current position using WASD controls
+   */
+  moveAvatar(deltaX: number, deltaZ: number): void {
+    if (this.avatar) {
+      const currentPos = this.avatar.getObject3D().position;
+      const newX = Math.max(0.5, Math.min(7.5, currentPos.x + deltaX));
+      const newZ = Math.max(0.5, Math.min(7.5, currentPos.z + deltaZ));
+      this.avatar.setTargetPosition(newX, newZ);
+    }
+
+    if (this.voxelAvatar) {
+      const currentPos = this.voxelAvatar.getObject3D().position;
+      const newX = Math.max(0.5, Math.min(7.5, currentPos.x + deltaX));
+      const newZ = Math.max(0.5, Math.min(7.5, currentPos.z + deltaZ));
+      this.voxelAvatar.setTargetPosition(newX, newZ);
     }
   }
 }

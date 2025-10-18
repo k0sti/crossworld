@@ -32,10 +32,13 @@ interface ChatPanelProps {
 }
 
 export function ChatPanel({ isOpen, currentPubkey, onViewProfile }: ChatPanelProps) {
+  console.log('[ChatPanel] Render - isOpen:', isOpen)
+
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [inputMessage, setInputMessage] = useState('')
   const [isSending, setIsSending] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
   const manager = useAccountManager()
 
   // Keep relay instances in ref to reuse for both subscribing and publishing
@@ -96,6 +99,15 @@ export function ChatPanel({ isOpen, currentPubkey, onViewProfile }: ChatPanelPro
   useEffect(() => {
     scrollToBottom()
   }, [messages])
+
+  // Auto-focus input when chat opens
+  useEffect(() => {
+    if (isOpen && inputRef.current) {
+      setTimeout(() => {
+        inputRef.current?.focus()
+      }, 100)
+    }
+  }, [isOpen])
 
   // Fetch profile metadata for a pubkey
   const fetchProfile = async (pubkey: string) => {
@@ -530,6 +542,7 @@ export function ChatPanel({ isOpen, currentPubkey, onViewProfile }: ChatPanelPro
         spacing={2}
       >
         <Input
+          ref={inputRef}
           value={inputMessage}
           onChange={(e) => setInputMessage(e.target.value)}
           onKeyPress={handleKeyPress}

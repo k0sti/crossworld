@@ -10,6 +10,8 @@ import { NetworkConfigPanel } from './components/NetworkConfigPanel'
 import { ProfilePanel } from './components/ProfilePanel'
 import { AvatarPanel } from './components/AvatarPanel'
 import { ChatPanel } from './components/ChatPanel'
+import { HelpOverlay } from './components/HelpOverlay'
+import { useKeyboardManager } from './hooks/useKeyboardManager'
 
 function App() {
   const [pubkey, setPubkey] = useState<string | null>(null)
@@ -18,6 +20,7 @@ function App() {
   const [activePanelType, setActivePanelType] = useState<ConfigPanelType>(null)
   const [isChatOpen, setIsChatOpen] = useState(false)
   const [viewedProfilePubkey, setViewedProfilePubkey] = useState<string | null>(null)
+  const [showHelp, setShowHelp] = useState(false)
   const accountManager = useMemo(() => new AccountManager(), [])
 
   // Avatar state
@@ -54,6 +57,37 @@ function App() {
     setActivePanelType('profile')
   }
 
+  const handleToggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen()
+    } else {
+      document.exitFullscreen()
+    }
+  }
+
+  // Keyboard manager with callbacks
+  const { getKeysPressed } = useKeyboardManager(
+    pubkey !== null,
+    isChatOpen,
+    {
+      onOpenNetworkPanel: () => setActivePanelType('network'),
+      onOpenProfilePanel: () => setActivePanelType('profile'),
+      onOpenAvatarPanel: () => setActivePanelType('avatar'),
+      onToggleChat: () => {
+        console.log('[App] onToggleChat - current:', isChatOpen, '-> new:', !isChatOpen)
+        setIsChatOpen(!isChatOpen)
+      },
+      onLogout: handleLogout,
+      onClosePanel: () => setActivePanelType(null),
+      onToggleCameraView: () => {
+        // TODO: Implement camera view toggle in SceneManager
+        console.log('Toggle camera view')
+      },
+      onToggleHelp: () => setShowHelp(!showHelp),
+      onToggleFullscreen: handleToggleFullscreen,
+    }
+  )
+
   return (
     <AccountsProvider manager={accountManager}>
       <ChakraProvider>
@@ -71,6 +105,8 @@ function App() {
           onAvatarUrlChange={handleAvatarUrlChange}
           avatarUrl={avatarUrl}
           colorChangeCounter={colorChangeCounter}
+          getKeysPressed={getKeysPressed}
+          isChatOpen={isChatOpen}
         />
         <TopBar
           pubkey={pubkey}
@@ -84,7 +120,10 @@ function App() {
             isEditMode={isEditMode}
             onToggleEditMode={setIsEditMode}
             isChatOpen={isChatOpen}
-            onToggleChat={() => setIsChatOpen(!isChatOpen)}
+            onToggleChat={() => {
+              console.log('[App] LeftSidebar onToggleChat - current:', isChatOpen, '-> new:', !isChatOpen)
+              setIsChatOpen(!isChatOpen)
+            }}
           />
         )}
 
@@ -109,7 +148,14 @@ function App() {
         )}
 
         {/* Chat Panel */}
-        <ChatPanel isOpen={isChatOpen} currentPubkey={pubkey} onViewProfile={handleViewProfile} />
+        <ChatPanel
+          isOpen={isChatOpen}
+          currentPubkey={pubkey}
+          onViewProfile={handleViewProfile}
+        />
+
+        {/* Help Overlay */}
+        <HelpOverlay isOpen={showHelp} onClose={() => setShowHelp(false)} />
       </ChakraProvider>
     </AccountsProvider>
   )

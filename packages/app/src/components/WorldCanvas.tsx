@@ -3,6 +3,7 @@ import { Box } from '@chakra-ui/react';
 import { SceneManager } from '../renderer/scene';
 import { GeometryController } from '../geometry/geometry-controller';
 import init, { AvatarEngine } from '@workspace/wasm';
+import type { KeysPressed } from '../hooks/useKeyboardManager';
 
 export type VoxelModelType = 'boy' | 'girl';
 
@@ -20,6 +21,8 @@ interface WorldCanvasProps {
   onAvatarUrlChange: (url: string) => void;
   avatarUrl?: string;
   colorChangeCounter?: number;
+  getKeysPressed?: () => KeysPressed;
+  isChatOpen?: boolean;
 }
 
 export function WorldCanvas({
@@ -30,14 +33,28 @@ export function WorldCanvas({
   useVoxFile,
   useOriginalColors,
   avatarUrl,
-  colorChangeCounter
+  colorChangeCounter,
+  getKeysPressed,
+  isChatOpen
 }: WorldCanvasProps) {
+  console.log('[WorldCanvas] Render - isChatOpen:', isChatOpen)
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneManagerRef = useRef<SceneManager | null>(null);
   const geometryControllerRef = useRef<GeometryController | null>(null);
   const avatarEngineRef = useRef<AvatarEngine | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const [colorSeed, setColorSeed] = useState(() => Math.random().toString(36).substring(7));
+
+  // Use refs to avoid stale closures in animation loop
+  const getKeysPressedRef = useRef(getKeysPressed);
+  const isChatOpenRef = useRef(isChatOpen);
+
+  // Update refs when props change
+  useEffect(() => {
+    getKeysPressedRef.current = getKeysPressed;
+    isChatOpenRef.current = isChatOpen;
+  }, [getKeysPressed, isChatOpen]);
 
   // Update color seed when counter changes
   useEffect(() => {
@@ -81,8 +98,39 @@ export function WorldCanvas({
       console.error('Failed to initialize geometry controller:', error);
     });
 
-    // Animation loop
+    // Animation loop with movement updates
     const animate = () => {
+      // Handle WASD movement every frame (only when chat is closed)
+      if (getKeysPressedRef.current && !isChatOpenRef.current) {
+        const keys = getKeysPressedRef.current();
+
+        // Calculate movement direction
+        let moveX = 0;
+        let moveZ = 0;
+
+        if (keys.forward) moveZ -= 1;
+        if (keys.backward) moveZ += 1;
+        if (keys.left) moveX -= 1;
+        if (keys.right) moveX += 1;
+
+        // Normalize diagonal movement
+        if (moveX !== 0 && moveZ !== 0) {
+          const length = Math.sqrt(moveX * moveX + moveZ * moveZ);
+          moveX /= length;
+          moveZ /= length;
+        }
+
+        // Apply run multiplier
+        const speed = keys.run ? 0.1 : 0.05;
+        moveX *= speed;
+        moveZ *= speed;
+
+        // Update avatar position if there's movement
+        if (moveX !== 0 || moveZ !== 0) {
+          sceneManager.moveAvatar(moveX, moveZ);
+        }
+      }
+
       sceneManager.render();
       animationFrameRef.current = requestAnimationFrame(animate);
     };
