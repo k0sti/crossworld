@@ -100,6 +100,7 @@ export function ProfileButton({ pubkey, onLogin }: ProfileButtonProps) {
     try {
       const account = SimpleAccount.generateNew()
       manager.addAccount(account)
+      manager.setActive(account)
 
       const metadata: ProfileMetadata = {
         name,
@@ -195,6 +196,9 @@ export function ProfileButton({ pubkey, onLogin }: ProfileButtonProps) {
         const account = new NostrConnectAccount(publicKey, signer)
         account.metadata = { _isAmber: true }
         manager.addAccount(account)
+        manager.setActive(account)
+      } else {
+        manager.setActive(existingAccount)
       }
 
       toast({
@@ -242,6 +246,9 @@ export function ProfileButton({ pubkey, onLogin }: ProfileButtonProps) {
       if (!existingAccount) {
         const account = new ExtensionAccount(publicKey, signer)
         manager.addAccount(account)
+        manager.setActive(account)
+      } else {
+        manager.setActive(existingAccount)
       }
 
       toast({

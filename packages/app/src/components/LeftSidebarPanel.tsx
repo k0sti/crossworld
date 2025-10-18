@@ -44,6 +44,8 @@ interface LeftSidebarPanelProps {
   onToggleEditMode: (isEditMode: boolean) => void
   isChatOpen: boolean
   onToggleChat: () => void
+  isClientListOpen: boolean
+  onToggleClientList: () => void
   // Voice props
   voiceConnected: boolean
   voiceConnecting: boolean
@@ -62,6 +64,8 @@ export function LeftSidebarPanel({
   onToggleEditMode,
   isChatOpen,
   onToggleChat,
+  isClientListOpen,
+  onToggleClientList,
   voiceConnected,
   voiceConnecting,
   micEnabled,
@@ -126,6 +130,11 @@ export function LeftSidebarPanel({
           icon="💬"
           onClick={onToggleChat}
           isActive={isChatOpen}
+        />
+        <SidebarIcon
+          icon="👥"
+          onClick={onToggleClientList}
+          isActive={isClientListOpen}
         />
 
         <Divider borderColor="rgba(255, 255, 255, 0.1)" my={1} />
