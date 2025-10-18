@@ -12,6 +12,7 @@ default:
     @echo "  just test             - Run all tests (Rust + TypeScript)"
     @echo "  just check            - Check everything before deployment"
     @echo "  just start-live       - Initialize live event with default parameters"
+    @echo "  just moq-relay        - Run local MoQ relay server"
     @echo ""
 
 # Build WASM module in development mode
@@ -65,3 +66,17 @@ check:
     @echo "\n=== Building TypeScript app ==="
     cd packages/app && bun run build
     @echo "\n✅ All checks passed! Ready for deployment."
+
+# Run local MoQ relay server
+moq-relay:
+    @if [ ! -f moq-relay/rs/Cargo.toml ]; then \
+        echo "MoQ relay not found. Cloning from GitHub..."; \
+        rm -rf moq-relay; \
+        git clone https://github.com/kixelated/moq.git moq-relay; \
+        echo "MoQ relay cloned successfully"; \
+    fi
+    @echo "Starting MoQ relay server on localhost:4443..."
+    @echo "Certificate will be auto-generated for localhost"
+    @echo "Press Ctrl+C to stop"
+    @echo ""
+    cd moq-relay/rs && cargo run --release --bin moq-relay -- moq-relay/cfg/dev.toml

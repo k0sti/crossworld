@@ -16,7 +16,7 @@ interface ProfileMetadata {
 interface RelayConfig {
   url: string
   enabledForProfile: boolean
-  enabledForChat: boolean
+  enabledForWorld: boolean
   status: 'connected' | 'connecting' | 'error' | 'disconnected'
 }
 
