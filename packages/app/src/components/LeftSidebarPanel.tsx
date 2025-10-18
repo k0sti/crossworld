@@ -1,5 +1,7 @@
 import { Box, VStack, Text, Divider } from '@chakra-ui/react'
 import { ConfigPanelType } from './ConfigPanel'
+import { VoiceButton } from './VoiceButton'
+import { MicButton } from './MicButton'
 
 interface SidebarIconProps {
   icon: string
@@ -42,6 +44,14 @@ interface LeftSidebarPanelProps {
   onToggleEditMode: (isEditMode: boolean) => void
   isChatOpen: boolean
   onToggleChat: () => void
+  // Voice props
+  voiceConnected: boolean
+  voiceConnecting: boolean
+  micEnabled: boolean
+  speaking: boolean
+  participantCount: number
+  onToggleVoice: () => void
+  onToggleMic: () => void
 }
 
 export function LeftSidebarPanel({
@@ -51,7 +61,14 @@ export function LeftSidebarPanel({
   isEditMode,
   onToggleEditMode,
   isChatOpen,
-  onToggleChat
+  onToggleChat,
+  voiceConnected,
+  voiceConnecting,
+  micEnabled,
+  speaking,
+  participantCount,
+  onToggleVoice,
+  onToggleMic,
 }: LeftSidebarPanelProps) {
   const handleLogout = () => {
     onOpenPanel(null)
@@ -110,6 +127,28 @@ export function LeftSidebarPanel({
           onClick={onToggleChat}
           isActive={isChatOpen}
         />
+
+        <Divider borderColor="rgba(255, 255, 255, 0.1)" my={1} />
+
+        {/* Voice Chat */}
+        <VoiceButton
+          isConnected={voiceConnected}
+          isConnecting={voiceConnecting}
+          onClick={onToggleVoice}
+          participantCount={participantCount}
+        />
+
+        {/* Mic Button (only shown when voice is connected) */}
+        {voiceConnected && (
+          <MicButton
+            micEnabled={micEnabled}
+            speaking={speaking}
+            onClick={onToggleMic}
+          />
+        )}
+
+        <Divider borderColor="rgba(255, 255, 255, 0.1)" my={1} />
+
         <SidebarIcon
           icon="🚪"
           onClick={handleLogout}

@@ -49,6 +49,7 @@ impl VoxelPalette {
         customized
     }
 
+    #[allow(dead_code)]
     pub fn len(&self) -> usize {
         self.colors.len()
     }
@@ -87,6 +88,7 @@ impl VoxelModel {
     }
 
     /// Get voxel at position
+    #[allow(dead_code)]
     pub fn get_voxel_at(&self, x: u8, y: u8, z: u8) -> Option<&Voxel> {
         self.voxels.iter().find(|v| v.x == x && v.y == y && v.z == z)
     }

@@ -24,6 +24,7 @@ impl AvatarManager {
     }
 
     /// Create a new avatar manager with a custom base model
+    #[allow(dead_code)]
     pub fn with_model(model: VoxelModel) -> Self {
         let base_palette = model.palette.clone();
 
