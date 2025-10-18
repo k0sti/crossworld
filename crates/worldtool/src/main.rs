@@ -198,14 +198,29 @@ async fn init_live(
 
     // Build the event
     let mut tags = vec![
-        Tag::custom(TagKind::Custom(std::borrow::Cow::Borrowed("d")), vec![LIVE_CHAT_D_TAG]),
-        Tag::custom(TagKind::Custom(std::borrow::Cow::Borrowed("title")), vec![&title]),
-        Tag::custom(TagKind::Custom(std::borrow::Cow::Borrowed("summary")), vec![&summary]),
-        Tag::custom(TagKind::Custom(std::borrow::Cow::Borrowed("status")), vec![&status]),
+        Tag::custom(
+            TagKind::Custom(std::borrow::Cow::Borrowed("d")),
+            vec![LIVE_CHAT_D_TAG],
+        ),
+        Tag::custom(
+            TagKind::Custom(std::borrow::Cow::Borrowed("title")),
+            vec![&title],
+        ),
+        Tag::custom(
+            TagKind::Custom(std::borrow::Cow::Borrowed("summary")),
+            vec![&summary],
+        ),
+        Tag::custom(
+            TagKind::Custom(std::borrow::Cow::Borrowed("status")),
+            vec![&status],
+        ),
     ];
 
     if let Some(img) = image {
-        tags.push(Tag::custom(TagKind::Custom(std::borrow::Cow::Borrowed("image")), vec![&img]));
+        tags.push(Tag::custom(
+            TagKind::Custom(std::borrow::Cow::Borrowed("image")),
+            vec![&img],
+        ));
     }
 
     // Add streaming URL (use default public relay if not specified)
@@ -221,11 +236,17 @@ async fn init_live(
         eprintln!("   See doc/voicechat.md for setup instructions.\n");
         DEFAULT_RELAY.to_string()
     });
-    tags.push(Tag::custom(TagKind::Custom(std::borrow::Cow::Borrowed("streaming")), vec![&stream_url]));
+    tags.push(Tag::custom(
+        TagKind::Custom(std::borrow::Cow::Borrowed("streaming")),
+        vec![&stream_url],
+    ));
 
     // Add relay tags for chat relays
     for relay_url in &relay_urls {
-        tags.push(Tag::custom(TagKind::Custom(std::borrow::Cow::Borrowed("relay")), vec![relay_url]));
+        tags.push(Tag::custom(
+            TagKind::Custom(std::borrow::Cow::Borrowed("relay")),
+            vec![relay_url],
+        ));
     }
 
     // Add hashtags
@@ -254,7 +275,10 @@ async fn init_live(
     tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
 
     println!("\nLive chat event initialized successfully!");
-    println!("Users can now send messages to this live chat using kind 1311 with a-tag: 30311:{}:{}", pubkey_hex, LIVE_CHAT_D_TAG);
+    println!(
+        "Users can now send messages to this live chat using kind 1311 with a-tag: 30311:{}:{}",
+        pubkey_hex, LIVE_CHAT_D_TAG
+    );
     println!("\nVoice streaming configured:");
     println!("  MoQ relay: {}", stream_url);
     if stream_url == "https://relay.moq.dev/anon" {
@@ -316,7 +340,9 @@ fn server_init(dir: PathBuf, no_build: bool) -> Result<()> {
 
         if !cargo_check.status.success() {
             eprintln!("❌ Cargo is not available");
-            eprintln!("   Install Rust: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh");
+            eprintln!(
+                "   Install Rust: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
+            );
             std::process::exit(1);
         }
 
@@ -370,7 +396,10 @@ fn server_run(
     if !binary_path.exists() {
         eprintln!("❌ Server binary not found: {}", binary_path.display());
         eprintln!("   Run 'worldtool server init' or build manually:");
-        eprintln!("     cd {} && cargo build --release --bin moq-relay", dir.display());
+        eprintln!(
+            "     cd {} && cargo build --release --bin moq-relay",
+            dir.display()
+        );
         std::process::exit(1);
     }
 
@@ -392,8 +421,7 @@ fn server_run(
         (None, None) => {
             // Generate self-signed certificate
             let cert_dir = dir.join("certs");
-            std::fs::create_dir_all(&cert_dir)
-                .context("Failed to create certs directory")?;
+            std::fs::create_dir_all(&cert_dir).context("Failed to create certs directory")?;
 
             let cert_file = cert_dir.join("cert.pem");
             let key_file = cert_dir.join("key.pem");
@@ -403,11 +431,19 @@ fn server_run(
 
                 let openssl_status = ProcessCommand::new("openssl")
                     .args([
-                        "req", "-x509", "-newkey", "rsa:4096",
-                        "-keyout", key_file.to_str().unwrap(),
-                        "-out", cert_file.to_str().unwrap(),
-                        "-days", "365", "-nodes",
-                        "-subj", "/CN=localhost",
+                        "req",
+                        "-x509",
+                        "-newkey",
+                        "rsa:4096",
+                        "-keyout",
+                        key_file.to_str().unwrap(),
+                        "-out",
+                        cert_file.to_str().unwrap(),
+                        "-days",
+                        "365",
+                        "-nodes",
+                        "-subj",
+                        "/CN=localhost",
                     ])
                     .status()
                     .context("Failed to generate certificate. Is openssl installed?")?;
@@ -451,8 +487,13 @@ fn server_run(
     println!("   Bind address: {}", bind_addr);
     println!("   Certificate: {}", cert_path.display());
     println!("   Key: {}", key_path.display());
-    println!("\n   Access URL: https://{}:{}/anon",
-        if bind == "0.0.0.0" { "localhost" } else { &bind },
+    println!(
+        "\n   Access URL: https://{}:{}/anon",
+        if bind == "0.0.0.0" {
+            "localhost"
+        } else {
+            &bind
+        },
         port
     );
     println!("\n   Press Ctrl+C to stop\n");

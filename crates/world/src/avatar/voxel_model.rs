@@ -37,9 +37,7 @@ impl VoxelPalette {
         let hash_value = hash_string(user_hash);
         let hue_shift = ((hash_value % 360) as f32) / 360.0;
 
-        let mut customized = Self {
-            colors: Vec::new(),
-        };
+        let mut customized = Self { colors: Vec::new() };
 
         for color in &self.colors {
             let shifted = apply_hue_shift(*color, hue_shift);
@@ -90,7 +88,9 @@ impl VoxelModel {
     /// Get voxel at position
     #[allow(dead_code)]
     pub fn get_voxel_at(&self, x: u8, y: u8, z: u8) -> Option<&Voxel> {
-        self.voxels.iter().find(|v| v.x == x && v.y == y && v.z == z)
+        self.voxels
+            .iter()
+            .find(|v| v.x == x && v.y == y && v.z == z)
     }
 
     /// Create a simple humanoid voxel model for testing

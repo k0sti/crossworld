@@ -3,11 +3,14 @@ use super::voxel_model::{VoxelModel, VoxelPalette};
 use crate::GeometryData;
 use std::collections::HashMap;
 
+/// Cached mesh data (vertices, indices, normals, colors)
+type MeshData = (Vec<f32>, Vec<u32>, Vec<f32>, Vec<f32>);
+
 /// Manages avatar generation and caching
 pub struct AvatarManager {
     base_model: VoxelModel,
     base_palette: VoxelPalette,
-    user_meshes: HashMap<String, (Vec<f32>, Vec<u32>, Vec<f32>, Vec<f32>)>,
+    user_meshes: HashMap<String, MeshData>,
 }
 
 impl AvatarManager {
@@ -39,12 +42,7 @@ impl AvatarManager {
     pub fn generate_avatar_geometry(&mut self, user_npub: &str) -> GeometryData {
         // Check cache first
         if let Some((verts, indices, norms, cols)) = self.user_meshes.get(user_npub) {
-            return GeometryData::new(
-                verts.clone(),
-                indices.clone(),
-                norms.clone(),
-                cols.clone(),
-            );
+            return GeometryData::new(verts.clone(), indices.clone(), norms.clone(), cols.clone());
         }
 
         // Generate customized palette for this user

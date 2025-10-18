@@ -1,6 +1,5 @@
 use anyhow::Result;
-use tracing::{info, Level};
-use tracing_subscriber;
+use tracing::{Level, info};
 
 #[tokio::main]
 async fn main() -> Result<()> {

@@ -1,4 +1,4 @@
-use super::voxel_model::VoxelModel;
+use super::voxel_model::{VoxelModel, VoxelPalette};
 
 #[derive(Clone, Copy, Debug)]
 enum Face {
@@ -62,9 +62,7 @@ impl<'a> VoxelMesher<'a> {
                     || nx >= self.model.size_x as i32
                     || ny >= self.model.size_y as i32
                     || nz >= self.model.size_z as i32
-                    || !self
-                        .model
-                        .has_voxel_at(nx as u8, ny as u8, nz as u8);
+                    || !self.model.has_voxel_at(nx as u8, ny as u8, nz as u8);
 
                 if is_visible {
                     let (face_verts, face_norms) = get_face_geometry(face, x, y, z, voxel_size);
@@ -129,7 +127,18 @@ fn get_face_geometry(face: Face, x: f32, y: f32, z: f32, size: f32) -> (Vec<f32>
             z,
         ],
         Face::Left => vec![
-            x, y, z, x, y, z + size, x, y + size, z + size, x, y + size, z,
+            x,
+            y,
+            z,
+            x,
+            y,
+            z + size,
+            x,
+            y + size,
+            z + size,
+            x,
+            y + size,
+            z,
         ],
         Face::Right => vec![
             x + size,
