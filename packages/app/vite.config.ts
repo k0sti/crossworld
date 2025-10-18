@@ -9,6 +9,12 @@ export default defineConfig({
   worker: {
     format: 'es'
   },
+  optimizeDeps: {
+    exclude: ['@kixelated/hang'],
+    esbuildOptions: {
+      target: 'esnext'
+    }
+  },
   resolve: {
     alias: {
       '@workspace/wasm': path.resolve(__dirname, '../wasm/crossworld-world.js')

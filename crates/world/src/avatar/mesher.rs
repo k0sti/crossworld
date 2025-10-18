@@ -1,4 +1,4 @@
-use super::voxel_model::{Voxel, VoxelModel, VoxelPalette};
+use super::voxel_model::VoxelModel;
 
 #[derive(Clone, Copy, Debug)]
 enum Face {

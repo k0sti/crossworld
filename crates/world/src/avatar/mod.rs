@@ -3,6 +3,8 @@ pub mod mesher;
 pub mod manager;
 pub mod vox_loader;
 
+// Note: Re-exported for potential future use
+#[allow(unused_imports)]
 pub use voxel_model::{Voxel, VoxelModel, VoxelPalette};
 pub use mesher::VoxelMesher;
 pub use manager::AvatarManager;
