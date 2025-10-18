@@ -13,15 +13,19 @@ export interface Participant {
 export class AudioSubscriber {
   private connection: MoqConnectionManager
   private watchers = new Map<string, Hang.Watch.Broadcast>()
-  private audioContext: AudioContext | null = null
   private discoveryActive = false
   private discoveryAbort: AbortController | null = null
+  private ownNpub: string | null = null
 
   public participants: Signal<Map<string, Participant>> = new Signal(new Map())
   public error: Signal<string | null> = new Signal(null)
 
   constructor(connection: MoqConnectionManager) {
     this.connection = connection
+  }
+
+  setOwnNpub(npub: string): void {
+    this.ownNpub = npub
   }
 
   async startListening(): Promise<void> {
@@ -33,11 +37,6 @@ export class AudioSubscriber {
     const conn = this.connection.getConnection()
     if (!conn) {
       throw new Error('Not connected to MoQ relay')
-    }
-
-    // Create audio context for playback
-    if (!this.audioContext) {
-      this.audioContext = new AudioContext()
     }
 
     console.log('Starting participant discovery...')
@@ -56,6 +55,7 @@ export class AudioSubscriber {
 
     try {
       // Get the announced stream with our path prefix
+      console.log('Setting up participant discovery for:', pathPrefix)
       const announced = connection.announced(Moq.Path.from(pathPrefix))
 
       while (!signal.aborted) {
@@ -76,7 +76,16 @@ export class AudioSubscriber {
         const pathStr = String(path)
         const npub = pathStr.slice(pathPrefix.length)
 
-        if (!npub || this.watchers.has(npub)) {
+        if (!npub) {
+          continue
+        }
+
+        // Skip our own broadcast
+        if (this.ownNpub && npub === this.ownNpub) {
+          continue
+        }
+
+        if (this.watchers.has(npub)) {
           continue
         }
 
@@ -96,11 +105,6 @@ export class AudioSubscriber {
     broadcastName: string,
     npub: string
   ): void {
-    if (!this.audioContext) {
-      console.error('Audio context not initialized')
-      return
-    }
-
     try {
       console.log('Subscribing to participant:', npub)
 
@@ -108,25 +112,41 @@ export class AudioSubscriber {
       const watcher = new Hang.Watch.Broadcast({
         connection,
         path: Moq.Path.from(broadcastName),
+        enabled: true, // CRITICAL: Must enable watcher for it to consume the broadcast
         audio: { enabled: true },
       })
 
       // Connect audio to output when available
       watcher.audio.root.subscribe((audioNode) => {
-        if (audioNode && this.audioContext) {
-          audioNode.connect(this.audioContext.destination)
+        if (audioNode) {
+          // Get the AudioContext from the watcher (created by Hang library)
+          const audioContext = watcher.audio.context.peek()
+
+          if (!audioContext) {
+            console.error('No AudioContext available for participant:', npub)
+            return
+          }
+
+          try {
+            // Connect the audio node to the destination of its own AudioContext
+            audioNode.connect(audioContext.destination)
+            console.log('Audio connected for participant:', npub)
+          } catch (err) {
+            console.error('Failed to connect audio for participant:', npub, err)
+          }
         }
       })
 
       // Subscribe to speaking state
       watcher.audio.speaking.active.subscribe((isSpeaking) => {
-        this.updateParticipant(npub, isSpeaking ?? false)
+        const speaking = isSpeaking ?? false
+        this.updateParticipant(npub, speaking)
       })
 
       this.watchers.set(npub, watcher)
       this.updateParticipant(npub, false)
     } catch (err) {
-      console.error(`Failed to subscribe to participant ${npub}:`, err)
+      console.error('Failed to subscribe to participant:', npub, err)
     }
   }
 
@@ -157,7 +177,7 @@ export class AudioSubscriber {
     // Close all watchers
     for (const [npub, watcher] of this.watchers) {
       try {
-        watcher.audio.enabled.set(false)
+        watcher.close()
       } catch (err) {
         console.error(`Error closing watcher for ${npub}:`, err)
       }
@@ -166,12 +186,6 @@ export class AudioSubscriber {
 
     // Clear participants
     this.participants.set(new Map())
-
-    // Close audio context
-    if (this.audioContext) {
-      this.audioContext.close()
-      this.audioContext = null
-    }
 
     console.log('Stopped listening')
   }

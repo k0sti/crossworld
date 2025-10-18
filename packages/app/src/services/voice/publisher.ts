@@ -7,6 +7,7 @@ import { LIVE_CHAT_D_TAG } from '../../config'
 export class AudioPublisher {
   private broadcast: Hang.Publish.Broadcast | null = null
   private connection: MoqConnectionManager
+  private mediaStream: MediaStream | null = null
 
   public micEnabled: Signal<boolean> = new Signal(false)
   public speaking: Signal<boolean> = new Signal(false)
@@ -31,7 +32,7 @@ export class AudioPublisher {
       console.log('Requesting microphone permission...')
 
       // Request microphone access
-      const stream = await navigator.mediaDevices.getUserMedia({
+      this.mediaStream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
@@ -40,7 +41,7 @@ export class AudioPublisher {
       })
 
       // Get audio track from stream
-      const audioTrack = stream.getAudioTracks()[0]
+      const audioTrack = this.mediaStream.getAudioTracks()[0]
       if (!audioTrack) {
         throw new Error('No audio track found in media stream')
       }
@@ -61,6 +62,7 @@ export class AudioPublisher {
       this.broadcast = new Hang.Publish.Broadcast({
         connection: conn,
         path: Moq.Path.from(broadcastName),
+        enabled: true, // CRITICAL: Must enable broadcast for it to announce itself
         audio: {
           enabled: true,
           source: audioTrack as any,
@@ -74,7 +76,7 @@ export class AudioPublisher {
 
       this.micEnabled.set(true)
       this.error.set(null)
-      console.log('Microphone enabled and broadcasting')
+      console.log('Microphone enabled, broadcasting at:', broadcastName)
     } catch (err) {
       console.error('Failed to enable microphone:', err)
       this.error.set(err instanceof Error ? err.message : 'Microphone access failed')
@@ -90,8 +92,17 @@ export class AudioPublisher {
     try {
       console.log('Disabling microphone...')
 
-      // Stop the broadcast
-      this.broadcast.audio.enabled.set(false)
+      // Properly close the broadcast to clean up resources
+      this.broadcast.close()
+
+      // Stop all media tracks to remove recording indicator
+      if (this.mediaStream) {
+        this.mediaStream.getTracks().forEach(track => {
+          track.stop()
+          console.log('Stopped media track:', track.kind)
+        })
+        this.mediaStream = null
+      }
 
       // Clean up
       this.broadcast = null
