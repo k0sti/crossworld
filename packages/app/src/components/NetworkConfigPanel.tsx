@@ -12,7 +12,7 @@ interface RelayStats {
 interface RelayConfig {
   url: string
   enabledForProfile: boolean
-  enabledForChat: boolean
+  enabledForWorld: boolean
   status: 'connected' | 'connecting' | 'error' | 'disconnected'
   errorMessage?: string
   stats?: RelayStats
@@ -43,7 +43,7 @@ export function NetworkConfigPanel(_props: NetworkConfigPanelProps) {
           return {
             url,
             enabledForProfile: defaults?.enabledForProfile ?? true,
-            enabledForChat: defaults?.enabledForChat ?? true,
+            enabledForWorld: defaults?.enabledForWorld ?? true,
             status: 'disconnected' as const,
             stats: { sent: 0, received: 0 }
           }
@@ -72,7 +72,7 @@ export function NetworkConfigPanel(_props: NetworkConfigPanelProps) {
   useEffect(() => {
     relays.forEach(relay => {
       const instance = relayInstances.current.get(relay.url)
-      const shouldBeEnabled = relay.enabledForProfile || relay.enabledForChat
+      const shouldBeEnabled = relay.enabledForProfile || relay.enabledForWorld
 
       if (shouldBeEnabled && !instance) {
         // Connect
@@ -189,7 +189,7 @@ export function NetworkConfigPanel(_props: NetworkConfigPanelProps) {
   const handleToggleChat = (relay: RelayConfig) => {
     const updatedRelay: RelayConfig = {
       ...relay,
-      enabledForChat: !relay.enabledForChat,
+      enabledForWorld: !relay.enabledForWorld,
     }
 
     const updated = relays.map(r => r.url === relay.url ? updatedRelay : r)
@@ -197,8 +197,8 @@ export function NetworkConfigPanel(_props: NetworkConfigPanelProps) {
     saveRelays(updated)
 
     toast({
-      title: relay.enabledForChat ? 'Chat Disabled' : 'Chat Enabled',
-      description: `${relay.url} ${relay.enabledForChat ? 'disabled' : 'enabled'} for chat`,
+      title: relay.enabledForWorld ? 'World Disabled' : 'World Enabled',
+      description: `${relay.url} ${relay.enabledForWorld ? 'disabled' : 'enabled'} for world`,
       status: 'info',
       duration: 2000,
     })
@@ -266,7 +266,7 @@ export function NetworkConfigPanel(_props: NetworkConfigPanelProps) {
     const newRelayConfig: RelayConfig = {
       url: newRelay,
       enabledForProfile: true,
-      enabledForChat: true,
+      enabledForWorld: true,
       status: 'disconnected',
       stats: { sent: 0, received: 0 }
     }
@@ -300,7 +300,7 @@ export function NetworkConfigPanel(_props: NetworkConfigPanelProps) {
       return {
         url,
         enabledForProfile: defaults?.enabledForProfile ?? true,
-        enabledForChat: defaults?.enabledForChat ?? true,
+        enabledForWorld: defaults?.enabledForWorld ?? true,
         status: 'disconnected' as const,
         stats: { sent: 0, received: 0 }
       }
@@ -383,11 +383,11 @@ export function NetworkConfigPanel(_props: NetworkConfigPanelProps) {
             px={2}
             py={0.5}
             borderRadius="md"
-            bg={relay.enabledForChat ? "green.500" : "rgba(255, 255, 255, 0.1)"}
-            color={relay.enabledForChat ? "white" : "whiteAlpha.600"}
+            bg={relay.enabledForWorld ? "green.500" : "rgba(255, 255, 255, 0.1)"}
+            color={relay.enabledForWorld ? "white" : "whiteAlpha.600"}
             _hover={{ opacity: 0.8 }}
           >
-            chat
+            world
           </Badge>
         </HStack>
 
