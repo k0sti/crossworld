@@ -3,6 +3,7 @@ import { Avatar } from './avatar';
 import { VoxelAvatar } from './voxel-avatar';
 import type { AvatarEngine } from '@workspace/wasm';
 import type { AvatarState } from '../services/avatar-state';
+import { Transform } from './transform';
 
 export class SceneManager {
   private scene: THREE.Scene;
@@ -275,12 +276,11 @@ export class SceneManager {
     return this.scene;
   }
 
-  createAvatar(modelUrl?: string, scale?: number, position?: { x: number; z: number }): void {
+  createAvatar(modelUrl?: string, scale?: number, transform?: Transform): void {
     if (this.avatar) {
       this.scene.remove(this.avatar.getObject3D());
     }
-    const { x = 4, z = 4 } = position || {};
-    this.avatar = new Avatar(x, z, { modelUrl, scale });
+    this.avatar = new Avatar(transform, { modelUrl, scale });
     this.scene.add(this.avatar.getObject3D());
   }
 
@@ -316,7 +316,7 @@ export class SceneManager {
   /**
    * Create a voxel avatar for a user
    */
-  createVoxelAvatar(userNpub: string, scale: number = 1.0, position?: { x: number; z: number }): void {
+  createVoxelAvatar(userNpub: string, scale: number = 1.0, transform?: Transform): void {
     if (!this.avatarEngine) {
       console.error('Avatar engine not initialized');
       return;
@@ -329,11 +329,10 @@ export class SceneManager {
     }
 
     // Create new voxel avatar
-    const { x = 4, z = 4 } = position || {};
     this.voxelAvatar = new VoxelAvatar({
       userNpub: userNpub || '',
       scale,
-    }, x, z);
+    }, transform);
 
     // Generate geometry from Rust
     const geometryData = this.avatarEngine.generate_avatar(userNpub);
@@ -350,7 +349,7 @@ export class SceneManager {
   /**
    * Create a voxel avatar from a .vox file
    */
-  async createVoxelAvatarFromVoxFile(voxUrl: string, userNpub: string | undefined = undefined, scale: number = 1.0, position?: { x: number; z: number }): Promise<void> {
+  async createVoxelAvatarFromVoxFile(voxUrl: string, userNpub: string | undefined = undefined, scale: number = 1.0, transform?: Transform): Promise<void> {
     // Import the loadVoxFromUrl function
     const { loadVoxFromUrl } = await import('../utils/voxLoader');
 
@@ -365,11 +364,10 @@ export class SceneManager {
       }
 
       // Create new voxel avatar
-      const { x = 4, z = 4 } = position || {};
       this.voxelAvatar = new VoxelAvatar({
         userNpub: userNpub ?? '',
         scale,
-      }, x, z);
+      }, transform);
 
       // Apply geometry from .vox file
       this.voxelAvatar.applyGeometry(geometryData);
@@ -442,11 +440,11 @@ export class SceneManager {
       return;
     }
 
-    const currentPosition = this.voxelAvatar.getPosition();
+    const currentTransform = this.voxelAvatar.getTransform();
 
     // Check if position changed significantly
     if (this.lastPublishedPosition) {
-      const distanceMoved = currentPosition.distanceTo(this.lastPublishedPosition);
+      const distanceMoved = currentTransform.getPosition().distanceTo(this.lastPublishedPosition);
       if (distanceMoved < this.MIN_POSITION_CHANGE) {
         return;
       }
@@ -461,26 +459,18 @@ export class SceneManager {
   private publishPlayerPosition(): void {
     if (!this.voxelAvatar || !this.onPositionUpdate) return;
 
-    const position = this.voxelAvatar.getPosition();
-    const group = this.voxelAvatar.getObject3D();
-    const quaternion = group.quaternion;
-
-    const quaternionArray: [number, number, number, number] = [
-      quaternion.x,
-      quaternion.y,
-      quaternion.z,
-      quaternion.w
-    ];
+    const transform = this.voxelAvatar.getTransform();
+    const eventData = transform.toEventData();
 
     this.onPositionUpdate(
-      position.x,
-      position.y,
-      position.z,
-      quaternionArray
+      eventData.x,
+      eventData.y,
+      eventData.z,
+      eventData.quaternion
     );
 
     // Update tracking
-    this.lastPublishedPosition = position.clone();
+    this.lastPublishedPosition = transform.getPosition();
     this.lastPublishTime = Date.now();
   }
 
@@ -535,12 +525,15 @@ export class SceneManager {
 
     const { position, avatarType, avatarModel, avatarUrl, npub } = state;
 
+    // Create transform from position data
+    const transform = Transform.fromEventData(position);
+
     if (avatarType === 'voxel') {
       // Create voxel avatar
       const voxelAvatar = new VoxelAvatar({
         userNpub: npub,
         scale: 1.0,
-      }, position.x, position.z);
+      }, transform);
 
       // Generate or load geometry
       if (avatarModel && avatarModel !== 'generated') {
@@ -572,7 +565,7 @@ export class SceneManager {
       console.log(`Created remote voxel avatar for ${npub}`);
     } else {
       // Create GLB avatar
-      const glbAvatar = new Avatar(position.x, position.z, {
+      const glbAvatar = new Avatar(transform, {
         modelUrl: avatarUrl,
         scale: 1.0,
       });

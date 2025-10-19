@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { Transform } from './transform';
 
 export interface AvatarConfig {
   modelUrl?: string;
@@ -9,8 +10,8 @@ export interface AvatarConfig {
 export class Avatar {
   private group: THREE.Group;
   private model: THREE.Object3D | null = null;
-  private position: THREE.Vector3;
-  private targetPosition: THREE.Vector3;
+  private transform: Transform;
+  private targetTransform: Transform;
   private isMoving: boolean = false;
   private moveSpeed: number = 3.0; // units per second
   private config: AvatarConfig;
@@ -18,13 +19,14 @@ export class Avatar {
   private animations: THREE.AnimationClip[] = [];
   private currentAction: THREE.AnimationAction | null = null;
 
-  constructor(initialX: number = 4, initialZ: number = 4, config: AvatarConfig = {}) {
-    this.position = new THREE.Vector3(initialX, 0, initialZ);
-    this.targetPosition = this.position.clone();
+  constructor(initialTransform?: Transform, config: AvatarConfig = {}) {
+    // Use provided transform or create default at (4, 0, 4)
+    this.transform = initialTransform ? Transform.fromTransform(initialTransform) : new Transform(4, 0, 4);
+    this.targetTransform = this.transform.clone();
     this.config = config;
 
     this.group = new THREE.Group();
-    this.group.position.copy(this.position);
+    this.transform.applyToObject3D(this.group);
 
     // Load GLB model
     this.loadModel();
@@ -137,8 +139,7 @@ export class Avatar {
   }
 
   setTargetPosition(x: number, z: number) {
-    // Keep y at 0 (ground level)
-    this.targetPosition.set(x, 0, z);
+    this.targetTransform.setXZ(x, z);
 
     const wasMoving = this.isMoving;
     this.isMoving = true;
@@ -148,14 +149,16 @@ export class Avatar {
       this.playAnimation('Walk', true);
     }
 
-    // Rotate to face target
-    const direction = new THREE.Vector3()
-      .subVectors(this.targetPosition, this.position)
-      .normalize();
+    // Calculate direction and rotate to face it
+    const dx = x - this.transform.getX();
+    const dz = z - this.transform.getZ();
+    const distance = Math.sqrt(dx * dx + dz * dz);
 
-    if (direction.length() > 0.01) {
-      const angle = Math.atan2(direction.x, direction.z);
-      this.group.rotation.y = angle;
+    if (distance > 0.01) {
+      const angle = Math.atan2(dx, dz);
+      this.transform.setAngle(angle);
+      this.targetTransform.setAngle(angle);
+      this.group.quaternion.copy(this.transform.getRotation());
     }
   }
 
@@ -167,12 +170,12 @@ export class Avatar {
 
     if (!this.isMoving) return;
 
-    const distance = this.position.distanceTo(this.targetPosition);
+    const distance = this.transform.distanceTo2D(this.targetTransform);
 
     if (distance < 0.1) {
       // Reached target
-      this.position.copy(this.targetPosition);
-      this.group.position.copy(this.position);
+      this.transform.setXZ(this.targetTransform.getX(), this.targetTransform.getZ());
+      this.group.position.set(this.transform.getX(), this.transform.getY(), this.transform.getZ());
       this.isMoving = false;
 
       // Switch to idle animation
@@ -182,20 +185,28 @@ export class Avatar {
 
     // Move towards target
     const moveDistance = this.moveSpeed * deltaTime_s;
-    const direction = new THREE.Vector3()
-      .subVectors(this.targetPosition, this.position)
-      .normalize();
+    const dx = this.targetTransform.getX() - this.transform.getX();
+    const dz = this.targetTransform.getZ() - this.transform.getZ();
+    const direction = new THREE.Vector2(dx, dz).normalize();
 
-    this.position.addScaledVector(direction, Math.min(moveDistance, distance));
-    this.group.position.copy(this.position);
+    const actualMove = Math.min(moveDistance, distance);
+    const newX = this.transform.getX() + direction.x * actualMove;
+    const newZ = this.transform.getZ() + direction.y * actualMove;
+
+    this.transform.setXZ(newX, newZ);
+    this.group.position.set(this.transform.getX(), this.transform.getY(), this.transform.getZ());
   }
 
   getObject3D(): THREE.Group {
     return this.group;
   }
 
+  getTransform(): Transform {
+    return this.transform.clone();
+  }
+
   getPosition(): THREE.Vector3 {
-    return this.position.clone();
+    return this.transform.getPosition();
   }
 
   isCurrentlyMoving(): boolean {

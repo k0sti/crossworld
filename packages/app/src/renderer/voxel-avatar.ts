@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { GeometryData } from '@workspace/wasm';
+import { Transform } from './transform';
 
 export interface VoxelAvatarConfig {
   scale?: number;
@@ -16,21 +17,21 @@ export class VoxelAvatar {
   private group: THREE.Group;
   private mesh: THREE.Mesh | null = null;
 
-  private position: THREE.Vector3;
-  private targetPosition: THREE.Vector3;
+  private transform: Transform;
+  private targetTransform: Transform;
   private isMoving: boolean = false;
   private moveSpeed: number = 3.0; // units per second
 
   constructor(
     private config: VoxelAvatarConfig,
-    initialX: number = 4,
-    initialZ: number = 4
+    initialTransform?: Transform
   ) {
-    this.position = new THREE.Vector3(initialX, 0, initialZ);
-    this.targetPosition = this.position.clone();
+    // Use provided transform or create default at (4, 0, 4)
+    this.transform = initialTransform ? Transform.fromTransform(initialTransform) : new Transform(4, 0, 4);
+    this.targetTransform = this.transform.clone();
 
     this.group = new THREE.Group();
-    this.group.position.copy(this.position);
+    this.transform.applyToObject3D(this.group);
   }
 
   /**
@@ -103,21 +104,23 @@ export class VoxelAvatar {
   }
 
   /**
-   * Set target position for avatar to walk to
+   * Set target position for avatar to walk to (2D: x, z)
    */
   setTargetPosition(x: number, z: number): void {
-    this.targetPosition.set(x, 0, z);
+    this.targetTransform.setXZ(x, z);
     this.isMoving = true;
 
-    // Rotate to face direction
-    const direction = new THREE.Vector3()
-      .subVectors(this.targetPosition, this.position)
-      .normalize();
+    // Calculate direction and rotate to face it
+    const dx = x - this.transform.getX();
+    const dz = z - this.transform.getZ();
+    const distance = Math.sqrt(dx * dx + dz * dz);
 
-    if (direction.length() > 0.01) {
+    if (distance > 0.01) {
       // Add π to flip 180° because MagicaVoxel models face opposite direction
-      const angle = Math.atan2(direction.x, direction.z) + Math.PI;
-      this.group.rotation.y = angle;
+      const angle = Math.atan2(dx, dz) + Math.PI;
+      this.transform.setAngle(angle);
+      this.targetTransform.setAngle(angle);
+      this.group.quaternion.copy(this.transform.getRotation());
     }
   }
 
@@ -127,24 +130,28 @@ export class VoxelAvatar {
   update(deltaTime_s: number): void {
     if (!this.isMoving) return;
 
-    const distance = this.position.distanceTo(this.targetPosition);
+    const distance = this.transform.distanceTo2D(this.targetTransform);
 
     if (distance < 0.1) {
       // Reached target
-      this.position.copy(this.targetPosition);
-      this.group.position.copy(this.position);
+      this.transform.setXZ(this.targetTransform.getX(), this.targetTransform.getZ());
+      this.group.position.set(this.transform.getX(), this.transform.getY(), this.transform.getZ());
       this.isMoving = false;
       return;
     }
 
     // Move towards target
     const moveDistance = this.moveSpeed * deltaTime_s;
-    const direction = new THREE.Vector3()
-      .subVectors(this.targetPosition, this.position)
-      .normalize();
+    const dx = this.targetTransform.getX() - this.transform.getX();
+    const dz = this.targetTransform.getZ() - this.transform.getZ();
+    const direction = new THREE.Vector2(dx, dz).normalize();
 
-    this.position.addScaledVector(direction, Math.min(moveDistance, distance));
-    this.group.position.copy(this.position);
+    const actualMove = Math.min(moveDistance, distance);
+    const newX = this.transform.getX() + direction.x * actualMove;
+    const newZ = this.transform.getZ() + direction.y * actualMove;
+
+    this.transform.setXZ(newX, newZ);
+    this.group.position.set(this.transform.getX(), this.transform.getY(), this.transform.getZ());
   }
 
   /**
@@ -155,10 +162,17 @@ export class VoxelAvatar {
   }
 
   /**
-   * Get current position
+   * Get current transform (position + rotation)
+   */
+  getTransform(): Transform {
+    return this.transform.clone();
+  }
+
+  /**
+   * Get current position (legacy, returns Vector3)
    */
   getPosition(): THREE.Vector3 {
-    return this.position.clone();
+    return this.transform.getPosition();
   }
 
   /**
