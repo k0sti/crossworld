@@ -118,23 +118,66 @@ export class AvatarStateService {
 
   /**
    * Start subscribing to avatar state and update events
+   *
+   * Strategy:
+   * 1. First fetch all existing state events (30317) without 'since' to get current users
+   * 2. Then subscribe to live updates (both 30317 and 1317) with since=now
+   *
+   * This ensures we see all active users regardless of when they last published
    */
-  startSubscription(): void {
+  async startSubscription(): Promise<void> {
     if (this.subscription) {
       console.warn('Avatar state subscription already active')
       return
     }
 
     const now = Math.floor(Date.now() / 1000)
-    const since = now - AVATAR_STATE_CONFIG.SUBSCRIPTION_WINDOW_S
+    const recentSince = now - AVATAR_STATE_CONFIG.SUBSCRIPTION_WINDOW_S
 
-    // Subscribe to both state events (30317) and update events (1317)
+    // Step 1: Query existing state events (30317) without 'since'
+    // This gets all current avatar states regardless of age
+    console.log('[AvatarState] Fetching existing state events...')
+    const existingStates = await this.pool.querySync(
+      WORLD_RELAYS,
+      {
+        kinds: [AVATAR_STATE_CONFIG.STATE_EVENT_KIND],
+        '#a': [this.liveActivityATag],
+        // No 'since' - we want all current state events
+      }
+    )
+
+    // Process existing state events
+    existingStates.forEach(event => {
+      this.handleStateEvent(event)
+    })
+
+    console.log(`[AvatarState] Loaded ${existingStates.length} existing state events`)
+
+    // Step 2: Query recent update events (1317) from the last hour
+    console.log('[AvatarState] Fetching recent update events...')
+    const recentUpdates = await this.pool.querySync(
+      WORLD_RELAYS,
+      {
+        kinds: [AVATAR_STATE_CONFIG.UPDATE_EVENT_KIND],
+        '#a': [this.liveActivityATag],
+        since: recentSince,
+      }
+    )
+
+    // Process recent update events
+    recentUpdates.forEach(event => {
+      this.handleUpdateEvent(event)
+    })
+
+    console.log(`[AvatarState] Loaded ${recentUpdates.length} recent update events`)
+
+    // Step 3: Subscribe to live updates (both state and update events) from now onwards
     this.subscription = this.pool.subscribeMany(
       WORLD_RELAYS,
       {
         kinds: [AVATAR_STATE_CONFIG.STATE_EVENT_KIND, AVATAR_STATE_CONFIG.UPDATE_EVENT_KIND],
         '#a': [this.liveActivityATag],
-        since,
+        since: now, // Only new events from now on
       },
       {
         onevent: (event: Event) => {
@@ -145,7 +188,7 @@ export class AvatarStateService {
           }
         },
         oneose: () => {
-          console.log('Avatar state subscription established')
+          console.log('[AvatarState] Live subscription established')
         },
       }
     )

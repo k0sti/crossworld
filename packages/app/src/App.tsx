@@ -16,6 +16,7 @@ import { fetchLiveEvent } from './services/live-event'
 import { AvatarStateService, type AvatarConfig, type AvatarState } from './services/avatar-state'
 import { useVoice } from './hooks/useVoice'
 import { npubEncode } from 'nostr-tools/nip19'
+import type { TeleportAnimationType } from './renderer/teleport-animation'
 
 function App() {
   const [pubkey, setPubkey] = useState<string | null>(null)
@@ -43,6 +44,7 @@ function App() {
   const [useVoxFile, setUseVoxFile] = useState(false)
   const [useOriginalColors, setUseOriginalColors] = useState(false)
   const [colorChangeCounter, setColorChangeCounter] = useState(0)
+  const [teleportAnimationType, setTeleportAnimationType] = useState<TeleportAnimationType>('fade')
 
   // State restoration
   const [showRestoreModal, setShowRestoreModal] = useState(false)
@@ -410,6 +412,7 @@ function App() {
           colorChangeCounter={colorChangeCounter}
           avatarStateService={avatarStateService}
           currentUserPubkey={pubkey}
+          teleportAnimationType={teleportAnimationType}
         />
         <TopBar
           pubkey={pubkey}
@@ -453,6 +456,8 @@ function App() {
             onCustomColor={handleCustomColor}
             onAvatarUrlChange={handleAvatarUrlChange}
             currentUrl={avatarUrl}
+            teleportAnimationType={teleportAnimationType}
+            onTeleportAnimationChange={setTeleportAnimationType}
           />
         )}
 
