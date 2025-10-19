@@ -149,12 +149,11 @@ export function WorldCanvas({
     console.log('Avatar update triggered:', { isLoggedIn, useVoxelAvatar, voxelModel, useVoxFile, useOriginalColors });
 
     if (isLoggedIn) {
-      // Preserve current position if avatar exists
-      let currentPosition: { x: number; z: number } | undefined;
+      // Preserve current transform (position + rotation) if avatar exists
+      let currentTransform: any = undefined; // Transform type
       const currentVoxelAvatar = sceneManager.getVoxelAvatar();
       if (currentVoxelAvatar) {
-        const pos = currentVoxelAvatar.getPosition();
-        currentPosition = { x: pos.x, z: pos.z };
+        currentTransform = currentVoxelAvatar.getTransform();
       }
 
       if (useVoxelAvatar) {
@@ -176,7 +175,7 @@ export function WorldCanvas({
 
           console.log('Loading voxel avatar from file:', voxUrl, 'with colors:', useOriginalColors ? 'original' : 'randomized');
 
-          sceneManager.createVoxelAvatarFromVoxFile(voxUrl, npubForColors, 1.0, currentPosition)
+          sceneManager.createVoxelAvatarFromVoxFile(voxUrl, npubForColors, 1.0, currentTransform)
             .then(() => {
               console.log('Successfully loaded voxel avatar from file');
             })
@@ -184,18 +183,18 @@ export function WorldCanvas({
               console.error('Failed to load voxel avatar from file:', error);
               // Fallback to generated model
               console.log('Falling back to generated model');
-              sceneManager.createVoxelAvatar(npubForGenerated, 1.0, currentPosition);
+              sceneManager.createVoxelAvatar(npubForGenerated, 1.0, currentTransform);
             });
         } else {
           // Use procedurally generated model
           console.log('Creating procedurally generated voxel avatar with npub:', npubForGenerated);
-          sceneManager.createVoxelAvatar(npubForGenerated, 1.0, currentPosition);
+          sceneManager.createVoxelAvatar(npubForGenerated, 1.0, currentTransform);
         }
       } else {
         // Remove voxel avatar if exists
         sceneManager.removeVoxelAvatar();
         console.log('Creating GLB avatar:', avatarUrl);
-        sceneManager.createAvatar(avatarUrl, 1.0, currentPosition);
+        sceneManager.createAvatar(avatarUrl, 1.0, currentTransform);
       }
     } else {
       sceneManager.removeAvatar();
