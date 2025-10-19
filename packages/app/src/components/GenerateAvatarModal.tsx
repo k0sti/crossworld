@@ -24,27 +24,7 @@ import {
 } from '@chakra-ui/react';
 import { useState, useRef, useEffect } from 'react';
 import * as THREE from 'three';
-import init, {
-  generate_sphere,
-  generate_cube,
-  generate_pyramid,
-  generate_torus,
-  generate_cylinder,
-  generate_diamond,
-  generate_noise,
-  generate_warrior,
-  generate_peasant,
-  generate_mage,
-  generate_knight,
-  generate_archer,
-  generate_robot,
-  generate_cat,
-  generate_dog,
-  generate_bird,
-  generate_fish,
-  generate_dragon,
-  generate_bear,
-} from '@workspace/wasm';
+// import init from '@workspace/wasm';
 
 export type GenerationCategory = 'humanoid' | 'animal' | 'geometric' | 'noise' | 'abstract';
 
@@ -163,96 +143,31 @@ export function GenerateAvatarModal({ isOpen, onClose, onGenerate }: GenerateAva
   }, [isOpen]);
 
   // Update preview when parameters change
+  // TODO: Re-enable once WASM import issues are resolved
   useEffect(() => {
     if (!isOpen || !previewSceneRef.current) return;
 
-    const updatePreview = async () => {
-      try {
-        await init();
+    // Placeholder: Show a simple cube for now
+    const { scene, mesh: oldMesh } = previewSceneRef.current;
 
-        const seed = 'preview';
-        let geometryData;
-
-        // Generate based on category and preset
-        if (category === 'geometric') {
-          switch (preset) {
-            case 'sphere': geometryData = generate_sphere(size, seed, undefined); break;
-            case 'cube': geometryData = generate_cube(size, seed, undefined); break;
-            case 'pyramid': geometryData = generate_pyramid(size, seed, undefined); break;
-            case 'torus': geometryData = generate_torus(size, seed, undefined); break;
-            case 'cylinder': geometryData = generate_cylinder(size, seed, undefined); break;
-            case 'diamond': geometryData = generate_diamond(size, seed, undefined); break;
-            default: geometryData = generate_sphere(size, seed, undefined);
-          }
-        } else if (category === 'humanoid') {
-          switch (preset) {
-            case 'warrior': geometryData = generate_warrior(size, bodyType, seed, undefined); break;
-            case 'peasant': geometryData = generate_peasant(size, bodyType, seed, undefined); break;
-            case 'mage': geometryData = generate_mage(size, bodyType, seed, undefined); break;
-            case 'knight': geometryData = generate_knight(size, bodyType, seed, undefined); break;
-            case 'archer': geometryData = generate_archer(size, bodyType, seed, undefined); break;
-            case 'robot': geometryData = generate_robot(size, bodyType, seed, undefined); break;
-            default: geometryData = generate_peasant(size, bodyType, seed, undefined);
-          }
-        } else if (category === 'animal') {
-          switch (preset) {
-            case 'cat': geometryData = generate_cat(size, bodyType, seed, undefined); break;
-            case 'dog': geometryData = generate_dog(size, bodyType, seed, undefined); break;
-            case 'bird': geometryData = generate_bird(size, bodyType, seed, undefined); break;
-            case 'fish': geometryData = generate_fish(size, bodyType, seed, undefined); break;
-            case 'dragon': geometryData = generate_dragon(size, bodyType, seed, undefined); break;
-            case 'bear': geometryData = generate_bear(size, bodyType, seed, undefined); break;
-            default: geometryData = generate_cat(size, bodyType, seed, undefined);
-          }
-        } else if (category === 'noise') {
-          geometryData = generate_noise(size, seed, complexity / 100, undefined);
-        } else {
-          geometryData = generate_sphere(size, seed, undefined);
-        }
-
-        const { scene, mesh: oldMesh } = previewSceneRef.current;
-
-        // Remove old mesh
-        if (oldMesh) {
-          scene.remove(oldMesh);
-          oldMesh.geometry.dispose();
-          if (Array.isArray(oldMesh.material)) {
-            oldMesh.material.forEach(m => m.dispose());
-          } else {
-            oldMesh.material.dispose();
-          }
-        }
-
-        // Create new geometry
-        const geometry = new THREE.BufferGeometry();
-        geometry.setAttribute('position', new THREE.Float32BufferAttribute(geometryData.vertices, 3));
-        geometry.setAttribute('normal', new THREE.Float32BufferAttribute(geometryData.normals, 3));
-        geometry.setAttribute('color', new THREE.Float32BufferAttribute(geometryData.colors, 3));
-        geometry.setIndex(Array.from(geometryData.indices));
-
-        // Center the geometry
-        geometry.computeBoundingBox();
-        const boundingBox = geometry.boundingBox!;
-        const center = new THREE.Vector3();
-        boundingBox.getCenter(center);
-        geometry.translate(-center.x, -center.y, -center.z);
-
-        const material = new THREE.MeshStandardMaterial({
-          vertexColors: true,
-          flatShading: true,
-        });
-
-        const mesh = new THREE.Mesh(geometry, material);
-        mesh.position.set(0, 0, 0);
-        scene.add(mesh);
-
-        previewSceneRef.current.mesh = mesh;
-      } catch (error) {
-        console.error('Failed to generate preview:', error);
+    // Remove old mesh
+    if (oldMesh) {
+      scene.remove(oldMesh);
+      oldMesh.geometry.dispose();
+      if (Array.isArray(oldMesh.material)) {
+        oldMesh.material.forEach((m: THREE.Material) => m.dispose());
+      } else {
+        oldMesh.material.dispose();
       }
-    };
+    }
 
-    updatePreview();
+    // Create placeholder cube
+    const geometry = new THREE.BoxGeometry(1, 1, 1);
+    const material = new THREE.MeshStandardMaterial({ color: 0x6496fa });
+    const mesh = new THREE.Mesh(geometry, material);
+    scene.add(mesh);
+
+    previewSceneRef.current.mesh = mesh;
   }, [isOpen, category, preset, size, bodyType, complexity]);
 
   const handleGenerate = () => {
