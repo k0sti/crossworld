@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { Transform } from './transform';
+import { TeleportAnimation, type TeleportAnimationType } from './teleport-animation';
 
 export interface AvatarConfig {
   modelUrl?: string;
@@ -18,12 +19,15 @@ export class Avatar {
   private mixer: THREE.AnimationMixer | null = null;
   private animations: THREE.AnimationClip[] = [];
   private currentAction: THREE.AnimationAction | null = null;
+  private teleportAnimation: TeleportAnimation | null = null;
+  private scene: THREE.Scene | null = null;
 
-  constructor(initialTransform?: Transform, config: AvatarConfig = {}) {
+  constructor(initialTransform?: Transform, config: AvatarConfig = {}, scene?: THREE.Scene) {
     // Use provided transform or create default at (4, 0, 4)
     this.transform = initialTransform ? Transform.fromTransform(initialTransform) : new Transform(4, 0, 4);
     this.targetTransform = this.transform.clone();
     this.config = config;
+    this.scene = scene || null;
 
     this.group = new THREE.Group();
     this.transform.applyToObject3D(this.group);
@@ -162,10 +166,60 @@ export class Avatar {
     }
   }
 
+  setScene(scene: THREE.Scene): void {
+    this.scene = scene;
+  }
+
+  teleportTo(x: number, z: number, animationType: TeleportAnimationType = 'fade') {
+    if (!this.model || !this.scene) return;
+
+    // Check if position actually changed
+    const dx = x - this.transform.getX();
+    const dz = z - this.transform.getZ();
+    const distance = Math.sqrt(dx * dx + dz * dz);
+
+    if (distance < 0.01) {
+      // Position hasn't changed, don't animate
+      return;
+    }
+
+    // Stop any current movement
+    this.isMoving = false;
+
+    // Stop walking animation
+    this.playAnimation('Idle', true);
+
+    // Calculate target rotation
+    const targetAngle = Math.atan2(dx, dz);
+
+    // Create teleport animation (creates ghost at current position/orientation)
+    this.teleportAnimation = new TeleportAnimation(this.group, this.scene, {
+      type: animationType,
+      duration: 500,
+    });
+
+    // Start animation (creates ghost clone at old position)
+    this.teleportAnimation.start();
+
+    // Immediately set new position and orientation (real avatar will fade in here)
+    this.transform.setXZ(x, z);
+    this.transform.setAngle(targetAngle);
+    this.targetTransform.setXZ(x, z);
+    this.targetTransform.setAngle(targetAngle);
+    this.group.position.set(this.transform.getX(), this.transform.getY(), this.transform.getZ());
+    this.group.quaternion.copy(this.transform.getRotation());
+  }
+
   update(deltaTime_s: number) {
     // Update animation mixer
     if (this.mixer) {
       this.mixer.update(deltaTime_s);
+    }
+
+    // Update teleport animation if active
+    if (this.teleportAnimation?.isActive()) {
+      this.teleportAnimation.update(performance.now());
+      return;
     }
 
     if (!this.isMoving) return;
@@ -211,5 +265,9 @@ export class Avatar {
 
   isCurrentlyMoving(): boolean {
     return this.isMoving;
+  }
+
+  isTeleporting(): boolean {
+    return this.teleportAnimation?.isActive() ?? false;
   }
 }

@@ -4,6 +4,7 @@ import { VoxelAvatar } from './voxel-avatar';
 import type { AvatarEngine } from '@workspace/wasm';
 import type { AvatarState } from '../services/avatar-state';
 import { Transform } from './transform';
+import type { TeleportAnimationType } from './teleport-animation';
 
 export class SceneManager {
   private scene: THREE.Scene;
@@ -31,6 +32,9 @@ export class SceneManager {
   private lastPublishTime: number = 0;
   private readonly PUBLISH_INTERVAL_MS = 500; // 500ms
   private readonly MIN_POSITION_CHANGE = 0.1; // Minimum movement to trigger update
+
+  // Teleport animation settings
+  private teleportAnimationType: TeleportAnimationType = 'fade';
 
   constructor() {
     this.scene = new THREE.Scene();
@@ -95,12 +99,23 @@ export class SceneManager {
         const clampedX = Math.max(0.5, Math.min(7.5, point.x));
         const clampedZ = Math.max(0.5, Math.min(7.5, point.z));
 
+        // Check if CTRL is held for teleport
+        const useTeleport = event.ctrlKey;
+
         // Move whichever avatar exists
         if (this.avatar) {
-          this.avatar.setTargetPosition(clampedX, clampedZ);
+          if (useTeleport) {
+            this.avatar.teleportTo(clampedX, clampedZ, this.teleportAnimationType);
+          } else {
+            this.avatar.setTargetPosition(clampedX, clampedZ);
+          }
         }
         if (this.voxelAvatar) {
-          this.voxelAvatar.setTargetPosition(clampedX, clampedZ);
+          if (useTeleport) {
+            this.voxelAvatar.teleportTo(clampedX, clampedZ, this.teleportAnimationType);
+          } else {
+            this.voxelAvatar.setTargetPosition(clampedX, clampedZ);
+          }
         }
       }
     });
@@ -229,25 +244,43 @@ export class SceneManager {
 
     // Update avatar
     if (this.avatar) {
+      const wasTeleporting = this.avatar.isTeleporting();
       this.avatar.update(deltaTime_s);
+      const isTeleporting = this.avatar.isTeleporting();
+
+      // Check if just finished teleporting
+      if (wasTeleporting && !isTeleporting) {
+        // Teleport completed - publish final position
+        this.publishPlayerPosition();
+      }
     }
 
     // Update voxel avatar
     if (this.voxelAvatar) {
       const wasMoving = this.voxelAvatar.isCurrentlyMoving();
+      const wasTeleporting = this.voxelAvatar.isTeleporting();
       this.voxelAvatar.update(deltaTime_s);
       const isMoving = this.voxelAvatar.isCurrentlyMoving();
+      const isTeleporting = this.voxelAvatar.isTeleporting();
 
-      // Check if movement state changed or if currently moving
-      if (wasMoving && !isMoving) {
-        // Just stopped moving - publish final position
-        this.publishPlayerPosition();
-      } else if (!wasMoving && isMoving) {
-        // Just started moving - publish initial position
-        this.publishPlayerPosition();
-      } else if (isMoving) {
-        // Currently moving - publish periodically
-        this.checkAndPublishPlayerPosition();
+      // Don't publish position during teleport animation
+      if (!isTeleporting) {
+        // Check if just finished teleporting
+        if (wasTeleporting && !isTeleporting) {
+          // Teleport completed - publish final position
+          this.publishPlayerPosition();
+        }
+        // Check if movement state changed or if currently moving
+        else if (wasMoving && !isMoving) {
+          // Just stopped moving - publish final position
+          this.publishPlayerPosition();
+        } else if (!wasMoving && isMoving) {
+          // Just started moving - publish initial position
+          this.publishPlayerPosition();
+        } else if (isMoving) {
+          // Currently moving - publish periodically
+          this.checkAndPublishPlayerPosition();
+        }
       }
     }
 
@@ -280,7 +313,7 @@ export class SceneManager {
     if (this.avatar) {
       this.scene.remove(this.avatar.getObject3D());
     }
-    this.avatar = new Avatar(transform, { modelUrl, scale });
+    this.avatar = new Avatar(transform, { modelUrl, scale }, this.scene);
     this.scene.add(this.avatar.getObject3D());
   }
 
@@ -332,7 +365,7 @@ export class SceneManager {
     this.voxelAvatar = new VoxelAvatar({
       userNpub: userNpub || '',
       scale,
-    }, transform);
+    }, transform, this.scene);
 
     // Generate geometry from Rust
     const geometryData = this.avatarEngine.generate_avatar(userNpub);
@@ -367,7 +400,7 @@ export class SceneManager {
       this.voxelAvatar = new VoxelAvatar({
         userNpub: userNpub ?? '',
         scale,
-      }, transform);
+      }, transform, this.scene);
 
       // Apply geometry from .vox file
       this.voxelAvatar.applyGeometry(geometryData);
@@ -533,7 +566,7 @@ export class SceneManager {
       const voxelAvatar = new VoxelAvatar({
         userNpub: npub,
         scale: 1.0,
-      }, transform);
+      }, transform, this.scene);
 
       // Generate or load geometry
       if (avatarModel && avatarModel !== 'generated') {
@@ -568,7 +601,7 @@ export class SceneManager {
       const glbAvatar = new Avatar(transform, {
         modelUrl: avatarUrl,
         scale: 1.0,
-      });
+      }, this.scene);
       this.scene.add(glbAvatar.getObject3D());
       this.remoteAvatars.set(pubkey, glbAvatar);
       console.log(`Created remote GLB avatar for ${npub}`);
@@ -584,14 +617,21 @@ export class SceneManager {
 
     const { position } = state;
 
-    // Update target position
-    avatar.setTargetPosition(position.x, position.z);
+    // Use teleport animation for remote avatar updates
+    avatar.teleportTo(position.x, position.z, this.teleportAnimationType);
+  }
 
-    // Update rotation if quaternion is available
-    if (position.quaternion && avatar.getObject3D()) {
-      const [qx, qy, qz, qw] = position.quaternion;
-      const quaternion = new THREE.Quaternion(qx, qy, qz, qw);
-      avatar.getObject3D().quaternion.copy(quaternion);
-    }
+  /**
+   * Set teleport animation type
+   */
+  setTeleportAnimationType(type: TeleportAnimationType): void {
+    this.teleportAnimationType = type;
+  }
+
+  /**
+   * Get current teleport animation type
+   */
+  getTeleportAnimationType(): TeleportAnimationType {
+    return this.teleportAnimationType;
   }
 }

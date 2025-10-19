@@ -4,6 +4,7 @@ import { SceneManager } from '../renderer/scene';
 import { GeometryController } from '../geometry/geometry-controller';
 import init, { AvatarEngine } from '@workspace/wasm';
 import type { AvatarStateService } from '../services/avatar-state';
+import type { TeleportAnimationType } from '../renderer/teleport-animation';
 
 export type VoxelModelType = 'boy' | 'girl';
 
@@ -23,6 +24,7 @@ interface WorldCanvasProps {
   colorChangeCounter?: number;
   avatarStateService?: AvatarStateService;
   currentUserPubkey?: string | null;
+  teleportAnimationType: TeleportAnimationType;
 }
 
 export function WorldCanvas({
@@ -35,7 +37,8 @@ export function WorldCanvas({
   avatarUrl,
   colorChangeCounter,
   avatarStateService,
-  currentUserPubkey
+  currentUserPubkey,
+  teleportAnimationType
 }: WorldCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneManagerRef = useRef<SceneManager | null>(null);
@@ -140,6 +143,14 @@ export function WorldCanvas({
 
     sceneManager.setEditMode(isEditMode);
   }, [isEditMode]);
+
+  // Handle teleport animation type changes
+  useEffect(() => {
+    const sceneManager = sceneManagerRef.current;
+    if (!sceneManager) return;
+
+    sceneManager.setTeleportAnimationType(teleportAnimationType);
+  }, [teleportAnimationType]);
 
   // Handle login state changes and avatar updates
   useEffect(() => {
