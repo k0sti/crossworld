@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import type { GeometryData } from '@workspace/wasm';
+import { Transform } from './transform';
+import { TeleportAnimation, type TeleportAnimationType } from './teleport-animation';
 
 export interface VoxelAvatarConfig {
   scale?: number;
@@ -16,21 +18,25 @@ export class VoxelAvatar {
   private group: THREE.Group;
   private mesh: THREE.Mesh | null = null;
 
-  private position: THREE.Vector3;
-  private targetPosition: THREE.Vector3;
+  private transform: Transform;
+  private targetTransform: Transform;
   private isMoving: boolean = false;
   private moveSpeed: number = 3.0; // units per second
+  private teleportAnimation: TeleportAnimation | null = null;
+  private scene: THREE.Scene | null = null;
 
   constructor(
     private config: VoxelAvatarConfig,
-    initialX: number = 4,
-    initialZ: number = 4
+    initialTransform?: Transform,
+    scene?: THREE.Scene
   ) {
-    this.position = new THREE.Vector3(initialX, 0, initialZ);
-    this.targetPosition = this.position.clone();
+    // Use provided transform or create default at (4, 0, 4)
+    this.transform = initialTransform ? Transform.fromTransform(initialTransform) : new Transform(4, 0, 4);
+    this.targetTransform = this.transform.clone();
+    this.scene = scene || null;
 
     this.group = new THREE.Group();
-    this.group.position.copy(this.position);
+    this.transform.applyToObject3D(this.group);
   }
 
   /**
@@ -103,48 +109,112 @@ export class VoxelAvatar {
   }
 
   /**
-   * Set target position for avatar to walk to
+   * Set target position for avatar to walk to (2D: x, z)
    */
   setTargetPosition(x: number, z: number): void {
-    this.targetPosition.set(x, 0, z);
+    this.targetTransform.setXZ(x, z);
     this.isMoving = true;
 
-    // Rotate to face direction
-    const direction = new THREE.Vector3()
-      .subVectors(this.targetPosition, this.position)
-      .normalize();
+    // Calculate direction and rotate to face it
+    const dx = x - this.transform.getX();
+    const dz = z - this.transform.getZ();
+    const distance = Math.sqrt(dx * dx + dz * dz);
 
-    if (direction.length() > 0.01) {
+    if (distance > 0.01) {
       // Add π to flip 180° because MagicaVoxel models face opposite direction
-      const angle = Math.atan2(direction.x, direction.z) + Math.PI;
-      this.group.rotation.y = angle;
+      const angle = Math.atan2(dx, dz) + Math.PI;
+      this.transform.setAngle(angle);
+      this.targetTransform.setAngle(angle);
+      this.group.quaternion.copy(this.transform.getRotation());
     }
+  }
+
+  /**
+   * Set the scene (needed for teleport animation)
+   */
+  setScene(scene: THREE.Scene): void {
+    this.scene = scene;
+  }
+
+  /**
+   * Teleport to a new position with animation
+   */
+  teleportTo(x: number, z: number, animationType: TeleportAnimationType = 'fade'): void {
+    if (!this.mesh || !this.scene) return;
+
+    // Check if position actually changed
+    const dx = x - this.transform.getX();
+    const dz = z - this.transform.getZ();
+    const distance = Math.sqrt(dx * dx + dz * dz);
+
+    if (distance < 0.01) {
+      // Position hasn't changed, don't animate
+      return;
+    }
+
+    // Stop any current movement
+    this.isMoving = false;
+
+    // Calculate target rotation
+    const targetAngle = Math.atan2(dx, dz) + Math.PI;
+
+    // Cancel any existing teleport animation before starting a new one
+    if (this.teleportAnimation?.isActive()) {
+      this.teleportAnimation.cancel();
+    }
+
+    // Create teleport animation (creates ghost at current position/orientation)
+    this.teleportAnimation = new TeleportAnimation(this.group, this.scene, {
+      type: animationType,
+      duration: 500,
+    });
+
+    // Start animation (creates ghost clone at old position)
+    this.teleportAnimation.start();
+
+    // Immediately set new position and orientation (real avatar will fade in here)
+    this.transform.setXZ(x, z);
+    this.transform.setAngle(targetAngle);
+    this.targetTransform.setXZ(x, z);
+    this.targetTransform.setAngle(targetAngle);
+    this.group.position.set(this.transform.getX(), this.transform.getY(), this.transform.getZ());
+    this.group.quaternion.copy(this.transform.getRotation());
   }
 
   /**
    * Update avatar position and movement
    */
   update(deltaTime_s: number): void {
+    // Update teleport animation if active
+    if (this.teleportAnimation?.isActive()) {
+      this.teleportAnimation.update(performance.now());
+      return;
+    }
+
     if (!this.isMoving) return;
 
-    const distance = this.position.distanceTo(this.targetPosition);
+    const distance = this.transform.distanceTo2D(this.targetTransform);
 
     if (distance < 0.1) {
       // Reached target
-      this.position.copy(this.targetPosition);
-      this.group.position.copy(this.position);
+      this.transform.setXZ(this.targetTransform.getX(), this.targetTransform.getZ());
+      this.group.position.set(this.transform.getX(), this.transform.getY(), this.transform.getZ());
       this.isMoving = false;
       return;
     }
 
     // Move towards target
     const moveDistance = this.moveSpeed * deltaTime_s;
-    const direction = new THREE.Vector3()
-      .subVectors(this.targetPosition, this.position)
-      .normalize();
+    const dx = this.targetTransform.getX() - this.transform.getX();
+    const dz = this.targetTransform.getZ() - this.transform.getZ();
+    const direction = new THREE.Vector2(dx, dz).normalize();
 
-    this.position.addScaledVector(direction, Math.min(moveDistance, distance));
-    this.group.position.copy(this.position);
+    const actualMove = Math.min(moveDistance, distance);
+    const newX = this.transform.getX() + direction.x * actualMove;
+    const newZ = this.transform.getZ() + direction.y * actualMove;
+
+    this.transform.setXZ(newX, newZ);
+    this.group.position.set(this.transform.getX(), this.transform.getY(), this.transform.getZ());
   }
 
   /**
@@ -155,10 +225,17 @@ export class VoxelAvatar {
   }
 
   /**
-   * Get current position
+   * Get current transform (position + rotation)
+   */
+  getTransform(): Transform {
+    return this.transform.clone();
+  }
+
+  /**
+   * Get current position (legacy, returns Vector3)
    */
   getPosition(): THREE.Vector3 {
-    return this.position.clone();
+    return this.transform.getPosition();
   }
 
   /**
@@ -166,6 +243,13 @@ export class VoxelAvatar {
    */
   isCurrentlyMoving(): boolean {
     return this.isMoving;
+  }
+
+  /**
+   * Check if avatar is currently teleporting
+   */
+  isTeleporting(): boolean {
+    return this.teleportAnimation?.isActive() ?? false;
   }
 
   /**

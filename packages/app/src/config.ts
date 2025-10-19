@@ -54,3 +54,24 @@ export const AVATAR_VOXEL_CONSTANTS = {
   get MODEL_HEIGHT() { return this.GRID_SIZE_Y * this.VOXEL_SIZE; },
   get MODEL_DEPTH() { return this.GRID_SIZE_Z * this.VOXEL_SIZE; },
 }
+
+// Avatar State Event System
+export const AVATAR_STATE_CONFIG = {
+  // Event kinds
+  STATE_EVENT_KIND: 30317,  // Addressable: Full avatar state
+  UPDATE_EVENT_KIND: 1317,  // Regular: Incremental updates
+
+  // Time windows (in seconds)
+  SUBSCRIPTION_WINDOW_S: 60 * 60,  // 1 hour - how far back to query events
+  STATE_TTL_S: 30 * 60,            // 30 minutes - when to consider user offline
+  EVENT_EXPIRY_S: 60 * 60,         // 1 hour - expiration tag on events
+
+  // Update intervals (in milliseconds)
+  POSITION_UPDATE_MS: 500,     // Position updates while moving
+  HEARTBEAT_INTERVAL_MS: 60000, // Heartbeat to keep presence alive
+}
+
+// Generate avatar state d-tag for a world
+export function getAvatarStateDTag(): string {
+  return `crossworld-avatar-${getLiveChatATag()}`
+}

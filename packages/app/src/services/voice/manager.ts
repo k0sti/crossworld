@@ -2,7 +2,7 @@ import { Effect, Signal } from '@kixelated/signals'
 import { MoqConnectionManager, moqConnection } from './connection'
 import { AudioPublisher } from './publisher'
 import { AudioSubscriber, type Participant } from './subscriber'
-import type { ClientStatusService } from '../client-status'
+import type { AvatarStateService } from '../avatar-state'
 
 export type VoiceStatus = 'disconnected' | 'connecting' | 'connected'
 
@@ -63,9 +63,9 @@ export class VoiceManager {
   }
 
   /**
-   * Set the client status service for participant discovery
+   * Set the avatar state service for participant discovery
    */
-  setClientStatusService(service: ClientStatusService): void {
+  setClientStatusService(service: AvatarStateService): void {
     this.subscriber.setClientStatusService(service)
   }
 
