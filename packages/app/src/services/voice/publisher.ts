@@ -39,11 +39,11 @@ export class AudioPublisher {
    */
   async enableMic(npub: string): Promise<void> {
     if (this.enabledSignal.peek()) {
-      console.log('Microphone already enabled')
+      console.log('[MoQ Publisher] Microphone already enabled')
       return
     }
 
-    console.log('Enabling microphone for:', npub)
+    console.log('[MoQ Publisher] Enabling microphone for:', npub)
     this.npubSignal.set(npub)
     this.enabledSignal.set(true)
   }
@@ -56,7 +56,7 @@ export class AudioPublisher {
       return
     }
 
-    console.log('Disabling microphone')
+    console.log('[MoQ Publisher] Disabling microphone')
     this.enabledSignal.set(false)
     this.npubSignal.set(undefined)
   }
@@ -76,7 +76,7 @@ export class AudioPublisher {
     // Spawn async microphone acquisition
     effect.spawn(async () => {
       try {
-        console.log('Requesting microphone permission...')
+        console.log('[MoQ Publisher] Requesting microphone permission...')
 
         // Request microphone access (ref: ref/moq/js/hang/src/publish/source/microphone.ts:43-56)
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -93,6 +93,7 @@ export class AudioPublisher {
           effect.cancel.then(() => true),
         ])
         if (cancelled) {
+          console.log('[MoQ Publisher] Effect cancelled, stopping stream')
           stream.getTracks().forEach(track => track.stop())
           return
         }
@@ -102,7 +103,11 @@ export class AudioPublisher {
           throw new Error('No audio track found')
         }
 
-        console.log('Microphone acquired:', track.label)
+        console.log('[MoQ Publisher] Microphone acquired:', {
+          label: track.label,
+          enabled: track.enabled,
+          readyState: track.readyState,
+        })
 
         // Set the track - this will trigger broadcast creation
         this.microphoneSource.set(track)
@@ -111,11 +116,11 @@ export class AudioPublisher {
 
         // Cleanup: stop track when effect is cancelled
         effect.cleanup(() => {
-          console.log('Stopping microphone track')
+          console.log('[MoQ Publisher] Stopping microphone track')
           track.stop()
         })
       } catch (err) {
-        console.error('Failed to acquire microphone:', err)
+        console.error('[MoQ Publisher] Failed to acquire microphone:', err)
         this.error.set(err instanceof Error ? err.message : 'Microphone access failed')
         this.enabledSignal.set(false)
       }
@@ -138,7 +143,11 @@ export class AudioPublisher {
 
     // Create broadcast path
     const path = Moq.Path.from(`crossworld/voice/${LIVE_CHAT_D_TAG}/${npub}`)
-    console.log('Creating broadcast:', String(path))
+    console.log('[MoQ Publisher] Creating broadcast:', {
+      path: String(path),
+      npub,
+      dTag: LIVE_CHAT_D_TAG,
+    })
 
     // Create broadcast (ref: ref/moq/js/hang/src/publish/element.ts:180-199)
     const broadcast = new Hang.Publish.Broadcast({
@@ -154,17 +163,20 @@ export class AudioPublisher {
       },
     })
 
+    console.log('[MoQ Publisher] Broadcast created, waiting for announcement...')
+
     // Subscribe to speaking state
     effect.effect((innerEffect) => {
       const isSpeaking = innerEffect.get(broadcast.audio.speaking.active)
+      console.log('[MoQ Publisher] Speaking state:', isSpeaking)
       this.speaking.set(isSpeaking)
     })
 
-    console.log('Broadcast created and publishing')
+    console.log('[MoQ Publisher] Now publishing audio to relay')
 
     // Cleanup: close broadcast when effect ends
     effect.cleanup(() => {
-      console.log('Closing broadcast')
+      console.log('[MoQ Publisher] Closing broadcast:', String(path))
       broadcast.close()
     })
   }
