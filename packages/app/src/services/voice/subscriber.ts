@@ -10,6 +10,7 @@ export interface Participant {
   speaking: boolean
   volume: number
   muted: boolean
+  discoverySource: 'nostr' | 'moq' | 'both'
 }
 
 /**
@@ -26,12 +27,18 @@ class ParticipantWatcher {
   public readonly speaking: Signal<boolean> = new Signal(false)
   public readonly volume: Signal<number> = new Signal(0.5)
   public readonly muted: Signal<boolean> = new Signal(false)
+  public discoverySource: 'nostr' | 'moq' | 'both' = 'nostr'
 
-  constructor(connection: Moq.Connection.Established, npub: string) {
+  constructor(connection: Moq.Connection.Established, npub: string, source: 'nostr' | 'moq' = 'nostr') {
     this.npub = npub
+    this.discoverySource = source
 
     const path = Moq.Path.from(`crossworld/voice/${LIVE_CHAT_D_TAG}/${npub}`)
-    console.log('Creating watcher for participant:', npub, 'path:', String(path))
+    console.log('[MoQ Subscriber] Creating watcher for participant:', {
+      npub,
+      path: String(path),
+      source,
+    })
 
     // Create watcher (ref: ref/moq/js/hang/src/watch/element.ts:221-238)
     this.watcher = new Hang.Watch.Broadcast({
@@ -57,10 +64,23 @@ class ParticipantWatcher {
     // Subscribe to speaking state
     this.signals.effect((effect) => {
       const isSpeaking = effect.get(this.watcher.audio.speaking.active)
+      if (isSpeaking !== undefined) {
+        console.log('[MoQ Subscriber] Speaking state for', npub, ':', isSpeaking)
+      }
       this.speaking.set(isSpeaking ?? false)
     })
 
-    console.log('Watcher created for:', npub)
+    console.log('[MoQ Subscriber] Watcher created and active for:', npub)
+  }
+
+  /**
+   * Mark this watcher as discovered via both sources
+   */
+  markDualDiscovery(): void {
+    if (this.discoverySource !== 'both') {
+      console.log('[MoQ Subscriber] Participant now discovered via both Nostr and MoQ:', this.npub)
+      this.discoverySource = 'both'
+    }
   }
 
   /**
@@ -81,7 +101,7 @@ class ParticipantWatcher {
    * Clean up resources
    */
   close(): void {
-    console.log('Closing watcher for:', this.npub)
+    console.log('[MoQ Subscriber] Closing watcher for:', this.npub)
     this.signals.close()
     this.emitter.close()
     this.watcher.close()
@@ -89,8 +109,8 @@ class ParticipantWatcher {
 }
 
 /**
- * Audio subscriber that watches participants from client list
- * Discovery based on ClientStatusService, playback based on hang library
+ * Audio subscriber with dual discovery: Nostr ClientStatusService + MoQ announcements
+ * Discovery based on both sources for maximum reliability
  */
 export class AudioSubscriber {
   private connection: MoqConnectionManager
@@ -98,15 +118,21 @@ export class AudioSubscriber {
   private ownNpub: string | null = null
   private clientStatusService: ClientStatusService | null = null
   private unsubscribeClientStatus: (() => void) | null = null
+  private announcementAbortController: AbortController | null = null
+  private signals = new Effect()
 
   public participants: Signal<Map<string, Participant>> = new Signal(new Map())
+
+  // Debug state
+  public announcementsReceived = 0
+  public activeAnnouncementCount = 0
 
   constructor(connection: MoqConnectionManager) {
     this.connection = connection
   }
 
   /**
-   * Set the client status service for participant discovery
+   * Set the client status service for Nostr-based discovery
    */
   setClientStatusService(service: ClientStatusService): void {
     this.clientStatusService = service
@@ -117,10 +143,11 @@ export class AudioSubscriber {
    */
   setOwnNpub(npub: string): void {
     this.ownNpub = npub
+    console.log('[MoQ Subscriber] Own npub set:', npub)
   }
 
   /**
-   * Start listening for participants via client list
+   * Start listening for participants via BOTH Nostr and MoQ announcements
    */
   async startListening(): Promise<void> {
     const conn = this.connection.getConnection()
@@ -128,28 +155,154 @@ export class AudioSubscriber {
       throw new Error('Not connected to MoQ relay')
     }
 
-    if (!this.clientStatusService) {
-      throw new Error('ClientStatusService not set - required for participant discovery')
+    console.log('[MoQ Subscriber] Starting DUAL discovery (Nostr + MoQ announcements)...')
+
+    // 1. Start Nostr-based discovery (ClientStatusService)
+    if (this.clientStatusService) {
+      console.log('[MoQ Subscriber] Starting Nostr-based discovery...')
+      this.unsubscribeClientStatus = this.clientStatusService.onChange((clients) => {
+        console.log('[MoQ Subscriber] Client list updated (Nostr), processing', clients.size, 'clients')
+        this.handleClientListUpdate(conn, clients)
+      })
+      console.log('[MoQ Subscriber] Nostr discovery active')
+    } else {
+      console.warn('[MoQ Subscriber] ClientStatusService not set - Nostr discovery disabled')
     }
 
-    console.log('Starting participant discovery via client status...')
+    // 2. Start MoQ announcement-based discovery
+    console.log('[MoQ Subscriber] Starting MoQ announcement-based discovery...')
+    this.startAnnouncementListener(conn)
 
-    // Subscribe to client status changes
-    this.unsubscribeClientStatus = this.clientStatusService.onChange((clients) => {
-      this.handleClientListUpdate(conn, clients)
-    })
-
-    console.log('Listening for participants')
+    console.log('[MoQ Subscriber] Now listening via BOTH discovery methods')
   }
 
   /**
-   * Handle client list update from ClientStatusService
+   * Start listening for MoQ announcements (like ref/innpub)
+   */
+  private async startAnnouncementListener(connection: Moq.Connection.Established): Promise<void> {
+    // Cancel any existing listener
+    if (this.announcementAbortController) {
+      this.announcementAbortController.abort()
+    }
+
+    this.announcementAbortController = new AbortController()
+    const signal = this.announcementAbortController.signal
+
+    const prefix = Moq.Path.from(`crossworld/voice/${LIVE_CHAT_D_TAG}`)
+    console.log('[MoQ Subscriber] Listening for announcements with prefix:', String(prefix))
+
+    const announced = connection.announced(prefix)
+
+    // Start announcement loop (ref: ref/innpub/src/multiplayer/stream.ts:1573-1602)
+    const loop = (async () => {
+      try {
+        let count = 0
+        for (;;) {
+          if (signal.aborted) {
+            console.log('[MoQ Subscriber] Announcement listener aborted')
+            break
+          }
+
+          const entry = await announced.next()
+          if (!entry) {
+            console.log('[MoQ Subscriber] Announcement stream ended')
+            break
+          }
+
+          count++
+          this.announcementsReceived = count
+
+          console.log('[MoQ Subscriber] Announcement received:', {
+            path: String(entry.path),
+            active: entry.active,
+            totalReceived: count,
+          })
+
+          if (entry.active) {
+            this.activeAnnouncementCount++
+            this.handleAnnouncementAdded(connection, entry.path)
+          } else {
+            this.activeAnnouncementCount = Math.max(0, this.activeAnnouncementCount - 1)
+            this.handleAnnouncementRemoved(entry.path)
+          }
+        }
+      } catch (err) {
+        if (!signal.aborted) {
+          console.error('[MoQ Subscriber] Announcement loop failed:', err)
+        }
+      }
+    })()
+
+    // Don't await - let it run in background
+    loop.catch((err) => {
+      if (!signal.aborted) {
+        console.error('[MoQ Subscriber] Announcement loop error:', err)
+      }
+    })
+  }
+
+  /**
+   * Handle MoQ announcement added
+   */
+  private handleAnnouncementAdded(connection: Moq.Connection.Established, path: Moq.Path.Valid): void {
+    // Extract npub from path: crossworld/voice/crossworld-dev/npub1...
+    const pathStr = String(path)
+    const segments = pathStr.split('/')
+    const npub = segments[segments.length - 1]
+
+    if (!npub || npub === this.ownNpub) {
+      console.log('[MoQ Subscriber] Skipping own broadcast or invalid npub')
+      return
+    }
+
+    console.log('[MoQ Subscriber] Participant announced via MoQ:', npub)
+
+    // Check if we already have a watcher from Nostr discovery
+    const existing = this.watchers.get(npub)
+    if (existing) {
+      console.log('[MoQ Subscriber] Participant already being watched (Nostr), marking as dual discovery')
+      existing.markDualDiscovery()
+      this.updateParticipantsList()
+    } else {
+      // Create new watcher discovered via MoQ
+      console.log('[MoQ Subscriber] Creating new watcher from MoQ announcement')
+      this.createWatcher(connection, npub, 'moq')
+    }
+  }
+
+  /**
+   * Handle MoQ announcement removed
+   */
+  private handleAnnouncementRemoved(path: Moq.Path.Valid): void {
+    const pathStr = String(path)
+    const segments = pathStr.split('/')
+    const npub = segments[segments.length - 1]
+
+    if (!npub) return
+
+    console.log('[MoQ Subscriber] Participant announcement ended (MoQ):', npub)
+
+    // Don't immediately remove if also discovered via Nostr
+    const watcher = this.watchers.get(npub)
+    if (watcher && watcher.discoverySource === 'both') {
+      console.log('[MoQ Subscriber] Keeping watcher (still active via Nostr)')
+      watcher.discoverySource = 'nostr'
+      this.updateParticipantsList()
+    } else if (watcher && watcher.discoverySource === 'moq') {
+      // Only discovered via MoQ, remove it
+      console.log('[MoQ Subscriber] Removing watcher (only discovered via MoQ)')
+      this.removeWatcher(npub)
+    }
+  }
+
+  /**
+   * Handle client list update from ClientStatusService (Nostr discovery)
    */
   private handleClientListUpdate(
     connection: Moq.Connection.Established,
     clients: Map<string, ClientStatus>
   ): void {
-    // Track which npubs should be active
+    // Track which npubs should be active via Nostr
     const activeNpubs = new Set<string>()
 
     // Process each client
@@ -166,31 +319,48 @@ export class AudioSubscriber {
 
       activeNpubs.add(client.npub)
 
-      // Create watcher if not already watching
-      if (!this.watchers.has(client.npub)) {
-        console.log('Client joined voice:', client.npub)
-        this.createWatcher(connection, client.npub)
+      // Create or update watcher
+      const existing = this.watchers.get(client.npub)
+      if (existing) {
+        // Already watching, check if we should mark as dual discovery
+        if (existing.discoverySource === 'moq') {
+          console.log('[MoQ Subscriber] Participant now discovered via both sources:', client.npub)
+          existing.markDualDiscovery()
+          this.updateParticipantsList()
+        }
+      } else {
+        // Create new watcher
+        console.log('[MoQ Subscriber] Client joined voice (Nostr):', client.npub)
+        this.createWatcher(connection, client.npub, 'nostr')
       }
     })
 
-    // Remove watchers for clients no longer in voice
-    for (const [npub] of this.watchers) {
+    console.log('[MoQ Subscriber] Active participants (Nostr):', activeNpubs.size, 'Total watchers:', this.watchers.size)
+
+    // Remove watchers that are no longer active via Nostr
+    for (const [npub, watcher] of this.watchers) {
       if (!activeNpubs.has(npub)) {
-        console.log('Client left voice:', npub)
-        this.removeWatcher(npub)
+        if (watcher.discoverySource === 'both') {
+          // Still announced via MoQ
+          console.log('[MoQ Subscriber] Client left Nostr but still on MoQ:', npub)
+          watcher.discoverySource = 'moq'
+          this.updateParticipantsList()
+        } else if (watcher.discoverySource === 'nostr') {
+          // Only on Nostr, remove it
+          console.log('[MoQ Subscriber] Client left voice (Nostr only):', npub)
+          this.removeWatcher(npub)
+        }
       }
     }
-
-    // Update participants signal
-    this.updateParticipantsList()
   }
 
   /**
    * Create watcher for a participant
    */
-  private createWatcher(connection: Moq.Connection.Established, npub: string): void {
+  private createWatcher(connection: Moq.Connection.Established, npub: string, source: 'nostr' | 'moq' = 'nostr'): void {
     try {
-      const watcher = new ParticipantWatcher(connection, npub)
+      console.log('[MoQ Subscriber] Creating watcher for:', npub, 'via', source)
+      const watcher = new ParticipantWatcher(connection, npub, source)
 
       // Subscribe to speaking changes
       watcher.speaking.subscribe(() => {
@@ -198,9 +368,10 @@ export class AudioSubscriber {
       })
 
       this.watchers.set(npub, watcher)
+      console.log('[MoQ Subscriber] Watcher created successfully. Total watchers:', this.watchers.size)
       this.updateParticipantsList()
     } catch (err) {
-      console.error('Failed to create watcher for', npub, err)
+      console.error('[MoQ Subscriber] Failed to create watcher for', npub, ':', err)
     }
   }
 
@@ -212,6 +383,7 @@ export class AudioSubscriber {
     if (watcher) {
       watcher.close()
       this.watchers.delete(npub)
+      console.log('[MoQ Subscriber] Watcher removed. Remaining watchers:', this.watchers.size)
       this.updateParticipantsList()
     }
   }
@@ -228,6 +400,7 @@ export class AudioSubscriber {
         speaking: watcher.speaking.peek(),
         volume: watcher.volume.peek(),
         muted: watcher.muted.peek(),
+        discoverySource: watcher.discoverySource,
       })
     }
 
@@ -260,7 +433,13 @@ export class AudioSubscriber {
    * Stop listening and clean up all watchers
    */
   stopListening(): void {
-    console.log('Stopping participant listening...')
+    console.log('[MoQ Subscriber] Stopping participant listening...')
+
+    // Stop announcement listener
+    if (this.announcementAbortController) {
+      this.announcementAbortController.abort()
+      this.announcementAbortController = null
+    }
 
     // Unsubscribe from client status
     if (this.unsubscribeClientStatus) {
@@ -269,6 +448,7 @@ export class AudioSubscriber {
     }
 
     // Close all watchers
+    const count = this.watchers.size
     for (const [, watcher] of this.watchers) {
       watcher.close()
     }
@@ -277,7 +457,7 @@ export class AudioSubscriber {
     // Clear participants
     this.participants.set(new Map())
 
-    console.log('Stopped listening')
+    console.log('[MoQ Subscriber] Stopped listening. Closed', count, 'watchers')
   }
 
   /**
@@ -299,5 +479,6 @@ export class AudioSubscriber {
    */
   close(): void {
     this.stopListening()
+    this.signals.close()
   }
 }
