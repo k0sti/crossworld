@@ -41,7 +41,7 @@ export function WorldCanvas({
   avatarStateService,
   currentUserPubkey,
   teleportAnimationType,
-  generationParams
+  generationParams: _generationParams
 }: WorldCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneManagerRef = useRef<SceneManager | null>(null);
