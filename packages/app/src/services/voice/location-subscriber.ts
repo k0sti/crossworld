@@ -47,7 +47,7 @@ class LocationWatcher {
 
           try {
             for (;;) {
-              const data = await this.track.readJson()
+              const data = await this.track.readJson() as { location?: string }
               if (!data) break
 
               // Parse location data

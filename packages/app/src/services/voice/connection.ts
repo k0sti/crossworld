@@ -41,7 +41,6 @@ export class MoqConnectionManager {
       if (established) {
         console.log('[MoQ Connection] Established:', {
           url: established.url?.toString(),
-          sessionId: established.session?.id,
         })
       }
     })
