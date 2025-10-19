@@ -47,25 +47,23 @@ function App() {
   useEffect(() => {
     const loadLiveEvent = async () => {
       try {
-        // TEMP: Use local relay (confirmed working)
-        // const localRelay = 'http://localhost:4443/anon'
-        // setStreamingUrl(localRelay)
-        // console.log('MoQ streaming URL (local relay):', localRelay)
-
-        // Other relays to test later:
-        // const hangRelay = 'https://relay.moq.dev/anon'
-        // const cfRelay = 'https://relay.cloudflare.mediaoverquic.com/crossworld-dev'
-
-        // Original live event fetching (commented out):
+        // Fetch live event for MoQ relay URL
         const liveEvent = await fetchLiveEvent()
         if (liveEvent?.streaming_url) {
           setStreamingUrl(liveEvent.streaming_url)
-          console.log('MoQ streaming URL:', liveEvent.streaming_url)
+          console.log('[App] MoQ streaming URL from live event:', liveEvent.streaming_url)
         } else {
-          console.warn('No streaming URL found in live event')
+          console.warn('[App] No streaming URL found in live event')
+
+          // Fallback options for testing:
+          // - Local relay: http://localhost:4443/anon
+          // - Public relays:
+          //   * https://relay.moq.dev/anon
+          //   * https://relay.cloudflare.mediaoverquic.com/anon
+          //   (NOTE: Use /anon suffix, NOT /crossworld-dev or other custom paths)
         }
       } catch (err) {
-        console.error('Failed to fetch live event:', err)
+        console.error('[App] Failed to fetch live event:', err)
       }
     }
     loadLiveEvent()
