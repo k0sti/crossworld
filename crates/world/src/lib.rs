@@ -195,3 +195,170 @@ pub fn load_vox_from_bytes(
 
     Ok(GeometryData::new(vertices, indices, normals, colors))
 }
+
+// Helper function to convert body type string to enum
+fn parse_body_type(body_type: &str) -> avatar::BodyType {
+    match body_type {
+        "slim" => avatar::BodyType::Slim,
+        "bulky" => avatar::BodyType::Bulky,
+        _ => avatar::BodyType::Normal,
+    }
+}
+
+// Helper function to generate geometry from VoxelModel
+fn voxel_model_to_geometry(model: avatar::VoxelModel, user_npub: Option<String>) -> GeometryData {
+    let customized_palette = if let Some(npub) = user_npub {
+        model.palette.customize_for_user(&npub)
+    } else {
+        model.palette.clone()
+    };
+
+    let mesher = avatar::VoxelMesher::new(&model);
+    let (vertices, indices, normals, colors) = mesher.generate_mesh(&customized_palette);
+    GeometryData::new(vertices, indices, normals, colors)
+}
+
+/// Generate a geometric sphere avatar
+#[wasm_bindgen]
+pub fn generate_sphere(size: u8, seed: String, user_npub: Option<String>) -> GeometryData {
+    let model = avatar::generate_sphere(size, &seed);
+    voxel_model_to_geometry(model, user_npub)
+}
+
+/// Generate a geometric cube avatar
+#[wasm_bindgen]
+pub fn generate_cube(size: u8, seed: String, user_npub: Option<String>) -> GeometryData {
+    let model = avatar::generate_cube(size, &seed);
+    voxel_model_to_geometry(model, user_npub)
+}
+
+/// Generate a geometric pyramid avatar
+#[wasm_bindgen]
+pub fn generate_pyramid(size: u8, seed: String, user_npub: Option<String>) -> GeometryData {
+    let model = avatar::generate_pyramid(size, &seed);
+    voxel_model_to_geometry(model, user_npub)
+}
+
+/// Generate a geometric torus avatar
+#[wasm_bindgen]
+pub fn generate_torus(size: u8, seed: String, user_npub: Option<String>) -> GeometryData {
+    let model = avatar::generate_torus(size, &seed);
+    voxel_model_to_geometry(model, user_npub)
+}
+
+/// Generate a geometric cylinder avatar
+#[wasm_bindgen]
+pub fn generate_cylinder(size: u8, seed: String, user_npub: Option<String>) -> GeometryData {
+    let model = avatar::generate_cylinder(size, &seed);
+    voxel_model_to_geometry(model, user_npub)
+}
+
+/// Generate a geometric diamond avatar
+#[wasm_bindgen]
+pub fn generate_diamond(size: u8, seed: String, user_npub: Option<String>) -> GeometryData {
+    let model = avatar::generate_diamond(size, &seed);
+    voxel_model_to_geometry(model, user_npub)
+}
+
+/// Generate a noise-based avatar
+#[wasm_bindgen]
+pub fn generate_noise(size: u8, seed: String, complexity: f32, user_npub: Option<String>) -> GeometryData {
+    let model = avatar::generate_noise(size, &seed, complexity);
+    voxel_model_to_geometry(model, user_npub)
+}
+
+/// Generate a humanoid warrior avatar
+#[wasm_bindgen]
+pub fn generate_warrior(size: u8, body_type: String, seed: String, user_npub: Option<String>) -> GeometryData {
+    let body = parse_body_type(&body_type);
+    let model = avatar::generate_warrior(size, body, &seed);
+    voxel_model_to_geometry(model, user_npub)
+}
+
+/// Generate a humanoid peasant avatar
+#[wasm_bindgen]
+pub fn generate_peasant(size: u8, body_type: String, seed: String, user_npub: Option<String>) -> GeometryData {
+    let body = parse_body_type(&body_type);
+    let model = avatar::generate_peasant(size, body, &seed);
+    voxel_model_to_geometry(model, user_npub)
+}
+
+/// Generate a humanoid mage avatar
+#[wasm_bindgen]
+pub fn generate_mage(size: u8, body_type: String, seed: String, user_npub: Option<String>) -> GeometryData {
+    let body = parse_body_type(&body_type);
+    let model = avatar::generate_mage(size, body, &seed);
+    voxel_model_to_geometry(model, user_npub)
+}
+
+/// Generate a humanoid knight avatar
+#[wasm_bindgen]
+pub fn generate_knight(size: u8, body_type: String, seed: String, user_npub: Option<String>) -> GeometryData {
+    let body = parse_body_type(&body_type);
+    let model = avatar::generate_knight(size, body, &seed);
+    voxel_model_to_geometry(model, user_npub)
+}
+
+/// Generate a humanoid archer avatar
+#[wasm_bindgen]
+pub fn generate_archer(size: u8, body_type: String, seed: String, user_npub: Option<String>) -> GeometryData {
+    let body = parse_body_type(&body_type);
+    let model = avatar::generate_archer(size, body, &seed);
+    voxel_model_to_geometry(model, user_npub)
+}
+
+/// Generate a robot avatar
+#[wasm_bindgen]
+pub fn generate_robot(size: u8, body_type: String, seed: String, user_npub: Option<String>) -> GeometryData {
+    let body = parse_body_type(&body_type);
+    let model = avatar::generate_robot(size, body, &seed);
+    voxel_model_to_geometry(model, user_npub)
+}
+
+/// Generate a cat avatar
+#[wasm_bindgen]
+pub fn generate_cat(size: u8, body_type: String, seed: String, user_npub: Option<String>) -> GeometryData {
+    let body = parse_body_type(&body_type);
+    let model = avatar::generate_cat(size, body, &seed);
+    voxel_model_to_geometry(model, user_npub)
+}
+
+/// Generate a dog avatar
+#[wasm_bindgen]
+pub fn generate_dog(size: u8, body_type: String, seed: String, user_npub: Option<String>) -> GeometryData {
+    let body = parse_body_type(&body_type);
+    let model = avatar::generate_dog(size, body, &seed);
+    voxel_model_to_geometry(model, user_npub)
+}
+
+/// Generate a bird avatar
+#[wasm_bindgen]
+pub fn generate_bird(size: u8, body_type: String, seed: String, user_npub: Option<String>) -> GeometryData {
+    let body = parse_body_type(&body_type);
+    let model = avatar::generate_bird(size, body, &seed);
+    voxel_model_to_geometry(model, user_npub)
+}
+
+/// Generate a fish avatar
+#[wasm_bindgen]
+pub fn generate_fish(size: u8, body_type: String, seed: String, user_npub: Option<String>) -> GeometryData {
+    let body = parse_body_type(&body_type);
+    let model = avatar::generate_fish(size, body, &seed);
+    voxel_model_to_geometry(model, user_npub)
+}
+
+/// Generate a dragon avatar
+#[wasm_bindgen]
+pub fn generate_dragon(size: u8, body_type: String, seed: String, user_npub: Option<String>) -> GeometryData {
+    let body = parse_body_type(&body_type);
+    let model = avatar::generate_dragon(size, body, &seed);
+    voxel_model_to_geometry(model, user_npub)
+}
+
+/// Generate a bear avatar
+#[wasm_bindgen]
+pub fn generate_bear(size: u8, body_type: String, seed: String, user_npub: Option<String>) -> GeometryData {
+    let body = parse_body_type(&body_type);
+    let model = avatar::generate_bear(size, body, &seed);
+    voxel_model_to_geometry(model, user_npub)
+}

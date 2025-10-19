@@ -9,6 +9,7 @@ import { ConfigPanelType } from './components/ConfigPanel'
 import { NetworkConfigPanel } from './components/NetworkConfigPanel'
 import { ProfilePanel } from './components/ProfilePanel'
 import { AvatarPanel } from './components/AvatarPanel'
+import type { GenerationParams } from './components/GenerateAvatarModal'
 import { ChatPanel } from './components/ChatPanel'
 import { ClientListPanel } from './components/ClientListPanel'
 import { RestoreStateModal } from './components/RestoreStateModal'
@@ -45,6 +46,7 @@ function App() {
   const [useOriginalColors, setUseOriginalColors] = useState(false)
   const [colorChangeCounter, setColorChangeCounter] = useState(0)
   const [teleportAnimationType, setTeleportAnimationType] = useState<TeleportAnimationType>('fade')
+  const [generationParams, setGenerationParams] = useState<GenerationParams | null>(null)
 
   // State restoration
   const [showRestoreModal, setShowRestoreModal] = useState(false)
@@ -324,6 +326,11 @@ function App() {
     setColorChangeCounter(c => c + 1)
   }
 
+  const handleGeneratedAvatarChange = (params: GenerationParams) => {
+    setGenerationParams(params)
+    setColorChangeCounter(c => c + 1) // Trigger re-render
+  }
+
   const handleViewProfile = (profilePubkey: string) => {
     setViewedProfilePubkey(profilePubkey)
     setActivePanelType('profile')
@@ -413,6 +420,7 @@ function App() {
           avatarStateService={avatarStateService}
           currentUserPubkey={pubkey}
           teleportAnimationType={teleportAnimationType}
+          generationParams={generationParams}
         />
         <TopBar
           pubkey={pubkey}
@@ -458,6 +466,7 @@ function App() {
             currentUrl={avatarUrl}
             teleportAnimationType={teleportAnimationType}
             onTeleportAnimationChange={setTeleportAnimationType}
+            onGeneratedAvatarChange={handleGeneratedAvatarChange}
           />
         )}
 

@@ -5,6 +5,7 @@ import { GeometryController } from '../geometry/geometry-controller';
 import init, { AvatarEngine } from '@workspace/wasm';
 import type { AvatarStateService } from '../services/avatar-state';
 import type { TeleportAnimationType } from '../renderer/teleport-animation';
+import type { GenerationParams } from './GenerateAvatarModal';
 
 export type VoxelModelType = 'boy' | 'girl';
 
@@ -25,6 +26,7 @@ interface WorldCanvasProps {
   avatarStateService?: AvatarStateService;
   currentUserPubkey?: string | null;
   teleportAnimationType: TeleportAnimationType;
+  generationParams: GenerationParams | null;
 }
 
 export function WorldCanvas({
@@ -38,7 +40,8 @@ export function WorldCanvas({
   colorChangeCounter,
   avatarStateService,
   currentUserPubkey,
-  teleportAnimationType
+  teleportAnimationType,
+  generationParams
 }: WorldCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneManagerRef = useRef<SceneManager | null>(null);
