@@ -3,6 +3,7 @@ import { Box } from '@chakra-ui/react';
 import { SceneManager } from '../renderer/scene';
 import { GeometryController } from '../geometry/geometry-controller';
 import init, { AvatarEngine } from '@workspace/wasm';
+import type { AvatarStateService } from '../services/avatar-state';
 
 export type VoxelModelType = 'boy' | 'girl';
 
@@ -20,6 +21,8 @@ interface WorldCanvasProps {
   onAvatarUrlChange: (url: string) => void;
   avatarUrl?: string;
   colorChangeCounter?: number;
+  avatarStateService?: AvatarStateService;
+  currentUserPubkey?: string | null;
 }
 
 export function WorldCanvas({
@@ -30,7 +33,9 @@ export function WorldCanvas({
   useVoxFile,
   useOriginalColors,
   avatarUrl,
-  colorChangeCounter
+  colorChangeCounter,
+  avatarStateService,
+  currentUserPubkey
 }: WorldCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneManagerRef = useRef<SceneManager | null>(null);
@@ -58,6 +63,19 @@ export function WorldCanvas({
 
     // Initialize scene
     sceneManager.initialize(canvas);
+
+    // Set position update callback and subscribe to state changes
+    let unsubscribe: (() => void) | undefined;
+    if (avatarStateService) {
+      sceneManager.setPositionUpdateCallback((x, y, z, quaternion) => {
+        avatarStateService.publishPosition({ x, y, z, quaternion }).catch(console.error);
+      });
+
+      // Subscribe to avatar state changes
+      unsubscribe = avatarStateService.onChange((states) => {
+        sceneManager.updateRemoteAvatars(states);
+      });
+    }
 
     // Initialize WASM and avatar engine
     init().then(() => {
@@ -101,8 +119,19 @@ export function WorldCanvas({
       }
       window.removeEventListener('resize', handleResize);
       geometryController.destroy();
+      if (unsubscribe) {
+        unsubscribe();
+      }
     };
-  }, []);
+  }, [avatarStateService]);
+
+  // Handle current user pubkey changes
+  useEffect(() => {
+    const sceneManager = sceneManagerRef.current;
+    if (!sceneManager) return;
+
+    sceneManager.setCurrentUserPubkey(currentUserPubkey || null);
+  }, [currentUserPubkey]);
 
   // Handle edit mode changes
   useEffect(() => {
@@ -120,6 +149,14 @@ export function WorldCanvas({
     console.log('Avatar update triggered:', { isLoggedIn, useVoxelAvatar, voxelModel, useVoxFile, useOriginalColors });
 
     if (isLoggedIn) {
+      // Preserve current position if avatar exists
+      let currentPosition: { x: number; z: number } | undefined;
+      const currentVoxelAvatar = sceneManager.getVoxelAvatar();
+      if (currentVoxelAvatar) {
+        const pos = currentVoxelAvatar.getPosition();
+        currentPosition = { x: pos.x, z: pos.z };
+      }
+
       if (useVoxelAvatar) {
         // Remove old GLB avatar if exists
         sceneManager.removeAvatar();
@@ -139,7 +176,7 @@ export function WorldCanvas({
 
           console.log('Loading voxel avatar from file:', voxUrl, 'with colors:', useOriginalColors ? 'original' : 'randomized');
 
-          sceneManager.createVoxelAvatarFromVoxFile(voxUrl, npubForColors, 1.0)
+          sceneManager.createVoxelAvatarFromVoxFile(voxUrl, npubForColors, 1.0, currentPosition)
             .then(() => {
               console.log('Successfully loaded voxel avatar from file');
             })
@@ -147,18 +184,18 @@ export function WorldCanvas({
               console.error('Failed to load voxel avatar from file:', error);
               // Fallback to generated model
               console.log('Falling back to generated model');
-              sceneManager.createVoxelAvatar(npubForGenerated, 1.0);
+              sceneManager.createVoxelAvatar(npubForGenerated, 1.0, currentPosition);
             });
         } else {
           // Use procedurally generated model
           console.log('Creating procedurally generated voxel avatar with npub:', npubForGenerated);
-          sceneManager.createVoxelAvatar(npubForGenerated, 1.0);
+          sceneManager.createVoxelAvatar(npubForGenerated, 1.0, currentPosition);
         }
       } else {
         // Remove voxel avatar if exists
         sceneManager.removeVoxelAvatar();
         console.log('Creating GLB avatar:', avatarUrl);
-        sceneManager.createAvatar(avatarUrl, 1.0);
+        sceneManager.createAvatar(avatarUrl, 1.0, currentPosition);
       }
     } else {
       sceneManager.removeAvatar();
