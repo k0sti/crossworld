@@ -2,6 +2,7 @@ import { Box, VStack, Text, HStack, Divider, IconButton, Input, Badge, Button } 
 import { useState, useRef } from 'react';
 import { ReadyPlayerMeService } from '../services/ready-player-me';
 import type { TeleportAnimationType } from '../renderer/teleport-animation';
+import { GenerateAvatarModal, type GenerationParams } from './GenerateAvatarModal';
 
 type VoxelModelType = 'boy' | 'girl';
 type AvatarSelectionType = 'boy' | 'girl' | 'man' | 'simple';
@@ -21,6 +22,7 @@ interface AvatarPanelProps {
   currentUrl?: string;
   teleportAnimationType: TeleportAnimationType;
   onTeleportAnimationChange: (type: TeleportAnimationType) => void;
+  onGeneratedAvatarChange: (params: GenerationParams) => void;
 }
 
 export function AvatarPanel({
@@ -37,13 +39,15 @@ export function AvatarPanel({
   onAvatarUrlChange,
   currentUrl,
   teleportAnimationType,
-  onTeleportAnimationChange
+  onTeleportAnimationChange,
+  onGeneratedAvatarChange
 }: AvatarPanelProps) {
   const [selectedColor, setSelectedColor] = useState('#ff6b6b');
   const colorInputRef = useRef<HTMLInputElement>(null);
   const [inputUrl, setInputUrl] = useState(currentUrl || '');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showLoadModel, setShowLoadModel] = useState(false);
+  const [showGenerateModal, setShowGenerateModal] = useState(false);
 
   // Determine current selection
   const currentSelection: AvatarSelectionType =
@@ -85,39 +89,41 @@ export function AvatarPanel({
   };
 
   return (
-    <Box
-      position="fixed"
-      top="60px"
-      left="68px"
-      zIndex={1500}
-      bg="rgba(0, 0, 0, 0.1)"
-      backdropFilter="blur(8px)"
-      p={4}
-      minW="320px"
-      maxW="400px"
-      _before={{
-        content: '""',
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        background: `
-          radial-gradient(ellipse at 20% 30%, rgba(255, 255, 255, 0.03) 0%, transparent 50%),
-          radial-gradient(ellipse at 80% 70%, rgba(255, 255, 255, 0.03) 0%, transparent 50%),
-          repeating-linear-gradient(
-            45deg,
-            transparent,
-            transparent 10px,
-            rgba(255, 255, 255, 0.01) 10px,
-            rgba(255, 255, 255, 0.01) 20px
-          )
-        `,
-        pointerEvents: 'none',
-        zIndex: -1,
-      }}
-    >
-      <VStack align="stretch" spacing={3}>
+    <>
+      {!showGenerateModal && (
+        <Box
+          position="fixed"
+          top="60px"
+          left="68px"
+          zIndex={1500}
+          bg="rgba(0, 0, 0, 0.1)"
+          backdropFilter="blur(8px)"
+          p={4}
+          minW="320px"
+          maxW="400px"
+          _before={{
+            content: '""',
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: `
+              radial-gradient(ellipse at 20% 30%, rgba(255, 255, 255, 0.03) 0%, transparent 50%),
+              radial-gradient(ellipse at 80% 70%, rgba(255, 255, 255, 0.03) 0%, transparent 50%),
+              repeating-linear-gradient(
+                45deg,
+                transparent,
+                transparent 10px,
+                rgba(255, 255, 255, 0.01) 10px,
+                rgba(255, 255, 255, 0.01) 20px
+              )
+            `,
+            pointerEvents: 'none',
+            zIndex: -1,
+          }}
+        >
+          <VStack align="stretch" spacing={3}>
         <Text fontSize="md" fontWeight="semibold" color="white">
           Select Avatar
         </Text>
@@ -203,6 +209,34 @@ export function AvatarPanel({
           </Box>
         </VStack>
 
+        {/* Generated Models */}
+        <VStack align="stretch" spacing={2}>
+          <Box
+            as="button"
+            onClick={() => handleSelectionChange('simple')}
+            p={3}
+            bg={currentSelection === 'simple' ? 'rgba(100, 200, 100, 0.2)' : 'rgba(80, 80, 80, 0.1)'}
+            border="1px solid"
+            borderColor={currentSelection === 'simple' ? 'rgba(100, 200, 100, 0.4)' : 'rgba(255, 255, 255, 0.1)'}
+            borderRadius="md"
+            _hover={{
+              bg: currentSelection === 'simple' ? 'rgba(100, 200, 100, 0.25)' : 'rgba(120, 120, 120, 0.2)',
+              borderColor: currentSelection === 'simple' ? 'rgba(100, 200, 100, 0.5)' : 'rgba(255, 255, 255, 0.2)'
+            }}
+            transition="all 0.2s"
+            cursor="pointer"
+          >
+            <HStack justify="space-between">
+              <Text fontSize="sm" color="white" fontWeight="medium">
+                🧱 Simple
+              </Text>
+              <Badge colorScheme="green" fontSize="2xs">
+                gen
+              </Badge>
+            </HStack>
+          </Box>
+        </VStack>
+
         {/* Load Model Button */}
         <Button
           size="sm"
@@ -273,41 +307,13 @@ export function AvatarPanel({
           </VStack>
         )}
 
-        {/* Generated Models */}
-        <VStack align="stretch" spacing={2}>
-          <Box
-            as="button"
-            onClick={() => handleSelectionChange('simple')}
-            p={3}
-            bg={currentSelection === 'simple' ? 'rgba(100, 200, 100, 0.2)' : 'rgba(80, 80, 80, 0.1)'}
-            border="1px solid"
-            borderColor={currentSelection === 'simple' ? 'rgba(100, 200, 100, 0.4)' : 'rgba(255, 255, 255, 0.1)'}
-            borderRadius="md"
-            _hover={{
-              bg: currentSelection === 'simple' ? 'rgba(100, 200, 100, 0.25)' : 'rgba(120, 120, 120, 0.2)',
-              borderColor: currentSelection === 'simple' ? 'rgba(100, 200, 100, 0.5)' : 'rgba(255, 255, 255, 0.2)'
-            }}
-            transition="all 0.2s"
-            cursor="pointer"
-          >
-            <HStack justify="space-between">
-              <Text fontSize="sm" color="white" fontWeight="medium">
-                🧱 Simple
-              </Text>
-              <Badge colorScheme="green" fontSize="2xs">
-                gen
-              </Badge>
-            </HStack>
-          </Box>
-        </VStack>
-
         {/* Generate Avatar Button */}
         <Button
           size="sm"
           fontSize="xs"
           colorScheme="teal"
           width="100%"
-          isDisabled
+          onClick={() => setShowGenerateModal(true)}
         >
           Generate Avatar
         </Button>
@@ -449,8 +455,20 @@ export function AvatarPanel({
             />
           </HStack>
         </VStack>
-      </VStack>
-    </Box>
+          </VStack>
+        </Box>
+      )}
+
+      {/* Generate Avatar Modal */}
+      <GenerateAvatarModal
+        isOpen={showGenerateModal}
+        onClose={() => setShowGenerateModal(false)}
+        onGenerate={(params) => {
+          onGeneratedAvatarChange(params);
+          setShowGenerateModal(false);
+        }}
+      />
+    </>
   );
 }
 
