@@ -1,13 +1,13 @@
 import { Box, VStack, HStack, Text, Avatar, Tooltip, Badge, Wrap } from '@chakra-ui/react'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { FiMapPin, FiMessageSquare, FiCompass, FiEdit3, FiMic, FiHeadphones } from 'react-icons/fi'
-import { type ClientStatusService, type ClientStatus } from '../services/client-status'
+import { type AvatarStateService, type AvatarState } from '../services/avatar-state'
 import { Relay } from 'applesauce-relay'
 import { DEFAULT_RELAYS } from '../config'
 
 interface ClientListPanelProps {
   isOpen: boolean
-  statusService: ClientStatusService
+  statusService: AvatarStateService
 }
 
 interface ProfileMetadata {
@@ -24,7 +24,7 @@ interface RelayConfig {
 }
 
 export function ClientListPanel({ isOpen, statusService }: ClientListPanelProps) {
-  const [clients, setClients] = useState<Map<string, ClientStatus>>(new Map())
+  const [clients, setClients] = useState<Map<string, AvatarState>>(new Map())
   const [profiles, setProfiles] = useState<Map<string, ProfileMetadata>>(new Map())
   const [enabledRelays, setEnabledRelays] = useState<string[]>([])
   const profileFetchQueueRef = useRef<Set<string>>(new Set())
@@ -138,7 +138,7 @@ export function ClientListPanel({ isOpen, statusService }: ClientListPanelProps)
     })
 
     // Get initial clients
-    setClients(statusService.getClients())
+    setClients(statusService.getUserStates())
 
     return unsubscribe
   }, [statusService, profiles, fetchProfile])
@@ -148,7 +148,7 @@ export function ClientListPanel({ isOpen, statusService }: ClientListPanelProps)
     return a.npub.localeCompare(b.npub)
   })
 
-  const getDisplayName = (client: ClientStatus): string => {
+  const getDisplayName = (client: AvatarState): string => {
     const profile = profiles.get(client.pubkey)
     return profile?.display_name || profile?.name || client.npub.slice(0, 12) + '...'
   }
@@ -238,7 +238,7 @@ export function ClientListPanel({ isOpen, statusService }: ClientListPanelProps)
                 <VStack align="start" spacing={1}>
                   <Text fontWeight="bold">{client.npub}</Text>
                   <Text fontSize="xs">{client.clientName} {client.clientVersion}</Text>
-                  <Text fontSize="xs">Last seen: {getTimeSince(client.lastUpdate)}</Text>
+                  <Text fontSize="xs">Last seen: {getTimeSince(client.lastUpdateTimestamp)}</Text>
                 </VStack>
               }
               placement="left"
@@ -307,7 +307,7 @@ export function ClientListPanel({ isOpen, statusService }: ClientListPanelProps)
                           speaking
                         </Badge>
                       )}
-                      {client.isChatting && (
+                      {client.activities.includes('chatting') && (
                         <Badge
                           fontSize="2xs"
                           px={1.5}
@@ -323,7 +323,7 @@ export function ClientListPanel({ isOpen, statusService }: ClientListPanelProps)
                           chatting
                         </Badge>
                       )}
-                      {client.isExploring && (
+                      {client.activities.includes('exploring') && (
                         <Badge
                           fontSize="2xs"
                           px={1.5}
@@ -339,7 +339,7 @@ export function ClientListPanel({ isOpen, statusService }: ClientListPanelProps)
                           exploring
                         </Badge>
                       )}
-                      {client.isEditing && (
+                      {client.activities.includes('editing') && (
                         <Badge
                           fontSize="2xs"
                           px={1.5}

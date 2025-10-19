@@ -3,7 +3,7 @@ import * as Moq from '@kixelated/moq'
 import { Effect, Signal } from '@kixelated/signals'
 import { MoqConnectionManager } from './connection'
 import { LIVE_CHAT_D_TAG } from '../../config'
-import { ClientStatusService, type ClientStatus } from '../client-status'
+import { AvatarStateService, type AvatarState } from '../avatar-state'
 
 export interface Participant {
   npub: string
@@ -109,15 +109,15 @@ class ParticipantWatcher {
 }
 
 /**
- * Audio subscriber with dual discovery: Nostr ClientStatusService + MoQ announcements
+ * Audio subscriber with dual discovery: Nostr AvatarStateService + MoQ announcements
  * Discovery based on both sources for maximum reliability
  */
 export class AudioSubscriber {
   private connection: MoqConnectionManager
   private watchers = new Map<string, ParticipantWatcher>()
   private ownNpub: string | null = null
-  private clientStatusService: ClientStatusService | null = null
-  private unsubscribeClientStatus: (() => void) | null = null
+  private avatarStateService: AvatarStateService | null = null
+  private unsubscribeAvatarState: (() => void) | null = null
   private announcementAbortController: AbortController | null = null
   private signals = new Effect()
 
@@ -132,10 +132,10 @@ export class AudioSubscriber {
   }
 
   /**
-   * Set the client status service for Nostr-based discovery
+   * Set the avatar state service for Nostr-based discovery
    */
-  setClientStatusService(service: ClientStatusService): void {
-    this.clientStatusService = service
+  setClientStatusService(service: AvatarStateService): void {
+    this.avatarStateService = service
   }
 
   /**
@@ -157,16 +157,16 @@ export class AudioSubscriber {
 
     console.log('[MoQ Subscriber] Starting DUAL discovery (Nostr + MoQ announcements)...')
 
-    // 1. Start Nostr-based discovery (ClientStatusService)
-    if (this.clientStatusService) {
+    // 1. Start Nostr-based discovery (AvatarStateService)
+    if (this.avatarStateService) {
       console.log('[MoQ Subscriber] Starting Nostr-based discovery...')
-      this.unsubscribeClientStatus = this.clientStatusService.onChange((clients) => {
-        console.log('[MoQ Subscriber] Client list updated (Nostr), processing', clients.size, 'clients')
-        this.handleClientListUpdate(conn, clients)
+      this.unsubscribeAvatarState = this.avatarStateService.onChange((states) => {
+        console.log('[MoQ Subscriber] Avatar states updated (Nostr), processing', states.size, 'users')
+        this.handleClientListUpdate(conn, states)
       })
       console.log('[MoQ Subscriber] Nostr discovery active')
     } else {
-      console.warn('[MoQ Subscriber] ClientStatusService not set - Nostr discovery disabled')
+      console.warn('[MoQ Subscriber] AvatarStateService not set - Nostr discovery disabled')
     }
 
     // 2. Start MoQ announcement-based discovery
@@ -296,42 +296,42 @@ export class AudioSubscriber {
   }
 
   /**
-   * Handle client list update from ClientStatusService (Nostr discovery)
+   * Handle avatar state update from AvatarStateService (Nostr discovery)
    */
   private handleClientListUpdate(
     connection: Moq.Connection.Established,
-    clients: Map<string, ClientStatus>
+    states: Map<string, AvatarState>
   ): void {
     // Track which npubs should be active via Nostr
     const activeNpubs = new Set<string>()
 
-    // Process each client
-    clients.forEach((client) => {
-      // Skip clients not in voice chat
-      if (!client.voiceConnected) {
+    // Process each state
+    states.forEach((state) => {
+      // Skip users not in voice chat
+      if (!state.voiceConnected) {
         return
       }
 
       // Skip ourselves
-      if (this.ownNpub && client.npub === this.ownNpub) {
+      if (this.ownNpub && state.npub === this.ownNpub) {
         return
       }
 
-      activeNpubs.add(client.npub)
+      activeNpubs.add(state.npub)
 
       // Create or update watcher
-      const existing = this.watchers.get(client.npub)
+      const existing = this.watchers.get(state.npub)
       if (existing) {
         // Already watching, check if we should mark as dual discovery
         if (existing.discoverySource === 'moq') {
-          console.log('[MoQ Subscriber] Participant now discovered via both sources:', client.npub)
+          console.log('[MoQ Subscriber] Participant now discovered via both sources:', state.npub)
           existing.markDualDiscovery()
           this.updateParticipantsList()
         }
       } else {
         // Create new watcher
-        console.log('[MoQ Subscriber] Client joined voice (Nostr):', client.npub)
-        this.createWatcher(connection, client.npub, 'nostr')
+        console.log('[MoQ Subscriber] User joined voice (Nostr):', state.npub)
+        this.createWatcher(connection, state.npub, 'nostr')
       }
     })
 
@@ -441,10 +441,10 @@ export class AudioSubscriber {
       this.announcementAbortController = null
     }
 
-    // Unsubscribe from client status
-    if (this.unsubscribeClientStatus) {
-      this.unsubscribeClientStatus()
-      this.unsubscribeClientStatus = null
+    // Unsubscribe from avatar state
+    if (this.unsubscribeAvatarState) {
+      this.unsubscribeAvatarState()
+      this.unsubscribeAvatarState = null
     }
 
     // Close all watchers

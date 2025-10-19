@@ -128,6 +128,17 @@ export function ProfileButton({ pubkey, onLogin }: ProfileButtonProps) {
         }
       }
 
+      // Save guest account to localStorage
+      try {
+        const serializedAccount = account.toJSON()
+        localStorage.setItem('guestAccount', JSON.stringify({
+          account: serializedAccount,
+          name,
+        }))
+      } catch (error) {
+        console.error('Failed to save guest account to localStorage:', error)
+      }
+
       toast({
         title: 'Guest login successful',
         description: `Welcome, ${name}!`,
@@ -287,6 +298,7 @@ export function ProfileButton({ pubkey, onLogin }: ProfileButtonProps) {
           isOpen={isOpen}
           onClose={onClose}
           onGuestLogin={handleGuestLogin}
+          onLogin={onLogin}
         />
       </>
     )
