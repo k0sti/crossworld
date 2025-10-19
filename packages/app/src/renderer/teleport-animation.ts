@@ -210,4 +210,14 @@ export class TeleportAnimation {
   isActive(): boolean {
     return this.isAnimating;
   }
+
+  /**
+   * Cancel the animation early and clean up
+   */
+  cancel(): void {
+    if (this.isAnimating) {
+      this.isAnimating = false;
+      this.cleanup();
+    }
+  }
 }

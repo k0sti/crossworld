@@ -192,6 +192,11 @@ export class Avatar {
     // Calculate target rotation
     const targetAngle = Math.atan2(dx, dz);
 
+    // Cancel any existing teleport animation before starting a new one
+    if (this.teleportAnimation?.isActive()) {
+      this.teleportAnimation.cancel();
+    }
+
     // Create teleport animation (creates ghost at current position/orientation)
     this.teleportAnimation = new TeleportAnimation(this.group, this.scene, {
       type: animationType,
