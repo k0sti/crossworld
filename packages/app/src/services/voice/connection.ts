@@ -31,6 +31,20 @@ export class MoqConnectionManager {
     // Expose connection status
     this.status = this.connection.status
     this.established = this.connection.established
+
+    // Monitor connection status changes
+    this.signals.effect((effect) => {
+      const status = effect.get(this.status)
+      console.log('[MoQ Connection] Status:', status)
+
+      const established = effect.get(this.established)
+      if (established) {
+        console.log('[MoQ Connection] Established:', {
+          url: established.url?.toString(),
+          sessionId: established.session?.id,
+        })
+      }
+    })
   }
 
   /**
@@ -38,16 +52,27 @@ export class MoqConnectionManager {
    * Connection.Reload handles reconnection automatically
    */
   connect(url: string): void {
-    console.log('Connecting to MoQ relay:', url)
-    this.urlSignal.set(new URL(url))
-    this.enabledSignal.set(true)
+    console.log('[MoQ Connection] Initiating connection to:', url)
+    try {
+      const parsedUrl = new URL(url)
+      console.log('[MoQ Connection] Parsed URL:', {
+        protocol: parsedUrl.protocol,
+        host: parsedUrl.host,
+        pathname: parsedUrl.pathname,
+      })
+      this.urlSignal.set(parsedUrl)
+      this.enabledSignal.set(true)
+    } catch (err) {
+      console.error('[MoQ Connection] Invalid URL:', err)
+      throw err
+    }
   }
 
   /**
    * Disconnect from MoQ relay
    */
   disconnect(): void {
-    console.log('Disconnecting from MoQ relay')
+    console.log('[MoQ Connection] Disconnecting from MoQ relay')
     this.enabledSignal.set(false)
     this.urlSignal.set(undefined)
   }
