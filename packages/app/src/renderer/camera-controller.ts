@@ -4,6 +4,7 @@ export class CameraController {
   private camera: THREE.PerspectiveCamera;
   private canvas: HTMLCanvasElement;
   private enabled: boolean = false;
+  private onExitCallback: (() => void) | null = null;
 
   // Movement state
   private moveForward = false;
@@ -40,6 +41,10 @@ export class CameraController {
     this.boundKeyUp = this.onKeyUp.bind(this);
     this.boundMouseMove = this.onMouseMove.bind(this);
     this.boundPointerLockChange = this.onPointerLockChange.bind(this);
+  }
+
+  setOnExitCallback(callback: () => void): void {
+    this.onExitCallback = callback;
   }
 
   enable(): void {
@@ -126,14 +131,14 @@ export class CameraController {
       case 'd':
         this.moveLeft = true; // Swapped: D now moves left
         break;
-      case 'q':
+      case 'v':
         this.moveDown = true;
         break;
-      case 'e':
+      case 'f':
         this.moveUp = true;
         break;
       case 'escape':
-        // This will be handled by the parent component
+        // This will be handled by pointer lock change
         break;
     }
   }
@@ -154,10 +159,10 @@ export class CameraController {
       case 'd':
         this.moveLeft = false; // Swapped: D now moves left
         break;
-      case 'q':
+      case 'v':
         this.moveDown = false;
         break;
-      case 'e':
+      case 'f':
         this.moveUp = false;
         break;
     }
@@ -178,9 +183,13 @@ export class CameraController {
   }
 
   private onPointerLockChange(): void {
-    // If pointer lock is lost while enabled, disable camera mode
+    // If pointer lock is lost while enabled, exit camera mode
     if (this.enabled && document.pointerLockElement !== this.canvas) {
-      // Don't disable here - let the parent component handle it via ESC
+      this.disable();
+      // Notify parent component that camera mode was exited
+      if (this.onExitCallback) {
+        this.onExitCallback();
+      }
     }
   }
 

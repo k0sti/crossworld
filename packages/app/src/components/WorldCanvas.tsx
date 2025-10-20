@@ -15,6 +15,7 @@ interface WorldCanvasProps {
   avatarStateService?: AvatarStateService;
   currentUserPubkey?: string | null;
   geometryControllerRef?: React.MutableRefObject<any>;
+  sceneManagerRef?: React.MutableRefObject<any>;
 }
 
 export function WorldCanvas({
@@ -26,9 +27,10 @@ export function WorldCanvas({
   avatarStateService,
   currentUserPubkey,
   geometryControllerRef,
+  sceneManagerRef,
 }: WorldCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const sceneManagerRef = useRef<SceneManager | null>(null);
+  const localSceneManagerRef = useRef<SceneManager | null>(null);
   const localGeometryControllerRef = useRef<GeometryController | null>(null);
   const avatarEngineRef = useRef<AvatarEngine | null>(null);
   const animationFrameRef = useRef<number | null>(null);
@@ -40,12 +42,17 @@ export function WorldCanvas({
     const sceneManager = new SceneManager();
     const geometryController = new GeometryController();
 
-    sceneManagerRef.current = sceneManager;
+    localSceneManagerRef.current = sceneManager;
     localGeometryControllerRef.current = geometryController;
 
     // Expose geometry controller to parent if ref provided
     if (geometryControllerRef) {
       geometryControllerRef.current = geometryController;
+    }
+
+    // Expose scene manager to parent if ref provided
+    if (sceneManagerRef) {
+      sceneManagerRef.current = sceneManager;
     }
 
     // Initialize scene
@@ -114,7 +121,7 @@ export function WorldCanvas({
 
   // Handle current user pubkey changes
   useEffect(() => {
-    const sceneManager = sceneManagerRef.current;
+    const sceneManager = localSceneManagerRef.current;
     if (!sceneManager) return;
 
     sceneManager.setCurrentUserPubkey(currentUserPubkey || null);
@@ -122,7 +129,7 @@ export function WorldCanvas({
 
   // Handle edit mode changes
   useEffect(() => {
-    const sceneManager = sceneManagerRef.current;
+    const sceneManager = localSceneManagerRef.current;
     if (!sceneManager) return;
 
     sceneManager.setEditMode(isEditMode);
@@ -130,7 +137,7 @@ export function WorldCanvas({
 
   // Handle camera mode changes
   useEffect(() => {
-    const sceneManager = sceneManagerRef.current;
+    const sceneManager = localSceneManagerRef.current;
     if (!sceneManager) return;
 
     sceneManager.setCameraMode(isCameraMode);
@@ -138,7 +145,7 @@ export function WorldCanvas({
 
   // Handle teleport animation type changes
   useEffect(() => {
-    const sceneManager = sceneManagerRef.current;
+    const sceneManager = localSceneManagerRef.current;
     if (!sceneManager) return;
 
     sceneManager.setTeleportAnimationType(teleportAnimationType);
@@ -146,7 +153,7 @@ export function WorldCanvas({
 
   // Handle avatar loading based on new unified avatar config
   useEffect(() => {
-    const sceneManager = sceneManagerRef.current;
+    const sceneManager = localSceneManagerRef.current;
     if (!sceneManager) return;
 
     console.log('Avatar update triggered:', {
