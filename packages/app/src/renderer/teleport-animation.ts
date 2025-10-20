@@ -2,10 +2,8 @@ import * as THREE from 'three';
 
 export type TeleportAnimationType = 'fade' | 'scale' | 'spin' | 'slide' | 'burst';
 
-export interface TeleportAnimationConfig {
-  type: TeleportAnimationType;
-  duration: number; // Total duration in milliseconds
-}
+// Teleport animation duration in milliseconds
+export const TELEPORT_ANIMATION_DURATION_MS = 300;
 
 /**
  * Manages teleport animation for an avatar
@@ -14,7 +12,7 @@ export interface TeleportAnimationConfig {
 export class TeleportAnimation {
   private startTime: number = 0;
   private isAnimating: boolean = false;
-  private config: TeleportAnimationConfig;
+  private animationType: TeleportAnimationType;
   private fadeInObject: THREE.Object3D; // The real avatar (fading in at new position)
   private fadeOutGhost: THREE.Group | null = null; // Ghost clone (fading out at old position)
   private originalScale: THREE.Vector3;
@@ -23,10 +21,10 @@ export class TeleportAnimation {
   private scene: THREE.Scene;
   private firstUpdate: boolean = true;
 
-  constructor(object: THREE.Object3D, scene: THREE.Scene, config: TeleportAnimationConfig) {
+  constructor(object: THREE.Object3D, scene: THREE.Scene, animationType: TeleportAnimationType = 'fade') {
     this.fadeInObject = object;
     this.scene = scene;
-    this.config = config;
+    this.animationType = animationType;
     this.originalScale = object.scale.clone();
     this.originalY = object.position.y; // Will be updated in first update() call
   }
@@ -38,6 +36,9 @@ export class TeleportAnimation {
   start(): void {
     this.startTime = performance.now();
     this.isAnimating = true;
+
+    // Set fade-in object to invisible (will fade in during animation)
+    this.setOpacity(this.fadeInObject, 0);
 
     // Create ghost clone at current position/rotation
     this.fadeOutGhost = this.createGhost();
@@ -94,7 +95,7 @@ export class TeleportAnimation {
     }
 
     const elapsed = currentTime - this.startTime;
-    const progress = Math.min(elapsed / this.config.duration, 1.0);
+    const progress = Math.min(elapsed / TELEPORT_ANIMATION_DURATION_MS, 1.0);
 
     // Animate fade-out on ghost (progress 0 -> 1)
     if (this.fadeOutGhost) {
@@ -116,7 +117,7 @@ export class TeleportAnimation {
   private applyFadeOutAnimation(object: THREE.Object3D, progress: number): void {
     const originalScale = this.originalScale;
 
-    switch (this.config.type) {
+    switch (this.animationType) {
       case 'fade':
         this.setOpacity(object, 1 - progress);
         break;
@@ -142,7 +143,7 @@ export class TeleportAnimation {
   private applyFadeInAnimation(object: THREE.Object3D, progress: number): void {
     const originalScale = this.originalScale;
 
-    switch (this.config.type) {
+    switch (this.animationType) {
       case 'fade':
         this.setOpacity(object, progress);
         break;
