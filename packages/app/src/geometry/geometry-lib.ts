@@ -1,18 +1,22 @@
-import init, { GeometryEngine, GeometryData } from 'crossworld-world';
+import init, { GeometryEngine, GeometryData } from '@workspace/wasm';
 
 let wasmInitialized = false;
 let initPromise: Promise<void> | null = null;
 
 export async function initializeWasm(): Promise<void> {
   if (wasmInitialized) return;
-  if (initPromise) return initPromise;
+
+  if (initPromise) {
+    await initPromise;
+    return;
+  }
 
   initPromise = init().then(() => {
     wasmInitialized = true;
     console.log('WASM module initialized');
   });
 
-  return initPromise;
+  await initPromise;
 }
 
 export class GeometryGenerator {

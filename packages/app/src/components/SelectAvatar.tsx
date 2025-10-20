@@ -20,6 +20,7 @@ import {
   Divider,
   Input,
   IconButton,
+  Textarea,
 } from '@chakra-ui/react';
 import { useState, useRef, useEffect } from 'react';
 import * as THREE from 'three';
@@ -29,9 +30,10 @@ import type { TeleportAnimationType } from '../renderer/teleport-animation';
 import { ENABLE_AVATAR_COLOR_SELECTION } from '../constants/features';
 
 export interface AvatarSelection {
-  avatarType: 'vox' | 'glb';
+  avatarType: 'vox' | 'glb' | 'csm';
   avatarId?: string;
   avatarUrl?: string;
+  csmCode?: string;
   teleportAnimationType: TeleportAnimationType;
 }
 
@@ -51,10 +53,11 @@ interface ModelItem {
 }
 
 export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: SelectAvatarProps) {
-  const [avatarType, setAvatarType] = useState<'vox' | 'glb'>(currentSelection?.avatarType || 'vox');
+  const [avatarType, setAvatarType] = useState<'vox' | 'glb' | 'csm'>(currentSelection?.avatarType || 'vox');
   const [selectedId, setSelectedId] = useState<string>(currentSelection?.avatarId || '');
   const [avatarUrl, setAvatarUrl] = useState<string>(currentSelection?.avatarUrl || '');
   const [inputUrl, setInputUrl] = useState<string>('');
+  const [csmCode, setCsmCode] = useState<string>(currentSelection?.csmCode || '>a [1 2 3 4 5 6 7 8]');
   const [teleportAnimationType, setTeleportAnimationType] = useState<TeleportAnimationType>(
     currentSelection?.teleportAnimationType || 'fade'
   );
@@ -197,7 +200,8 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
     }
 
     // Don't reload preview if no model is selected yet
-    if (!selectedId && !avatarUrl) {
+    // CSM models are an exception - they always have code to render
+    if (!selectedId && !avatarUrl && avatarType !== 'csm') {
       console.log('[SelectAvatar] Preview effect skipped - no model selected');
       return;
     }
@@ -231,6 +235,78 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
     // Load the selected model
     const loadPreview = async () => {
       if (!previewSceneRef.current) return;
+
+      // Handle CSM models first (they don't use URLs)
+      if (avatarType === 'csm') {
+        try {
+          const { parseCsmToMesh } = await import('../utils/cubeWasm');
+          const result = await parseCsmToMesh(csmCode);
+
+          if (!previewSceneRef.current) return; // Component unmounted
+
+          // Check if result contains an error
+          if ('error' in result) {
+            console.error('[SelectAvatar] CSM parse error:', result.error);
+            throw new Error(result.error);
+          }
+
+          // Create geometry from CSM data
+          const geometry = new THREE.BufferGeometry();
+          geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(result.vertices), 3));
+          geometry.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(result.normals), 3));
+          geometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(result.colors), 3));
+          geometry.setIndex(new THREE.BufferAttribute(new Uint32Array(result.indices), 1));
+
+          // CENTER THE GEOMETRY so rotation happens around geometric center
+          geometry.computeBoundingBox();
+          const geoCenter = new THREE.Vector3();
+          geometry.boundingBox!.getCenter(geoCenter);
+          geometry.translate(-geoCenter.x, 0, -geoCenter.z); // Only center horizontally
+
+          const material = new THREE.MeshPhongMaterial({
+            vertexColors: true,
+            specular: 0x111111,
+            shininess: 30,
+            side: THREE.DoubleSide,
+          });
+
+          const mesh = new THREE.Mesh(geometry, material);
+
+          // Calculate bounding box for sizing and positioning
+          geometry.computeBoundingBox();
+          const box = geometry.boundingBox!;
+          const size = box.getSize(new THREE.Vector3());
+
+          // Lift mesh so bottom is at y=0 (geometry is already centered in X/Z)
+          mesh.position.y = -box.min.y;
+
+          // Scale to fit in view
+          const maxDim = Math.max(size.x, size.y, size.z);
+          const scale = 1.5 / maxDim;
+          mesh.scale.setScalar(scale);
+
+          // Add directly to scene
+          mesh.rotation.y = Math.PI; // Rotate 180 degrees to show front
+          scene.add(mesh);
+          previewSceneRef.current.mesh = mesh;
+          console.log('[SelectAvatar] CSM model loaded successfully');
+          return;
+        } catch (error) {
+          console.error('[SelectAvatar] Failed to load CSM model:', error);
+          // Show error placeholder (wrapped in group for consistent rotation)
+          const geometry = new THREE.BoxGeometry(0.5, 1, 0.5);
+          const material = new THREE.MeshStandardMaterial({ color: 0xff0000 });
+          const mesh = new THREE.Mesh(geometry, material);
+          mesh.position.y = 0.5;
+
+          const group = new THREE.Group();
+          group.add(mesh);
+          group.rotation.y = Math.PI; // Rotate 180 degrees to show front
+          scene.add(group);
+          previewSceneRef.current.mesh = group;
+          return;
+        }
+      }
 
       let modelUrl: string | undefined;
 
@@ -381,13 +457,14 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
     };
 
     loadPreview();
-  }, [isOpen, sceneReady, selectedId, avatarUrl, voxModels, glbModels]); // Removed avatarType to prevent reload on tab switch
+  }, [isOpen, sceneReady, selectedId, avatarUrl, voxModels, glbModels, csmCode, avatarType]);
 
   const handleSave = () => {
     const selection: AvatarSelection = {
       avatarType,
       avatarId: avatarType === 'vox' ? selectedId : (avatarType === 'glb' && selectedId !== 'file' ? selectedId : undefined),
       avatarUrl: avatarUrl || undefined,
+      csmCode: avatarType === 'csm' ? csmCode : undefined,
       teleportAnimationType,
     };
     console.log('[SelectAvatar] Saving avatar selection:', selection);
@@ -485,7 +562,7 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
               colorScheme="blue"
               index={avatarType === 'vox' ? 0 : avatarType === 'glb' ? 1 : 2}
               onChange={(index) => {
-                const types: ('vox' | 'glb')[] = ['vox', 'glb', 'vox'];
+                const types: ('vox' | 'glb' | 'csm')[] = ['vox', 'glb', 'csm'];
                 setAvatarType(types[index]);
                 setAvatarUrl('');
                 // Clear selectedId when switching tabs to prevent showing wrong type
@@ -517,11 +594,31 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
                   )}
                 </TabPanel>
 
-                {/* Generated */}
+                {/* CSM (Cube Script Model) */}
                 <TabPanel>
-                  <Text fontSize="sm" color="gray.400" textAlign="center" py={4}>
-                    TBD
-                  </Text>
+                  <VStack align="stretch" spacing={3}>
+                    <Text fontSize="sm" fontWeight="semibold" color="white">
+                      Cube Script Model (CSM)
+                    </Text>
+                    <Textarea
+                      value={csmCode}
+                      onChange={(e) => setCsmCode(e.target.value)}
+                      placeholder="Enter CSM code..."
+                      size="sm"
+                      fontSize="xs"
+                      fontFamily="monospace"
+                      bg="rgba(0, 0, 0, 0.3)"
+                      color="white"
+                      borderColor="rgba(255, 255, 255, 0.2)"
+                      _hover={{ borderColor: 'rgba(255, 255, 255, 0.3)' }}
+                      _focus={{ borderColor: 'blue.400', boxShadow: '0 0 0 1px #3182ce' }}
+                      rows={8}
+                      spellCheck={false}
+                    />
+                    <Text fontSize="xs" color="gray.400">
+                      Example: <code>&gt;a [1 2 3 4 5 6 7 8]</code>
+                    </Text>
+                  </VStack>
                 </TabPanel>
               </TabPanels>
             </Tabs>

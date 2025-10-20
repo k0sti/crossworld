@@ -17,11 +17,13 @@ default:
 
 # Build WASM module in development mode
 build-wasm-dev:
-    cd crates/world && wasm-pack build --dev --target web --out-dir ../../packages/wasm --out-name crossworld-world
+    cd crates/world && wasm-pack build --dev --target web --out-dir ../../packages/wasm-world --out-name crossworld-world
+    cd crates/cube && wasm-pack build --dev --target web --out-dir ../../packages/wasm-cube
 
 # Build WASM module in release mode
 build-wasm:
-    cd crates/world && wasm-pack build --target web --out-dir ../../packages/wasm --out-name crossworld-world
+    cd crates/world && wasm-pack build --target web --out-dir ../../packages/wasm-world --out-name crossworld-world
+    cd crates/cube && wasm-pack build --target web --out-dir ../../packages/wasm-cube
 
 # Start development server (builds WASM first)
 dev: build-wasm-dev
@@ -33,7 +35,7 @@ build: build-wasm
 
 # Clean build artifacts
 clean:
-    rm -rf packages/wasm
+    rm -rf packages/wasm-world packages/wasm-cube
     cd packages/app && rm -rf dist node_modules/.vite
 
 # Install dependencies
