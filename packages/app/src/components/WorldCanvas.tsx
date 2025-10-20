@@ -134,7 +134,8 @@ export function WorldCanvas({
 
     console.log('Avatar update triggered:', { isLoggedIn, avatarConfig });
 
-    if (isLoggedIn) {
+    const loadAvatar = async () => {
+      if (isLoggedIn) {
       // Preserve current transform (position + rotation) if avatar exists
       const currentTransform = sceneManager.getCurrentTransform();
 
@@ -154,9 +155,9 @@ export function WorldCanvas({
         // Try to load from avatarId first
         if (avatarConfig.avatarId && avatarConfig.avatarId !== 'file') {
           // Load predefined voxel model from disk
-          const voxFilename = getVoxFilename(avatarConfig.avatarId);
-          if (voxFilename) {
-            const voxUrl = `${import.meta.env.BASE_URL}assets/models/vox/${voxFilename}`;
+          const { getModelUrl } = await import('../utils/modelConfig');
+          const voxUrl = getModelUrl(avatarConfig.avatarId, 'vox');
+          if (voxUrl) {
             console.log('[WorldCanvas] Loading voxel avatar from disk:', voxUrl);
 
             sceneManager.createVoxelAvatarFromVoxFile(voxUrl, npubForColors, 1.0, currentTransform)
@@ -202,7 +203,8 @@ export function WorldCanvas({
 
         // Try avatarId first (predefined GLB models)
         if (avatarConfig.avatarId && avatarConfig.avatarId !== 'file') {
-          glbUrl = getGLBUrl(avatarConfig.avatarId);
+          const { getModelUrl } = await import('../utils/modelConfig');
+          glbUrl = getModelUrl(avatarConfig.avatarId, 'glb') || undefined;
         }
 
         // Fallback to avatarUrl
@@ -213,12 +215,20 @@ export function WorldCanvas({
         // Load the GLB
         if (glbUrl) {
           console.log('Loading GLB avatar:', glbUrl);
-          sceneManager.createAvatar(glbUrl, 1.0, currentTransform);
+          try {
+            // Check if file exists before loading
+            const checkResponse = await fetch(glbUrl, { method: 'HEAD' });
+            if (checkResponse.ok) {
+              sceneManager.createAvatar(glbUrl, 1.0, currentTransform);
+            } else {
+              console.warn('GLB model not found:', glbUrl);
+              // Don't create avatar if model doesn't exist
+            }
+          } catch (error) {
+            console.error('Failed to check/load GLB avatar:', error);
+          }
         } else {
           console.warn('No GLB URL available for avatar');
-          // Fallback to default man model
-          const defaultUrl = `${import.meta.env.BASE_URL}assets/models/man.glb`;
-          sceneManager.createAvatar(defaultUrl, 1.0, currentTransform);
         }
       }
 
@@ -226,9 +236,12 @@ export function WorldCanvas({
       if (avatarConfig.avatarMod) {
         console.log('Avatar modifications not yet implemented');
       }
-    } else {
-      sceneManager.removeAvatar();
-    }
+      } else {
+        sceneManager.removeAvatar();
+      }
+    };
+
+    loadAvatar();
   }, [isLoggedIn, avatarConfig]);
 
   return (
@@ -245,25 +258,3 @@ export function WorldCanvas({
   );
 }
 
-/**
- * Get .vox filename for a given avatar ID
- */
-function getVoxFilename(avatarId: string): string | null {
-  const voxModels: Record<string, string> = {
-    'boy': 'chr_peasant_guy_blackhair.vox',
-    'girl': 'chr_peasant_girl_orangehair.vox',
-  };
-
-  return voxModels[avatarId] || null;
-}
-
-/**
- * Get GLB URL for a given avatar ID
- */
-function getGLBUrl(avatarId: string): string | undefined {
-  const glbModels: Record<string, string> = {
-    'man': `${import.meta.env.BASE_URL}assets/models/man.glb`,
-  };
-
-  return glbModels[avatarId];
-}

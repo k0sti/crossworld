@@ -42,25 +42,57 @@ interface SelectAvatarProps {
   currentSelection?: AvatarSelection;
 }
 
-const VOX_MODELS = [
-  { id: 'boy', label: '👦 Boy', icon: '👦' },
-  { id: 'girl', label: '👧 Girl', icon: '👧' },
-];
+import { loadModelsConfig } from '../utils/modelConfig';
 
-const GLB_MODELS = [
-  { id: 'man', label: '🎭 Man', icon: '🎭' },
-];
+interface ModelItem {
+  id: string;
+  label: string;
+  filename: string;
+}
 
 export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: SelectAvatarProps) {
   const [avatarType, setAvatarType] = useState<'voxel' | 'glb'>(currentSelection?.avatarType || 'voxel');
-  const [selectedId, setSelectedId] = useState<string>(currentSelection?.avatarId || 'boy');
+  const [selectedId, setSelectedId] = useState<string>(currentSelection?.avatarId || '');
   const [avatarUrl, setAvatarUrl] = useState<string>(currentSelection?.avatarUrl || '');
   const [inputUrl, setInputUrl] = useState<string>('');
   const [teleportAnimationType, setTeleportAnimationType] = useState<TeleportAnimationType>(
     currentSelection?.teleportAnimationType || 'fade'
   );
+  const [voxModels, setVoxModels] = useState<ModelItem[]>([]);
+  const [glbModels, setGlbModels] = useState<ModelItem[]>([]);
+  const [modelsLoaded, setModelsLoaded] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Load models configuration
+  useEffect(() => {
+    console.log('[SelectAvatar] Loading models config...');
+    loadModelsConfig().then(config => {
+      console.log('[SelectAvatar] Models config loaded:', config);
+      const vox = config.vox.map(([label, filename]) => ({
+        id: filename.replace('.vox', ''),
+        label,
+        filename
+      }));
+      const glb = config.glb.map(([label, filename]) => ({
+        id: filename.replace('.glb', ''),
+        label,
+        filename
+      }));
+      setVoxModels(vox);
+      setGlbModels(glb);
+      setModelsLoaded(true);
+
+      // Set default selection if none exists or if current selection is invalid
+      if ((!selectedId || selectedId === 'boy' || selectedId === 'girl') && vox.length > 0) {
+        console.log('[SelectAvatar] Setting default selection to:', vox[0].id);
+        setSelectedId(vox[0].id);
+      }
+    }).catch(error => {
+      console.error('[SelectAvatar] Failed to load models config:', error);
+      setModelsLoaded(true); // Still set to true to show the error state
+    });
+  }, []);
 
   // Preview canvas - use callback ref to detect when canvas is mounted
   const [previewCanvas, setPreviewCanvas] = useState<HTMLCanvasElement | null>(null);
@@ -208,14 +240,17 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
         console.log('[SelectAvatar] Loading preview from URL:', modelUrl);
       } else if (selectedId && selectedId !== 'file') {
         if (avatarType === 'voxel') {
-          const voxFilename = getVoxFilename(selectedId);
-          if (voxFilename) {
-            modelUrl = `${import.meta.env.BASE_URL}assets/models/vox/${voxFilename}`;
+          const model = voxModels.find(m => m.id === selectedId);
+          if (model) {
+            modelUrl = `${import.meta.env.BASE_URL}assets/models/vox/${model.filename}`;
             console.log('[SelectAvatar] Loading VOX preview:', modelUrl);
           }
         } else if (avatarType === 'glb') {
-          modelUrl = getGLBUrl(selectedId);
-          console.log('[SelectAvatar] Loading GLB preview:', modelUrl);
+          const model = glbModels.find(m => m.id === selectedId);
+          if (model) {
+            modelUrl = `${import.meta.env.BASE_URL}assets/models/glb/${model.filename}`;
+            console.log('[SelectAvatar] Loading GLB preview:', modelUrl);
+          }
         }
       }
 
@@ -229,6 +264,7 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
 
         const group = new THREE.Group();
         group.add(mesh);
+        group.rotation.y = Math.PI; // Rotate 180 degrees to show front
         scene.add(group);
         previewSceneRef.current.mesh = group;
         return;
@@ -262,6 +298,7 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
           model.scale.setScalar(scale);
 
           wrapper.add(model);
+          wrapper.rotation.y = Math.PI; // Rotate 180 degrees to show front
           scene.add(wrapper);
           previewSceneRef.current.mesh = wrapper;
           console.log('[SelectAvatar] GLB model loaded successfully');
@@ -275,6 +312,7 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
 
           const group = new THREE.Group();
           group.add(mesh);
+          group.rotation.y = Math.PI; // Rotate 180 degrees to show front
           scene.add(group);
           previewSceneRef.current.mesh = group;
         }
@@ -321,6 +359,7 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
           mesh.scale.setScalar(scale);
 
           // Add directly to scene - no group needed since geometry is centered
+          mesh.rotation.y = Math.PI; // Rotate 180 degrees to show front
           scene.add(mesh);
           previewSceneRef.current.mesh = mesh;
           console.log('[SelectAvatar] VOX model loaded successfully');
@@ -334,6 +373,7 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
 
           const group = new THREE.Group();
           group.add(mesh);
+          group.rotation.y = Math.PI; // Rotate 180 degrees to show front
           scene.add(group);
           previewSceneRef.current.mesh = group;
         }
@@ -341,7 +381,7 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
     };
 
     loadPreview();
-  }, [isOpen, sceneReady, selectedId, avatarUrl]); // Removed avatarType to prevent reload on tab switch
+  }, [isOpen, sceneReady, selectedId, avatarUrl, voxModels, glbModels]); // Removed avatarType to prevent reload on tab switch
 
   const handleSave = () => {
     const selection: AvatarSelection = {
@@ -376,8 +416,8 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
     ReadyPlayerMeService.openAvatarCreator();
   };
 
-  const renderModelGrid = (models: typeof VOX_MODELS) => (
-    <SimpleGrid columns={3} spacing={3}>
+  const renderModelGrid = (models: ModelItem[]) => (
+    <SimpleGrid columns={6} spacing={2} maxHeight="300px" overflowY="auto">
       {models.map((model) => (
         <Box
           key={model.id}
@@ -387,7 +427,7 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
             setSelectedId(model.id);
             setAvatarUrl('');
           }}
-          p={4}
+          p={2}
           bg={selectedId === model.id && !avatarUrl ? 'rgba(100, 150, 250, 0.3)' : 'rgba(80, 80, 80, 0.1)'}
           border="1px solid"
           borderColor={selectedId === model.id && !avatarUrl ? 'rgba(100, 150, 250, 0.5)' : 'rgba(255, 255, 255, 0.1)'}
@@ -397,13 +437,11 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
           }}
           transition="all 0.2s"
           cursor="pointer"
+          title={model.filename}
         >
-          <VStack spacing={2}>
-            <Text fontSize="3xl">{model.icon}</Text>
-            <Text fontSize="xs" color="white">
-              {model.label.split(' ')[1] || model.label}
-            </Text>
-          </VStack>
+          <Text fontSize="xs" color="white" noOfLines={1}>
+            {model.label}
+          </Text>
         </Box>
       ))}
     </SimpleGrid>
@@ -463,12 +501,20 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
               <TabPanels>
                 {/* VOX */}
                 <TabPanel>
-                  {renderModelGrid(VOX_MODELS)}
+                  {modelsLoaded ? renderModelGrid(voxModels) : (
+                    <Text fontSize="sm" color="gray.400" textAlign="center" py={4}>
+                      Loading models...
+                    </Text>
+                  )}
                 </TabPanel>
 
                 {/* GLB */}
                 <TabPanel>
-                  {renderModelGrid(GLB_MODELS)}
+                  {modelsLoaded ? renderModelGrid(glbModels) : (
+                    <Text fontSize="sm" color="gray.400" textAlign="center" py={4}>
+                      Loading models...
+                    </Text>
+                  )}
                 </TabPanel>
 
                 {/* Cube */}
@@ -656,25 +702,3 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
   );
 }
 
-/**
- * Get .vox filename for a given avatar ID
- */
-function getVoxFilename(avatarId: string): string | null {
-  const voxModels: Record<string, string> = {
-    'boy': 'chr_peasant_guy_blackhair.vox',
-    'girl': 'chr_peasant_girl_orangehair.vox',
-  };
-
-  return voxModels[avatarId] || null;
-}
-
-/**
- * Get GLB URL for a given avatar ID
- */
-function getGLBUrl(avatarId: string): string | undefined {
-  const glbModels: Record<string, string> = {
-    'man': `${import.meta.env.BASE_URL}assets/models/man.glb`,
-  };
-
-  return glbModels[avatarId];
-}
