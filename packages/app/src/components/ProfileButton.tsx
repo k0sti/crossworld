@@ -27,9 +27,10 @@ interface ProfileMetadata {
 interface ProfileButtonProps {
   pubkey: string | null
   onLogin: (pubkey: string) => void
+  onOpenProfile?: () => void
 }
 
-export function ProfileButton({ pubkey, onLogin }: ProfileButtonProps) {
+export function ProfileButton({ pubkey, onLogin, onOpenProfile }: ProfileButtonProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [profile, setProfile] = useState<ProfileMetadata | null>(null)
   const toast = useToast()
@@ -307,7 +308,13 @@ export function ProfileButton({ pubkey, onLogin }: ProfileButtonProps) {
   const displayName = profile?.display_name || profile?.name || null
 
   return (
-    <HStack gap={2}>
+    <HStack
+      gap={2}
+      cursor={onOpenProfile ? "pointer" : "default"}
+      onClick={onOpenProfile}
+      _hover={onOpenProfile ? { opacity: 0.8 } : undefined}
+      transition="opacity 0.2s"
+    >
       <Avatar src={profile?.picture} icon={<FiUser />} name={displayName || pubkey} size="sm" />
       {displayName && (
         <Text fontSize="sm" fontWeight="medium" color="white" lineHeight="1">

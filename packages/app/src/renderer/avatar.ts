@@ -1,40 +1,50 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { Transform } from './transform';
-import { TeleportAnimation, type TeleportAnimationType } from './teleport-animation';
+import { BaseAvatar } from './base-avatar';
 
 export interface AvatarConfig {
   modelUrl?: string;
   scale?: number;
 }
 
-export class Avatar {
-  private group: THREE.Group;
+/**
+ * GLB-based avatar with animation support
+ */
+export class Avatar extends BaseAvatar {
   private model: THREE.Object3D | null = null;
-  private transform: Transform;
-  private targetTransform: Transform;
-  private isMoving: boolean = false;
-  private moveSpeed: number = 3.0; // units per second
   private config: AvatarConfig;
   private mixer: THREE.AnimationMixer | null = null;
   private animations: THREE.AnimationClip[] = [];
   private currentAction: THREE.AnimationAction | null = null;
-  private teleportAnimation: TeleportAnimation | null = null;
-  private scene: THREE.Scene | null = null;
 
   constructor(initialTransform?: Transform, config: AvatarConfig = {}, scene?: THREE.Scene) {
-    // Use provided transform or create default at (4, 0, 4)
-    this.transform = initialTransform ? Transform.fromTransform(initialTransform) : new Transform(4, 0, 4);
-    this.targetTransform = this.transform.clone();
+    super(initialTransform, scene);
     this.config = config;
-    this.scene = scene || null;
-
-    this.group = new THREE.Group();
-    this.transform.applyToObject3D(this.group);
 
     // Load GLB model
     this.loadModel();
   }
+
+  // ========== BaseAvatar hooks ==========
+
+  protected getModel(): THREE.Object3D | null {
+    return this.model;
+  }
+
+  protected getRotationOffset(): number {
+    return 0; // GLB models face forward by default
+  }
+
+  protected onStartMoving(): void {
+    this.playAnimation('Walk', true);
+  }
+
+  protected onStopMoving(): void {
+    this.playAnimation('Idle', true);
+  }
+
+  // ========== GLB-specific implementation ==========
 
   private loadModel() {
     const loader = new GLTFLoader();
@@ -142,137 +152,40 @@ export class Avatar {
     }
   }
 
-  setTargetPosition(x: number, z: number) {
-    this.targetTransform.setXZ(x, z);
-
-    const wasMoving = this.isMoving;
-    this.isMoving = true;
-
-    // Start walking animation if not already moving
-    if (!wasMoving) {
-      this.playAnimation('Walk', true);
-    }
-
-    // Calculate direction and rotate to face it
-    const dx = x - this.transform.getX();
-    const dz = z - this.transform.getZ();
-    const distance = Math.sqrt(dx * dx + dz * dz);
-
-    if (distance > 0.01) {
-      const angle = Math.atan2(dx, dz);
-      this.transform.setAngle(angle);
-      this.targetTransform.setAngle(angle);
-      this.group.quaternion.copy(this.transform.getRotation());
-    }
-  }
-
-  setScene(scene: THREE.Scene): void {
-    this.scene = scene;
-  }
-
-  teleportTo(x: number, z: number, animationType: TeleportAnimationType = 'fade') {
-    if (!this.model || !this.scene) return;
-
-    // Check if position actually changed
-    const dx = x - this.transform.getX();
-    const dz = z - this.transform.getZ();
-    const distance = Math.sqrt(dx * dx + dz * dz);
-
-    if (distance < 0.01) {
-      // Position hasn't changed, don't animate
-      return;
-    }
-
-    // Stop any current movement
-    this.isMoving = false;
-
-    // Stop walking animation
-    this.playAnimation('Idle', true);
-
-    // Calculate target rotation
-    const targetAngle = Math.atan2(dx, dz);
-
-    // Cancel any existing teleport animation before starting a new one
-    if (this.teleportAnimation?.isActive()) {
-      this.teleportAnimation.cancel();
-    }
-
-    // Create teleport animation (creates ghost at current position/orientation)
-    this.teleportAnimation = new TeleportAnimation(this.group, this.scene, {
-      type: animationType,
-      duration: 500,
-    });
-
-    // Start animation (creates ghost clone at old position)
-    this.teleportAnimation.start();
-
-    // Immediately set new position and orientation (real avatar will fade in here)
-    this.transform.setXZ(x, z);
-    this.transform.setAngle(targetAngle);
-    this.targetTransform.setXZ(x, z);
-    this.targetTransform.setAngle(targetAngle);
-    this.group.position.set(this.transform.getX(), this.transform.getY(), this.transform.getZ());
-    this.group.quaternion.copy(this.transform.getRotation());
-  }
-
-  update(deltaTime_s: number) {
+  // Override update to add animation mixer update
+  update(deltaTime_s: number): void {
     // Update animation mixer
     if (this.mixer) {
       this.mixer.update(deltaTime_s);
     }
 
-    // Update teleport animation if active
-    if (this.teleportAnimation?.isActive()) {
-      this.teleportAnimation.update(performance.now());
-      return;
+    // Call base class update for movement/teleport
+    super.update(deltaTime_s);
+  }
+
+  dispose(): void {
+    // Dispose animation mixer
+    if (this.mixer) {
+      this.mixer.stopAllAction();
     }
 
-    if (!this.isMoving) return;
-
-    const distance = this.transform.distanceTo2D(this.targetTransform);
-
-    if (distance < 0.1) {
-      // Reached target
-      this.transform.setXZ(this.targetTransform.getX(), this.targetTransform.getZ());
-      this.group.position.set(this.transform.getX(), this.transform.getY(), this.transform.getZ());
-      this.isMoving = false;
-
-      // Switch to idle animation
-      this.playAnimation('Idle', true);
-      return;
+    // Dispose model geometry and materials
+    if (this.model) {
+      this.model.traverse((child) => {
+        if ((child as THREE.Mesh).isMesh) {
+          const mesh = child as THREE.Mesh;
+          if (mesh.geometry) {
+            mesh.geometry.dispose();
+          }
+          if (mesh.material) {
+            if (Array.isArray(mesh.material)) {
+              mesh.material.forEach((m) => m.dispose());
+            } else {
+              mesh.material.dispose();
+            }
+          }
+        }
+      });
     }
-
-    // Move towards target
-    const moveDistance = this.moveSpeed * deltaTime_s;
-    const dx = this.targetTransform.getX() - this.transform.getX();
-    const dz = this.targetTransform.getZ() - this.transform.getZ();
-    const direction = new THREE.Vector2(dx, dz).normalize();
-
-    const actualMove = Math.min(moveDistance, distance);
-    const newX = this.transform.getX() + direction.x * actualMove;
-    const newZ = this.transform.getZ() + direction.y * actualMove;
-
-    this.transform.setXZ(newX, newZ);
-    this.group.position.set(this.transform.getX(), this.transform.getY(), this.transform.getZ());
-  }
-
-  getObject3D(): THREE.Group {
-    return this.group;
-  }
-
-  getTransform(): Transform {
-    return this.transform.clone();
-  }
-
-  getPosition(): THREE.Vector3 {
-    return this.transform.getPosition();
-  }
-
-  isCurrentlyMoving(): boolean {
-    return this.isMoving;
-  }
-
-  isTeleporting(): boolean {
-    return this.teleportAnimation?.isActive() ?? false;
   }
 }

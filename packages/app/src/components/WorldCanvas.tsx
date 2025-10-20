@@ -1,61 +1,33 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { Box } from '@chakra-ui/react';
 import { SceneManager } from '../renderer/scene';
 import { GeometryController } from '../geometry/geometry-controller';
 import init, { AvatarEngine } from '@workspace/wasm';
-import type { AvatarStateService } from '../services/avatar-state';
+import type { AvatarStateService, AvatarConfig } from '../services/avatar-state';
 import type { TeleportAnimationType } from '../renderer/teleport-animation';
-import type { GenerationParams } from './GenerateAvatarModal';
-
-export type VoxelModelType = 'boy' | 'girl';
 
 interface WorldCanvasProps {
   isLoggedIn: boolean;
-  useVoxelAvatar: boolean;
-  onToggleAvatarType: (useVoxel: boolean) => void;
   isEditMode: boolean;
-  voxelModel: VoxelModelType;
-  onVoxelModelChange: (model: VoxelModelType) => void;
-  useVoxFile: boolean;
-  onVoxFileChange: (useVox: boolean) => void;
-  useOriginalColors: boolean;
-  onColorModeChange: (useOriginal: boolean) => void;
-  onAvatarUrlChange: (url: string) => void;
-  avatarUrl?: string;
-  colorChangeCounter?: number;
+  avatarConfig: AvatarConfig;
+  teleportAnimationType: TeleportAnimationType;
   avatarStateService?: AvatarStateService;
   currentUserPubkey?: string | null;
-  teleportAnimationType: TeleportAnimationType;
-  generationParams: GenerationParams | null;
 }
 
 export function WorldCanvas({
   isLoggedIn,
-  useVoxelAvatar,
   isEditMode,
-  voxelModel,
-  useVoxFile,
-  useOriginalColors,
-  avatarUrl,
-  colorChangeCounter,
+  avatarConfig,
+  teleportAnimationType,
   avatarStateService,
   currentUserPubkey,
-  teleportAnimationType,
-  generationParams: _generationParams
 }: WorldCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneManagerRef = useRef<SceneManager | null>(null);
   const geometryControllerRef = useRef<GeometryController | null>(null);
   const avatarEngineRef = useRef<AvatarEngine | null>(null);
   const animationFrameRef = useRef<number | null>(null);
-  const [colorSeed, setColorSeed] = useState(() => Math.random().toString(36).substring(7));
-
-  // Update color seed when counter changes
-  useEffect(() => {
-    if (colorChangeCounter !== undefined && colorChangeCounter > 0) {
-      setColorSeed(Math.random().toString(36).substring(7));
-    }
-  }, [colorChangeCounter]);
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -73,8 +45,8 @@ export function WorldCanvas({
     // Set position update callback and subscribe to state changes
     let unsubscribe: (() => void) | undefined;
     if (avatarStateService) {
-      sceneManager.setPositionUpdateCallback((x, y, z, quaternion) => {
-        avatarStateService.publishPosition({ x, y, z, quaternion }).catch(console.error);
+      sceneManager.setPositionUpdateCallback((x, y, z, quaternion, moveStyle) => {
+        avatarStateService.publishPosition({ x, y, z, quaternion }, moveStyle).catch(console.error);
       });
 
       // Subscribe to avatar state changes
@@ -155,66 +127,127 @@ export function WorldCanvas({
     sceneManager.setTeleportAnimationType(teleportAnimationType);
   }, [teleportAnimationType]);
 
-  // Handle login state changes and avatar updates
+  // Handle avatar loading based on new unified avatar config
   useEffect(() => {
     const sceneManager = sceneManagerRef.current;
     if (!sceneManager) return;
 
-    console.log('Avatar update triggered:', { isLoggedIn, useVoxelAvatar, voxelModel, useVoxFile, useOriginalColors });
+    console.log('Avatar update triggered:', {
+      isLoggedIn,
+      avatarType: avatarConfig.avatarType,
+      avatarId: avatarConfig.avatarId,
+      avatarUrl: avatarConfig.avatarUrl
+    });
 
-    if (isLoggedIn) {
+    const loadAvatar = async () => {
+      if (isLoggedIn) {
       // Preserve current transform (position + rotation) if avatar exists
-      let currentTransform: any = undefined; // Transform type
-      const currentVoxelAvatar = sceneManager.getVoxelAvatar();
-      if (currentVoxelAvatar) {
-        currentTransform = currentVoxelAvatar.getTransform();
-      }
+      const currentTransform = sceneManager.getCurrentTransform();
 
-      if (useVoxelAvatar) {
+      // Priority loading order:
+      // 1. Load from avatarId (predefined models)
+      // 2. Load from avatarUrl (custom URL)
+      // 3. Load from avatarData (procedural generation - not yet implemented)
+      // Finally: Apply avatarMod (modifications - not yet implemented)
+
+      // Use original colors (undefined = original palette)
+      const npubForColors = undefined;
+
+      if (avatarConfig.avatarType === 'vox') {
         // Remove old GLB avatar if exists
         sceneManager.removeAvatar();
 
-        // Create voxel avatar with color customization
-        // Use undefined for npub to get original colors, or a seed for randomized colors
-        const npubForColors = useOriginalColors ? undefined : `npub1seed${colorSeed}`;
-        // For generated avatars, always use a npub for color variation
-        const npubForGenerated = npubForColors || 'npub1default';
+        // Try to load from avatarId first
+        if (avatarConfig.avatarId && avatarConfig.avatarId !== 'file') {
+          // Load predefined voxel model from disk
+          const { getModelUrl } = await import('../utils/modelConfig');
+          const voxUrl = getModelUrl(avatarConfig.avatarId, 'vox');
+          if (voxUrl) {
+            console.log('[WorldCanvas] Loading voxel avatar from disk:', voxUrl);
 
-        if (useVoxFile) {
-          // Load from .vox file - can use undefined for original colors
-          const voxFilename = voxelModel === 'boy'
-            ? 'chr_peasant_guy_blackhair.vox'
-            : 'chr_peasant_girl_orangehair.vox';
-          const voxUrl = `${import.meta.env.BASE_URL}assets/models/vox/${voxFilename}`;
-
-          console.log('Loading voxel avatar from file:', voxUrl, 'with colors:', useOriginalColors ? 'original' : 'randomized');
-
-          sceneManager.createVoxelAvatarFromVoxFile(voxUrl, npubForColors, 1.0, currentTransform)
+            sceneManager.createVoxelAvatarFromVoxFile(voxUrl, npubForColors, 1.0, currentTransform)
+              .then(() => {
+                console.log('[WorldCanvas] Successfully loaded voxel avatar from disk');
+              })
+              .catch(error => {
+                console.error('[WorldCanvas] Failed to load voxel avatar from disk:', error);
+                // Fallback to generated
+                console.log('[WorldCanvas] Falling back to generated model');
+                sceneManager.createVoxelAvatar('npub1default', 1.0, currentTransform);
+              });
+          } else {
+            console.warn('[WorldCanvas] Unknown voxel model ID:', avatarConfig.avatarId);
+            sceneManager.createVoxelAvatar('npub1default', 1.0, currentTransform);
+          }
+        } else if (avatarConfig.avatarUrl) {
+          // Load from custom URL
+          console.log('[WorldCanvas] Loading voxel avatar from URL:', avatarConfig.avatarUrl);
+          sceneManager.createVoxelAvatarFromVoxFile(avatarConfig.avatarUrl, npubForColors, 1.0, currentTransform)
             .then(() => {
-              console.log('Successfully loaded voxel avatar from file');
+              console.log('[WorldCanvas] Successfully loaded voxel avatar from URL');
             })
             .catch(error => {
-              console.error('Failed to load voxel avatar from file:', error);
-              // Fallback to generated model
-              console.log('Falling back to generated model');
-              sceneManager.createVoxelAvatar(npubForGenerated, 1.0, currentTransform);
+              console.error('[WorldCanvas] Failed to load voxel avatar from URL:', error);
+              sceneManager.createVoxelAvatar('npub1default', 1.0, currentTransform);
             });
+        } else if (avatarConfig.avatarData) {
+          // TODO: Generate from avatarData (procedural generation)
+          console.log('[WorldCanvas] Avatar generation from avatarData not yet implemented');
+          sceneManager.createVoxelAvatar('npub1default', 1.0, currentTransform);
         } else {
-          // Use procedurally generated model
-          console.log('Creating procedurally generated voxel avatar with npub:', npubForGenerated);
-          sceneManager.createVoxelAvatar(npubForGenerated, 1.0, currentTransform);
+          // Fallback to simple generated model
+          console.log('[WorldCanvas] Using simple generated voxel avatar');
+          sceneManager.createVoxelAvatar('npub1default', 1.0, currentTransform);
         }
-      } else {
-        // Remove voxel avatar if exists
-        sceneManager.removeVoxelAvatar();
-        console.log('Creating GLB avatar:', avatarUrl);
-        sceneManager.createAvatar(avatarUrl, 1.0, currentTransform);
+      } else if (avatarConfig.avatarType === 'glb') {
+        // Remove existing avatar if exists
+        sceneManager.removeAvatar();
+
+        // Load GLB avatar
+        let glbUrl: string | undefined;
+
+        // Try avatarId first (predefined GLB models)
+        if (avatarConfig.avatarId && avatarConfig.avatarId !== 'file') {
+          const { getModelUrl } = await import('../utils/modelConfig');
+          glbUrl = getModelUrl(avatarConfig.avatarId, 'glb') || undefined;
+        }
+
+        // Fallback to avatarUrl
+        if (!glbUrl && avatarConfig.avatarUrl) {
+          glbUrl = avatarConfig.avatarUrl;
+        }
+
+        // Load the GLB
+        if (glbUrl) {
+          console.log('Loading GLB avatar:', glbUrl);
+          try {
+            // Check if file exists before loading
+            const checkResponse = await fetch(glbUrl, { method: 'HEAD' });
+            if (checkResponse.ok) {
+              sceneManager.createAvatar(glbUrl, 1.0, currentTransform);
+            } else {
+              console.warn('GLB model not found:', glbUrl);
+              // Don't create avatar if model doesn't exist
+            }
+          } catch (error) {
+            console.error('Failed to check/load GLB avatar:', error);
+          }
+        } else {
+          console.warn('No GLB URL available for avatar');
+        }
       }
-    } else {
-      sceneManager.removeAvatar();
-      sceneManager.removeVoxelAvatar();
-    }
-  }, [isLoggedIn, avatarUrl, useVoxelAvatar, voxelModel, useVoxFile, useOriginalColors, colorSeed]);
+
+      // TODO: Apply avatarMod if present
+      if (avatarConfig.avatarMod) {
+        console.log('Avatar modifications not yet implemented');
+      }
+      } else {
+        sceneManager.removeAvatar();
+      }
+    };
+
+    loadAvatar();
+  }, [isLoggedIn, avatarConfig.avatarType, avatarConfig.avatarId, avatarConfig.avatarUrl, avatarConfig.avatarData, avatarConfig.avatarMod]);
 
   return (
     <Box
@@ -229,3 +262,4 @@ export function WorldCanvas({
     </Box>
   );
 }
+

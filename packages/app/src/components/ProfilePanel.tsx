@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Box, VStack, Text, Avatar, HStack, Divider, Flex, IconButton, Tooltip, useToast, SimpleGrid } from '@chakra-ui/react'
 import { FiUser, FiCopy, FiExternalLink } from 'react-icons/fi'
 import { npubEncode } from 'nostr-tools/nip19'
@@ -22,16 +22,39 @@ interface RelayConfig {
 
 interface ProfilePanelProps {
   pubkey: string | null
+  onClose?: () => void
 }
 
-export function ProfilePanel({ pubkey }: ProfilePanelProps) {
+export function ProfilePanel({ pubkey, onClose }: ProfilePanelProps) {
   const [profile, setProfile] = useState<ProfileMetadata | null>(null)
   const [enabledRelays, setEnabledRelays] = useState<string[]>([])
   const toast = useToast()
+  const panelRef = useRef<HTMLDivElement>(null)
   const npub = pubkey ? npubEncode(pubkey) : ''
   const displayNpub = npub ? `${npub.slice(0, 12)}...${npub.slice(-8)}` : ''
   const emojiHash = pubkey ? pubkey_to_emoji(pubkey) : ''
   const emojiArray = Array.from(emojiHash)
+
+  // Handle click outside to close panel
+  useEffect(() => {
+    if (!onClose) return
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (panelRef.current && !panelRef.current.contains(event.target as Node)) {
+        onClose()
+      }
+    }
+
+    // Add listener after a small delay to prevent immediate closing
+    const timeoutId = setTimeout(() => {
+      document.addEventListener('mousedown', handleClickOutside)
+    }, 100)
+
+    return () => {
+      clearTimeout(timeoutId)
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [onClose])
 
   // Load enabled relays from localStorage
   useEffect(() => {
@@ -142,6 +165,7 @@ export function ProfilePanel({ pubkey }: ProfilePanelProps) {
 
   return (
     <Box
+      ref={panelRef}
       position="fixed"
       top="60px"
       left="68px"

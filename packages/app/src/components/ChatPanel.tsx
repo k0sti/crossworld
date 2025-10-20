@@ -4,18 +4,13 @@ import { FiSend, FiTrash2 } from 'react-icons/fi'
 import { Relay, onlyEvents } from 'applesauce-relay'
 import { DEFAULT_RELAYS, getLiveChatATag, CHAT_HISTORY_CONFIG } from '../config'
 import { useAccountManager } from 'applesauce-react/hooks'
+import { profileCache } from '../services/profile-cache'
 
 interface ChatMessage {
   pubkey: string
   time: number
   content: string
   id: string
-}
-
-interface ProfileMetadata {
-  name?: string
-  picture?: string
-  display_name?: string
 }
 
 interface RelayConfig {
@@ -41,10 +36,7 @@ export function ChatPanel({ isOpen, currentPubkey, onViewProfile }: ChatPanelPro
   // Keep relay instances in ref to reuse for both subscribing and publishing
   const relayInstancesRef = useRef<Map<string, Relay>>(new Map())
   const subscriptionsRef = useRef<any[]>([])
-
-  // Cache profiles by pubkey
-  const [profiles, setProfiles] = useState<Map<string, ProfileMetadata>>(new Map())
-  const profileFetchQueueRef = useRef<Set<string>>(new Set())
+  const [profilesVersion, setProfilesVersion] = useState(0) // Trigger re-render when profiles update
 
   // Get enabled relays from configuration
   const [enabledRelays, setEnabledRelays] = useState<string[]>([])
@@ -78,8 +70,8 @@ export function ChatPanel({ isOpen, currentPubkey, onViewProfile }: ChatPanelPro
     const handleRelayConfigChanged = () => {
       loadEnabledRelays()
       // Clear profile cache when relay config changes
-      setProfiles(new Map())
-      profileFetchQueueRef.current.clear()
+      profileCache.clearCache()
+      setProfilesVersion(v => v + 1)
     }
 
     window.addEventListener('relayConfigChanged', handleRelayConfigChanged)
@@ -97,89 +89,32 @@ export function ChatPanel({ isOpen, currentPubkey, onViewProfile }: ChatPanelPro
     scrollToBottom()
   }, [messages])
 
-  // Fetch profile metadata for a pubkey
+  // Fetch profile metadata for a pubkey using cache
   const fetchProfile = async (pubkey: string) => {
-    if (profiles.has(pubkey) || profileFetchQueueRef.current.has(pubkey)) {
-      return
+    if (profileRelays.length === 0) return
+
+    // Fetch from cache (will return cached if valid, or fetch from relays)
+    const profile = await profileCache.getProfile(pubkey, profileRelays)
+    if (profile) {
+      // Trigger re-render
+      setProfilesVersion(v => v + 1)
     }
-
-    if (profileRelays.length === 0) {
-      return
-    }
-
-    profileFetchQueueRef.current.add(pubkey)
-
-    for (const relayUrl of profileRelays) {
-      try {
-        const relay = new Relay(relayUrl)
-        const events = await new Promise<any[]>((resolve) => {
-          const collectedEvents: any[] = []
-          let isResolved = false
-
-          const cleanup = () => {
-            if (!isResolved) {
-              isResolved = true
-              try { relay.close() } catch (e) {}
-              resolve(collectedEvents)
-            }
-          }
-
-          relay.request({
-            kinds: [0],
-            authors: [pubkey],
-            limit: 1
-          }).subscribe({
-            next: (event: any) => {
-              if (event === 'EOSE') {
-                cleanup()
-              } else if (event && event.kind === 0) {
-                collectedEvents.push(event)
-              }
-            },
-            error: () => cleanup(),
-            complete: () => cleanup()
-          })
-
-          setTimeout(cleanup, 2000)
-        })
-
-        if (events.length > 0) {
-          const latestEvent = events.sort((a, b) => b.created_at - a.created_at)[0]
-          try {
-            const metadata = JSON.parse(latestEvent.content) as ProfileMetadata
-            setProfiles(prev => new Map(prev).set(pubkey, metadata))
-            profileFetchQueueRef.current.delete(pubkey)
-            return
-          } catch (e) {
-            console.error('Failed to parse profile metadata:', e)
-          }
-        }
-      } catch (error) {
-        console.error(`Failed to fetch profile from ${relayUrl}:`, error)
-      }
-    }
-
-    profileFetchQueueRef.current.delete(pubkey)
   }
 
   // Fetch profiles for new messages
   useEffect(() => {
     messages.forEach(msg => {
-      if (!profiles.has(msg.pubkey)) {
+      if (!profileCache.isCached(msg.pubkey)) {
         fetchProfile(msg.pubkey)
       }
     })
-  }, [messages, profileRelays])
+  }, [messages, profileRelays, profilesVersion])
 
   // Manage streaming subscription
   useEffect(() => {
     if (!isOpen || enabledRelays.length === 0) return
 
     console.log('[ChatPanel] Opening subscriptions with history...')
-
-    // Clear profile cache when chat opens to refresh profile data
-    setProfiles(new Map())
-    profileFetchQueueRef.current.clear()
 
     const currentTime_s = Math.floor(Date.now() / 1000)
     const historySince_s = currentTime_s - CHAT_HISTORY_CONFIG.MAX_TIME_RANGE_S
@@ -352,12 +287,12 @@ export function ChatPanel({ isOpen, currentPubkey, onViewProfile }: ChatPanelPro
   }
 
   const getProfileName = (pubkey: string) => {
-    const profile = profiles.get(pubkey)
+    const profile = profileCache.getCached(pubkey)
     return profile?.display_name || profile?.name || 'Anonymous'
   }
 
   const getProfilePicture = (pubkey: string) => {
-    const profile = profiles.get(pubkey)
+    const profile = profileCache.getCached(pubkey)
     return profile?.picture
   }
 

@@ -8,6 +8,7 @@ import { DEFAULT_RELAYS } from '../config'
 interface ClientListPanelProps {
   isOpen: boolean
   statusService: AvatarStateService
+  onOpenProfile?: (pubkey: string) => void
 }
 
 interface ProfileMetadata {
@@ -23,7 +24,7 @@ interface RelayConfig {
   status: 'connected' | 'connecting' | 'error' | 'disconnected'
 }
 
-export function ClientListPanel({ isOpen, statusService }: ClientListPanelProps) {
+export function ClientListPanel({ isOpen, statusService, onOpenProfile }: ClientListPanelProps) {
   const [clients, setClients] = useState<Map<string, AvatarState>>(new Map())
   const [profiles, setProfiles] = useState<Map<string, ProfileMetadata>>(new Map())
   const [enabledRelays, setEnabledRelays] = useState<string[]>([])
@@ -253,6 +254,7 @@ export function ClientListPanel({ isOpen, statusService }: ClientListPanelProps)
                 }}
                 transition="background 0.2s"
                 position="relative"
+                onClick={() => onOpenProfile?.(client.pubkey)}
               >
                 <HStack spacing={3} align="start">
                   {/* Avatar */}
@@ -275,6 +277,22 @@ export function ClientListPanel({ isOpen, statusService }: ClientListPanelProps)
 
                     {/* Activity Badges */}
                     <Wrap spacing={1}>
+                      {client.position && (
+                        <Badge
+                          fontSize="2xs"
+                          px={1.5}
+                          py={0.5}
+                          borderRadius="md"
+                          bg="gray.600"
+                          color="white"
+                          display="flex"
+                          alignItems="center"
+                          gap={1}
+                        >
+                          <FiMapPin size={10} />
+                          {formatPosition(client.position)}
+                        </Badge>
+                      )}
                       {client.voiceConnected && (
                         <Badge
                           fontSize="2xs"
@@ -356,14 +374,6 @@ export function ClientListPanel({ isOpen, statusService }: ClientListPanelProps)
                         </Badge>
                       )}
                     </Wrap>
-
-                    {/* Position indicator */}
-                    {client.position && (
-                      <HStack spacing={1} fontSize="xs" color="whiteAlpha.600">
-                        <FiMapPin size={10} />
-                        <Text>{formatPosition(client.position)}</Text>
-                      </HStack>
-                    )}
                   </VStack>
                 </HStack>
               </Box>
