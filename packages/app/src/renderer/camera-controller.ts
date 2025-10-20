@@ -121,10 +121,10 @@ export class CameraController {
         this.moveBackward = true;
         break;
       case 'a':
-        this.moveLeft = true;
+        this.moveRight = true; // Swapped: A now moves right
         break;
       case 'd':
-        this.moveRight = true;
+        this.moveLeft = true; // Swapped: D now moves left
         break;
       case 'q':
         this.moveDown = true;
@@ -149,10 +149,10 @@ export class CameraController {
         this.moveBackward = false;
         break;
       case 'a':
-        this.moveLeft = false;
+        this.moveRight = false; // Swapped: A now moves right
         break;
       case 'd':
-        this.moveRight = false;
+        this.moveLeft = false; // Swapped: D now moves left
         break;
       case 'q':
         this.moveDown = false;
