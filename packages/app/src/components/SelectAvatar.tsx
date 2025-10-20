@@ -33,7 +33,7 @@ export interface AvatarSelection {
   avatarType: 'vox' | 'glb' | 'csm';
   avatarId?: string;
   avatarUrl?: string;
-  csmCode?: string;
+  avatarData?: string;  // For CSM: contains the CSM code
   teleportAnimationType: TeleportAnimationType;
 }
 
@@ -57,7 +57,11 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
   const [selectedId, setSelectedId] = useState<string>(currentSelection?.avatarId || '');
   const [avatarUrl, setAvatarUrl] = useState<string>(currentSelection?.avatarUrl || '');
   const [inputUrl, setInputUrl] = useState<string>('');
-  const [csmCode, setCsmCode] = useState<string>(currentSelection?.csmCode || '>a [1 2 3 4 5 6 7 8]');
+  const [csmCode, setCsmCode] = useState<string>(
+    currentSelection?.avatarType === 'csm' && currentSelection?.avatarData
+      ? currentSelection.avatarData
+      : '>a [1 2 3 4 5 6 7 8]'
+  );
   const [teleportAnimationType, setTeleportAnimationType] = useState<TeleportAnimationType>(
     currentSelection?.teleportAnimationType || 'fade'
   );
@@ -464,7 +468,7 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
       avatarType,
       avatarId: avatarType === 'vox' ? selectedId : (avatarType === 'glb' && selectedId !== 'file' ? selectedId : undefined),
       avatarUrl: avatarUrl || undefined,
-      csmCode: avatarType === 'csm' ? csmCode : undefined,
+      avatarData: avatarType === 'csm' ? csmCode : undefined,
       teleportAnimationType,
     };
     console.log('[SelectAvatar] Saving avatar selection:', selection);
@@ -572,7 +576,7 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
               <TabList>
                 <Tab fontSize="xs">VOX</Tab>
                 <Tab fontSize="xs">GLB</Tab>
-                <Tab fontSize="xs">Cube</Tab>
+                <Tab fontSize="xs">CSM</Tab>
               </TabList>
 
               <TabPanels>

@@ -456,8 +456,10 @@ export class AvatarStateService {
       const avatarData = getTag('avatar_data')
       const avatarMod = getTag('avatar_mod')
 
-      // Validate consistency between avatarType and avatarId
-      if (avatarId) {
+      console.log('[AvatarState] Parsed state event:', { avatarType, avatarId, avatarUrl, avatarDataLength: avatarData?.length, pubkey: event.pubkey.slice(0, 8) })
+
+      // Validate consistency between avatarType and avatarId (skip for csm)
+      if (avatarId && avatarType !== 'csm') {
         const isVoxId = avatarId === 'boy' || avatarId === 'girl'
         const isGlbId = avatarId === 'man'
 

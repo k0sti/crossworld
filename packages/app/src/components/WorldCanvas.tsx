@@ -235,6 +235,31 @@ export function WorldCanvas({
         } else {
           console.warn('No GLB URL available for avatar');
         }
+      } else if (avatarConfig.avatarType === 'csm') {
+        // Remove old avatar
+        sceneManager.removeAvatar();
+
+        // Get CSM code from avatarData
+        if (avatarConfig.avatarData) {
+          console.log('[WorldCanvas] Loading CSM avatar from avatarData');
+          try {
+            const { parseCsmToMesh } = await import('../utils/cubeWasm');
+            const result = await parseCsmToMesh(avatarConfig.avatarData);
+
+            if ('error' in result) {
+              console.error('[WorldCanvas] CSM parse error:', result.error);
+              return;
+            }
+
+            // Create CSM avatar from mesh data
+            sceneManager.createCsmAvatar(result, npubForColors, 1.0, currentTransform);
+            console.log('[WorldCanvas] Successfully loaded CSM avatar');
+          } catch (error) {
+            console.error('[WorldCanvas] Failed to load CSM avatar:', error);
+          }
+        } else {
+          console.warn('[WorldCanvas] No avatarData provided for CSM avatar');
+        }
       }
 
       // TODO: Apply avatarMod if present
