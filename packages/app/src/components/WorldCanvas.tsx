@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { Box } from '@chakra-ui/react';
 import { SceneManager } from '../renderer/scene';
 import { GeometryController } from '../geometry/geometry-controller';
@@ -136,11 +136,7 @@ export function WorldCanvas({
 
     if (isLoggedIn) {
       // Preserve current transform (position + rotation) if avatar exists
-      let currentTransform: any = undefined;
-      const currentVoxelAvatar = sceneManager.getVoxelAvatar();
-      if (currentVoxelAvatar) {
-        currentTransform = currentVoxelAvatar.getTransform();
-      }
+      const currentTransform = sceneManager.getCurrentTransform();
 
       // Priority loading order:
       // 1. Load from avatarId (predefined models)
@@ -198,8 +194,8 @@ export function WorldCanvas({
           sceneManager.createVoxelAvatar('npub1default', 1.0, currentTransform);
         }
       } else if (avatarConfig.avatarType === 'glb') {
-        // Remove voxel avatar if exists
-        sceneManager.removeVoxelAvatar();
+        // Remove existing avatar if exists
+        sceneManager.removeAvatar();
 
         // Load GLB avatar
         let glbUrl: string | undefined;
@@ -232,7 +228,6 @@ export function WorldCanvas({
       }
     } else {
       sceneManager.removeAvatar();
-      sceneManager.removeVoxelAvatar();
     }
   }, [isLoggedIn, avatarConfig]);
 
@@ -265,10 +260,10 @@ function getVoxFilename(avatarId: string): string | null {
 /**
  * Get GLB URL for a given avatar ID
  */
-function getGLBUrl(avatarId: string): string | null {
+function getGLBUrl(avatarId: string): string | undefined {
   const glbModels: Record<string, string> = {
     'man': `${import.meta.env.BASE_URL}assets/models/man.glb`,
   };
 
-  return glbModels[avatarId] || null;
+  return glbModels[avatarId];
 }
