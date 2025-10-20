@@ -277,11 +277,16 @@ export class AvatarStateService {
       return
     }
 
+    // Discard update events older than state event
+    // State event is canonical at its timestamp, older updates are obsolete
+    if (event.created_at < stateEvent.event.created_at) {
+      return // Update is obsolete, state event supersedes it
+    }
+
     // Verify update links to current state event
     const currentStateRef = this.getStateEventRefFromStateEvent(stateEvent.event)
     if (stateEventRef !== currentStateRef) {
-      console.log('Update event links to old state, ignoring')
-      return
+      return // Update links to old state event
     }
 
     // Store update event
@@ -329,9 +334,13 @@ export class AvatarStateService {
     }
 
     // Apply update events in chronological order
+    // Filter out updates older than state event (state is canonical at its timestamp)
     const updates = this.updateEvents.get(pubkey) || []
+    const stateTimestamp = stateEventData.event.created_at
+
     let shouldRemove = false
     updates
+      .filter(update => update.event.created_at >= stateTimestamp)
       .sort((a, b) => a.event.created_at - b.event.created_at)
       .forEach(update => {
         const removed = this.applyUpdate(state, update.event)
