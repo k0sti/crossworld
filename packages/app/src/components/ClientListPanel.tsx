@@ -8,6 +8,7 @@ import { DEFAULT_RELAYS } from '../config'
 interface ClientListPanelProps {
   isOpen: boolean
   statusService: AvatarStateService
+  onOpenProfile?: (pubkey: string) => void
 }
 
 interface ProfileMetadata {
@@ -23,7 +24,7 @@ interface RelayConfig {
   status: 'connected' | 'connecting' | 'error' | 'disconnected'
 }
 
-export function ClientListPanel({ isOpen, statusService }: ClientListPanelProps) {
+export function ClientListPanel({ isOpen, statusService, onOpenProfile }: ClientListPanelProps) {
   const [clients, setClients] = useState<Map<string, AvatarState>>(new Map())
   const [profiles, setProfiles] = useState<Map<string, ProfileMetadata>>(new Map())
   const [enabledRelays, setEnabledRelays] = useState<string[]>([])
@@ -253,6 +254,7 @@ export function ClientListPanel({ isOpen, statusService }: ClientListPanelProps)
                 }}
                 transition="background 0.2s"
                 position="relative"
+                onClick={() => onOpenProfile?.(client.pubkey)}
               >
                 <HStack spacing={3} align="start">
                   {/* Avatar */}

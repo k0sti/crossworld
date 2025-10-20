@@ -405,6 +405,9 @@ function App() {
         <TopBar
           pubkey={pubkey}
           onLogin={handleLogin}
+          onOpenPanel={setActivePanelType}
+          onOpenProfile={() => setActivePanelType('profile')}
+          activePanelType={activePanelType}
         />
         {pubkey && (
           <LeftSidebarPanel
@@ -429,7 +432,12 @@ function App() {
 
         {/* Config Panels */}
         {activePanelType === 'network' && <NetworkConfigPanel />}
-        {activePanelType === 'profile' && <ProfilePanel pubkey={viewedProfilePubkey || pubkey} />}
+        {activePanelType === 'profile' && (
+          <ProfilePanel
+            pubkey={viewedProfilePubkey || pubkey}
+            onClose={() => setActivePanelType(null)}
+          />
+        )}
         {activePanelType === 'avatar' && (
           <SelectAvatar
             isOpen={true}
@@ -451,6 +459,7 @@ function App() {
         <ClientListPanel
           isOpen={isClientListOpen}
           statusService={avatarStateService}
+          onOpenProfile={handleViewProfile}
         />
 
         {/* Loading State Modal */}
