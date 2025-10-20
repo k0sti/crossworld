@@ -168,10 +168,11 @@ export class CameraController {
 
     // Update camera rotation based on mouse movement
     this.yaw -= event.movementX * this.lookSpeed;
-    this.pitch -= event.movementY * this.lookSpeed;
+    this.pitch += event.movementY * this.lookSpeed; // Flipped: moving mouse up looks up
 
-    // Clamp pitch to prevent flipping
-    this.pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, this.pitch));
+    // Clamp pitch to prevent looking directly up or down (80 degrees max)
+    const maxPitch = Math.PI * 80 / 180; // 80 degrees in radians
+    this.pitch = Math.max(-maxPitch, Math.min(maxPitch, this.pitch));
 
     this.updateCameraRotation();
   }
