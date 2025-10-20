@@ -94,7 +94,7 @@ export default defineConfig({
       '@assets': path.resolve(__dirname, '../../assets')
     }
   },
-  publicDir: 'public',
+  publicDir: false,
   // Serve assets from project root during dev
   server: {
     fs: {

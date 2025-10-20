@@ -1,5 +1,5 @@
-import { Box, Flex, IconButton } from '@chakra-ui/react'
-import { FiGlobe } from 'react-icons/fi'
+import { Box, Flex, IconButton, HStack } from '@chakra-ui/react'
+import { FiGlobe, FiInfo } from 'react-icons/fi'
 import { ProfileButton } from './ProfileButton'
 import { ConfigPanelType } from './ConfigPanel'
 
@@ -29,15 +29,24 @@ export function TopBar({ pubkey, onLogin, onOpenPanel, onOpenProfile, activePane
       <Flex justify="space-between" align="center">
         <ProfileButton pubkey={pubkey} onLogin={onLogin} onOpenProfile={onOpenProfile} />
 
-        {pubkey && (
+        <HStack spacing={2}>
+          {pubkey && (
+            <IconButton
+              aria-label="Network settings"
+              icon={<FiGlobe />}
+              onClick={() => onOpenPanel(activePanelType === 'network' ? null : 'network')}
+              variant={activePanelType === 'network' ? 'solid' : 'ghost'}
+              size="sm"
+            />
+          )}
           <IconButton
-            aria-label="Network settings"
-            icon={<FiGlobe />}
-            onClick={() => onOpenPanel(activePanelType === 'network' ? null : 'network')}
-            variant={activePanelType === 'network' ? 'solid' : 'ghost'}
+            aria-label="About"
+            icon={<FiInfo />}
+            onClick={() => onOpenPanel(activePanelType === 'info' ? null : 'info')}
+            variant={activePanelType === 'info' ? 'solid' : 'ghost'}
             size="sm"
           />
-        )}
+        </HStack>
       </Flex>
     </Box>
   )
