@@ -1,6 +1,6 @@
 import { Box, SimpleGrid, Text } from '@chakra-ui/react'
 
-export type ConfigPanelType = 'network' | 'profile' | 'avatar' | null
+export type ConfigPanelType = 'network' | 'profile' | 'avatar' | 'info' | null
 
 interface ConfigIconProps {
   icon: string
