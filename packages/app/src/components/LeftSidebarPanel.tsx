@@ -8,16 +8,20 @@ interface SidebarIconProps {
   icon: string
   onClick: () => void
   isActive?: boolean
+  activeBgColor?: string
 }
 
-function SidebarIcon({ icon, onClick, isActive }: SidebarIconProps) {
+function SidebarIcon({ icon, onClick, isActive, activeBgColor }: SidebarIconProps) {
+  const defaultActiveBg = "rgba(120, 120, 120, 0.2)"
+  const activeBg = isActive ? (activeBgColor || defaultActiveBg) : "rgba(80, 80, 80, 0.1)"
+
   return (
     <Box
       as="button"
       onClick={onClick}
       w="48px"
       h="48px"
-      bg={isActive ? "rgba(120, 120, 120, 0.2)" : "rgba(80, 80, 80, 0.1)"}
+      bg={activeBg}
       border="1px solid rgba(255, 255, 255, 0.1)"
       _hover={{
         bg: 'rgba(120, 120, 120, 0.2)',
@@ -123,11 +127,17 @@ export function LeftSidebarPanel({
           </>
         )}
 
-        {/* Camera Mode Toggle */}
+        {/* Camera Mode Button */}
         <SidebarIcon
           icon="📷"
-          onClick={onToggleCameraMode}
+          onClick={() => {
+            // Only enter camera mode, don't toggle
+            if (!isCameraMode) {
+              onToggleCameraMode()
+            }
+          }}
           isActive={isCameraMode}
+          activeBgColor="rgba(255, 215, 0, 0.4)" // Yellow when active
         />
         <Divider borderColor="rgba(255, 255, 255, 0.1)" my={1} />
 
