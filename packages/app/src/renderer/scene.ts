@@ -6,6 +6,7 @@ import type { AvatarEngine } from '@workspace/wasm';
 import type { AvatarState } from '../services/avatar-state';
 import { Transform } from './transform';
 import type { TeleportAnimationType } from './teleport-animation';
+import { CameraController } from './camera-controller';
 
 export class SceneManager {
   private scene: THREE.Scene;
@@ -18,10 +19,12 @@ export class SceneManager {
   private mouse: THREE.Vector2;
   private lastTime: number = 0;
   private isEditMode: boolean = false;
+  private isCameraMode: boolean = false;
   private gridHelper: THREE.GridHelper | null = null;
   private previewCube: THREE.LineSegments | null = null;
   private currentGridPosition: THREE.Vector3 = new THREE.Vector3();
   private onPositionUpdate?: (x: number, y: number, z: number, quaternion: [number, number, number, number], moveStyle?: string) => void;
+  private cameraController: CameraController | null = null;
 
   // Remote avatars for other users
   private remoteAvatars: Map<string, IAvatar> = new Map();
@@ -71,13 +74,17 @@ export class SceneManager {
     this.setupMouseListener(canvas);
     this.setupMouseMoveListener(canvas);
     this.setupEditModeHelpers();
+
+    // Initialize camera controller
+    this.cameraController = new CameraController(this.camera, canvas);
+
     this.lastTime = performance.now();
   }
 
   private setupMouseListener(canvas: HTMLCanvasElement): void {
     canvas.addEventListener('click', (event) => {
-      // Don't move avatar in edit mode
-      if (this.isEditMode) return;
+      // Don't move avatar in edit mode or camera mode
+      if (this.isEditMode || this.isCameraMode) return;
 
       // Need avatar and geometry mesh to handle clicks
       if (!this.currentAvatar || !this.geometryMesh) return;
@@ -247,8 +254,13 @@ export class SceneManager {
     const deltaTime_s = (currentTime - this.lastTime) / 1000;
     this.lastTime = currentTime;
 
-    // Update current avatar
-    if (this.currentAvatar) {
+    // Update camera controller if in camera mode
+    if (this.isCameraMode && this.cameraController) {
+      this.cameraController.update(deltaTime_s);
+    }
+
+    // Update current avatar (not in camera mode)
+    if (this.currentAvatar && !this.isCameraMode) {
       const wasTeleporting = this.currentAvatar.isTeleporting();
       this.currentAvatar.update(deltaTime_s);
       const isTeleporting = this.currentAvatar.isTeleporting();
@@ -453,6 +465,21 @@ export class SceneManager {
 
     if (this.previewCube && !isEditMode) {
       this.previewCube.visible = false;
+    }
+  }
+
+  /**
+   * Set camera mode to enable/disable free camera movement
+   */
+  setCameraMode(isCameraMode: boolean): void {
+    this.isCameraMode = isCameraMode;
+
+    if (!this.cameraController) return;
+
+    if (isCameraMode) {
+      this.cameraController.enable();
+    } else {
+      this.cameraController.disable();
     }
   }
 
