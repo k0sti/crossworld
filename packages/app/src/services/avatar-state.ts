@@ -4,8 +4,6 @@ import { WORLD_RELAYS, getLiveChatATag, getAvatarStateDTag, AVATAR_STATE_CONFIG 
 import type { AccountManager } from 'applesauce-accounts'
 
 export type AvatarType = 'voxel' | 'glb'
-export type VoxelModelType = 'boy' | 'girl' | 'generated'
-export type ColorMode = 'original' | 'random' | 'custom'
 export type UserStatus = 'active' | 'idle' | 'away'
 export type ActivityType = 'chatting' | 'exploring' | 'editing'
 
@@ -19,10 +17,10 @@ export interface Position {
 
 export interface AvatarConfig {
   avatarType: AvatarType
-  avatarModel?: VoxelModelType  // voxel only
-  avatarUrl?: string            // GLB only
-  avatarColors?: ColorMode
-  customColor?: string
+  avatarId?: string             // ID that can be used to load existing model from disk (e.g., 'boy', 'girl', 'man')
+  avatarUrl?: string            // Load avatar from URL
+  avatarData?: string           // Preferred way, generate model based on data (not yet implemented)
+  avatarMod?: string            // Custom modification applied to avatar after load (not yet implemented)
 }
 
 export interface AvatarState {
@@ -32,10 +30,10 @@ export interface AvatarState {
 
   // Avatar configuration
   avatarType: AvatarType
-  avatarModel?: VoxelModelType
+  avatarId?: string
   avatarUrl?: string
-  avatarColors?: ColorMode
-  customColor?: string
+  avatarData?: string
+  avatarMod?: string
 
   // Client info
   clientName: string
@@ -229,7 +227,10 @@ export class AvatarStateService {
 
     // Parse state event
     const parsed = this.parseStateEvent(event)
-    if (!parsed) return
+    if (!parsed) {
+      console.warn(`[AvatarState] Skipping invalid state event from ${pubkey.slice(0, 8)}...`)
+      return
+    }
 
     // Store state event
     this.stateEvents.set(pubkey, { event, parsed })
@@ -297,10 +298,10 @@ export class AvatarStateService {
       npub: npubEncode(pubkey),
       pubkey,
       avatarType: stateEventData.parsed.avatarType || 'voxel',
-      avatarModel: stateEventData.parsed.avatarModel,
+      avatarId: stateEventData.parsed.avatarId,
       avatarUrl: stateEventData.parsed.avatarUrl,
-      avatarColors: stateEventData.parsed.avatarColors,
-      customColor: stateEventData.parsed.customColor,
+      avatarData: stateEventData.parsed.avatarData,
+      avatarMod: stateEventData.parsed.avatarMod,
       clientName: stateEventData.parsed.clientName || 'Unknown',
       clientVersion: stateEventData.parsed.clientVersion,
       position: stateEventData.parsed.position || { x: 0, y: 0, z: 0 },
@@ -344,7 +345,8 @@ export class AvatarStateService {
       try {
         state.position = JSON.parse(positionStr)
       } catch (e) {
-        console.error('Failed to parse position:', e)
+        console.warn('[AvatarState] Failed to parse position in update event, keeping previous value')
+        // Don't update position if parsing fails
       }
     }
 
@@ -394,10 +396,21 @@ export class AvatarStateService {
       }
 
       const avatarType = (getTag('avatar_type') || 'voxel') as AvatarType
-      const avatarModel = getTag('avatar_model') as VoxelModelType | undefined
+      const avatarId = getTag('avatar_id')
       const avatarUrl = getTag('avatar_url')
-      const avatarColors = getTag('avatar_colors') as ColorMode | undefined
-      const customColor = getTag('avatar_custom_color')
+      const avatarData = getTag('avatar_data')
+      const avatarMod = getTag('avatar_mod')
+
+      // Validate consistency between avatarType and avatarId
+      if (avatarId) {
+        const isVoxelId = avatarId === 'boy' || avatarId === 'girl'
+        const isGlbId = avatarId === 'man'
+
+        if ((isVoxelId && avatarType !== 'voxel') || (isGlbId && avatarType !== 'glb')) {
+          console.warn(`[AvatarState] Skipping event: avatarType '${avatarType}' doesn't match avatarId '${avatarId}'`)
+          return null
+        }
+      }
 
       const clientName = getTag('client') || 'Unknown'
       const clientVersion = getTag('client_version')
@@ -408,7 +421,8 @@ export class AvatarStateService {
         try {
           position = JSON.parse(positionStr)
         } catch (e) {
-          console.error('Failed to parse position:', e)
+          console.warn('[AvatarState] Failed to parse position JSON, skipping event:', positionStr.slice(0, 50))
+          return null
         }
       }
 
@@ -419,10 +433,10 @@ export class AvatarStateService {
 
       return {
         avatarType,
-        avatarModel,
+        avatarId,
         avatarUrl,
-        avatarColors,
-        customColor,
+        avatarData,
+        avatarMod,
         clientName,
         clientVersion,
         position,
@@ -517,17 +531,17 @@ export class AvatarStateService {
     ]
 
     // Add optional avatar fields
-    if (avatarConfig.avatarModel) {
-      tags.push(['avatar_model', avatarConfig.avatarModel])
+    if (avatarConfig.avatarId) {
+      tags.push(['avatar_id', avatarConfig.avatarId])
     }
     if (avatarConfig.avatarUrl) {
       tags.push(['avatar_url', avatarConfig.avatarUrl])
     }
-    if (avatarConfig.avatarColors) {
-      tags.push(['avatar_colors', avatarConfig.avatarColors])
+    if (avatarConfig.avatarData) {
+      tags.push(['avatar_data', avatarConfig.avatarData])
     }
-    if (avatarConfig.customColor) {
-      tags.push(['avatar_custom_color', avatarConfig.customColor])
+    if (avatarConfig.avatarMod) {
+      tags.push(['avatar_mod', avatarConfig.avatarMod])
     }
 
     const unsignedEvent = {

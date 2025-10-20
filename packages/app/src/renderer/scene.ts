@@ -556,7 +556,7 @@ export class SceneManager {
   private createRemoteAvatar(pubkey: string, state: AvatarState): void {
     if (!this.avatarEngine) return;
 
-    const { position, avatarType, avatarModel, avatarUrl, npub } = state;
+    const { position, avatarType, avatarId, avatarUrl, npub } = state;
 
     // Create transform from position data
     const transform = Transform.fromEventData(position);
@@ -569,9 +569,9 @@ export class SceneManager {
       }, transform, this.scene);
 
       // Generate or load geometry
-      if (avatarModel && avatarModel !== 'generated') {
+      if (avatarId && avatarId !== 'generated') {
         // Load from .vox file
-        const voxFilename = avatarModel === 'boy'
+        const voxFilename = avatarId === 'boy'
           ? 'chr_peasant_guy_blackhair.vox'
           : 'chr_peasant_girl_orangehair.vox';
         const voxUrl = `${import.meta.env.BASE_URL}assets/models/vox/${voxFilename}`;
