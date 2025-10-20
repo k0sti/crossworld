@@ -25,7 +25,7 @@ export class SceneManager {
 
   // Remote avatars for other users
   private remoteAvatars: Map<string, IAvatar> = new Map();
-  private remoteAvatarConfigs: Map<string, { avatarType: string; avatarId?: string }> = new Map();
+  private remoteAvatarConfigs: Map<string, { avatarType: string; avatarId?: string; avatarData?: string }> = new Map();
   private currentUserPubkey: string | null = null;
 
   // Position update tracking for player avatar (removed periodic updates)
@@ -408,6 +408,40 @@ export class SceneManager {
   }
 
   /**
+   * Create a CSM avatar from parsed mesh data
+   */
+  createCsmAvatar(meshData: { vertices: number[]; indices: number[]; normals: number[]; colors: number[] }, userNpub: string | undefined = undefined, scale: number = 1.0, transform?: Transform): void {
+    // Remove existing avatar
+    if (this.currentAvatar) {
+      this.scene.remove(this.currentAvatar.getObject3D());
+      this.currentAvatar.dispose();
+    }
+
+    // Create new voxel avatar (CSM avatars use VoxelAvatar class)
+    const voxelAvatar = new VoxelAvatar({
+      userNpub: userNpub ?? '',
+      scale,
+    }, transform, this.scene);
+
+    // Convert mesh data to the format VoxelAvatar expects
+    const geometryData = {
+      vertices: new Float32Array(meshData.vertices),
+      indices: new Uint32Array(meshData.indices),
+      normals: new Float32Array(meshData.normals),
+      colors: new Float32Array(meshData.colors),
+    };
+
+    // Apply geometry from CSM mesh
+    voxelAvatar.applyGeometry(geometryData);
+
+    // Add to scene
+    this.scene.add(voxelAvatar.getObject3D());
+    this.currentAvatar = voxelAvatar;
+
+    console.log('Created CSM avatar');
+  }
+
+  /**
    * Set edit mode to show/hide grid helpers
    */
   setEditMode(isEditMode: boolean): void {
@@ -502,8 +536,16 @@ export class SceneManager {
       // Check if avatar model changed
       const modelChanged = existingConfig && (
         existingConfig.avatarType !== state.avatarType ||
-        existingConfig.avatarId !== state.avatarId
+        existingConfig.avatarId !== state.avatarId ||
+        existingConfig.avatarData !== state.avatarData
       );
+
+      if (modelChanged) {
+        console.log(`[Scene] Model changed for ${state.npub}:`, {
+          old: existingConfig,
+          new: { avatarType: state.avatarType, avatarId: state.avatarId, avatarDataLength: state.avatarData?.length }
+        });
+      }
 
       // Check if we need to create a new avatar
       if (!existing || modelChanged) {
@@ -529,7 +571,9 @@ export class SceneManager {
   private createRemoteAvatar(pubkey: string, state: AvatarState): void {
     if (!this.avatarEngine) return;
 
-    const { position, avatarType, avatarId, avatarUrl, npub } = state;
+    const { position, avatarType, avatarId, avatarUrl, avatarData, npub } = state;
+
+    console.log(`[Scene] Creating remote avatar for ${npub}:`, { avatarType, avatarId, avatarUrl, avatarDataLength: avatarData?.length });
 
     // Create transform from position data
     const transform = Transform.fromEventData(position);
@@ -575,8 +619,77 @@ export class SceneManager {
       // Add to scene
       this.scene.add(voxelAvatar.getObject3D());
       this.remoteAvatars.set(pubkey, voxelAvatar);
-      this.remoteAvatarConfigs.set(pubkey, { avatarType, avatarId });
+      this.remoteAvatarConfigs.set(pubkey, { avatarType, avatarId, avatarData });
       console.log(`Created remote voxel avatar for ${npub}`);
+    } else if (avatarType === 'csm') {
+      // Create CSM avatar
+      if (avatarData) {
+        console.log(`Creating remote CSM avatar for ${npub}`);
+
+        // Parse CSM code to mesh
+        import('../utils/cubeWasm').then(({ parseCsmToMesh }) => {
+          parseCsmToMesh(avatarData).then((result) => {
+            if ('error' in result) {
+              console.error(`Failed to parse CSM for remote avatar ${npub}:`, result.error);
+              // Fallback to generated avatar
+              const geometryData = this.avatarEngine!.generate_avatar(npub);
+              const voxelAvatar = new VoxelAvatar({
+                userNpub: npub,
+                scale: 1.0,
+              }, transform, this.scene);
+              voxelAvatar.applyGeometry(geometryData);
+              this.scene.add(voxelAvatar.getObject3D());
+              this.remoteAvatars.set(pubkey, voxelAvatar);
+              this.remoteAvatarConfigs.set(pubkey, { avatarType, avatarId, avatarData });
+              return;
+            }
+
+            // Create voxel avatar with CSM mesh
+            const voxelAvatar = new VoxelAvatar({
+              userNpub: npub,
+              scale: 1.0,
+            }, transform, this.scene);
+
+            // Convert mesh data to typed arrays
+            const geometryData = {
+              vertices: new Float32Array(result.vertices),
+              indices: new Uint32Array(result.indices),
+              normals: new Float32Array(result.normals),
+              colors: new Float32Array(result.colors),
+            };
+
+            voxelAvatar.applyGeometry(geometryData);
+            this.scene.add(voxelAvatar.getObject3D());
+            this.remoteAvatars.set(pubkey, voxelAvatar);
+            this.remoteAvatarConfigs.set(pubkey, { avatarType, avatarId, avatarData });
+            console.log(`Created remote CSM avatar for ${npub}`);
+          }).catch(error => {
+            console.error(`Failed to load CSM avatar for remote user ${npub}:`, error);
+            // Fallback to generated avatar
+            const geometryData = this.avatarEngine!.generate_avatar(npub);
+            const voxelAvatar = new VoxelAvatar({
+              userNpub: npub,
+              scale: 1.0,
+            }, transform, this.scene);
+            voxelAvatar.applyGeometry(geometryData);
+            this.scene.add(voxelAvatar.getObject3D());
+            this.remoteAvatars.set(pubkey, voxelAvatar);
+            this.remoteAvatarConfigs.set(pubkey, { avatarType, avatarId, avatarData });
+          });
+        }).catch(console.error);
+      } else {
+        console.warn(`No avatarData provided for remote CSM avatar ${npub}, using generated`);
+        // Fallback to generated avatar
+        const geometryData = this.avatarEngine.generate_avatar(npub);
+        const voxelAvatar = new VoxelAvatar({
+          userNpub: npub,
+          scale: 1.0,
+        }, transform, this.scene);
+        voxelAvatar.applyGeometry(geometryData);
+        this.scene.add(voxelAvatar.getObject3D());
+        this.remoteAvatars.set(pubkey, voxelAvatar);
+        this.remoteAvatarConfigs.set(pubkey, { avatarType, avatarId, avatarData });
+      }
     } else {
       // Create GLB avatar
       const glbAvatar = new Avatar(transform, {
@@ -585,7 +698,7 @@ export class SceneManager {
       }, this.scene);
       this.scene.add(glbAvatar.getObject3D());
       this.remoteAvatars.set(pubkey, glbAvatar);
-      this.remoteAvatarConfigs.set(pubkey, { avatarType, avatarId });
+      this.remoteAvatarConfigs.set(pubkey, { avatarType, avatarId, avatarData });
       console.log(`Created remote GLB avatar for ${npub}`);
     }
   }

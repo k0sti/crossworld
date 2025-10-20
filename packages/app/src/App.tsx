@@ -314,6 +314,7 @@ function App() {
       avatarType: selection.avatarType,
       avatarId: selection.avatarId,
       avatarUrl: selection.avatarUrl,
+      avatarData: selection.avatarData,
     }
 
     console.log('[App] Avatar selection received:', selection)
@@ -453,6 +454,7 @@ function App() {
               avatarType: avatarConfig.avatarType,
               avatarId: avatarConfig.avatarId,
               avatarUrl: avatarConfig.avatarUrl,
+              avatarData: avatarConfig.avatarData,
               teleportAnimationType,
             }}
           />
