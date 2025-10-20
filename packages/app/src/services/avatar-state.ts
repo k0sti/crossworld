@@ -3,7 +3,7 @@ import { npubEncode } from 'nostr-tools/nip19'
 import { WORLD_RELAYS, getLiveChatATag, getAvatarStateDTag, AVATAR_STATE_CONFIG } from '../config'
 import type { AccountManager } from 'applesauce-accounts'
 
-export type AvatarType = 'vox' | 'glb'
+export type AvatarType = 'vox' | 'glb' | 'csm'
 export type UserStatus = 'active' | 'idle' | 'away'
 export type ActivityType = 'chatting' | 'exploring' | 'editing'
 
@@ -21,6 +21,7 @@ export interface AvatarConfig {
   avatarUrl?: string            // Load avatar from URL
   avatarData?: string           // Preferred way, generate model based on data (not yet implemented)
   avatarMod?: string            // Custom modification applied to avatar after load (not yet implemented)
+  csmCode?: string              // CSM (Cube Script Model) code for procedurally generated voxel models
 }
 
 export interface AvatarState {
