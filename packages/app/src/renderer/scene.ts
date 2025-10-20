@@ -249,10 +249,8 @@ export class SceneManager {
 
     // Update current avatar
     if (this.currentAvatar) {
-      const wasMoving = this.currentAvatar.isCurrentlyMoving();
       const wasTeleporting = this.currentAvatar.isTeleporting();
       this.currentAvatar.update(deltaTime_s);
-      const isMoving = this.currentAvatar.isCurrentlyMoving();
       const isTeleporting = this.currentAvatar.isTeleporting();
 
       // Don't publish position during teleport animation
@@ -475,7 +473,7 @@ export class SceneManager {
 
     // Get list of pubkeys that should have avatars
     const activePubkeys = new Set<string>();
-    states.forEach((state, pubkey) => {
+    states.forEach((_state, pubkey) => {
       // Skip current user
       if (pubkey === this.currentUserPubkey) return;
       // Note: 'away' status users are already removed from states map by avatar-state service
