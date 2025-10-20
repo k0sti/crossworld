@@ -26,9 +26,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { ReadyPlayerMeService } from '../services/ready-player-me';
 import type { TeleportAnimationType } from '../renderer/teleport-animation';
-
-// Feature flag for color selection
-const ENABLE_COLOR_SELECTION = false;
+import { ENABLE_AVATAR_COLOR_SELECTION } from '../constants/features';
 
 export interface AvatarSelection {
   avatarType: 'voxel' | 'glb';
@@ -545,7 +543,7 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
               </HStack>
             </VStack>
 
-            {ENABLE_COLOR_SELECTION && (
+            {ENABLE_AVATAR_COLOR_SELECTION && (
               <>
                 <Divider borderColor="rgba(255, 255, 255, 0.1)" />
 
