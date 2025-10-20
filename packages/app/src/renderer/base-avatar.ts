@@ -130,10 +130,7 @@ export abstract class BaseAvatar implements IAvatar {
     }
 
     // Create and start teleport animation
-    this.teleportAnimation = new TeleportAnimation(this.group, this.scene, {
-      type: animationType,
-      duration: 500,
-    });
+    this.teleportAnimation = new TeleportAnimation(this.group, this.scene, animationType);
     this.teleportAnimation.start();
 
     // Immediately set new position and orientation
