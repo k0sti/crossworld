@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Avatar } from './avatar';
 import { VoxelAvatar } from './voxel-avatar';
+import type { IAvatar } from './base-avatar';
 import type { AvatarEngine } from '@workspace/wasm';
 import type { AvatarState } from '../services/avatar-state';
 import { Transform } from './transform';
@@ -11,8 +12,7 @@ export class SceneManager {
   private camera: THREE.PerspectiveCamera;
   private renderer: THREE.WebGLRenderer;
   private geometryMesh: THREE.Mesh | null = null;
-  private avatar: Avatar | null = null;
-  private voxelAvatar: VoxelAvatar | null = null;
+  private currentAvatar: IAvatar | null = null;
   private avatarEngine: AvatarEngine | null = null;
   private raycaster: THREE.Raycaster;
   private mouse: THREE.Vector2;
@@ -24,7 +24,7 @@ export class SceneManager {
   private onPositionUpdate?: (x: number, y: number, z: number, quaternion: [number, number, number, number]) => void;
 
   // Remote avatars for other users
-  private remoteAvatars: Map<string, VoxelAvatar | Avatar> = new Map();
+  private remoteAvatars: Map<string, IAvatar> = new Map();
   private currentUserPubkey: string | null = null;
 
   // Position update tracking for player avatar
@@ -79,8 +79,8 @@ export class SceneManager {
       // Don't move avatar in edit mode
       if (this.isEditMode) return;
 
-      // Need either avatar and geometry mesh to handle clicks
-      if ((!this.avatar && !this.voxelAvatar) || !this.geometryMesh) return;
+      // Need avatar and geometry mesh to handle clicks
+      if (!this.currentAvatar || !this.geometryMesh) return;
 
       // Calculate mouse position in normalized device coordinates (-1 to +1)
       const rect = canvas.getBoundingClientRect();
@@ -102,20 +102,11 @@ export class SceneManager {
         // Check if CTRL is held for teleport
         const useTeleport = event.ctrlKey;
 
-        // Move whichever avatar exists
-        if (this.avatar) {
-          if (useTeleport) {
-            this.avatar.teleportTo(clampedX, clampedZ, this.teleportAnimationType);
-          } else {
-            this.avatar.setTargetPosition(clampedX, clampedZ);
-          }
-        }
-        if (this.voxelAvatar) {
-          if (useTeleport) {
-            this.voxelAvatar.teleportTo(clampedX, clampedZ, this.teleportAnimationType);
-          } else {
-            this.voxelAvatar.setTargetPosition(clampedX, clampedZ);
-          }
+        // Move avatar
+        if (useTeleport) {
+          this.currentAvatar.teleportTo(clampedX, clampedZ, this.teleportAnimationType);
+        } else {
+          this.currentAvatar.setTargetPosition(clampedX, clampedZ);
         }
       }
     });
@@ -242,26 +233,13 @@ export class SceneManager {
     const deltaTime_s = (currentTime - this.lastTime) / 1000;
     this.lastTime = currentTime;
 
-    // Update avatar
-    if (this.avatar) {
-      const wasTeleporting = this.avatar.isTeleporting();
-      this.avatar.update(deltaTime_s);
-      const isTeleporting = this.avatar.isTeleporting();
-
-      // Check if just finished teleporting
-      if (wasTeleporting && !isTeleporting) {
-        // Teleport completed - publish final position
-        this.publishPlayerPosition();
-      }
-    }
-
-    // Update voxel avatar
-    if (this.voxelAvatar) {
-      const wasMoving = this.voxelAvatar.isCurrentlyMoving();
-      const wasTeleporting = this.voxelAvatar.isTeleporting();
-      this.voxelAvatar.update(deltaTime_s);
-      const isMoving = this.voxelAvatar.isCurrentlyMoving();
-      const isTeleporting = this.voxelAvatar.isTeleporting();
+    // Update current avatar
+    if (this.currentAvatar) {
+      const wasMoving = this.currentAvatar.isCurrentlyMoving();
+      const wasTeleporting = this.currentAvatar.isTeleporting();
+      this.currentAvatar.update(deltaTime_s);
+      const isMoving = this.currentAvatar.isCurrentlyMoving();
+      const isTeleporting = this.currentAvatar.isTeleporting();
 
       // Don't publish position during teleport animation
       if (!isTeleporting) {
@@ -310,17 +288,22 @@ export class SceneManager {
   }
 
   createAvatar(modelUrl?: string, scale?: number, transform?: Transform): void {
-    if (this.avatar) {
-      this.scene.remove(this.avatar.getObject3D());
+    // Remove existing avatar
+    if (this.currentAvatar) {
+      this.scene.remove(this.currentAvatar.getObject3D());
+      this.currentAvatar.dispose();
     }
-    this.avatar = new Avatar(transform, { modelUrl, scale }, this.scene);
-    this.scene.add(this.avatar.getObject3D());
+
+    // Create new GLB avatar
+    this.currentAvatar = new Avatar(transform, { modelUrl, scale }, this.scene);
+    this.scene.add(this.currentAvatar.getObject3D());
   }
 
   removeAvatar(): void {
-    if (this.avatar) {
-      this.scene.remove(this.avatar.getObject3D());
-      this.avatar = null;
+    if (this.currentAvatar) {
+      this.scene.remove(this.currentAvatar.getObject3D());
+      this.currentAvatar.dispose();
+      this.currentAvatar = null;
 
       // Reset camera to default position
       this.camera.position.set(8, 6, 8);
@@ -329,7 +312,11 @@ export class SceneManager {
   }
 
   hasAvatar(): boolean {
-    return this.avatar !== null || this.voxelAvatar !== null;
+    return this.currentAvatar !== null;
+  }
+
+  getCurrentTransform(): Transform | undefined {
+    return this.currentAvatar?.getTransform();
   }
 
   /**
@@ -355,14 +342,14 @@ export class SceneManager {
       return;
     }
 
-    // Remove existing voxel avatar
-    if (this.voxelAvatar) {
-      this.scene.remove(this.voxelAvatar.getObject3D());
-      this.voxelAvatar.dispose();
+    // Remove existing avatar
+    if (this.currentAvatar) {
+      this.scene.remove(this.currentAvatar.getObject3D());
+      this.currentAvatar.dispose();
     }
 
     // Create new voxel avatar
-    this.voxelAvatar = new VoxelAvatar({
+    const voxelAvatar = new VoxelAvatar({
       userNpub: userNpub || '',
       scale,
     }, transform, this.scene);
@@ -371,10 +358,11 @@ export class SceneManager {
     const geometryData = this.avatarEngine.generate_avatar(userNpub);
 
     // Apply geometry to avatar
-    this.voxelAvatar.applyGeometry(geometryData);
+    voxelAvatar.applyGeometry(geometryData);
 
     // Add to scene
-    this.scene.add(this.voxelAvatar.getObject3D());
+    this.scene.add(voxelAvatar.getObject3D());
+    this.currentAvatar = voxelAvatar;
 
     console.log(`Created voxel avatar for ${userNpub}`);
   }
@@ -390,51 +378,30 @@ export class SceneManager {
       // Load .vox file and get geometry (pass undefined for original colors)
       const geometryData = await loadVoxFromUrl(voxUrl, userNpub ?? undefined);
 
-      // Remove existing voxel avatar
-      if (this.voxelAvatar) {
-        this.scene.remove(this.voxelAvatar.getObject3D());
-        this.voxelAvatar.dispose();
+      // Remove existing avatar
+      if (this.currentAvatar) {
+        this.scene.remove(this.currentAvatar.getObject3D());
+        this.currentAvatar.dispose();
       }
 
       // Create new voxel avatar
-      this.voxelAvatar = new VoxelAvatar({
+      const voxelAvatar = new VoxelAvatar({
         userNpub: userNpub ?? '',
         scale,
       }, transform, this.scene);
 
       // Apply geometry from .vox file
-      this.voxelAvatar.applyGeometry(geometryData);
+      voxelAvatar.applyGeometry(geometryData);
 
       // Add to scene
-      this.scene.add(this.voxelAvatar.getObject3D());
+      this.scene.add(voxelAvatar.getObject3D());
+      this.currentAvatar = voxelAvatar;
 
       console.log(`Created voxel avatar from .vox file: ${voxUrl}`);
     } catch (error) {
       console.error('Failed to load .vox avatar:', error);
       throw error;
     }
-  }
-
-  /**
-   * Remove voxel avatar from scene
-   */
-  removeVoxelAvatar(): void {
-    if (this.voxelAvatar) {
-      this.scene.remove(this.voxelAvatar.getObject3D());
-      this.voxelAvatar.dispose();
-      this.voxelAvatar = null;
-
-      // Reset camera to default position
-      this.camera.position.set(8, 6, 8);
-      this.camera.lookAt(4, 0, 4);
-    }
-  }
-
-  /**
-   * Get the current voxel avatar
-   */
-  getVoxelAvatar(): VoxelAvatar | null {
-    return this.voxelAvatar;
   }
 
   /**
@@ -463,7 +430,7 @@ export class SceneManager {
    * Check if enough time/distance has passed to publish position update
    */
   private checkAndPublishPlayerPosition(): void {
-    if (!this.voxelAvatar || !this.onPositionUpdate) return;
+    if (!this.currentAvatar || !this.onPositionUpdate) return;
 
     const now = Date.now();
     const timeSinceLastPublish = now - this.lastPublishTime;
@@ -473,7 +440,7 @@ export class SceneManager {
       return;
     }
 
-    const currentTransform = this.voxelAvatar.getTransform();
+    const currentTransform = this.currentAvatar.getTransform();
 
     // Check if position changed significantly
     if (this.lastPublishedPosition) {
@@ -490,9 +457,9 @@ export class SceneManager {
    * Publish current player position
    */
   private publishPlayerPosition(): void {
-    if (!this.voxelAvatar || !this.onPositionUpdate) return;
+    if (!this.currentAvatar || !this.onPositionUpdate) return;
 
-    const transform = this.voxelAvatar.getTransform();
+    const transform = this.currentAvatar.getTransform();
     const eventData = transform.toEventData();
 
     this.onPositionUpdate(
@@ -525,9 +492,7 @@ export class SceneManager {
     for (const [pubkey, avatar] of this.remoteAvatars.entries()) {
       if (!activePubkeys.has(pubkey)) {
         this.scene.remove(avatar.getObject3D());
-        if (avatar instanceof VoxelAvatar) {
-          avatar.dispose();
-        }
+        avatar.dispose();
         this.remoteAvatars.delete(pubkey);
         console.log(`Removed remote avatar for ${pubkey}`);
       }

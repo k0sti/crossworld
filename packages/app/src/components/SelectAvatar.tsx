@@ -23,7 +23,7 @@ import {
 } from '@chakra-ui/react';
 import { useState, useRef, useEffect } from 'react';
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { ReadyPlayerMeService } from '../services/ready-player-me';
 import type { TeleportAnimationType } from '../renderer/teleport-animation';
 
@@ -673,10 +673,10 @@ function getVoxFilename(avatarId: string): string | null {
 /**
  * Get GLB URL for a given avatar ID
  */
-function getGLBUrl(avatarId: string): string | null {
+function getGLBUrl(avatarId: string): string | undefined {
   const glbModels: Record<string, string> = {
     'man': `${import.meta.env.BASE_URL}assets/models/man.glb`,
   };
 
-  return glbModels[avatarId] || null;
+  return glbModels[avatarId];
 }

@@ -195,16 +195,3 @@ pub fn load_vox_from_bytes(
 
     Ok(GeometryData::new(vertices, indices, normals, colors))
 }
-
-// Helper function to generate geometry from VoxelModel
-fn voxel_model_to_geometry(model: avatar::VoxelModel, user_npub: Option<String>) -> GeometryData {
-    let customized_palette = if let Some(npub) = user_npub {
-        model.palette.customize_for_user(&npub)
-    } else {
-        model.palette.clone()
-    };
-
-    let mesher = avatar::VoxelMesher::new(&model);
-    let (vertices, indices, normals, colors) = mesher.generate_mesh(&customized_palette);
-    GeometryData::new(vertices, indices, normals, colors)
-}
