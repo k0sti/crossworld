@@ -18,12 +18,12 @@ default:
 # Build WASM module in development mode
 build-wasm-dev:
     cd crates/world && wasm-pack build --dev --target web --out-dir ../../packages/wasm-world --out-name crossworld-world
-    cd crates/cube && wasm-pack build --dev --target web --out-dir ../../packages/wasm-cube
+    cd crates/cube && wasm-pack build --dev --target web --out-dir ../../packages/wasm-cube -- --features wasm
 
 # Build WASM module in release mode
 build-wasm:
     cd crates/world && wasm-pack build --target web --out-dir ../../packages/wasm-world --out-name crossworld-world
-    cd crates/cube && wasm-pack build --target web --out-dir ../../packages/wasm-cube
+    cd crates/cube && wasm-pack build --target web --out-dir ../../packages/wasm-cube -- --features wasm
 
 # Start development server (builds WASM first)
 dev: build-wasm-dev

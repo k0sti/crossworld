@@ -49,6 +49,12 @@ export class GeometryController {
     return this.stats;
   }
 
+  setGroundRenderMode(useCube: boolean) {
+    if (this.worker) {
+      this.worker.postMessage({ type: 'setGroundRenderMode', useCube });
+    }
+  }
+
   destroy() {
     if (this.worker) {
       this.worker.terminate();

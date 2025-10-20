@@ -34,6 +34,22 @@ export class GeometryGenerator {
     }
     return this.engine.generate_frame();
   }
+
+  setGroundRenderMode(useCube: boolean): void {
+    if (!this.engine) {
+      console.error('GeometryEngine not initialized');
+      return;
+    }
+    this.engine.setGroundRenderMode(useCube);
+  }
+
+  getGroundRenderMode(): boolean {
+    if (!this.engine) {
+      console.error('GeometryEngine not initialized');
+      return false;
+    }
+    return this.engine.getGroundRenderMode();
+  }
 }
 
 export { GeometryEngine, GeometryData };

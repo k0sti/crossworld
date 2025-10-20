@@ -55,6 +55,9 @@ interface LeftSidebarPanelProps {
   participantCount: number
   onToggleVoice: () => void
   onToggleMic: () => void
+  // Ground render mode
+  useCubeGround: boolean
+  onToggleGroundRenderMode: () => void
 }
 
 export function LeftSidebarPanel({
@@ -74,6 +77,8 @@ export function LeftSidebarPanel({
   participantCount,
   onToggleVoice,
   onToggleMic,
+  useCubeGround,
+  onToggleGroundRenderMode,
 }: LeftSidebarPanelProps) {
   const handleLogout = () => {
     onOpenPanel(null)
@@ -113,6 +118,14 @@ export function LeftSidebarPanel({
             <Divider borderColor="rgba(255, 255, 255, 0.1)" my={1} />
           </>
         )}
+
+        {/* Ground Render Mode Toggle */}
+        <SidebarIcon
+          icon={useCubeGround ? "🧊" : "🟩"}
+          onClick={onToggleGroundRenderMode}
+          isActive={useCubeGround}
+        />
+        <Divider borderColor="rgba(255, 255, 255, 0.1)" my={1} />
 
         {/* Config Icons */}
         <SidebarIcon

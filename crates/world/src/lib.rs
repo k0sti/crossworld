@@ -5,6 +5,7 @@ mod geometry;
 use avatar::AvatarManager;
 use emoji_hash::pubkey_to_emoji_hash;
 use geometry::GeometryEngine as GeometryEngineInternal;
+use std::cell::RefCell;
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen(start)]
@@ -15,7 +16,7 @@ pub fn init() {
 
 #[wasm_bindgen]
 pub struct GeometryEngine {
-    engine: GeometryEngineInternal,
+    engine: RefCell<GeometryEngineInternal>,
 }
 
 #[wasm_bindgen]
@@ -24,13 +25,32 @@ impl GeometryEngine {
     pub fn new() -> Self {
         web_sys::console::log_1(&"GeometryEngine initialized".into());
         Self {
-            engine: GeometryEngineInternal::new(),
+            engine: RefCell::new(GeometryEngineInternal::new()),
         }
     }
 
     #[wasm_bindgen]
     pub fn generate_frame(&self) -> GeometryData {
-        self.engine.generate_frame()
+        self.engine.borrow().generate_frame()
+    }
+
+    #[wasm_bindgen(js_name = setGroundRenderMode)]
+    pub fn set_ground_render_mode(&self, use_cube: bool) {
+        let mode = if use_cube {
+            geometry::GroundRenderMode::Cube
+        } else {
+            geometry::GroundRenderMode::Flat
+        };
+        self.engine.borrow_mut().set_render_mode(mode);
+        web_sys::console::log_1(&format!("Ground render mode set to: {:?}", mode).into());
+    }
+
+    #[wasm_bindgen(js_name = getGroundRenderMode)]
+    pub fn get_ground_render_mode(&self) -> bool {
+        match self.engine.borrow().get_render_mode() {
+            geometry::GroundRenderMode::Cube => true,
+            geometry::GroundRenderMode::Flat => false,
+        }
     }
 }
 

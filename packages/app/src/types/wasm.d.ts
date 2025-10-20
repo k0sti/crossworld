@@ -24,6 +24,8 @@ declare module '@workspace/wasm' {
     free(): void;
     constructor();
     generate_frame(): GeometryData;
+    setGroundRenderMode(use_cube: boolean): void;
+    getGroundRenderMode(): boolean;
   }
 
   export class NetworkClient {

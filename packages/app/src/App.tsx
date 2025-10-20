@@ -52,6 +52,10 @@ function App() {
   const restoreTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const initialStatePublished = useRef(false)
 
+  // Ground render mode
+  const [useCubeGround, setUseCubeGround] = useState(false)
+  const geometryControllerRef = useRef<any>(null)
+
   // Fetch live event on mount
   useEffect(() => {
     const loadLiveEvent = async () => {
@@ -408,6 +412,7 @@ function App() {
           teleportAnimationType={teleportAnimationType}
           avatarStateService={avatarStateService}
           currentUserPubkey={pubkey}
+          geometryControllerRef={geometryControllerRef}
         />
         <TopBar
           pubkey={pubkey}
@@ -434,6 +439,14 @@ function App() {
             participantCount={voice.participantCount}
             onToggleVoice={handleToggleVoice}
             onToggleMic={handleToggleMic}
+            useCubeGround={useCubeGround}
+            onToggleGroundRenderMode={() => {
+              const newMode = !useCubeGround
+              setUseCubeGround(newMode)
+              if (geometryControllerRef.current) {
+                geometryControllerRef.current.setGroundRenderMode(newMode)
+              }
+            }}
           />
         )}
 

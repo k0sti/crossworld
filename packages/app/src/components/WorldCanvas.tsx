@@ -13,6 +13,7 @@ interface WorldCanvasProps {
   teleportAnimationType: TeleportAnimationType;
   avatarStateService?: AvatarStateService;
   currentUserPubkey?: string | null;
+  geometryControllerRef?: React.MutableRefObject<any>;
 }
 
 export function WorldCanvas({
@@ -22,10 +23,11 @@ export function WorldCanvas({
   teleportAnimationType,
   avatarStateService,
   currentUserPubkey,
+  geometryControllerRef,
 }: WorldCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneManagerRef = useRef<SceneManager | null>(null);
-  const geometryControllerRef = useRef<GeometryController | null>(null);
+  const localGeometryControllerRef = useRef<GeometryController | null>(null);
   const avatarEngineRef = useRef<AvatarEngine | null>(null);
   const animationFrameRef = useRef<number | null>(null);
 
@@ -37,7 +39,12 @@ export function WorldCanvas({
     const geometryController = new GeometryController();
 
     sceneManagerRef.current = sceneManager;
-    geometryControllerRef.current = geometryController;
+    localGeometryControllerRef.current = geometryController;
+
+    // Expose geometry controller to parent if ref provided
+    if (geometryControllerRef) {
+      geometryControllerRef.current = geometryController;
+    }
 
     // Initialize scene
     sceneManager.initialize(canvas);
