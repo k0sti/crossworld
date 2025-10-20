@@ -535,21 +535,27 @@ export class SceneManager {
 
       // Generate or load geometry
       if (avatarId && avatarId !== 'generated') {
-        // Load from .vox file
-        const voxFilename = avatarId === 'boy'
-          ? 'chr_peasant_guy_blackhair.vox'
-          : 'chr_peasant_girl_orangehair.vox';
-        const voxUrl = `${import.meta.env.BASE_URL}assets/models/vox/${voxFilename}`;
+        // Load from .vox file using model config
+        import('../utils/modelConfig').then(({ getModelUrl }) => {
+          const voxUrl = getModelUrl(avatarId, 'vox');
 
-        import('../utils/voxLoader').then(({ loadVoxFromUrl }) => {
-          loadVoxFromUrl(voxUrl, npub).then((geometryData) => {
-            voxelAvatar.applyGeometry(geometryData);
-          }).catch(error => {
-            console.error('Failed to load .vox avatar for remote user:', error);
-            // Fallback to generated
+          if (!voxUrl) {
+            console.warn(`No model found for avatarId: ${avatarId}, using generated`);
             const geometryData = this.avatarEngine!.generate_avatar(npub);
             voxelAvatar.applyGeometry(geometryData);
-          });
+            return;
+          }
+
+          import('../utils/voxLoader').then(({ loadVoxFromUrl }) => {
+            loadVoxFromUrl(voxUrl, npub).then((geometryData) => {
+              voxelAvatar.applyGeometry(geometryData);
+            }).catch(error => {
+              console.error('Failed to load .vox avatar for remote user:', error);
+              // Fallback to generated
+              const geometryData = this.avatarEngine!.generate_avatar(npub);
+              voxelAvatar.applyGeometry(geometryData);
+            });
+          }).catch(console.error);
         }).catch(console.error);
       } else {
         // Use procedurally generated model
