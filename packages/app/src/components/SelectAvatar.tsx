@@ -29,7 +29,7 @@ import type { TeleportAnimationType } from '../renderer/teleport-animation';
 import { ENABLE_AVATAR_COLOR_SELECTION } from '../constants/features';
 
 export interface AvatarSelection {
-  avatarType: 'voxel' | 'glb';
+  avatarType: 'vox' | 'glb';
   avatarId?: string;
   avatarUrl?: string;
   teleportAnimationType: TeleportAnimationType;
@@ -51,7 +51,7 @@ interface ModelItem {
 }
 
 export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: SelectAvatarProps) {
-  const [avatarType, setAvatarType] = useState<'voxel' | 'glb'>(currentSelection?.avatarType || 'voxel');
+  const [avatarType, setAvatarType] = useState<'vox' | 'glb'>(currentSelection?.avatarType || 'vox');
   const [selectedId, setSelectedId] = useState<string>(currentSelection?.avatarId || '');
   const [avatarUrl, setAvatarUrl] = useState<string>(currentSelection?.avatarUrl || '');
   const [inputUrl, setInputUrl] = useState<string>('');
@@ -239,7 +239,7 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
         modelUrl = avatarUrl;
         console.log('[SelectAvatar] Loading preview from URL:', modelUrl);
       } else if (selectedId && selectedId !== 'file') {
-        if (avatarType === 'voxel') {
+        if (avatarType === 'vox') {
           const model = voxModels.find(m => m.id === selectedId);
           if (model) {
             modelUrl = `${import.meta.env.BASE_URL}assets/models/vox/${model.filename}`;
@@ -316,7 +316,7 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
           scene.add(group);
           previewSceneRef.current.mesh = group;
         }
-      } else if (avatarType === 'voxel' || modelUrl.endsWith('.vox')) {
+      } else if (avatarType === 'vox' || modelUrl.endsWith('.vox')) {
         // Load VOX file
         try {
           const { loadVoxFromUrl } = await import('../utils/voxLoader');
@@ -386,7 +386,7 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
   const handleSave = () => {
     const selection: AvatarSelection = {
       avatarType,
-      avatarId: avatarType === 'voxel' ? selectedId : (avatarType === 'glb' && selectedId !== 'file' ? selectedId : undefined),
+      avatarId: avatarType === 'vox' ? selectedId : (avatarType === 'glb' && selectedId !== 'file' ? selectedId : undefined),
       avatarUrl: avatarUrl || undefined,
       teleportAnimationType,
     };
@@ -483,9 +483,9 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
             <Tabs
               variant="soft-rounded"
               colorScheme="blue"
-              index={avatarType === 'voxel' ? 0 : avatarType === 'glb' ? 1 : 2}
+              index={avatarType === 'vox' ? 0 : avatarType === 'glb' ? 1 : 2}
               onChange={(index) => {
-                const types: ('voxel' | 'glb')[] = ['voxel', 'glb', 'voxel'];
+                const types: ('vox' | 'glb')[] = ['vox', 'glb', 'vox'];
                 setAvatarType(types[index]);
                 setAvatarUrl('');
                 // Clear selectedId when switching tabs to prevent showing wrong type
@@ -517,7 +517,7 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
                   )}
                 </TabPanel>
 
-                {/* Cube */}
+                {/* Generated */}
                 <TabPanel>
                   <Text fontSize="sm" color="gray.400" textAlign="center" py={4}>
                     TBD

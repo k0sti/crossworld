@@ -6,14 +6,14 @@ This document describes the avatar model format used in Crossworld, including ev
 
 Avatars in Crossworld are configured through Nostr state events (kind 30317) and can be loaded from multiple sources with a defined priority order.
 
-## Event Fields
+## State Events (Kind 30317)
 
 Avatar configuration is stored in state events using the following tags:
 
 ### Required Fields
 
 - `avatar_type` (string): Avatar format type
-  - `voxel` - Voxel-based 3D model
+  - `vox` - Voxel-based 3D model (.vox files)
   - `glb` - GLB/GLTF 3D model
 
 ### Optional Fields
@@ -60,7 +60,7 @@ Avatars are loaded in the following priority order:
 
 ## Predefined Models
 
-### Voxel Models (avatar_type: 'voxel')
+### Vox Models (avatar_type: 'vox')
 
 | avatar_id | File                              |
 |-----------|-----------------------------------|
@@ -82,7 +82,7 @@ Avatars are loaded in the following priority order:
     ["d", "crossworld"],
     ["a", "30311:pubkey:world"],
     ["expiration", "1234567890"],
-    ["avatar_type", "voxel"],
+    ["avatar_type", "vox"],
     ["avatar_id", "boy"],
     ["client", "Crossworld Web"],
     ["position", "{\"x\":4,\"y\":0,\"z\":4}"],
@@ -111,12 +111,58 @@ When loading an avatar, clients should:
 ### Fallback Behavior
 
 If loading fails at any step:
-- Voxel avatars: Fall back to procedurally generated simple voxel avatar
+- Vox avatars: Fall back to procedurally generated simple voxel avatar
 - GLB avatars: Fall back to default `man.glb` model
 
 ### Color Handling
 
 Avatars use their original palette colors by default. Color customization features are disabled in the current version.
+
+## Update Events (Kind 1317)
+
+Position updates and movement are sent via update events. These events include:
+
+### Movement Style
+
+The `move_style` tag indicates how the avatar should move to the new position:
+
+- `walk` - Walk animation at normal speed (default)
+- `run` - Run animation at double speed (SHIFT+click)
+- `teleport:fade` - Teleport with fade animation (CTRL+click)
+- `teleport:scale` - Teleport with scale animation
+- `teleport:spin` - Teleport with spin animation
+- `teleport:slide` - Teleport with slide animation
+- `teleport:burst` - Teleport with burst animation
+
+### Movement Controls
+
+- **Click**: Walk to target position
+- **SHIFT+Click**: Run to target position
+- **CTRL+Click**: Teleport to target position with selected animation
+
+### Example Update Event
+
+```json
+{
+  "kind": 1317,
+  "tags": [
+    ["a", "30317:pubkey:crossworld-avatar-..."],
+    ["a", "30311:pubkey:crossworld-dev"],
+    ["update_type", "position"],
+    ["expiration", "1234567890"],
+    ["position", "{\"x\":5.5,\"y\":0,\"z\":3.2}"],
+    ["move_style", "run"]
+  ],
+  "content": ""
+}
+```
+
+### Remote Avatar Animation
+
+When clients receive position updates, they animate remote avatars based on `move_style`:
+
+- **walk/run**: Smooth animation from last known position to new position
+- **teleport:X**: Instant position change with visual effect X
 
 ## Future Enhancements
 
