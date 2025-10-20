@@ -21,6 +21,7 @@ import type { TeleportAnimationType } from './renderer/teleport-animation'
 function App() {
   const [pubkey, setPubkey] = useState<string | null>(null)
   const [isEditMode, setIsEditMode] = useState(false)
+  const [isCameraMode, setIsCameraMode] = useState(false)
   const [activePanelType, setActivePanelType] = useState<ConfigPanelType>(null)
   const [isChatOpen, setIsChatOpen] = useState(false)
   const [isClientListOpen, setIsClientListOpen] = useState(false)
@@ -274,6 +275,21 @@ function App() {
     }
   }, [pubkey, isEditMode, isExploring, avatarStateService, voice.isConnected, voice.micEnabled, isChatOpen])
 
+  // Handle ESC key to exit camera mode
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isCameraMode) {
+        setIsCameraMode(false)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isCameraMode])
+
   // Publish new state event when avatar configuration changes
   useEffect(() => {
     // Skip if not logged in or initial state not yet published
@@ -408,6 +424,7 @@ function App() {
         <WorldCanvas
           isLoggedIn={pubkey !== null}
           isEditMode={isEditMode}
+          isCameraMode={isCameraMode}
           avatarConfig={avatarConfig}
           teleportAnimationType={teleportAnimationType}
           avatarStateService={avatarStateService}
@@ -428,6 +445,8 @@ function App() {
             activePanelType={activePanelType}
             isEditMode={isEditMode}
             onToggleEditMode={setIsEditMode}
+            isCameraMode={isCameraMode}
+            onToggleCameraMode={() => setIsCameraMode(!isCameraMode)}
             isChatOpen={isChatOpen}
             onToggleChat={() => setIsChatOpen(!isChatOpen)}
             isClientListOpen={isClientListOpen}

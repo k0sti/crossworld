@@ -9,6 +9,7 @@ import type { TeleportAnimationType } from '../renderer/teleport-animation';
 interface WorldCanvasProps {
   isLoggedIn: boolean;
   isEditMode: boolean;
+  isCameraMode: boolean;
   avatarConfig: AvatarConfig;
   teleportAnimationType: TeleportAnimationType;
   avatarStateService?: AvatarStateService;
@@ -19,6 +20,7 @@ interface WorldCanvasProps {
 export function WorldCanvas({
   isLoggedIn,
   isEditMode,
+  isCameraMode,
   avatarConfig,
   teleportAnimationType,
   avatarStateService,
@@ -125,6 +127,14 @@ export function WorldCanvas({
 
     sceneManager.setEditMode(isEditMode);
   }, [isEditMode]);
+
+  // Handle camera mode changes
+  useEffect(() => {
+    const sceneManager = sceneManagerRef.current;
+    if (!sceneManager) return;
+
+    sceneManager.setCameraMode(isCameraMode);
+  }, [isCameraMode]);
 
   // Handle teleport animation type changes
   useEffect(() => {

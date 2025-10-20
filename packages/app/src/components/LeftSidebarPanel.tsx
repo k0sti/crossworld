@@ -43,6 +43,8 @@ interface LeftSidebarPanelProps {
   activePanelType: ConfigPanelType
   isEditMode: boolean
   onToggleEditMode: (isEditMode: boolean) => void
+  isCameraMode: boolean
+  onToggleCameraMode: () => void
   isChatOpen: boolean
   onToggleChat: () => void
   isClientListOpen: boolean
@@ -66,6 +68,8 @@ export function LeftSidebarPanel({
   activePanelType,
   isEditMode,
   onToggleEditMode,
+  isCameraMode,
+  onToggleCameraMode,
   isChatOpen,
   onToggleChat,
   isClientListOpen,
@@ -118,6 +122,14 @@ export function LeftSidebarPanel({
             <Divider borderColor="rgba(255, 255, 255, 0.1)" my={1} />
           </>
         )}
+
+        {/* Camera Mode Toggle */}
+        <SidebarIcon
+          icon="📷"
+          onClick={onToggleCameraMode}
+          isActive={isCameraMode}
+        />
+        <Divider borderColor="rgba(255, 255, 255, 0.1)" my={1} />
 
         {/* Ground Render Mode Toggle */}
         <SidebarIcon
