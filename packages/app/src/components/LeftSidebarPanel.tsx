@@ -1,3 +1,4 @@
+import { useEffect, useCallback } from 'react'
 import { Box, VStack, Text, Divider } from '@chakra-ui/react'
 import { ConfigPanelType } from './ConfigPanel'
 import { VoiceButton } from './VoiceButton'
@@ -88,19 +89,105 @@ export function LeftSidebarPanel({
   useCubeGround,
   onToggleGroundRenderMode,
 }: LeftSidebarPanelProps) {
-  const handleLogout = () => {
+  const handleLogout = useCallback(() => {
     onOpenPanel(null)
     onLogout()
-  }
+  }, [onOpenPanel, onLogout])
 
-  const handleOpenPanel = (type: ConfigPanelType) => {
+  const handleOpenPanel = useCallback((type: ConfigPanelType) => {
     // If clicking the same panel, close it; otherwise open the new panel
     if (activePanelType === type) {
       onOpenPanel(null)
     } else {
       onOpenPanel(type)
     }
-  }
+  }, [activePanelType, onOpenPanel])
+
+  // Keyboard shortcuts for sidebar buttons
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      // Ignore if typing in input fields
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return
+      }
+
+      // Ignore if camera mode is active (WASD keys used there)
+      if (isCameraMode) {
+        return
+      }
+
+      // Build action list based on visible buttons
+      const actions: Array<() => void> = []
+
+      // 1. Edit mode toggle (if enabled)
+      if (ENABLE_EDIT_MODE) {
+        actions.push(() => onToggleEditMode(!isEditMode))
+      }
+
+      // 2. Camera mode
+      actions.push(() => {
+        if (!isCameraMode) {
+          onToggleCameraMode()
+        }
+      })
+
+      // 3. Ground render mode
+      actions.push(onToggleGroundRenderMode)
+
+      // 4. Avatar panel
+      actions.push(() => handleOpenPanel('avatar'))
+
+      // 5. Chat
+      actions.push(onToggleChat)
+
+      // 6. Client list
+      actions.push(onToggleClientList)
+
+      // 7. Voice (if enabled)
+      if (ENABLE_VOICE_CHAT) {
+        actions.push(onToggleVoice)
+      }
+
+      // 8. Mic (if voice connected)
+      if (ENABLE_VOICE_CHAT && voiceConnected) {
+        actions.push(onToggleMic)
+      }
+
+      // 9. Logout (always last)
+      actions.push(handleLogout)
+
+      // Map number keys to actions
+      const key = e.key
+      const num = parseInt(key)
+      if (!isNaN(num) && num >= 1 && num <= actions.length) {
+        e.preventDefault()
+        actions[num - 1]()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyPress)
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyPress)
+    }
+  }, [
+    isEditMode,
+    isCameraMode,
+    useCubeGround,
+    activePanelType,
+    isChatOpen,
+    isClientListOpen,
+    voiceConnected,
+    onToggleEditMode,
+    onToggleCameraMode,
+    onToggleGroundRenderMode,
+    onToggleChat,
+    onToggleClientList,
+    onToggleVoice,
+    onToggleMic,
+    handleLogout,
+    handleOpenPanel,
+  ])
 
   return (
     <Box
