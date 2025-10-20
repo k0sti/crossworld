@@ -634,6 +634,7 @@ version = "0.0.1"
 dependencies = [
  "bincode",
  "console_error_panic_hook",
+ "crossworld-cube",
  "dot_vox",
  "futures",
  "getrandom 0.3.3",

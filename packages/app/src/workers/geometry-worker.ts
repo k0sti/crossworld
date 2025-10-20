@@ -1,7 +1,8 @@
 import { GeometryGenerator } from '../geometry/geometry-lib';
 
 export interface GeometryMessage {
-  type: 'init' | 'update';
+  type: 'init' | 'update' | 'setGroundRenderMode';
+  useCube?: boolean;
 }
 
 export interface GeometryResult {
@@ -84,6 +85,12 @@ class GeometryWorkerManager {
   stop() {
     this.isRunning = false;
   }
+
+  setGroundRenderMode(useCube: boolean) {
+    if (this.generator) {
+      this.generator.setGroundRenderMode(useCube);
+    }
+  }
 }
 
 // Worker message handler
@@ -99,6 +106,12 @@ self.addEventListener('message', async (event) => {
 
     case 'update':
       // For now, we don't need to handle updates
+      break;
+
+    case 'setGroundRenderMode':
+      if (message.useCube !== undefined) {
+        manager.setGroundRenderMode(message.useCube);
+      }
       break;
   }
 });
