@@ -56,6 +56,7 @@ function App() {
   // Ground render mode
   const [useCubeGround, setUseCubeGround] = useState(false)
   const geometryControllerRef = useRef<any>(null)
+  const sceneManagerRef = useRef<any>(null)
 
   // Fetch live event on mount
   useEffect(() => {
@@ -275,20 +276,14 @@ function App() {
     }
   }, [pubkey, isEditMode, isExploring, avatarStateService, voice.isConnected, voice.micEnabled, isChatOpen])
 
-  // Handle ESC key to exit camera mode
+  // Set up camera mode exit callback (triggered when pointer lock is released)
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isCameraMode) {
+    if (sceneManagerRef.current) {
+      sceneManagerRef.current.setOnCameraModeExit(() => {
         setIsCameraMode(false)
-      }
+      })
     }
-
-    window.addEventListener('keydown', handleKeyDown)
-
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [isCameraMode])
+  }, [])
 
   // Publish new state event when avatar configuration changes
   useEffect(() => {
@@ -430,6 +425,7 @@ function App() {
           avatarStateService={avatarStateService}
           currentUserPubkey={pubkey}
           geometryControllerRef={geometryControllerRef}
+          sceneManagerRef={sceneManagerRef}
         />
         <TopBar
           pubkey={pubkey}

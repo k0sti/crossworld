@@ -484,6 +484,15 @@ export class SceneManager {
   }
 
   /**
+   * Set callback for when camera mode exits (e.g., pointer lock lost)
+   */
+  setOnCameraModeExit(callback: () => void): void {
+    if (this.cameraController) {
+      this.cameraController.setOnExitCallback(callback);
+    }
+  }
+
+  /**
    * Set the current user's pubkey (to exclude from remote avatars)
    */
   setCurrentUserPubkey(pubkey: string | null): void {
