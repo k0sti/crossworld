@@ -3,13 +3,12 @@ import { ChakraProvider, useToast } from '@chakra-ui/react'
 import { AccountsProvider } from 'applesauce-react/providers'
 import { AccountManager } from 'applesauce-accounts'
 import { TopBar } from './components/TopBar'
-import { WorldCanvas, type VoxelModelType } from './components/WorldCanvas'
+import { WorldCanvas } from './components/WorldCanvas'
 import { LeftSidebarPanel } from './components/LeftSidebarPanel'
 import { ConfigPanelType } from './components/ConfigPanel'
 import { NetworkConfigPanel } from './components/NetworkConfigPanel'
 import { ProfilePanel } from './components/ProfilePanel'
-import { AvatarPanel } from './components/AvatarPanel'
-import type { GenerationParams } from './components/GenerateAvatarModal'
+import { SelectAvatar, type AvatarSelection } from './components/SelectAvatar'
 import { ChatPanel } from './components/ChatPanel'
 import { ClientListPanel } from './components/ClientListPanel'
 import { RestoreStateModal } from './components/RestoreStateModal'
@@ -21,7 +20,6 @@ import type { TeleportAnimationType } from './renderer/teleport-animation'
 
 function App() {
   const [pubkey, setPubkey] = useState<string | null>(null)
-  const [useVoxelAvatar, setUseVoxelAvatar] = useState(true)
   const [isEditMode, setIsEditMode] = useState(false)
   const [activePanelType, setActivePanelType] = useState<ConfigPanelType>(null)
   const [isChatOpen, setIsChatOpen] = useState(false)
@@ -39,14 +37,15 @@ function App() {
   const [isExploring, setIsExploring] = useState(false)
   const exploringTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Avatar state
-  const [avatarUrl, setAvatarUrl] = useState<string | undefined>()
-  const [voxelModel, setVoxelModel] = useState<VoxelModelType>('boy')
-  const [useVoxFile, setUseVoxFile] = useState(false)
-  const [useOriginalColors, setUseOriginalColors] = useState(false)
-  const [colorChangeCounter, setColorChangeCounter] = useState(0)
+  // Avatar state - unified configuration
+  const [avatarConfig, setAvatarConfig] = useState<AvatarConfig>({
+    avatarType: 'vox',
+    avatarId: 'boy',
+  })
   const [teleportAnimationType, setTeleportAnimationType] = useState<TeleportAnimationType>('fade')
-  const [generationParams, setGenerationParams] = useState<GenerationParams | null>(null)
+
+  // Avatar selection modal
+  const [showSelectAvatar, setShowSelectAvatar] = useState(false)
 
   // State restoration
   const [showRestoreModal, setShowRestoreModal] = useState(false)
@@ -108,20 +107,16 @@ function App() {
           // Auto-restore state
           console.log('[App] Restoring previous state')
 
-          // Apply restored avatar config to UI state
-          if (state.avatarType) {
-            setUseVoxelAvatar(state.avatarType === 'voxel')
+          // Build avatar config from restored state
+          const restoredConfig: AvatarConfig = {
+            avatarType: state.avatarType || 'vox',
+            avatarId: state.avatarId,
+            avatarUrl: state.avatarUrl,
+            avatarData: state.avatarData,
+            avatarMod: state.avatarMod,
           }
-          if (state.avatarModel) {
-            setVoxelModel(state.avatarModel as VoxelModelType)
-            setUseVoxFile(state.avatarModel !== 'generated')
-          }
-          if (state.avatarColors) {
-            setUseOriginalColors(state.avatarColors === 'original')
-          }
-          if (state.avatarUrl) {
-            setAvatarUrl(state.avatarUrl)
-          }
+          console.log('[App] Restoring avatar config:', restoredConfig)
+          setAvatarConfig(restoredConfig)
 
           // Publish state with restored data
           publishInitialState(state)
@@ -134,9 +129,10 @@ function App() {
             isClosable: true,
           })
         } else {
-          // No previous state, publish new state
-          console.log('[App] No previous state found, starting fresh')
-          publishInitialState()
+          // No previous state, show avatar selection
+          console.log('[App] No previous state found, showing avatar selection')
+          setShowSelectAvatar(true)
+          // Still dismiss the restore modal
         }
 
         // Dismiss modal
@@ -146,8 +142,8 @@ function App() {
         setShowRestoreModal(false)
       } catch (err) {
         console.error('[App] Failed to query/restore state:', err)
-        // On error, start fresh
-        publishInitialState()
+        // On error, show avatar selection
+        setShowSelectAvatar(true)
 
         if (restoreTimeoutRef.current) {
           clearTimeout(restoreTimeoutRef.current)
@@ -163,7 +159,7 @@ function App() {
         clearTimeout(restoreTimeoutRef.current)
       }
     }
-  }, [pubkey])
+  }, [pubkey, avatarStateService, toast])
 
   // Helper to publish initial state
   const publishInitialState = (restoredState?: Partial<AvatarState>) => {
@@ -171,19 +167,21 @@ function App() {
     voice.setClientStatusService?.(avatarStateService)
 
     // Build avatar config (use restored state or defaults)
-    const avatarConfig: AvatarConfig = {
-      avatarType: restoredState?.avatarType ?? (useVoxelAvatar ? 'voxel' : 'glb'),
-      avatarModel: restoredState?.avatarModel ?? (useVoxFile ? voxelModel : 'generated'),
-      avatarUrl: restoredState?.avatarUrl ?? (!useVoxelAvatar ? avatarUrl : undefined),
-      avatarColors: restoredState?.avatarColors ?? (useOriginalColors ? 'original' : 'random'),
+    const config: AvatarConfig = {
+      avatarType: restoredState?.avatarType ?? avatarConfig.avatarType,
+      avatarId: restoredState?.avatarId ?? avatarConfig.avatarId,
+      avatarUrl: restoredState?.avatarUrl ?? avatarConfig.avatarUrl,
+      avatarData: restoredState?.avatarData ?? avatarConfig.avatarData,
+      avatarMod: restoredState?.avatarMod ?? avatarConfig.avatarMod,
     }
+    console.log('[App] Publishing initial state with config:', config)
 
     // Use restored position or default
     const position = restoredState?.position ?? { x: 4, y: 0, z: 4 }
 
     // Publish initial state event
     avatarStateService.publishStateEvent(
-      avatarConfig,
+      config,
       position,
       'active',
       false,
@@ -277,17 +275,9 @@ function App() {
     // Skip if not logged in or initial state not yet published
     if (!pubkey || !initialStatePublished.current) return
 
-    // Build avatar config from current settings
-    const avatarConfig: AvatarConfig = {
-      avatarType: useVoxelAvatar ? 'voxel' : 'glb',
-      avatarModel: useVoxFile ? voxelModel : 'generated',
-      avatarUrl: !useVoxelAvatar ? avatarUrl : undefined,
-      avatarColors: useOriginalColors ? 'original' : 'random',
-    }
-
     // Publish state event with updated config (preserves position)
     avatarStateService.updateAvatarConfig(avatarConfig).catch(console.error)
-  }, [pubkey, useVoxelAvatar, voxelModel, useVoxFile, useOriginalColors, avatarUrl, avatarStateService])
+  }, [pubkey, avatarConfig, avatarStateService])
 
   const handleLogin = (publicKey: string) => {
     setPubkey(publicKey)
@@ -303,8 +293,14 @@ function App() {
     if (voice.isConnected) {
       await voice.disconnect()
     }
+
     // Stop avatar state heartbeat
     avatarStateService.stopHeartbeat()
+
+    // Remove own state to prevent showing as remote avatar
+    if (pubkey) {
+      avatarStateService.removeUserState(pubkey)
+    }
 
     // Reset state
     initialStatePublished.current = false
@@ -313,22 +309,23 @@ function App() {
     setIsClientListOpen(false)
   }
 
-  const handleAvatarUrlChange = (url: string) => {
-    setAvatarUrl(url)
-    setUseVoxelAvatar(false)
-  }
+  const handleAvatarSelection = (selection: AvatarSelection) => {
+    const config: AvatarConfig = {
+      avatarType: selection.avatarType,
+      avatarId: selection.avatarId,
+      avatarUrl: selection.avatarUrl,
+    }
 
-  const handleRandomizeColors = () => {
-    setColorChangeCounter(c => c + 1)
-  }
+    console.log('[App] Avatar selection received:', selection)
+    console.log('[App] Setting avatar config:', config)
+    setAvatarConfig(config)
+    setTeleportAnimationType(selection.teleportAnimationType)
+    setShowSelectAvatar(false)
 
-  const handleCustomColor = (_color: string) => {
-    setColorChangeCounter(c => c + 1)
-  }
-
-  const handleGeneratedAvatarChange = (params: GenerationParams) => {
-    setGenerationParams(params)
-    setColorChangeCounter(c => c + 1) // Trigger re-render
+    // If this is first login, publish initial state
+    if (pubkey && !initialStatePublished.current) {
+      publishInitialState()
+    }
   }
 
   const handleViewProfile = (profilePubkey: string) => {
@@ -405,26 +402,18 @@ function App() {
       <ChakraProvider>
         <WorldCanvas
           isLoggedIn={pubkey !== null}
-          useVoxelAvatar={useVoxelAvatar}
-          onToggleAvatarType={setUseVoxelAvatar}
           isEditMode={isEditMode}
-          voxelModel={voxelModel}
-          onVoxelModelChange={setVoxelModel}
-          useVoxFile={useVoxFile}
-          onVoxFileChange={setUseVoxFile}
-          useOriginalColors={useOriginalColors}
-          onColorModeChange={setUseOriginalColors}
-          onAvatarUrlChange={handleAvatarUrlChange}
-          avatarUrl={avatarUrl}
-          colorChangeCounter={colorChangeCounter}
+          avatarConfig={avatarConfig}
+          teleportAnimationType={teleportAnimationType}
           avatarStateService={avatarStateService}
           currentUserPubkey={pubkey}
-          teleportAnimationType={teleportAnimationType}
-          generationParams={generationParams}
         />
         <TopBar
           pubkey={pubkey}
           onLogin={handleLogin}
+          onOpenPanel={setActivePanelType}
+          onOpenProfile={() => setActivePanelType('profile')}
+          activePanelType={activePanelType}
         />
         {pubkey && (
           <LeftSidebarPanel
@@ -449,24 +438,23 @@ function App() {
 
         {/* Config Panels */}
         {activePanelType === 'network' && <NetworkConfigPanel />}
-        {activePanelType === 'profile' && <ProfilePanel pubkey={viewedProfilePubkey || pubkey} />}
+        {activePanelType === 'profile' && (
+          <ProfilePanel
+            pubkey={viewedProfilePubkey || pubkey}
+            onClose={() => setActivePanelType(null)}
+          />
+        )}
         {activePanelType === 'avatar' && (
-          <AvatarPanel
-            useVoxelAvatar={useVoxelAvatar}
-            onToggleAvatarType={setUseVoxelAvatar}
-            currentModel={voxelModel}
-            onModelChange={setVoxelModel}
-            useVoxFile={useVoxFile}
-            onSourceChange={setUseVoxFile}
-            useOriginalColors={useOriginalColors}
-            onColorModeChange={setUseOriginalColors}
-            onRandomizeColors={handleRandomizeColors}
-            onCustomColor={handleCustomColor}
-            onAvatarUrlChange={handleAvatarUrlChange}
-            currentUrl={avatarUrl}
-            teleportAnimationType={teleportAnimationType}
-            onTeleportAnimationChange={setTeleportAnimationType}
-            onGeneratedAvatarChange={handleGeneratedAvatarChange}
+          <SelectAvatar
+            isOpen={true}
+            onClose={() => setActivePanelType(null)}
+            onSave={handleAvatarSelection}
+            currentSelection={{
+              avatarType: avatarConfig.avatarType,
+              avatarId: avatarConfig.avatarId,
+              avatarUrl: avatarConfig.avatarUrl,
+              teleportAnimationType,
+            }}
           />
         )}
 
@@ -477,11 +465,28 @@ function App() {
         <ClientListPanel
           isOpen={isClientListOpen}
           statusService={avatarStateService}
+          onOpenProfile={handleViewProfile}
         />
 
         {/* Loading State Modal */}
         <RestoreStateModal
           isOpen={showRestoreModal}
+        />
+
+        {/* Avatar Selection Modal (first login) */}
+        <SelectAvatar
+          isOpen={showSelectAvatar}
+          onClose={() => {
+            // Don't allow closing without selecting
+            // Could publish a default state here if needed
+          }}
+          onSave={handleAvatarSelection}
+          currentSelection={{
+            avatarType: avatarConfig.avatarType,
+            avatarId: avatarConfig.avatarId,
+            avatarUrl: avatarConfig.avatarUrl,
+            teleportAnimationType,
+          }}
         />
       </ChakraProvider>
     </AccountsProvider>

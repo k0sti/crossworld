@@ -1,12 +1,17 @@
-import { Box, Flex } from '@chakra-ui/react'
+import { Box, Flex, IconButton } from '@chakra-ui/react'
+import { FiGlobe } from 'react-icons/fi'
 import { ProfileButton } from './ProfileButton'
+import { ConfigPanelType } from './ConfigPanel'
 
 interface TopBarProps {
   pubkey: string | null
   onLogin: (pubkey: string) => void
+  onOpenPanel: (type: ConfigPanelType) => void
+  onOpenProfile: () => void
+  activePanelType: ConfigPanelType
 }
 
-export function TopBar({ pubkey, onLogin }: TopBarProps) {
+export function TopBar({ pubkey, onLogin, onOpenPanel, onOpenProfile, activePanelType }: TopBarProps) {
   return (
     <Box
       as="header"
@@ -22,7 +27,17 @@ export function TopBar({ pubkey, onLogin }: TopBarProps) {
       py={2}
     >
       <Flex justify="space-between" align="center">
-        <ProfileButton pubkey={pubkey} onLogin={onLogin} />
+        <ProfileButton pubkey={pubkey} onLogin={onLogin} onOpenProfile={onOpenProfile} />
+
+        {pubkey && (
+          <IconButton
+            aria-label="Network settings"
+            icon={<FiGlobe />}
+            onClick={() => onOpenPanel(activePanelType === 'network' ? null : 'network')}
+            variant={activePanelType === 'network' ? 'solid' : 'ghost'}
+            size="sm"
+          />
+        )}
       </Flex>
     </Box>
   )
