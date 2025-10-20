@@ -39,7 +39,7 @@ function App() {
 
   // Avatar state - unified configuration
   const [avatarConfig, setAvatarConfig] = useState<AvatarConfig>({
-    avatarType: 'voxel',
+    avatarType: 'vox',
     avatarId: 'boy',
   })
   const [teleportAnimationType, setTeleportAnimationType] = useState<TeleportAnimationType>('fade')
@@ -109,7 +109,7 @@ function App() {
 
           // Build avatar config from restored state
           const restoredConfig: AvatarConfig = {
-            avatarType: state.avatarType || 'voxel',
+            avatarType: state.avatarType || 'vox',
             avatarId: state.avatarId,
             avatarUrl: state.avatarUrl,
             avatarData: state.avatarData,
@@ -293,8 +293,14 @@ function App() {
     if (voice.isConnected) {
       await voice.disconnect()
     }
+
     // Stop avatar state heartbeat
     avatarStateService.stopHeartbeat()
+
+    // Remove own state to prevent showing as remote avatar
+    if (pubkey) {
+      avatarStateService.removeUserState(pubkey)
+    }
 
     // Reset state
     initialStatePublished.current = false

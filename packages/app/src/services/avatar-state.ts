@@ -3,7 +3,7 @@ import { npubEncode } from 'nostr-tools/nip19'
 import { WORLD_RELAYS, getLiveChatATag, getAvatarStateDTag, AVATAR_STATE_CONFIG } from '../config'
 import type { AccountManager } from 'applesauce-accounts'
 
-export type AvatarType = 'voxel' | 'glb'
+export type AvatarType = 'vox' | 'glb'
 export type UserStatus = 'active' | 'idle' | 'away'
 export type ActivityType = 'chatting' | 'exploring' | 'editing'
 
@@ -41,6 +41,7 @@ export interface AvatarState {
 
   // Current state
   position: Position
+  moveStyle?: string  // walk, run, teleport:fade, teleport:spin, etc.
   status: UserStatus
   voiceConnected: boolean
   micEnabled: boolean
@@ -85,6 +86,9 @@ export class AvatarStateService {
   // Cleanup timers
   private userTimers: Map<string, NodeJS.Timeout> = new Map()
 
+  // Batch notification flag to prevent excessive updates during initial load
+  private batchingNotifications: boolean = false
+
   constructor(accountManager?: AccountManager) {
     this.pool = new SimplePool()
     this.accountManager = accountManager || null
@@ -110,6 +114,9 @@ export class AvatarStateService {
   }
 
   private notifyListeners(): void {
+    // Skip notification if we're batching (during initial load)
+    if (this.batchingNotifications) return
+
     const statesCopy = new Map(this.userStates)
     this.listeners.forEach(listener => listener(statesCopy))
   }
@@ -131,6 +138,9 @@ export class AvatarStateService {
 
     const now = Math.floor(Date.now() / 1000)
     const recentSince = now - AVATAR_STATE_CONFIG.SUBSCRIPTION_WINDOW_S
+
+    // Enable batching to prevent multiple listener notifications during initial load
+    this.batchingNotifications = true
 
     // Step 1: Query existing state events (30317) without 'since'
     // This gets all current avatar states regardless of age
@@ -168,6 +178,10 @@ export class AvatarStateService {
     })
 
     console.log(`[AvatarState] Loaded ${recentUpdates.length} recent update events`)
+
+    // Disable batching and send a single notification with all loaded states
+    this.batchingNotifications = false
+    this.notifyListeners()
 
     // Step 3: Subscribe to live updates (both state and update events) from now onwards
     this.subscription = this.pool.subscribeMany(
@@ -259,7 +273,7 @@ export class AvatarStateService {
     // Check if we have the state event
     const stateEvent = this.stateEvents.get(pubkey)
     if (!stateEvent) {
-      console.warn('Received update before state event for', pubkey)
+      // Update received before state event - silently ignore
       return
     }
 
@@ -297,7 +311,7 @@ export class AvatarStateService {
     const state: AvatarState = {
       npub: npubEncode(pubkey),
       pubkey,
-      avatarType: stateEventData.parsed.avatarType || 'voxel',
+      avatarType: stateEventData.parsed.avatarType || 'vox',
       avatarId: stateEventData.parsed.avatarId,
       avatarUrl: stateEventData.parsed.avatarUrl,
       avatarData: stateEventData.parsed.avatarData,
@@ -316,11 +330,19 @@ export class AvatarStateService {
 
     // Apply update events in chronological order
     const updates = this.updateEvents.get(pubkey) || []
+    let shouldRemove = false
     updates
       .sort((a, b) => a.event.created_at - b.event.created_at)
       .forEach(update => {
-        this.applyUpdate(state, update.event)
+        const removed = this.applyUpdate(state, update.event)
+        if (removed) shouldRemove = true
       })
+
+    // If user was removed (status=away), don't re-add them
+    if (shouldRemove) {
+      this.notifyListeners()
+      return
+    }
 
     this.userStates.set(pubkey, state)
     this.notifyListeners()
@@ -328,8 +350,9 @@ export class AvatarStateService {
 
   /**
    * Apply an update event to state
+   * Returns true if user should be removed (status=away)
    */
-  private applyUpdate(state: AvatarState, event: Event): void {
+  private applyUpdate(state: AvatarState, event: Event): boolean {
     const getTag = (name: string): string | undefined => {
       const tag = event.tags.find((t) => t[0] === name)
       return tag?.[1]
@@ -350,10 +373,31 @@ export class AvatarStateService {
       }
     }
 
+    // Update move style
+    const moveStyle = getTag('move_style')
+    if (moveStyle) {
+      state.moveStyle = moveStyle
+    }
+
     // Update status
     const status = getTag('status')
     if (status) {
       state.status = status as UserStatus
+
+      // If status is 'away', user has logged out - remove them completely
+      if (status === 'away') {
+        const pubkey = state.pubkey
+        console.log(`[AvatarState] User ${state.npub} went away, removing from state`)
+        this.userStates.delete(pubkey)
+        this.stateEvents.delete(pubkey)
+        this.updateEvents.delete(pubkey)
+        const timer = this.userTimers.get(pubkey)
+        if (timer) {
+          clearTimeout(timer)
+          this.userTimers.delete(pubkey)
+        }
+        return true // Signal that user was removed
+      }
     }
 
     // Update activities
@@ -379,6 +423,7 @@ export class AvatarStateService {
     }
 
     state.lastUpdateTimestamp = event.created_at
+    return false // User not removed
   }
 
   /**
@@ -395,7 +440,7 @@ export class AvatarStateService {
         return event.tags.filter((t) => t[0] === name).map((t) => t[1])
       }
 
-      const avatarType = (getTag('avatar_type') || 'voxel') as AvatarType
+      const avatarType = (getTag('avatar_type') || 'vox') as AvatarType
       const avatarId = getTag('avatar_id')
       const avatarUrl = getTag('avatar_url')
       const avatarData = getTag('avatar_data')
@@ -403,10 +448,10 @@ export class AvatarStateService {
 
       // Validate consistency between avatarType and avatarId
       if (avatarId) {
-        const isVoxelId = avatarId === 'boy' || avatarId === 'girl'
+        const isVoxId = avatarId === 'boy' || avatarId === 'girl'
         const isGlbId = avatarId === 'man'
 
-        if ((isVoxelId && avatarType !== 'voxel') || (isGlbId && avatarType !== 'glb')) {
+        if ((isVoxId && avatarType !== 'vox') || (isGlbId && avatarType !== 'glb')) {
           console.warn(`[AvatarState] Skipping event: avatarType '${avatarType}' doesn't match avatarId '${avatarId}'`)
           return null
         }
@@ -575,6 +620,7 @@ export class AvatarStateService {
    */
   async publishUpdate(update: {
     position?: Position
+    moveStyle?: string
     status?: UserStatus
     activities?: ActivityType[]
     voiceConnected?: boolean
@@ -610,6 +656,9 @@ export class AvatarStateService {
     // Add only provided fields
     if (update.position) {
       tags.push(['position', JSON.stringify(update.position)])
+    }
+    if (update.moveStyle) {
+      tags.push(['move_style', update.moveStyle])
     }
     if (update.status) {
       tags.push(['status', update.status])
@@ -648,7 +697,7 @@ export class AvatarStateService {
   /**
    * Publish position update (with rate limiting)
    */
-  async publishPosition(position: Position): Promise<void> {
+  async publishPosition(position: Position, moveStyle?: string): Promise<void> {
     const now = Date.now()
 
     // Rate limit position updates
@@ -657,7 +706,7 @@ export class AvatarStateService {
     }
 
     this.lastPositionPublishTime = now
-    await this.publishUpdate({ position })
+    await this.publishUpdate({ position, moveStyle })
   }
 
   /**
@@ -747,6 +796,22 @@ export class AvatarStateService {
       console.error('Failed to query last state:', err)
       return null
     }
+  }
+
+  /**
+   * Remove a specific user's state (used when logging out to prevent showing own avatar as remote)
+   */
+  removeUserState(pubkey: string): void {
+    const existing = this.userTimers.get(pubkey)
+    if (existing) {
+      clearTimeout(existing)
+      this.userTimers.delete(pubkey)
+    }
+
+    this.userStates.delete(pubkey)
+    this.stateEvents.delete(pubkey)
+    this.updateEvents.delete(pubkey)
+    this.notifyListeners()
   }
 
   /**

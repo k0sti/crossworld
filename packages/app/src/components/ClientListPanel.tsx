@@ -277,6 +277,22 @@ export function ClientListPanel({ isOpen, statusService, onOpenProfile }: Client
 
                     {/* Activity Badges */}
                     <Wrap spacing={1}>
+                      {client.position && (
+                        <Badge
+                          fontSize="2xs"
+                          px={1.5}
+                          py={0.5}
+                          borderRadius="md"
+                          bg="gray.600"
+                          color="white"
+                          display="flex"
+                          alignItems="center"
+                          gap={1}
+                        >
+                          <FiMapPin size={10} />
+                          {formatPosition(client.position)}
+                        </Badge>
+                      )}
                       {client.voiceConnected && (
                         <Badge
                           fontSize="2xs"
@@ -358,14 +374,6 @@ export function ClientListPanel({ isOpen, statusService, onOpenProfile }: Client
                         </Badge>
                       )}
                     </Wrap>
-
-                    {/* Position indicator */}
-                    {client.position && (
-                      <HStack spacing={1} fontSize="xs" color="whiteAlpha.600">
-                        <FiMapPin size={10} />
-                        <Text>{formatPosition(client.position)}</Text>
-                      </HStack>
-                    )}
                   </VStack>
                 </HStack>
               </Box>

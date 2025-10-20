@@ -21,20 +21,20 @@ export class SceneManager {
   private gridHelper: THREE.GridHelper | null = null;
   private previewCube: THREE.LineSegments | null = null;
   private currentGridPosition: THREE.Vector3 = new THREE.Vector3();
-  private onPositionUpdate?: (x: number, y: number, z: number, quaternion: [number, number, number, number]) => void;
+  private onPositionUpdate?: (x: number, y: number, z: number, quaternion: [number, number, number, number], moveStyle?: string) => void;
 
   // Remote avatars for other users
   private remoteAvatars: Map<string, IAvatar> = new Map();
+  private remoteAvatarConfigs: Map<string, { avatarType: string; avatarId?: string }> = new Map();
   private currentUserPubkey: string | null = null;
 
-  // Position update tracking for player avatar
-  private lastPublishedPosition: THREE.Vector3 | null = null;
-  private lastPublishTime: number = 0;
-  private readonly PUBLISH_INTERVAL_MS = 500; // 500ms
-  private readonly MIN_POSITION_CHANGE = 0.1; // Minimum movement to trigger update
+  // Position update tracking for player avatar (removed periodic updates)
 
   // Teleport animation settings
   private teleportAnimationType: TeleportAnimationType = 'fade';
+
+  // Current movement style for position updates
+  private currentMoveStyle: string = 'walk';
 
   constructor() {
     this.scene = new THREE.Scene();
@@ -99,14 +99,28 @@ export class SceneManager {
         const clampedX = Math.max(0.5, Math.min(7.5, point.x));
         const clampedZ = Math.max(0.5, Math.min(7.5, point.z));
 
-        // Check if CTRL is held for teleport
+        // Check modifiers: CTRL for teleport, SHIFT for run
         const useTeleport = event.ctrlKey;
+        const useRun = event.shiftKey && !useTeleport;
 
         // Move avatar
         if (useTeleport) {
           this.currentAvatar.teleportTo(clampedX, clampedZ, this.teleportAnimationType);
-        } else {
+          this.currentMoveStyle = `teleport:${this.teleportAnimationType}`;
+          // Publish TARGET position with move style
+          this.publishPlayerPositionAt(clampedX, clampedZ, this.currentMoveStyle);
+        } else if (useRun) {
+          this.currentAvatar.setRunSpeed(true);
           this.currentAvatar.setTargetPosition(clampedX, clampedZ);
+          this.currentMoveStyle = 'run';
+          // Publish TARGET position with move style
+          this.publishPlayerPositionAt(clampedX, clampedZ, this.currentMoveStyle);
+        } else {
+          this.currentAvatar.setRunSpeed(false);
+          this.currentAvatar.setTargetPosition(clampedX, clampedZ);
+          this.currentMoveStyle = 'walk';
+          // Publish TARGET position with move style
+          this.publishPlayerPositionAt(clampedX, clampedZ, this.currentMoveStyle);
         }
       }
     });
@@ -248,17 +262,8 @@ export class SceneManager {
           // Teleport completed - publish final position
           this.publishPlayerPosition();
         }
-        // Check if movement state changed or if currently moving
-        else if (wasMoving && !isMoving) {
-          // Just stopped moving - publish final position
-          this.publishPlayerPosition();
-        } else if (!wasMoving && isMoving) {
-          // Just started moving - publish initial position
-          this.publishPlayerPosition();
-        } else if (isMoving) {
-          // Currently moving - publish periodically
-          this.checkAndPublishPlayerPosition();
-        }
+        // Note: Only publish on movement start, not when reaching target
+        // Position is already published immediately when clicking (in setupMouseListener)
       }
     }
 
@@ -329,7 +334,7 @@ export class SceneManager {
   /**
    * Set callback for position updates
    */
-  setPositionUpdateCallback(callback: (x: number, y: number, z: number, quaternion: [number, number, number, number]) => void): void {
+  setPositionUpdateCallback(callback: (x: number, y: number, z: number, quaternion: [number, number, number, number], moveStyle?: string) => void): void {
     this.onPositionUpdate = callback;
   }
 
@@ -427,33 +432,6 @@ export class SceneManager {
   }
 
   /**
-   * Check if enough time/distance has passed to publish position update
-   */
-  private checkAndPublishPlayerPosition(): void {
-    if (!this.currentAvatar || !this.onPositionUpdate) return;
-
-    const now = Date.now();
-    const timeSinceLastPublish = now - this.lastPublishTime;
-
-    // Check if enough time has passed
-    if (timeSinceLastPublish < this.PUBLISH_INTERVAL_MS) {
-      return;
-    }
-
-    const currentTransform = this.currentAvatar.getTransform();
-
-    // Check if position changed significantly
-    if (this.lastPublishedPosition) {
-      const distanceMoved = currentTransform.getPosition().distanceTo(this.lastPublishedPosition);
-      if (distanceMoved < this.MIN_POSITION_CHANGE) {
-        return;
-      }
-    }
-
-    this.publishPlayerPosition();
-  }
-
-  /**
    * Publish current player position
    */
   private publishPlayerPosition(): void {
@@ -468,10 +446,25 @@ export class SceneManager {
       eventData.z,
       eventData.quaternion
     );
+  }
 
-    // Update tracking
-    this.lastPublishedPosition = transform.getPosition();
-    this.lastPublishTime = Date.now();
+  /**
+   * Publish specific position (used when setting target position)
+   */
+  private publishPlayerPositionAt(x: number, z: number, moveStyle: string): void {
+    if (!this.currentAvatar || !this.onPositionUpdate) return;
+
+    // Get current rotation from avatar
+    const transform = this.currentAvatar.getTransform();
+
+    // TODO: Pass moveStyle to onPositionUpdate
+    this.onPositionUpdate(
+      x,
+      0, // y is always 0 on the ground
+      z,
+      transform.toEventData().quaternion,
+      moveStyle
+    );
   }
 
   /**
@@ -482,9 +475,10 @@ export class SceneManager {
 
     // Get list of pubkeys that should have avatars
     const activePubkeys = new Set<string>();
-    states.forEach((_state, pubkey) => {
+    states.forEach((state, pubkey) => {
       // Skip current user
       if (pubkey === this.currentUserPubkey) return;
+      // Note: 'away' status users are already removed from states map by avatar-state service
       activePubkeys.add(pubkey);
     });
 
@@ -494,6 +488,7 @@ export class SceneManager {
         this.scene.remove(avatar.getObject3D());
         avatar.dispose();
         this.remoteAvatars.delete(pubkey);
+        this.remoteAvatarConfigs.delete(pubkey);
         console.log(`Removed remote avatar for ${pubkey}`);
       }
     }
@@ -504,9 +499,24 @@ export class SceneManager {
       if (pubkey === this.currentUserPubkey) return;
 
       const existing = this.remoteAvatars.get(pubkey);
+      const existingConfig = this.remoteAvatarConfigs.get(pubkey);
+
+      // Check if avatar model changed
+      const modelChanged = existingConfig && (
+        existingConfig.avatarType !== state.avatarType ||
+        existingConfig.avatarId !== state.avatarId
+      );
 
       // Check if we need to create a new avatar
-      if (!existing) {
+      if (!existing || modelChanged) {
+        // Remove old avatar if model changed
+        if (modelChanged && existing) {
+          this.scene.remove(existing.getObject3D());
+          existing.dispose();
+          this.remoteAvatars.delete(pubkey);
+          this.remoteAvatarConfigs.delete(pubkey);
+          console.log(`Recreating remote avatar for ${state.npub} due to model change`);
+        }
         this.createRemoteAvatar(pubkey, state);
       } else {
         // Update position for existing avatar
@@ -526,14 +536,14 @@ export class SceneManager {
     // Create transform from position data
     const transform = Transform.fromEventData(position);
 
-    if (avatarType === 'voxel') {
+    if (avatarType === 'vox') {
       // Create voxel avatar
       const voxelAvatar = new VoxelAvatar({
         userNpub: npub,
         scale: 1.0,
       }, transform, this.scene);
 
-      // Generate or load geometry
+      // Generate or load geometry (use undefined for npub to preserve original colors)
       if (avatarId && avatarId !== 'generated') {
         // Load from .vox file using model config
         import('../utils/modelConfig').then(({ getModelUrl }) => {
@@ -547,7 +557,8 @@ export class SceneManager {
           }
 
           import('../utils/voxLoader').then(({ loadVoxFromUrl }) => {
-            loadVoxFromUrl(voxUrl, npub).then((geometryData) => {
+            // Pass undefined to preserve original colors
+            loadVoxFromUrl(voxUrl, undefined).then((geometryData) => {
               voxelAvatar.applyGeometry(geometryData);
             }).catch(error => {
               console.error('Failed to load .vox avatar for remote user:', error);
@@ -566,6 +577,7 @@ export class SceneManager {
       // Add to scene
       this.scene.add(voxelAvatar.getObject3D());
       this.remoteAvatars.set(pubkey, voxelAvatar);
+      this.remoteAvatarConfigs.set(pubkey, { avatarType, avatarId });
       console.log(`Created remote voxel avatar for ${npub}`);
     } else {
       // Create GLB avatar
@@ -575,6 +587,7 @@ export class SceneManager {
       }, this.scene);
       this.scene.add(glbAvatar.getObject3D());
       this.remoteAvatars.set(pubkey, glbAvatar);
+      this.remoteAvatarConfigs.set(pubkey, { avatarType, avatarId });
       console.log(`Created remote GLB avatar for ${npub}`);
     }
   }
@@ -586,10 +599,24 @@ export class SceneManager {
     const avatar = this.remoteAvatars.get(pubkey);
     if (!avatar) return;
 
-    const { position } = state;
+    const { position, moveStyle } = state;
 
-    // Use teleport animation for remote avatar updates
-    avatar.teleportTo(position.x, position.z, this.teleportAnimationType);
+    if (!moveStyle || moveStyle === 'walk') {
+      // Walk: animate from current position at normal speed
+      avatar.setRunSpeed(false);
+      avatar.setTargetPosition(position.x, position.z);
+    } else if (moveStyle === 'run') {
+      // Run: animate from current position at double speed
+      avatar.setRunSpeed(true);
+      avatar.setTargetPosition(position.x, position.z);
+    } else if (moveStyle.startsWith('teleport:')) {
+      // Teleport with specified animation
+      const animationType = moveStyle.substring(9) as TeleportAnimationType; // Remove 'teleport:' prefix
+      avatar.teleportTo(position.x, position.z, animationType);
+    } else {
+      // Unknown move style - default to teleport with fade
+      avatar.teleportTo(position.x, position.z, 'fade');
+    }
   }
 
   /**

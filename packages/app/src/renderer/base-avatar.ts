@@ -16,6 +16,8 @@ export interface IAvatar {
   // Movement
   setTargetPosition(x: number, z: number): void;
   teleportTo(x: number, z: number, animationType: TeleportAnimationType): void;
+  setPositionImmediate(x: number, z: number): void;
+  setRunSpeed(isRunning: boolean): void;
 
   // State
   isCurrentlyMoving(): boolean;
@@ -38,9 +40,14 @@ export abstract class BaseAvatar implements IAvatar {
   protected transform: Transform;
   protected targetTransform: Transform;
   protected isMoving: boolean = false;
-  protected moveSpeed: number = 3.0;
+  protected baseMoveSpeed: number = 3.0;
+  protected isRunning: boolean = false;
   protected teleportAnimation: TeleportAnimation | null = null;
   protected scene: THREE.Scene | null = null;
+
+  protected get moveSpeed(): number {
+    return this.baseMoveSpeed * (this.isRunning ? 2.0 : 1.0);
+  }
 
   constructor(initialTransform?: Transform, scene?: THREE.Scene) {
     this.transform = initialTransform ? Transform.fromTransform(initialTransform) : new Transform(4, 0, 4);
@@ -77,6 +84,10 @@ export abstract class BaseAvatar implements IAvatar {
 
   // ========== Shared implementation ==========
 
+  setRunSpeed(isRunning: boolean): void {
+    this.isRunning = isRunning;
+  }
+
   setTargetPosition(x: number, z: number): void {
     this.targetTransform.setXZ(x, z);
 
@@ -102,6 +113,37 @@ export abstract class BaseAvatar implements IAvatar {
 
   setScene(scene: THREE.Scene): void {
     this.scene = scene;
+  }
+
+  setPositionImmediate(x: number, z: number): void {
+    // Check if position actually changed
+    const dx = x - this.transform.getX();
+    const dz = z - this.transform.getZ();
+    const distance = Math.sqrt(dx * dx + dz * dz);
+
+    if (distance < 0.01) {
+      return;
+    }
+
+    // Stop any current movement
+    this.isMoving = false;
+    this.onStopMoving();
+
+    // Calculate target rotation
+    const targetAngle = Math.atan2(dx, dz) + this.getRotationOffset();
+
+    // Cancel any existing teleport animation
+    if (this.teleportAnimation?.isActive()) {
+      this.teleportAnimation.cancel();
+    }
+
+    // Immediately set new position and orientation (no animation)
+    this.transform.setXZ(x, z);
+    this.transform.setAngle(targetAngle);
+    this.targetTransform.setXZ(x, z);
+    this.targetTransform.setAngle(targetAngle);
+    this.group.position.set(this.transform.getX(), this.transform.getY(), this.transform.getZ());
+    this.group.quaternion.copy(this.transform.getRotation());
   }
 
   teleportTo(x: number, z: number, animationType: TeleportAnimationType = 'fade'): void {

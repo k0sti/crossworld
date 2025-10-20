@@ -45,8 +45,8 @@ export function WorldCanvas({
     // Set position update callback and subscribe to state changes
     let unsubscribe: (() => void) | undefined;
     if (avatarStateService) {
-      sceneManager.setPositionUpdateCallback((x, y, z, quaternion) => {
-        avatarStateService.publishPosition({ x, y, z, quaternion }).catch(console.error);
+      sceneManager.setPositionUpdateCallback((x, y, z, quaternion, moveStyle) => {
+        avatarStateService.publishPosition({ x, y, z, quaternion }, moveStyle).catch(console.error);
       });
 
       // Subscribe to avatar state changes
@@ -132,7 +132,12 @@ export function WorldCanvas({
     const sceneManager = sceneManagerRef.current;
     if (!sceneManager) return;
 
-    console.log('Avatar update triggered:', { isLoggedIn, avatarConfig });
+    console.log('Avatar update triggered:', {
+      isLoggedIn,
+      avatarType: avatarConfig.avatarType,
+      avatarId: avatarConfig.avatarId,
+      avatarUrl: avatarConfig.avatarUrl
+    });
 
     const loadAvatar = async () => {
       if (isLoggedIn) {
@@ -148,7 +153,7 @@ export function WorldCanvas({
       // Use original colors (undefined = original palette)
       const npubForColors = undefined;
 
-      if (avatarConfig.avatarType === 'voxel') {
+      if (avatarConfig.avatarType === 'vox') {
         // Remove old GLB avatar if exists
         sceneManager.removeAvatar();
 
@@ -242,7 +247,7 @@ export function WorldCanvas({
     };
 
     loadAvatar();
-  }, [isLoggedIn, avatarConfig]);
+  }, [isLoggedIn, avatarConfig.avatarType, avatarConfig.avatarId, avatarConfig.avatarUrl, avatarConfig.avatarData, avatarConfig.avatarMod]);
 
   return (
     <Box
