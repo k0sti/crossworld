@@ -8,7 +8,8 @@ node_modules
 # Build outputs
 target/
 dist/
-packages/wasm/
+packages/wasm-world/
+packages/wasm-cube/
 
 # Environment
 .env

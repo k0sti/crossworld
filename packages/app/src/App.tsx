@@ -22,6 +22,7 @@ import type { TeleportAnimationType } from './renderer/teleport-animation'
 function App() {
   const [pubkey, setPubkey] = useState<string | null>(null)
   const [isEditMode, setIsEditMode] = useState(false)
+  const [isCameraMode, setIsCameraMode] = useState(false)
   const [activePanelType, setActivePanelType] = useState<ConfigPanelType>(null)
   const [isChatOpen, setIsChatOpen] = useState(false)
   const [isClientListOpen, setIsClientListOpen] = useState(false)
@@ -52,6 +53,11 @@ function App() {
   const [showRestoreModal, setShowRestoreModal] = useState(false)
   const restoreTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const initialStatePublished = useRef(false)
+
+  // Ground render mode
+  const [useCubeGround, setUseCubeGround] = useState(false)
+  const geometryControllerRef = useRef<any>(null)
+  const sceneManagerRef = useRef<any>(null)
 
   // Fetch live event on mount
   useEffect(() => {
@@ -271,6 +277,15 @@ function App() {
     }
   }, [pubkey, isEditMode, isExploring, avatarStateService, voice.isConnected, voice.micEnabled, isChatOpen])
 
+  // Set up camera mode exit callback (triggered when pointer lock is released)
+  useEffect(() => {
+    if (sceneManagerRef.current) {
+      sceneManagerRef.current.setOnCameraModeExit(() => {
+        setIsCameraMode(false)
+      })
+    }
+  }, [])
+
   // Publish new state event when avatar configuration changes
   useEffect(() => {
     // Skip if not logged in or initial state not yet published
@@ -315,6 +330,7 @@ function App() {
       avatarType: selection.avatarType,
       avatarId: selection.avatarId,
       avatarUrl: selection.avatarUrl,
+      avatarData: selection.avatarData,
     }
 
     console.log('[App] Avatar selection received:', selection)
@@ -327,6 +343,17 @@ function App() {
     if (pubkey && !initialStatePublished.current) {
       publishInitialState()
     }
+  }
+
+  const handleRestart = () => {
+    // Reset avatar config to empty state
+    setAvatarConfig({
+      avatarType: 'vox',
+      avatarId: undefined,
+      avatarUrl: undefined,
+      avatarData: undefined,
+    })
+    setTeleportAnimationType('fade')
   }
 
   const handleViewProfile = (profilePubkey: string) => {
@@ -404,10 +431,13 @@ function App() {
         <WorldCanvas
           isLoggedIn={pubkey !== null}
           isEditMode={isEditMode}
+          isCameraMode={isCameraMode}
           avatarConfig={avatarConfig}
           teleportAnimationType={teleportAnimationType}
           avatarStateService={avatarStateService}
           currentUserPubkey={pubkey}
+          geometryControllerRef={geometryControllerRef}
+          sceneManagerRef={sceneManagerRef}
         />
         <TopBar
           pubkey={pubkey}
@@ -419,10 +449,11 @@ function App() {
         {pubkey && (
           <LeftSidebarPanel
             onOpenPanel={setActivePanelType}
-            onLogout={handleLogout}
             activePanelType={activePanelType}
             isEditMode={isEditMode}
             onToggleEditMode={setIsEditMode}
+            isCameraMode={isCameraMode}
+            onToggleCameraMode={() => setIsCameraMode(!isCameraMode)}
             isChatOpen={isChatOpen}
             onToggleChat={() => setIsChatOpen(!isChatOpen)}
             isClientListOpen={isClientListOpen}
@@ -434,6 +465,14 @@ function App() {
             participantCount={voice.participantCount}
             onToggleVoice={handleToggleVoice}
             onToggleMic={handleToggleMic}
+            useCubeGround={useCubeGround}
+            onToggleGroundRenderMode={() => {
+              const newMode = !useCubeGround
+              setUseCubeGround(newMode)
+              if (geometryControllerRef.current) {
+                geometryControllerRef.current.setGroundRenderMode(newMode)
+              }
+            }}
           />
         )}
 
@@ -444,6 +483,10 @@ function App() {
           <ProfilePanel
             pubkey={viewedProfilePubkey || pubkey}
             onClose={() => setActivePanelType(null)}
+            local_user={!viewedProfilePubkey || viewedProfilePubkey === pubkey}
+            onLogout={handleLogout}
+            onOpenAvatarSelection={() => setActivePanelType('avatar')}
+            onRestart={handleRestart}
           />
         )}
         {activePanelType === 'avatar' && (
@@ -455,6 +498,7 @@ function App() {
               avatarType: avatarConfig.avatarType,
               avatarId: avatarConfig.avatarId,
               avatarUrl: avatarConfig.avatarUrl,
+              avatarData: avatarConfig.avatarData,
               teleportAnimationType,
             }}
           />

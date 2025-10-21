@@ -9,23 +9,29 @@ import type { TeleportAnimationType } from '../renderer/teleport-animation';
 interface WorldCanvasProps {
   isLoggedIn: boolean;
   isEditMode: boolean;
+  isCameraMode: boolean;
   avatarConfig: AvatarConfig;
   teleportAnimationType: TeleportAnimationType;
   avatarStateService?: AvatarStateService;
   currentUserPubkey?: string | null;
+  geometryControllerRef?: React.MutableRefObject<any>;
+  sceneManagerRef?: React.MutableRefObject<any>;
 }
 
 export function WorldCanvas({
   isLoggedIn,
   isEditMode,
+  isCameraMode,
   avatarConfig,
   teleportAnimationType,
   avatarStateService,
   currentUserPubkey,
+  geometryControllerRef,
+  sceneManagerRef,
 }: WorldCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const sceneManagerRef = useRef<SceneManager | null>(null);
-  const geometryControllerRef = useRef<GeometryController | null>(null);
+  const localSceneManagerRef = useRef<SceneManager | null>(null);
+  const localGeometryControllerRef = useRef<GeometryController | null>(null);
   const avatarEngineRef = useRef<AvatarEngine | null>(null);
   const animationFrameRef = useRef<number | null>(null);
 
@@ -36,8 +42,18 @@ export function WorldCanvas({
     const sceneManager = new SceneManager();
     const geometryController = new GeometryController();
 
-    sceneManagerRef.current = sceneManager;
-    geometryControllerRef.current = geometryController;
+    localSceneManagerRef.current = sceneManager;
+    localGeometryControllerRef.current = geometryController;
+
+    // Expose geometry controller to parent if ref provided
+    if (geometryControllerRef) {
+      geometryControllerRef.current = geometryController;
+    }
+
+    // Expose scene manager to parent if ref provided
+    if (sceneManagerRef) {
+      sceneManagerRef.current = sceneManager;
+    }
 
     // Initialize scene
     sceneManager.initialize(canvas);
@@ -105,7 +121,7 @@ export function WorldCanvas({
 
   // Handle current user pubkey changes
   useEffect(() => {
-    const sceneManager = sceneManagerRef.current;
+    const sceneManager = localSceneManagerRef.current;
     if (!sceneManager) return;
 
     sceneManager.setCurrentUserPubkey(currentUserPubkey || null);
@@ -113,15 +129,23 @@ export function WorldCanvas({
 
   // Handle edit mode changes
   useEffect(() => {
-    const sceneManager = sceneManagerRef.current;
+    const sceneManager = localSceneManagerRef.current;
     if (!sceneManager) return;
 
     sceneManager.setEditMode(isEditMode);
   }, [isEditMode]);
 
+  // Handle camera mode changes
+  useEffect(() => {
+    const sceneManager = localSceneManagerRef.current;
+    if (!sceneManager) return;
+
+    sceneManager.setCameraMode(isCameraMode);
+  }, [isCameraMode]);
+
   // Handle teleport animation type changes
   useEffect(() => {
-    const sceneManager = sceneManagerRef.current;
+    const sceneManager = localSceneManagerRef.current;
     if (!sceneManager) return;
 
     sceneManager.setTeleportAnimationType(teleportAnimationType);
@@ -129,7 +153,7 @@ export function WorldCanvas({
 
   // Handle avatar loading based on new unified avatar config
   useEffect(() => {
-    const sceneManager = sceneManagerRef.current;
+    const sceneManager = localSceneManagerRef.current;
     if (!sceneManager) return;
 
     console.log('Avatar update triggered:', {
@@ -234,6 +258,31 @@ export function WorldCanvas({
           }
         } else {
           console.warn('No GLB URL available for avatar');
+        }
+      } else if (avatarConfig.avatarType === 'csm') {
+        // Remove old avatar
+        sceneManager.removeAvatar();
+
+        // Get CSM code from avatarData
+        if (avatarConfig.avatarData) {
+          console.log('[WorldCanvas] Loading CSM avatar from avatarData');
+          try {
+            const { parseCsmToMesh } = await import('../utils/cubeWasm');
+            const result = await parseCsmToMesh(avatarConfig.avatarData);
+
+            if ('error' in result) {
+              console.error('[WorldCanvas] CSM parse error:', result.error);
+              return;
+            }
+
+            // Create CSM avatar from mesh data
+            sceneManager.createCsmAvatar(result, npubForColors, 1.0, currentTransform);
+            console.log('[WorldCanvas] Successfully loaded CSM avatar');
+          } catch (error) {
+            console.error('[WorldCanvas] Failed to load CSM avatar:', error);
+          }
+        } else {
+          console.warn('[WorldCanvas] No avatarData provided for CSM avatar');
         }
       }
 

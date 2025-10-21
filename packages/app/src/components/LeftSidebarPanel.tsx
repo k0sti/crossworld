@@ -1,3 +1,4 @@
+import { useEffect, useCallback } from 'react'
 import { Box, VStack, Text, Divider } from '@chakra-ui/react'
 import { ConfigPanelType } from './ConfigPanel'
 import { VoiceButton } from './VoiceButton'
@@ -8,16 +9,20 @@ interface SidebarIconProps {
   icon: string
   onClick: () => void
   isActive?: boolean
+  activeBgColor?: string
 }
 
-function SidebarIcon({ icon, onClick, isActive }: SidebarIconProps) {
+function SidebarIcon({ icon, onClick, isActive, activeBgColor }: SidebarIconProps) {
+  const defaultActiveBg = "rgba(120, 120, 120, 0.2)"
+  const activeBg = isActive ? (activeBgColor || defaultActiveBg) : "rgba(80, 80, 80, 0.1)"
+
   return (
     <Box
       as="button"
       onClick={onClick}
       w="48px"
       h="48px"
-      bg={isActive ? "rgba(120, 120, 120, 0.2)" : "rgba(80, 80, 80, 0.1)"}
+      bg={activeBg}
       border="1px solid rgba(255, 255, 255, 0.1)"
       _hover={{
         bg: 'rgba(120, 120, 120, 0.2)',
@@ -39,10 +44,11 @@ function SidebarIcon({ icon, onClick, isActive }: SidebarIconProps) {
 
 interface LeftSidebarPanelProps {
   onOpenPanel: (type: ConfigPanelType) => void
-  onLogout: () => void
   activePanelType: ConfigPanelType
   isEditMode: boolean
   onToggleEditMode: (isEditMode: boolean) => void
+  isCameraMode: boolean
+  onToggleCameraMode: () => void
   isChatOpen: boolean
   onToggleChat: () => void
   isClientListOpen: boolean
@@ -55,14 +61,18 @@ interface LeftSidebarPanelProps {
   participantCount: number
   onToggleVoice: () => void
   onToggleMic: () => void
+  // Ground render mode
+  useCubeGround: boolean
+  onToggleGroundRenderMode: () => void
 }
 
 export function LeftSidebarPanel({
   onOpenPanel,
-  onLogout,
   activePanelType,
   isEditMode,
   onToggleEditMode,
+  isCameraMode,
+  onToggleCameraMode,
   isChatOpen,
   onToggleChat,
   isClientListOpen,
@@ -74,20 +84,99 @@ export function LeftSidebarPanel({
   participantCount,
   onToggleVoice,
   onToggleMic,
+  useCubeGround,
+  onToggleGroundRenderMode,
 }: LeftSidebarPanelProps) {
-  const handleLogout = () => {
-    onOpenPanel(null)
-    onLogout()
-  }
-
-  const handleOpenPanel = (type: ConfigPanelType) => {
+  const handleOpenPanel = useCallback((type: ConfigPanelType) => {
     // If clicking the same panel, close it; otherwise open the new panel
     if (activePanelType === type) {
       onOpenPanel(null)
     } else {
       onOpenPanel(type)
     }
-  }
+  }, [activePanelType, onOpenPanel])
+
+  // Keyboard shortcuts for sidebar buttons
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      // Ignore if typing in input fields
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return
+      }
+
+      // Ignore if camera mode is active (WASD keys used there)
+      if (isCameraMode) {
+        return
+      }
+
+      // Build action list based on visible buttons
+      const actions: Array<() => void> = []
+
+      // 1. Edit mode toggle (if enabled)
+      if (ENABLE_EDIT_MODE) {
+        actions.push(() => onToggleEditMode(!isEditMode))
+      }
+
+      // 2. Camera mode
+      actions.push(() => {
+        if (!isCameraMode) {
+          onToggleCameraMode()
+        }
+      })
+
+      // 3. Ground render mode
+      actions.push(onToggleGroundRenderMode)
+
+      // 4. Avatar panel
+      actions.push(() => handleOpenPanel('avatar'))
+
+      // 5. Chat
+      actions.push(onToggleChat)
+
+      // 6. Client list
+      actions.push(onToggleClientList)
+
+      // 7. Voice (if enabled)
+      if (ENABLE_VOICE_CHAT) {
+        actions.push(onToggleVoice)
+      }
+
+      // 8. Mic (if voice connected)
+      if (ENABLE_VOICE_CHAT && voiceConnected) {
+        actions.push(onToggleMic)
+      }
+
+      // Map number keys to actions
+      const key = e.key
+      const num = parseInt(key)
+      if (!isNaN(num) && num >= 1 && num <= actions.length) {
+        e.preventDefault()
+        actions[num - 1]()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyPress)
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyPress)
+    }
+  }, [
+    isEditMode,
+    isCameraMode,
+    useCubeGround,
+    activePanelType,
+    isChatOpen,
+    isClientListOpen,
+    voiceConnected,
+    onToggleEditMode,
+    onToggleCameraMode,
+    onToggleGroundRenderMode,
+    onToggleChat,
+    onToggleClientList,
+    onToggleVoice,
+    onToggleMic,
+    handleOpenPanel,
+  ])
 
   return (
     <Box
@@ -113,6 +202,28 @@ export function LeftSidebarPanel({
             <Divider borderColor="rgba(255, 255, 255, 0.1)" my={1} />
           </>
         )}
+
+        {/* Camera Mode Button */}
+        <SidebarIcon
+          icon="📷"
+          onClick={() => {
+            // Only enter camera mode, don't toggle
+            if (!isCameraMode) {
+              onToggleCameraMode()
+            }
+          }}
+          isActive={isCameraMode}
+          activeBgColor="rgba(255, 215, 0, 0.4)" // Yellow when active
+        />
+        <Divider borderColor="rgba(255, 255, 255, 0.1)" my={1} />
+
+        {/* Ground Render Mode Toggle */}
+        <SidebarIcon
+          icon={useCubeGround ? "🧊" : "🟩"}
+          onClick={onToggleGroundRenderMode}
+          isActive={useCubeGround}
+        />
+        <Divider borderColor="rgba(255, 255, 255, 0.1)" my={1} />
 
         {/* Config Icons */}
         <SidebarIcon
@@ -156,14 +267,6 @@ export function LeftSidebarPanel({
           </>
         )}
 
-        {!ENABLE_VOICE_CHAT && (
-          <Divider borderColor="rgba(255, 255, 255, 0.1)" my={1} />
-        )}
-
-        <SidebarIcon
-          icon="🚪"
-          onClick={handleLogout}
-        />
       </VStack>
     </Box>
   )
