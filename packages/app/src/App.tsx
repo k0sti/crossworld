@@ -13,11 +13,11 @@ import { SelectAvatar, type AvatarSelection } from './components/SelectAvatar'
 import { ChatPanel } from './components/ChatPanel'
 import { ClientListPanel } from './components/ClientListPanel'
 import { RestoreStateModal } from './components/RestoreStateModal'
-import { fetchLiveEvent } from './services/live-event'
 import { AvatarStateService, type AvatarConfig, type AvatarState } from './services/avatar-state'
 import { useVoice } from './hooks/useVoice'
 import { npubEncode } from 'nostr-tools/nip19'
 import type { TeleportAnimationType } from './renderer/teleport-animation'
+import { VOICE_CONFIG } from './config'
 
 function App() {
   const [pubkey, setPubkey] = useState<string | null>(null)
@@ -27,7 +27,6 @@ function App() {
   const [isChatOpen, setIsChatOpen] = useState(false)
   const [isClientListOpen, setIsClientListOpen] = useState(false)
   const [viewedProfilePubkey, setViewedProfilePubkey] = useState<string | null>(null)
-  const [streamingUrl, setStreamingUrl] = useState<string | null>(null)
   const accountManager = useMemo(() => new AccountManager(), [])
   const avatarStateService = useMemo(() => new AvatarStateService(accountManager), [accountManager])
   const toast = useToast()
@@ -59,30 +58,29 @@ function App() {
   const geometryControllerRef = useRef<any>(null)
   const sceneManagerRef = useRef<any>(null)
 
-  // Fetch live event on mount
-  useEffect(() => {
-    const loadLiveEvent = async () => {
-      try {
-        // Fetch live event for MoQ relay URL
-        const liveEvent = await fetchLiveEvent()
-        if (liveEvent?.streaming_url) {
-          setStreamingUrl(liveEvent.streaming_url)
-          console.log('[App] MoQ streaming URL from live event:', liveEvent.streaming_url)
-        } else {
-          console.warn('[App] No streaming URL found in live event')
+  // MoQ streaming URL state
+  const [streamingUrl, setStreamingUrl] = useState<string | null>(VOICE_CONFIG.DEBUG_RELAY_URL)
 
-          // Fallback options for testing:
-          // - Local relay: http://localhost:4443/anon
-          // - Public relays:
-          //   * https://relay.moq.dev/anon
-          //   * https://relay.cloudflare.mediaoverquic.com/anon
-          //   (NOTE: Use /anon suffix, NOT /crossworld-dev or other custom paths)
-        }
-      } catch (err) {
-        console.error('[App] Failed to fetch live event:', err)
-      }
+  // Fetch streaming URL from live event (if not using debug URL)
+  useEffect(() => {
+    if (VOICE_CONFIG.DEBUG_RELAY_URL) {
+      console.log('[App] Using DEBUG MoQ relay URL:', VOICE_CONFIG.DEBUG_RELAY_URL)
+      setStreamingUrl(VOICE_CONFIG.DEBUG_RELAY_URL)
+    } else {
+      console.log('[App] Fetching MoQ relay URL from live event...')
+      import('./services/live-event').then(({ fetchLiveEvent }) => {
+        fetchLiveEvent().then(liveEvent => {
+          if (liveEvent?.streaming_url) {
+            console.log('[App] MoQ streaming URL from live event:', liveEvent.streaming_url)
+            setStreamingUrl(liveEvent.streaming_url)
+          } else {
+            console.warn('[App] No streaming URL found in live event')
+          }
+        }).catch(err => {
+          console.error('[App] Failed to fetch live event:', err)
+        })
+      })
     }
-    loadLiveEvent()
   }, [])
 
   // Start avatar state subscription on mount
