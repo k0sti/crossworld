@@ -75,3 +75,10 @@ export const AVATAR_STATE_CONFIG = {
 export function getAvatarStateDTag(): string {
   return `crossworld-avatar-${getLiveChatATag()}`
 }
+
+// Voice/MoQ Configuration
+export const VOICE_CONFIG = {
+  // Debug: override relay URL (set to null to use event-based URL)
+  // DEBUG_RELAY_URL: 'https://moq.justinmoon.com/anon' as string | null,
+  DEBUG_RELAY_URL: null,  // Uncomment to use URL from live event
+}
