@@ -7,6 +7,7 @@ import { WorldCanvas } from './components/WorldCanvas'
 import { LeftSidebarPanel } from './components/LeftSidebarPanel'
 import { ConfigPanelType } from './components/ConfigPanel'
 import { NetworkConfigPanel } from './components/NetworkConfigPanel'
+import { InfoPanel } from './components/InfoPanel'
 import { ProfilePanel } from './components/ProfilePanel'
 import { SelectAvatar, type AvatarSelection } from './components/SelectAvatar'
 import { ChatPanel } from './components/ChatPanel'
@@ -467,6 +468,7 @@ function App() {
 
         {/* Config Panels */}
         {activePanelType === 'network' && <NetworkConfigPanel />}
+        {activePanelType === 'info' && <InfoPanel />}
         {activePanelType === 'profile' && (
           <ProfilePanel
             pubkey={viewedProfilePubkey || pubkey}
