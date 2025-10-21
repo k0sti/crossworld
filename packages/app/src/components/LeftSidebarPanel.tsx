@@ -44,7 +44,6 @@ function SidebarIcon({ icon, onClick, isActive, activeBgColor }: SidebarIconProp
 
 interface LeftSidebarPanelProps {
   onOpenPanel: (type: ConfigPanelType) => void
-  onLogout: () => void
   activePanelType: ConfigPanelType
   isEditMode: boolean
   onToggleEditMode: (isEditMode: boolean) => void
@@ -69,7 +68,6 @@ interface LeftSidebarPanelProps {
 
 export function LeftSidebarPanel({
   onOpenPanel,
-  onLogout,
   activePanelType,
   isEditMode,
   onToggleEditMode,
@@ -89,11 +87,6 @@ export function LeftSidebarPanel({
   useCubeGround,
   onToggleGroundRenderMode,
 }: LeftSidebarPanelProps) {
-  const handleLogout = useCallback(() => {
-    onOpenPanel(null)
-    onLogout()
-  }, [onOpenPanel, onLogout])
-
   const handleOpenPanel = useCallback((type: ConfigPanelType) => {
     // If clicking the same panel, close it; otherwise open the new panel
     if (activePanelType === type) {
@@ -153,9 +146,6 @@ export function LeftSidebarPanel({
         actions.push(onToggleMic)
       }
 
-      // 9. Logout (always last)
-      actions.push(handleLogout)
-
       // Map number keys to actions
       const key = e.key
       const num = parseInt(key)
@@ -185,7 +175,6 @@ export function LeftSidebarPanel({
     onToggleClientList,
     onToggleVoice,
     onToggleMic,
-    handleLogout,
     handleOpenPanel,
   ])
 
@@ -278,14 +267,6 @@ export function LeftSidebarPanel({
           </>
         )}
 
-        {!ENABLE_VOICE_CHAT && (
-          <Divider borderColor="rgba(255, 255, 255, 0.1)" my={1} />
-        )}
-
-        <SidebarIcon
-          icon="🚪"
-          onClick={handleLogout}
-        />
       </VStack>
     </Box>
   )

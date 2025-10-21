@@ -438,7 +438,6 @@ function App() {
         {pubkey && (
           <LeftSidebarPanel
             onOpenPanel={setActivePanelType}
-            onLogout={handleLogout}
             activePanelType={activePanelType}
             isEditMode={isEditMode}
             onToggleEditMode={setIsEditMode}
@@ -473,6 +472,8 @@ function App() {
           <ProfilePanel
             pubkey={viewedProfilePubkey || pubkey}
             onClose={() => setActivePanelType(null)}
+            local_user={!viewedProfilePubkey || viewedProfilePubkey === pubkey}
+            onLogout={handleLogout}
           />
         )}
         {activePanelType === 'avatar' && (
