@@ -4,7 +4,6 @@ import {
   ModalContent,
   ModalHeader,
   ModalBody,
-  ModalCloseButton,
   VStack,
   HStack,
   Button,
@@ -21,7 +20,9 @@ import {
   Input,
   IconButton,
   Textarea,
+  Collapse,
 } from '@chakra-ui/react';
+import { FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import { useState, useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
@@ -68,8 +69,32 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
   const [voxModels, setVoxModels] = useState<ModelItem[]>([]);
   const [glbModels, setGlbModels] = useState<ModelItem[]>([]);
   const [modelsLoaded, setModelsLoaded] = useState(false);
+  const [showMoreSettings, setShowMoreSettings] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Check if user has a previous avatar selection
+  const hasPreviousSelection = !!(currentSelection?.avatarId || currentSelection?.avatarUrl || currentSelection?.avatarData);
+
+  // Cycle to previous VOX model
+  const cyclePrevVox = () => {
+    if (avatarType !== 'vox' || voxModels.length === 0) return;
+
+    const currentIndex = voxModels.findIndex(m => m.id === selectedId);
+    const prevIndex = currentIndex <= 0 ? voxModels.length - 1 : currentIndex - 1;
+    setSelectedId(voxModels[prevIndex].id);
+    setAvatarUrl('');
+  };
+
+  // Cycle to next VOX model
+  const cycleNextVox = () => {
+    if (avatarType !== 'vox' || voxModels.length === 0) return;
+
+    const currentIndex = voxModels.findIndex(m => m.id === selectedId);
+    const nextIndex = currentIndex >= voxModels.length - 1 ? 0 : currentIndex + 1;
+    setSelectedId(voxModels[nextIndex].id);
+    setAvatarUrl('');
+  };
 
   // Load models configuration
   useEffect(() => {
@@ -90,8 +115,13 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
       setGlbModels(glb);
       setModelsLoaded(true);
 
-      // Set default selection if none exists or if current selection is invalid
-      if ((!selectedId || selectedId === 'boy' || selectedId === 'girl') && vox.length > 0) {
+      // Select random VOX model if no avatar is selected
+      if (!currentSelection?.avatarId && vox.length > 0) {
+        const randomIndex = Math.floor(Math.random() * vox.length);
+        console.log('[SelectAvatar] Auto-selecting random VOX model:', vox[randomIndex].id);
+        setSelectedId(vox[randomIndex].id);
+        setAvatarType('vox');
+      } else if ((!selectedId || selectedId === 'boy' || selectedId === 'girl') && vox.length > 0) {
         console.log('[SelectAvatar] Setting default selection to:', vox[0].id);
         setSelectedId(vox[0].id);
       }
@@ -529,37 +559,105 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
   );
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} size="xl" closeOnOverlayClick={false}>
+    <Modal
+      isOpen={isOpen}
+      onClose={hasPreviousSelection ? onClose : () => {}}
+      size="xl"
+      closeOnOverlayClick={hasPreviousSelection}
+      closeOnEsc={hasPreviousSelection}
+    >
       <ModalOverlay />
       <ModalContent bg="rgba(20, 20, 30, 0.95)" backdropFilter="blur(10px)">
         <ModalHeader color="white">Select Avatar</ModalHeader>
-        <ModalCloseButton color="white" />
         <ModalBody pb={6}>
           <VStack align="stretch" spacing={4}>
-            {/* Preview Canvas */}
-            <Box
-              ref={previewContainerRef}
-              display="flex"
-              justifyContent="center"
-              alignItems="center"
-              bg="rgba(26, 26, 30, 0.8)"
-              borderRadius="md"
-              p={4}
-              border="1px solid"
-              borderColor="rgba(255, 255, 255, 0.1)"
-              minHeight="300px"
-            >
-              <canvas
-                ref={setPreviewCanvas}
-                style={{
-                  borderRadius: '8px',
-                  maxWidth: '100%',
-                  height: 'auto',
-                  display: 'block',
-                }}
-              />
+            {/* Preview Canvas with Cycle Buttons */}
+            <Box position="relative">
+              <Box
+                ref={previewContainerRef}
+                display="flex"
+                justifyContent="center"
+                alignItems="center"
+                bg="rgba(26, 26, 30, 0.8)"
+                borderRadius="md"
+                p={4}
+                border="1px solid"
+                borderColor="rgba(255, 255, 255, 0.1)"
+                minHeight="300px"
+              >
+                <canvas
+                  ref={setPreviewCanvas}
+                  style={{
+                    borderRadius: '8px',
+                    maxWidth: '100%',
+                    height: 'auto',
+                    display: 'block',
+                  }}
+                />
+              </Box>
+
+              {/* Left/Right Cycle Buttons (VOX only) */}
+              {avatarType === 'vox' && voxModels.length > 0 && (
+                <>
+                  <IconButton
+                    aria-label="Previous model"
+                    icon={<FiChevronLeft />}
+                    position="absolute"
+                    left="8px"
+                    top="50%"
+                    transform="translateY(-50%)"
+                    onClick={cyclePrevVox}
+                    size="lg"
+                    colorScheme="blue"
+                    variant="solid"
+                    opacity={0.8}
+                    _hover={{ opacity: 1 }}
+                    zIndex={1}
+                  />
+                  <IconButton
+                    aria-label="Next model"
+                    icon={<FiChevronRight />}
+                    position="absolute"
+                    right="8px"
+                    top="50%"
+                    transform="translateY(-50%)"
+                    onClick={cycleNextVox}
+                    size="lg"
+                    colorScheme="blue"
+                    variant="solid"
+                    opacity={0.8}
+                    _hover={{ opacity: 1 }}
+                    zIndex={1}
+                  />
+                </>
+              )}
             </Box>
 
+            {/* Action Buttons - Moved here under preview */}
+            <HStack spacing={3}>
+              {hasPreviousSelection && (
+                <Button flex={1} onClick={onClose} variant="ghost" color="white">
+                  Cancel
+                </Button>
+              )}
+              <Button flex={1} colorScheme="blue" onClick={handleSave}>
+                Save
+              </Button>
+            </HStack>
+
+            {/* More Settings Toggle */}
+            <Button
+              onClick={() => setShowMoreSettings(!showMoreSettings)}
+              variant="ghost"
+              size="sm"
+              color="white"
+            >
+              {showMoreSettings ? '▼' : '▶'} More Settings
+            </Button>
+
+            {/* More Settings Collapsible */}
+            <Collapse in={showMoreSettings} animateOpacity>
+              <VStack align="stretch" spacing={4}>
             {/* Tabs */}
             <Tabs
               variant="soft-rounded"
@@ -786,16 +884,8 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
                 />
               </HStack>
             </VStack>
-
-            {/* Action Buttons */}
-            <HStack spacing={3} pt={4}>
-              <Button flex={1} onClick={onClose} variant="ghost" color="white">
-                Cancel
-              </Button>
-              <Button flex={1} colorScheme="blue" onClick={handleSave}>
-                Save
-              </Button>
-            </HStack>
+              </VStack>
+            </Collapse>
           </VStack>
         </ModalBody>
       </ModalContent>

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Box, VStack, Text, Avatar, HStack, Divider, Flex, IconButton, Tooltip, useToast, SimpleGrid, Button } from '@chakra-ui/react'
-import { FiUser, FiCopy, FiExternalLink, FiLogOut, FiTrash2 } from 'react-icons/fi'
+import { FiUser, FiCopy, FiExternalLink, FiLogOut, FiRefreshCw } from 'react-icons/fi'
 import { npubEncode } from 'nostr-tools/nip19'
 import { Relay } from 'applesauce-relay'
 import { pubkey_to_emoji } from '@workspace/wasm'
@@ -25,9 +25,11 @@ interface ProfilePanelProps {
   onClose?: () => void
   local_user?: boolean
   onLogout?: () => void
+  onOpenAvatarSelection?: () => void
+  onRestart?: () => void
 }
 
-export function ProfilePanel({ pubkey, onClose, local_user = false, onLogout }: ProfilePanelProps) {
+export function ProfilePanel({ pubkey, onClose, local_user = false, onLogout, onOpenAvatarSelection, onRestart }: ProfilePanelProps) {
   const [profile, setProfile] = useState<ProfileMetadata | null>(null)
   const [enabledRelays, setEnabledRelays] = useState<string[]>([])
   const toast = useToast()
@@ -174,26 +176,31 @@ export function ProfilePanel({ pubkey, onClose, local_user = false, onLogout }: 
     }
   }
 
-  const handleClearData = () => {
-    if (window.confirm('Are you sure you want to clear all local data? This will log you out and remove all cached information.')) {
-      // Clear localStorage
-      localStorage.clear()
+  const handleRestart = () => {
+    // Clear avatar settings from localStorage
+    localStorage.removeItem('avatarSelection')
 
-      toast({
-        title: 'Data cleared',
-        description: 'All local data has been cleared',
-        status: 'success',
-        duration: 3000,
-        isClosable: true,
-      })
+    toast({
+      title: 'Avatar settings cleared',
+      description: 'Opening avatar selection...',
+      status: 'info',
+      duration: 2000,
+      isClosable: true,
+    })
 
-      // Logout and close
-      if (onLogout) {
-        onLogout()
-      }
-      if (onClose) {
-        onClose()
-      }
+    // Close profile panel
+    if (onClose) {
+      onClose()
+    }
+
+    // Call restart handler to reset avatar config
+    if (onRestart) {
+      onRestart()
+    }
+
+    // Open avatar selection
+    if (onOpenAvatarSelection) {
+      onOpenAvatarSelection()
     }
   }
 
@@ -307,6 +314,16 @@ export function ProfilePanel({ pubkey, onClose, local_user = false, onLogout }: 
                     Profile Settings
                   </Text>
                   <HStack gap={2}>
+                    <Button
+                      leftIcon={<FiRefreshCw />}
+                      onClick={handleRestart}
+                      size="sm"
+                      colorScheme="blue"
+                      variant="outline"
+                      flex={1}
+                    >
+                      Restart
+                    </Button>
                     <Button
                       leftIcon={<FiLogOut />}
                       onClick={handleLogout}
