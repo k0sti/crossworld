@@ -23,4 +23,4 @@ export const ENABLE_EDIT_MODE = false;
  * - Microphone toggle button when connected
  * - Voice chat UI and controls
  */
-export const ENABLE_VOICE_CHAT = false;
+export const ENABLE_VOICE_CHAT = true;

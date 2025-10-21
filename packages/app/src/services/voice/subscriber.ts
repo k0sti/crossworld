@@ -15,10 +15,11 @@ export interface Participant {
 
 /**
  * Watcher for a single participant's audio stream
- * Based on ref/moq/js/hang/src/watch/element.ts
+ * Uses Watch.Broadcast to directly watch the user's path
  */
 class ParticipantWatcher {
   public readonly npub: string
+  public readonly sessionId: string
   private watcher: Hang.Watch.Broadcast
   private emitter: Hang.Watch.Audio.Emitter
   private signals = new Effect()
@@ -29,32 +30,40 @@ class ParticipantWatcher {
   public readonly muted: Signal<boolean> = new Signal(false)
   public discoverySource: 'nostr' | 'moq' | 'both' = 'nostr'
 
-  constructor(connection: Moq.Connection.Established, npub: string, source: 'nostr' | 'moq' = 'nostr') {
+  constructor(
+    connection: Signal<Moq.Connection.Established | undefined>,
+    npub: string,
+    sessionId: string,
+    source: 'nostr' | 'moq' = 'nostr'
+  ) {
     this.npub = npub
+    this.sessionId = sessionId
     this.discoverySource = source
 
-    const path = Moq.Path.from(`crossworld/voice/${LIVE_CHAT_D_TAG}/${npub}`)
+    // Watch specific broadcast: crossworld/voice/{d-tag}/{npub}/{session}
+    const broadcastPath = Moq.Path.from('crossworld', 'voice', LIVE_CHAT_D_TAG, npub, sessionId)
     console.log('[MoQ Subscriber] Creating watcher for participant:', {
       npub,
-      path: String(path),
+      sessionId,
+      broadcastPath: String(broadcastPath),
       source,
     })
 
-    // Create watcher (ref: ref/moq/js/hang/src/watch/element.ts:221-238)
+    // Create broadcast watcher
     this.watcher = new Hang.Watch.Broadcast({
       connection,
-      path,
+      path: broadcastPath,
       enabled: true,
       audio: {
         enabled: true,
-        latency: 100 as any, // 100ms jitter buffer (Milli type)
+        latency: 100 as any, // 100ms jitter buffer
         speaking: {
           enabled: true,
         },
       },
     })
 
-    // Create emitter to connect audio to speakers (ref: ref/moq/js/hang/src/watch/element.ts:251-255)
+    // Create emitter to connect audio to speakers
     this.emitter = new Hang.Watch.Audio.Emitter(this.watcher.audio, {
       volume: this.volume,
       muted: this.muted,
@@ -65,12 +74,12 @@ class ParticipantWatcher {
     this.signals.effect((effect) => {
       const isSpeaking = effect.get(this.watcher.audio.speaking.active)
       if (isSpeaking !== undefined) {
-        console.log('[MoQ Subscriber] Speaking state for', npub, ':', isSpeaking)
+        console.log('[MoQ Subscriber] Speaking state for', this.npub, ':', isSpeaking)
       }
       this.speaking.set(isSpeaking ?? false)
     })
 
-    console.log('[MoQ Subscriber] Watcher created and active for:', npub)
+    console.log('[MoQ Subscriber] Watcher created for:', npub)
   }
 
   /**
@@ -110,7 +119,6 @@ class ParticipantWatcher {
 
 /**
  * Audio subscriber with dual discovery: Nostr AvatarStateService + MoQ announcements
- * Discovery based on both sources for maximum reliability
  */
 export class AudioSubscriber {
   private connection: MoqConnectionManager
@@ -177,7 +185,8 @@ export class AudioSubscriber {
   }
 
   /**
-   * Start listening for MoQ announcements (like ref/innpub)
+   * Start listening for MoQ announcements
+   * Listens for: crossworld/voice/{d-tag}/*
    */
   private async startAnnouncementListener(connection: Moq.Connection.Established): Promise<void> {
     // Cancel any existing listener
@@ -188,12 +197,13 @@ export class AudioSubscriber {
     this.announcementAbortController = new AbortController()
     const signal = this.announcementAbortController.signal
 
-    const prefix = Moq.Path.from(`crossworld/voice/${LIVE_CHAT_D_TAG}`)
+    // Listen for all voice broadcasts: crossworld/voice/{d-tag}/*
+    const prefix = Moq.Path.from('crossworld', 'voice', LIVE_CHAT_D_TAG)
     console.log('[MoQ Subscriber] Listening for announcements with prefix:', String(prefix))
 
     const announced = connection.announced(prefix)
 
-    // Start announcement loop (ref: ref/innpub/src/multiplayer/stream.ts:1573-1602)
+    // Start announcement loop
     const loop = (async () => {
       try {
         let count = 0
@@ -245,28 +255,46 @@ export class AudioSubscriber {
    * Handle MoQ announcement added
    */
   private handleAnnouncementAdded(connection: Moq.Connection.Established, path: Moq.Path.Valid): void {
-    // Extract npub from path: crossworld/voice/crossworld-dev/npub1...
+    // Extract npub and session from path: crossworld/voice/{d-tag}/{npub}/{session}
     const pathStr = String(path)
     const segments = pathStr.split('/')
-    const npub = segments[segments.length - 1]
+    // Expecting: ['crossworld', 'voice', d-tag, npub, session]
+    const npub = segments.length >= 4 ? segments[3] : null
+    const sessionId = segments.length >= 5 ? segments[4] : null
 
-    if (!npub || npub === this.ownNpub) {
-      console.log('[MoQ Subscriber] Skipping own broadcast or invalid npub')
+    if (!npub || !sessionId || npub === this.ownNpub) {
+      console.log('[MoQ Subscriber] Skipping own broadcast or invalid path')
       return
     }
 
-    console.log('[MoQ Subscriber] Participant announced via MoQ:', npub)
+    console.log('[MoQ Subscriber] Participant announced via MoQ:', npub, 'session:', sessionId)
 
-    // Check if we already have a watcher from Nostr discovery
+    // Check if we already have a watcher
     const existing = this.watchers.get(npub)
     if (existing) {
-      console.log('[MoQ Subscriber] Participant already being watched (Nostr), marking as dual discovery')
-      existing.markDualDiscovery()
-      this.updateParticipantsList()
+      // Check if this is a new session (user toggled mic)
+      if (existing.sessionId !== sessionId) {
+        console.log('[MoQ Subscriber] New session detected for', npub, '- replacing watcher')
+        console.log('[MoQ Subscriber] Old session:', existing.sessionId, '-> New session:', sessionId)
+
+        // Remember the discovery source
+        const source = existing.discoverySource === 'both' ? 'both' : 'moq'
+
+        // Remove old watcher
+        existing.close()
+        this.watchers.delete(npub)
+
+        // Create new watcher with new session
+        this.createWatcher(connection, npub, sessionId, source)
+      } else {
+        console.log('[MoQ Subscriber] Same session, marking as dual discovery')
+        existing.markDualDiscovery()
+        this.updateParticipantsList()
+      }
     } else {
       // Create new watcher discovered via MoQ
       console.log('[MoQ Subscriber] Creating new watcher from MoQ announcement')
-      this.createWatcher(connection, npub, 'moq')
+      this.createWatcher(connection, npub, sessionId, 'moq')
     }
   }
 
@@ -276,7 +304,7 @@ export class AudioSubscriber {
   private handleAnnouncementRemoved(path: Moq.Path.Valid): void {
     const pathStr = String(path)
     const segments = pathStr.split('/')
-    const npub = segments[segments.length - 1]
+    const npub = segments.length >= 4 ? segments[3] : null
 
     if (!npub) return
 
@@ -297,6 +325,8 @@ export class AudioSubscriber {
 
   /**
    * Handle avatar state update from AvatarStateService (Nostr discovery)
+   * Note: We don't have session ID from Nostr, so we can't create watchers here
+   * Watchers will be created when MoQ announcements arrive
    */
   private handleClientListUpdate(
     connection: Moq.Connection.Established,
@@ -319,20 +349,15 @@ export class AudioSubscriber {
 
       activeNpubs.add(state.npub)
 
-      // Create or update watcher
+      // Mark existing watchers as discovered via Nostr
       const existing = this.watchers.get(state.npub)
-      if (existing) {
-        // Already watching, check if we should mark as dual discovery
-        if (existing.discoverySource === 'moq') {
-          console.log('[MoQ Subscriber] Participant now discovered via both sources:', state.npub)
-          existing.markDualDiscovery()
-          this.updateParticipantsList()
-        }
-      } else {
-        // Create new watcher
-        console.log('[MoQ Subscriber] User joined voice (Nostr):', state.npub)
-        this.createWatcher(connection, state.npub, 'nostr')
+      if (existing && existing.discoverySource === 'moq') {
+        console.log('[MoQ Subscriber] Participant now discovered via both sources:', state.npub)
+        existing.markDualDiscovery()
+        this.updateParticipantsList()
       }
+      // Note: We can't create watchers here because we don't have session ID
+      // Watchers are created from MoQ announcements which include the session ID
     })
 
     console.log('[MoQ Subscriber] Active participants (Nostr):', activeNpubs.size, 'Total watchers:', this.watchers.size)
@@ -357,10 +382,10 @@ export class AudioSubscriber {
   /**
    * Create watcher for a participant
    */
-  private createWatcher(connection: Moq.Connection.Established, npub: string, source: 'nostr' | 'moq' = 'nostr'): void {
+  private createWatcher(connection: Moq.Connection.Established, npub: string, sessionId: string, source: 'nostr' | 'moq' = 'nostr'): void {
     try {
-      console.log('[MoQ Subscriber] Creating watcher for:', npub, 'via', source)
-      const watcher = new ParticipantWatcher(connection, npub, source)
+      console.log('[MoQ Subscriber] Creating watcher for:', npub, 'session:', sessionId, 'via', source)
+      const watcher = new ParticipantWatcher(this.connection.established, npub, sessionId, source)
 
       // Subscribe to speaking changes
       watcher.speaking.subscribe(() => {

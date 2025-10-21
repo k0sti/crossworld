@@ -4,8 +4,6 @@ use noise::{NoiseFn, Perlin, Fbm};
 
 pub struct CubeGround {
     octree: Octree,
-    noise: Perlin,
-    fbm: Fbm<Perlin>,
 }
 
 impl CubeGround {
@@ -22,8 +20,6 @@ impl CubeGround {
 
         Self {
             octree: Octree::new(root),
-            noise,
-            fbm,
         }
     }
 
