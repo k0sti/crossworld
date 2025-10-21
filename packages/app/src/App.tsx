@@ -345,6 +345,17 @@ function App() {
     }
   }
 
+  const handleRestart = () => {
+    // Reset avatar config to empty state
+    setAvatarConfig({
+      avatarType: 'vox',
+      avatarId: undefined,
+      avatarUrl: undefined,
+      avatarData: undefined,
+    })
+    setTeleportAnimationType('fade')
+  }
+
   const handleViewProfile = (profilePubkey: string) => {
     setViewedProfilePubkey(profilePubkey)
     setActivePanelType('profile')
@@ -474,6 +485,8 @@ function App() {
             onClose={() => setActivePanelType(null)}
             local_user={!viewedProfilePubkey || viewedProfilePubkey === pubkey}
             onLogout={handleLogout}
+            onOpenAvatarSelection={() => setActivePanelType('avatar')}
+            onRestart={handleRestart}
           />
         )}
         {activePanelType === 'avatar' && (
