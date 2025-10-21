@@ -58,7 +58,6 @@ export class AudioPublisher {
 
     console.log('[MoQ Publisher] Disabling microphone')
     this.enabledSignal.set(false)
-    this.npubSignal.set(undefined)
   }
 
   /**
@@ -67,6 +66,7 @@ export class AudioPublisher {
    */
   #runMicrophone(effect: Effect): void {
     const enabled = effect.get(this.enabledSignal)
+
     if (!enabled) {
       this.microphoneSource.set(undefined)
       this.micEnabled.set(false)
@@ -116,7 +116,7 @@ export class AudioPublisher {
 
         // Cleanup: stop track when effect is cancelled
         effect.cleanup(() => {
-          console.log('[MoQ Publisher] Stopping microphone track')
+          console.log('[MoQ Publisher] Effect cleanup - stopping microphone track')
           track.stop()
         })
       } catch (err) {
@@ -130,8 +130,12 @@ export class AudioPublisher {
   /**
    * Create and manage broadcast
    * Ref: ref/moq/js/hang/src/publish/broadcast.ts
+   * Path structure: crossworld/voice/{d-tag}/{npub}/{session}
    */
   #runBroadcast(effect: Effect): void {
+    const enabled = effect.get(this.enabledSignal)
+    if (!enabled) return
+
     const conn = effect.get(this.connection.established)
     if (!conn) return
 
@@ -141,12 +145,16 @@ export class AudioPublisher {
     const audioSource = effect.get(this.microphoneSource)
     if (!audioSource) return
 
-    // Create broadcast path
-    const path = Moq.Path.from(`crossworld/voice/${LIVE_CHAT_D_TAG}/${npub}`)
+    // Generate random session ID (allows multiple tabs/connections)
+    const sessionId = Math.random().toString(36).slice(2, 8)
+
+    // Create broadcast path: crossworld/voice/{d-tag}/{npub}/{session}
+    const path = Moq.Path.from('crossworld', 'voice', LIVE_CHAT_D_TAG, npub, sessionId)
     console.log('[MoQ Publisher] Creating broadcast:', {
       path: String(path),
       npub,
       dTag: LIVE_CHAT_D_TAG,
+      sessionId,
     })
 
     // Create broadcast (ref: ref/moq/js/hang/src/publish/element.ts:180-199)

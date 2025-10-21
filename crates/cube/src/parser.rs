@@ -37,9 +37,7 @@ enum Token {
     Octant(Octant),       // a-h
     Axis(char),           // x, y, z
     Integer(i32),
-    Whitespace,
     Newline,
-    Comment,
 }
 
 struct Lexer {
