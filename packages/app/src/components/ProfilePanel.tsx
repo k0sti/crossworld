@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
-import { Box, VStack, Text, Avatar, HStack, Divider, Flex, IconButton, Tooltip, useToast, SimpleGrid } from '@chakra-ui/react'
-import { FiUser, FiCopy, FiExternalLink } from 'react-icons/fi'
+import { Box, VStack, Text, Avatar, HStack, Divider, Flex, IconButton, Tooltip, useToast, SimpleGrid, Button } from '@chakra-ui/react'
+import { FiUser, FiCopy, FiExternalLink, FiLogOut, FiRefreshCw } from 'react-icons/fi'
 import { npubEncode } from 'nostr-tools/nip19'
 import { Relay } from 'applesauce-relay'
 import { pubkey_to_emoji } from '@workspace/wasm'
@@ -23,9 +23,13 @@ interface RelayConfig {
 interface ProfilePanelProps {
   pubkey: string | null
   onClose?: () => void
+  local_user?: boolean
+  onLogout?: () => void
+  onOpenAvatarSelection?: () => void
+  onRestart?: () => void
 }
 
-export function ProfilePanel({ pubkey, onClose }: ProfilePanelProps) {
+export function ProfilePanel({ pubkey, onClose, local_user = false, onLogout, onOpenAvatarSelection, onRestart }: ProfilePanelProps) {
   const [profile, setProfile] = useState<ProfileMetadata | null>(null)
   const [enabledRelays, setEnabledRelays] = useState<string[]>([])
   const toast = useToast()
@@ -163,6 +167,43 @@ export function ProfilePanel({ pubkey, onClose }: ProfilePanelProps) {
 
   const displayName = profile?.display_name || profile?.name || 'Anonymous'
 
+  const handleLogout = () => {
+    if (onLogout) {
+      onLogout()
+    }
+    if (onClose) {
+      onClose()
+    }
+  }
+
+  const handleRestart = () => {
+    // Clear avatar settings from localStorage
+    localStorage.removeItem('avatarSelection')
+
+    toast({
+      title: 'Avatar settings cleared',
+      description: 'Opening avatar selection...',
+      status: 'info',
+      duration: 2000,
+      isClosable: true,
+    })
+
+    // Close profile panel
+    if (onClose) {
+      onClose()
+    }
+
+    // Call restart handler to reset avatar config
+    if (onRestart) {
+      onRestart()
+    }
+
+    // Open avatar selection
+    if (onOpenAvatarSelection) {
+      onOpenAvatarSelection()
+    }
+  }
+
   return (
     <Box
       ref={panelRef}
@@ -264,6 +305,39 @@ export function ProfilePanel({ pubkey, onClose }: ProfilePanelProps) {
                 </>
               )}
             </VStack>
+
+            {local_user && (
+              <>
+                <Divider borderColor="whiteAlpha.200" />
+                <VStack align="stretch" gap={2}>
+                  <Text fontSize="sm" color="whiteAlpha.600" fontWeight="semibold">
+                    Profile Settings
+                  </Text>
+                  <HStack gap={2}>
+                    <Button
+                      leftIcon={<FiRefreshCw />}
+                      onClick={handleRestart}
+                      size="sm"
+                      colorScheme="blue"
+                      variant="outline"
+                      flex={1}
+                    >
+                      Restart
+                    </Button>
+                    <Button
+                      leftIcon={<FiLogOut />}
+                      onClick={handleLogout}
+                      size="sm"
+                      colorScheme="red"
+                      variant="outline"
+                      flex={1}
+                    >
+                      Logout
+                    </Button>
+                  </HStack>
+                </VStack>
+              </>
+            )}
           </>
         ) : (
           <Text fontSize="sm" color="whiteAlpha.700" textAlign="center" py={8}>

@@ -54,6 +54,12 @@ futures = "0.3"
 # Voxel model loading
 dot_vox = "5.1"
 
+# Cube model for procedural generation
+crossworld-cube = { path = "../cube" }
+
+# Noise functions for terrain generation
+noise = "0.9"
+
 # Getrandom (required for WASM)
 getrandom = { version = "0.3", features = ["wasm_js"] }
 
