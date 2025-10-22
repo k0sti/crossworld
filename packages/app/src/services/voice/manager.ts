@@ -18,7 +18,6 @@ export class VoiceManager {
 
   // State
   private currentNpub: string | null = null
-  private currentRoom: string | null = null
 
   // Output signals
   public readonly status: Signal<VoiceStatus> = new Signal('disconnected')
@@ -73,15 +72,14 @@ export class VoiceManager {
   /**
    * Connect to voice chat
    */
-  async connect(streamingUrl: string, npub: string, room?: string): Promise<void> {
+  async connect(streamingUrl: string, npub: string): Promise<void> {
     if (this.status.peek() === 'connected') {
       console.log('Already connected to voice')
       return
     }
 
-    console.log('Connecting to voice chat...', { room: room || 'default' })
+    console.log('Connecting to voice chat...')
     this.currentNpub = npub
-    this.currentRoom = room || null
     this.error.set(null)
 
     try {
@@ -110,10 +108,8 @@ export class VoiceManager {
       // Set own npub for subscriber
       this.subscriber.setOwnNpub(npub)
 
-      // Set room if specified
-      if (room) {
-        this.subscriber.setRoom(room)
-      }
+      // Room filtering would be done in subscriber if needed
+      // Currently room is encoded in the path during broadcast
 
       // Start listening for participants
       await this.subscriber.startListening()
@@ -150,7 +146,6 @@ export class VoiceManager {
 
       this.error.set(null)
       this.currentNpub = null
-      this.currentRoom = null
 
       console.log('Voice chat disconnected')
     } catch (err) {
@@ -169,23 +164,10 @@ export class VoiceManager {
     if (this.publisher.isMicEnabled()) {
       await this.publisher.disableMic()
     } else {
-      await this.publisher.enableMic(this.currentNpub, this.currentRoom || undefined)
+      await this.publisher.enableMic(this.currentNpub)
     }
   }
 
-  /**
-   * Switch to a different room
-   */
-  setRoom(room: string): void {
-    if (!this.currentNpub) {
-      throw new Error('Not connected to voice')
-    }
-
-    console.log('Switching voice chat to room:', room)
-    this.currentRoom = room
-    this.publisher.setRoom(room)
-    this.subscriber.setRoom(room)
-  }
 
   /**
    * Set volume for a participant (0.0 - 1.0)
