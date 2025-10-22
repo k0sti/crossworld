@@ -1,6 +1,7 @@
 use crate::GeometryData;
-use crossworld_cube::{Octant, Octree, OctreeNode};
+use crossworld_cube::{Cube, Octree};
 use noise::{Fbm, NoiseFn, Perlin};
+use std::rc::Rc;
 
 pub struct CubeGround {
     octree: Octree,
@@ -23,54 +24,58 @@ impl CubeGround {
         }
     }
 
-    fn build_ground_octree(noise: &Perlin, fbm: &Fbm<Perlin>) -> OctreeNode {
+    fn build_ground_octree(noise: &Perlin, fbm: &Fbm<Perlin>) -> Cube<i32> {
         // Build 8 children at level 1 (each represents 8x8x8 space)
-        let level1_children = Octant::all().map(|octant| Self::build_level2(octant, noise, fbm));
+        let level1_children: [Rc<Cube<i32>>; 8] = std::array::from_fn(|i| {
+            Rc::new(Self::build_level2(i, noise, fbm))
+        });
 
-        OctreeNode::new_children(level1_children)
+        Cube::cubes(level1_children)
     }
 
-    fn build_level2(parent: Octant, noise: &Perlin, fbm: &Fbm<Perlin>) -> OctreeNode {
+    fn build_level2(parent_idx: usize, noise: &Perlin, fbm: &Fbm<Perlin>) -> Cube<i32> {
         // Build 8 children at level 2 (each represents 4x4x4 space)
-        let level2_children =
-            Octant::all().map(|octant| Self::build_level3(parent, octant, noise, fbm));
+        let level2_children: [Rc<Cube<i32>>; 8] = std::array::from_fn(|i| {
+            Rc::new(Self::build_level3(parent_idx, i, noise, fbm))
+        });
 
-        OctreeNode::new_children(level2_children)
+        Cube::cubes(level2_children)
     }
 
     fn build_level3(
-        parent1: Octant,
-        parent2: Octant,
+        parent1_idx: usize,
+        parent2_idx: usize,
         noise: &Perlin,
         fbm: &Fbm<Perlin>,
-    ) -> OctreeNode {
+    ) -> Cube<i32> {
         // Build 8 children at level 3 (each represents 2x2x2 space)
-        let level3_children =
-            Octant::all().map(|octant| Self::build_level4(parent1, parent2, octant, noise, fbm));
+        let level3_children: [Rc<Cube<i32>>; 8] = std::array::from_fn(|i| {
+            Rc::new(Self::build_level4(parent1_idx, parent2_idx, i, noise, fbm))
+        });
 
-        OctreeNode::new_children(level3_children)
+        Cube::cubes(level3_children)
     }
 
     fn build_level4(
-        parent1: Octant,
-        parent2: Octant,
-        parent3: Octant,
+        parent1_idx: usize,
+        parent2_idx: usize,
+        parent3_idx: usize,
         noise: &Perlin,
         fbm: &Fbm<Perlin>,
-    ) -> OctreeNode {
+    ) -> Cube<i32> {
         // Build 8 children at level 4 (each represents 1x1x1 voxel)
         // Calculate position in 16x16x16 grid (0-15 range)
-        let (p1x, p1y, p1z) = parent1.offset();
-        let (p2x, p2y, p2z) = parent2.offset();
-        let (p3x, p3y, p3z) = parent3.offset();
+        let (p1x, p1y, p1z) = octant_offset(parent1_idx);
+        let (p2x, p2y, p2z) = octant_offset(parent2_idx);
+        let (p3x, p3y, p3z) = octant_offset(parent3_idx);
 
         // Position within 16x16x16 grid
         let base_x = ((p1x * 16.0) + (p2x * 8.0) + (p3x * 4.0)) as i32;
         let base_y = ((p1y * 16.0) + (p2y * 8.0) + (p3y * 4.0)) as i32;
         let base_z = ((p1z * 16.0) + (p2z * 8.0) + (p3z * 4.0)) as i32;
 
-        let level4_children = Octant::all().map(|octant| {
-            let (ox, oy, oz) = octant.offset();
+        let level4_children: [Rc<Cube<i32>>; 8] = std::array::from_fn(|octant_idx| {
+            let (ox, oy, oz) = octant_offset(octant_idx);
             let voxel_x = base_x + (ox * 2.0) as i32;
             let voxel_y = base_y + (oy * 2.0) as i32;
             let voxel_z = base_z + (oz * 2.0) as i32;
@@ -79,10 +84,10 @@ impl CubeGround {
             let world_y = voxel_y - 8;
 
             let value = Self::get_voxel_value(voxel_x, world_y, voxel_z, noise, fbm);
-            OctreeNode::Value(value)
+            Rc::new(Cube::Solid(value))
         });
 
-        OctreeNode::new_children(level4_children)
+        Cube::cubes(level4_children)
     }
 
     fn get_voxel_value(x: i32, y: i32, z: i32, noise: &Perlin, fbm: &Fbm<Perlin>) -> i32 {
@@ -161,4 +166,13 @@ impl Default for CubeGround {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Get octant offset for given index (0-7)
+/// Same logic as the removed Octant enum
+fn octant_offset(index: usize) -> (f32, f32, f32) {
+    let x = if index & 0b100 != 0 { 0.5 } else { 0.0 };
+    let y = if index & 0b010 != 0 { 0.5 } else { 0.0 };
+    let z = if index & 0b001 != 0 { 0.5 } else { 0.0 };
+    (x, y, z)
 }

@@ -244,10 +244,10 @@ fn add_cube(mesh: &mut MeshData, x: f32, y: f32, z: f32, size: f32, color: [f32;
         mesh.indices.push(base_index + indices[2]);
         mesh.indices.push(base_index + indices[3]);
 
-        // Add normals for all 4 vertices of this face (flipped to point outward)
-        let flipped_normal = [-normal[0], -normal[1], -normal[2]];
-        for _ in 0..4 {
-            mesh.normals.extend_from_slice(&flipped_normal);
+        // Add normals for the 6 triangle vertices (3 + 3)
+        // Normals already point outward, no need to flip
+        for _ in 0..6 {
+            mesh.normals.extend_from_slice(normal);
         }
     }
 }
