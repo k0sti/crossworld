@@ -10,6 +10,7 @@ target/
 dist/
 packages/wasm-world/
 packages/wasm-cube/
+test_output/
 
 # Environment
 .env
