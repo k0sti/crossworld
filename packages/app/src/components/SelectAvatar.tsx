@@ -1,9 +1,4 @@
 import {
-  Modal,
-  ModalOverlay,
-  ModalContent,
-  ModalHeader,
-  ModalBody,
   VStack,
   HStack,
   Button,
@@ -29,6 +24,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { ReadyPlayerMeService } from '../services/ready-player-me';
 import type { TeleportAnimationType } from '../renderer/teleport-animation';
 import { ENABLE_AVATAR_COLOR_SELECTION } from '../constants/features';
+import { ResponsivePanel } from './ResponsivePanel';
 
 export interface AvatarSelection {
   avatarType: 'vox' | 'glb' | 'csm';
@@ -559,20 +555,36 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
   );
 
   return (
-    <Modal
+    <ResponsivePanel
       isOpen={isOpen}
-      onClose={hasPreviousSelection ? onClose : () => {}}
-      size="xl"
-      closeOnOverlayClick={hasPreviousSelection}
+      onClose={hasPreviousSelection ? onClose : undefined}
+      closeOnClickOutside={hasPreviousSelection}
       closeOnEsc={hasPreviousSelection}
+      forceFullscreen={true}
+      padding={6}
+      zIndex={2000}
+      title="Select Avatar"
+      actions={
+        <HStack spacing={3}>
+          {hasPreviousSelection && (
+            <Button flex={1} onClick={onClose} variant="ghost" color="white">
+              Cancel
+            </Button>
+          )}
+          <Button flex={1} colorScheme="blue" onClick={handleSave}>
+            Save
+          </Button>
+        </HStack>
+      }
     >
-      <ModalOverlay />
-      <ModalContent bg="rgba(20, 20, 30, 0.95)" backdropFilter="blur(10px)">
-        <ModalHeader color="white">Select Avatar</ModalHeader>
-        <ModalBody pb={6}>
-          <VStack align="stretch" spacing={4}>
-            {/* Preview Canvas with Cycle Buttons */}
-            <Box position="relative">
+      <Box
+        maxW="900px"
+        mx="auto"
+        w="full"
+      >
+        <VStack align="stretch" spacing={4}>
+          {/* Preview Canvas with Cycle Buttons */}
+          <Box position="relative">
               <Box
                 ref={previewContainerRef}
                 display="flex"
@@ -632,18 +644,6 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
                 </>
               )}
             </Box>
-
-            {/* Action Buttons - Moved here under preview */}
-            <HStack spacing={3}>
-              {hasPreviousSelection && (
-                <Button flex={1} onClick={onClose} variant="ghost" color="white">
-                  Cancel
-                </Button>
-              )}
-              <Button flex={1} colorScheme="blue" onClick={handleSave}>
-                Save
-              </Button>
-            </HStack>
 
             {/* More Settings Toggle */}
             <Button
@@ -886,10 +886,9 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
             </VStack>
               </VStack>
             </Collapse>
-          </VStack>
-        </ModalBody>
-      </ModalContent>
-    </Modal>
+        </VStack>
+      </Box>
+    </ResponsivePanel>
   );
 }
 

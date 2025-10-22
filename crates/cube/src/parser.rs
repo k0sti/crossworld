@@ -1,380 +1,301 @@
-use crate::octree::{Octant, Octree, OctreeBuilder, OctreeNode};
+use crate::octree::{octant_char_to_index, Axis, Cube, Octree};
+use nom::{
+    branch::alt,
+    bytes::complete::take_while,
+    character::complete::{char, i32 as nom_i32, multispace0, one_of},
+    combinator::{map, opt, value},
+    multi::many0,
+    sequence::{delimited, preceded, tuple},
+    IResult,
+};
 use std::collections::HashMap;
+use std::rc::Rc;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum CsmError {
-    #[error("Unexpected token at position {pos}: {msg}")]
-    UnexpectedToken { pos: usize, msg: String },
-
-    #[error("Invalid octant character: {0}")]
-    InvalidOctant(char),
-
-    #[error("Expected {expected} children in array, got {actual}")]
-    InvalidChildCount { expected: usize, actual: usize },
+    #[error("Parse error: {0}")]
+    ParseError(String),
 
     #[error("Path not found: {0}")]
     PathNotFound(String),
 
-    #[error("Invalid syntax: {0}")]
-    InvalidSyntax(String),
+    #[error("Invalid octant character: {0}")]
+    InvalidOctant(char),
 
-    #[error("Parse error: {0}")]
-    ParseError(String),
+    #[error("Expected {expected} children, got {actual}")]
+    InvalidChildCount { expected: usize, actual: usize },
 }
 
 type Result<T> = std::result::Result<T, CsmError>;
 
-/// Token types for the lexer
-#[derive(Debug, Clone, PartialEq)]
-enum Token {
-    Greater,        // >
-    LeftBracket,    // [
-    RightBracket,   // ]
-    LeftAngle,      // <
-    Slash,          // /
-    Pipe,           // |
-    Octant(Octant), // a-h
-    Axis(char),     // x, y, z
-    Integer(i32),
-    Newline,
+// Whitespace and comments
+fn comment(input: &str) -> IResult<&str, ()> {
+    value(
+        (),
+        tuple((char('#'), take_while(|c| c != '\n'), opt(char('\n')))),
+    )(input)
 }
 
-struct Lexer {
-    input: Vec<char>,
-    pos: usize,
-}
-
-impl Lexer {
-    fn new(input: &str) -> Self {
-        Lexer {
-            input: input.chars().collect(),
-            pos: 0,
-        }
+fn ws_or_comment(input: &str) -> IResult<&str, ()> {
+    let (input, _) = multispace0(input)?;
+    let mut remaining = input;
+    while let Ok((input, _)) = comment(remaining) {
+        let (input, _) = multispace0(input)?;
+        remaining = input;
     }
+    Ok((remaining, ()))
+}
 
-    fn peek(&self) -> Option<char> {
-        if self.pos < self.input.len() {
-            Some(self.input[self.pos])
+// Path parsing (octant chars a-h)
+fn octant(input: &str) -> IResult<&str, usize> {
+    map(one_of("abcdefgh"), |c| octant_char_to_index(c).unwrap())(input)
+}
+
+fn path(input: &str) -> IResult<&str, Vec<usize>> {
+    many0(octant)(input)
+}
+
+// Axis parsing (x, y, z)
+fn axis(input: &str) -> IResult<&str, Axis> {
+    map(one_of("xyzXYZ"), |c| Axis::from_char(c).unwrap())(input)
+}
+
+// Swap parsing (^xyz)
+fn swap_axes(input: &str) -> IResult<&str, Vec<Axis>> {
+    preceded(char('^'), many0(axis))(input)
+}
+
+// Mirror parsing (/xyz)
+fn mirror_axes(input: &str) -> IResult<&str, Vec<Axis>> {
+    preceded(char('/'), many0(axis))(input)
+}
+
+// Cube value parsing
+fn cube_value(input: &str) -> IResult<&str, Cube<i32>> {
+    map(nom_i32, Cube::solid)(input)
+}
+
+// Reference parsing (<path>)
+fn cube_reference<'a>(
+    input: &'a str,
+    prev_epoch: &Option<HashMap<Vec<usize>, Rc<Cube<i32>>>>,
+) -> IResult<&'a str, Cube<i32>> {
+    let (input, _) = char('<')(input)?;
+    let (input, p) = path(input)?;
+
+    if let Some(prev) = prev_epoch {
+        if let Some(cube) = prev.get(&p) {
+            Ok((input, (**cube).clone()))
         } else {
-            None
+            Err(nom::Err::Failure(nom::error::Error::new(
+                input,
+                nom::error::ErrorKind::Verify,
+            )))
+        }
+    } else {
+        Err(nom::Err::Failure(nom::error::Error::new(
+            input,
+            nom::error::ErrorKind::Verify,
+        )))
+    }
+}
+
+// Array parsing [...]
+fn cube_array<'a>(
+    input: &'a str,
+    prev_epoch: &Option<HashMap<Vec<usize>, Rc<Cube<i32>>>>,
+) -> IResult<&'a str, Cube<i32>> {
+    let (input, _) = char('[')(input)?;
+    let (input, _) = ws_or_comment(input)?;
+
+    let mut children = Vec::new();
+    let mut remaining = input;
+
+    for _ in 0..8 {
+        let (input, _) = ws_or_comment(remaining)?;
+        let (input, child) = parse_cube_inner(input, prev_epoch)?;
+        children.push(Rc::new(child));
+        remaining = input;
+    }
+
+    let (input, _) = ws_or_comment(remaining)?;
+    let (input, _) = char(']')(input)?;
+
+    if children.len() == 8 {
+        Ok((input, Cube::cubes(children.try_into().unwrap())))
+    } else {
+        Err(nom::Err::Failure(nom::error::Error::new(
+            input,
+            nom::error::ErrorKind::Count,
+        )))
+    }
+}
+
+// Swap application (^xyz <cube>)
+fn cube_swap<'a>(
+    input: &'a str,
+    prev_epoch: &Option<HashMap<Vec<usize>, Rc<Cube<i32>>>>,
+) -> IResult<&'a str, Cube<i32>> {
+    let (input, axes) = swap_axes(input)?;
+    let (input, _) = ws_or_comment(input)?;
+    let (input, cube) = parse_cube_inner(input, prev_epoch)?;
+    Ok((input, cube.apply_swap(&axes)))
+}
+
+// Mirror application (/xyz <cube>)
+fn cube_mirror<'a>(
+    input: &'a str,
+    prev_epoch: &Option<HashMap<Vec<usize>, Rc<Cube<i32>>>>,
+) -> IResult<&'a str, Cube<i32>> {
+    let (input, axes) = mirror_axes(input)?;
+    let (input, _) = ws_or_comment(input)?;
+    let (input, cube) = parse_cube_inner(input, prev_epoch)?;
+    Ok((input, cube.apply_mirror(&axes)))
+}
+
+// Main cube parser
+fn parse_cube_inner<'a>(
+    input: &'a str,
+    prev_epoch: &Option<HashMap<Vec<usize>, Rc<Cube<i32>>>>,
+) -> IResult<&'a str, Cube<i32>> {
+    preceded(
+        ws_or_comment,
+        alt((
+            |i| cube_swap(i, prev_epoch),
+            |i| cube_mirror(i, prev_epoch),
+            cube_value,
+            |i| cube_array(i, prev_epoch),
+            |i| cube_reference(i, prev_epoch),
+        )),
+    )(input)
+}
+
+// Statement parsing (>path cube)
+fn statement<'a>(
+    input: &'a str,
+    prev_epoch: &Option<HashMap<Vec<usize>, Rc<Cube<i32>>>>,
+) -> IResult<&'a str, (Vec<usize>, Cube<i32>)> {
+    let (input, _) = ws_or_comment(input)?;
+    let (input, _) = char('>')(input)?;
+    let (input, p) = path(input)?;
+    let (input, _) = ws_or_comment(input)?;
+    let (input, cube) = parse_cube_inner(input, prev_epoch)?;
+    Ok((input, (p, cube)))
+}
+
+// Epoch separator (|)
+fn epoch_separator(input: &str) -> IResult<&str, ()> {
+    value((), delimited(ws_or_comment, char('|'), ws_or_comment))(input)
+}
+
+// Epoch parsing
+fn epoch<'a>(
+    input: &'a str,
+    prev_epoch: &Option<HashMap<Vec<usize>, Rc<Cube<i32>>>>,
+) -> IResult<&'a str, HashMap<Vec<usize>, Rc<Cube<i32>>>> {
+    let mut assignments = HashMap::new();
+    let mut remaining = input;
+
+    loop {
+        let (input, _) = ws_or_comment(remaining)?;
+
+        // Check for epoch separator or end
+        if input.is_empty() || input.starts_with('|') {
+            remaining = input;
+            break;
+        }
+
+        // Try to parse statement
+        match statement(input, prev_epoch) {
+            Ok((input, (p, cube))) => {
+                assignments.insert(p, Rc::new(cube));
+                remaining = input;
+            }
+            Err(_) => break,
         }
     }
 
-    fn advance(&mut self) -> Option<char> {
-        if self.pos < self.input.len() {
-            let ch = self.input[self.pos];
-            self.pos += 1;
-            Some(ch)
+    Ok((remaining, assignments))
+}
+
+// Full model parser
+fn parse_model(input: &str) -> IResult<&str, Octree> {
+    let mut prev_epoch: Option<HashMap<Vec<usize>, Rc<Cube<i32>>>> = None;
+    let mut current_epoch = HashMap::new();
+    let mut remaining = input;
+
+    loop {
+        let (input, _) = ws_or_comment(remaining)?;
+
+        if input.is_empty() {
+            break;
+        }
+
+        // Parse epoch
+        let (input, assignments) = epoch(input, &prev_epoch)?;
+        if !assignments.is_empty() {
+            current_epoch = assignments.clone();
+            prev_epoch = Some(assignments);
+        }
+
+        // Check for epoch separator
+        if let Ok((input, _)) = epoch_separator(input) {
+            remaining = input;
         } else {
-            None
+            remaining = input;
+            break;
         }
     }
 
-    fn skip_whitespace(&mut self) {
-        while let Some(ch) = self.peek() {
-            if ch.is_whitespace() && ch != '\n' {
-                self.advance();
-            } else {
-                break;
-            }
-        }
-    }
+    // Build final cube from root assignment or empty
+    let root = if let Some(cube) = current_epoch.get(&vec![]) {
+        (**cube).clone()
+    } else {
+        // Build from partial assignments
+        build_cube_from_assignments(&current_epoch, &[])
+    };
 
-    fn skip_comment(&mut self) {
-        if self.peek() == Some('#') {
-            while let Some(ch) = self.advance() {
-                if ch == '\n' {
-                    break;
-                }
-            }
-        }
-    }
-
-    fn next_token(&mut self) -> Option<Token> {
-        loop {
-            self.skip_whitespace();
-
-            if self.peek() == Some('#') {
-                self.skip_comment();
-                continue;
-            }
-
-            let ch = self.peek()?;
-
-            return Some(match ch {
-                '\n' => {
-                    self.advance();
-                    Token::Newline
-                }
-                '>' => {
-                    self.advance();
-                    Token::Greater
-                }
-                '[' => {
-                    self.advance();
-                    Token::LeftBracket
-                }
-                ']' => {
-                    self.advance();
-                    Token::RightBracket
-                }
-                '<' => {
-                    self.advance();
-                    Token::LeftAngle
-                }
-                '/' => {
-                    self.advance();
-                    Token::Slash
-                }
-                '|' => {
-                    self.advance();
-                    Token::Pipe
-                }
-                'a' | 'b' | 'c' | 'd' | 'e' | 'f' | 'g' | 'h' => {
-                    self.advance();
-                    Token::Octant(Octant::from_char(ch).unwrap())
-                }
-                'x' | 'y' | 'z' => {
-                    self.advance();
-                    Token::Axis(ch)
-                }
-                '-' | '0'..='9' => {
-                    let mut num_str = String::new();
-                    if ch == '-' {
-                        num_str.push(ch);
-                        self.advance();
-                    }
-                    while let Some(digit) = self.peek() {
-                        if digit.is_ascii_digit() {
-                            num_str.push(digit);
-                            self.advance();
-                        } else {
-                            break;
-                        }
-                    }
-                    let num = num_str.parse::<i32>().ok()?;
-                    Token::Integer(num)
-                }
-                '=' => {
-                    // Skip equals sign
-                    self.advance();
-                    continue;
-                }
-                _ => {
-                    self.advance();
-                    continue;
-                }
-            });
-        }
-    }
+    Ok((remaining, Octree::new(root)))
 }
 
-/// Parser for CSM (Cube Script Model)
-struct Parser {
-    lexer: Lexer,
-    current_token: Option<Token>,
-}
-
-impl Parser {
-    fn new(input: &str) -> Self {
-        let mut lexer = Lexer::new(input);
-        let current_token = lexer.next_token();
-        Parser {
-            lexer,
-            current_token,
-        }
+// Build cube from partial assignments
+fn build_cube_from_assignments(
+    assignments: &HashMap<Vec<usize>, Rc<Cube<i32>>>,
+    prefix: &[usize],
+) -> Cube<i32> {
+    // Check for direct assignment
+    if let Some(cube) = assignments.get(prefix) {
+        return (**cube).clone();
     }
 
-    fn advance(&mut self) {
-        self.current_token = self.lexer.next_token();
+    // Check if any children exist
+    let has_children = assignments
+        .keys()
+        .any(|path| path.len() > prefix.len() && path[..prefix.len()] == *prefix);
+
+    if !has_children {
+        return Cube::Solid(0);
     }
 
-    fn skip_newlines(&mut self) {
-        while self.current_token == Some(Token::Newline) {
-            self.advance();
-        }
-    }
+    // Build children
+    let children: Vec<Rc<Cube<i32>>> = (0..8)
+        .map(|i| {
+            let mut child_prefix = prefix.to_vec();
+            child_prefix.push(i);
+            Rc::new(build_cube_from_assignments(assignments, &child_prefix))
+        })
+        .collect();
 
-    fn parse_path(&mut self) -> Result<Vec<Octant>> {
-        let mut path = Vec::new();
-        while let Some(Token::Octant(octant)) = self.current_token {
-            path.push(octant);
-            self.advance();
-        }
-        Ok(path)
-    }
-
-    fn parse_transform(&mut self) -> Result<Vec<char>> {
-        let mut axes = Vec::new();
-        if self.current_token == Some(Token::Slash) {
-            self.advance();
-            while let Some(Token::Axis(axis)) = self.current_token {
-                axes.push(axis);
-                self.advance();
-            }
-        }
-        Ok(axes)
-    }
-
-    fn parse_cube(
-        &mut self,
-        prev_epoch: &Option<HashMap<Vec<Octant>, OctreeNode>>,
-    ) -> Result<OctreeNode> {
-        self.skip_newlines();
-
-        match &self.current_token {
-            Some(Token::Integer(value)) => {
-                let value = *value;
-                self.advance();
-                Ok(OctreeNode::Value(value))
-            }
-            Some(Token::LeftBracket) => {
-                self.advance();
-                let mut children = Vec::new();
-                for _ in 0..8 {
-                    self.skip_newlines();
-                    let child = self.parse_cube(prev_epoch)?;
-                    children.push(child);
-                    self.skip_newlines();
-                }
-                if self.current_token != Some(Token::RightBracket) {
-                    return Err(CsmError::InvalidSyntax(
-                        "Expected ] after 8 children".to_string(),
-                    ));
-                }
-                self.advance();
-
-                let len = children.len();
-                if len != 8 {
-                    return Err(CsmError::InvalidChildCount {
-                        expected: 8,
-                        actual: len,
-                    });
-                }
-
-                Ok(OctreeNode::new_children(children.try_into().map_err(
-                    |_| CsmError::InvalidChildCount {
-                        expected: 8,
-                        actual: len,
-                    },
-                )?))
-            }
-            Some(Token::LeftAngle) => {
-                self.advance();
-                let path = self.parse_path()?;
-
-                // Look up the node from previous epoch
-                if let Some(prev) = prev_epoch {
-                    if let Some(node) = prev.get(&path) {
-                        Ok(node.clone())
-                    } else {
-                        Err(CsmError::PathNotFound(format!(
-                            "Path not found: {}",
-                            path.iter().map(|o| o.to_char()).collect::<String>()
-                        )))
-                    }
-                } else {
-                    Err(CsmError::ParseError(
-                        "Reference used but no previous epoch".to_string(),
-                    ))
-                }
-            }
-            Some(Token::Slash) => {
-                let axes = self.parse_transform()?;
-                let cube = self.parse_cube(prev_epoch)?;
-                Ok(cube.apply_transform(&axes))
-            }
-            _ => Err(CsmError::InvalidSyntax(format!(
-                "Expected cube, got {:?}",
-                self.current_token
-            ))),
-        }
-    }
-
-    fn parse_statement(
-        &mut self,
-        prev_epoch: &Option<HashMap<Vec<Octant>, OctreeNode>>,
-    ) -> Result<(Vec<Octant>, OctreeNode)> {
-        self.skip_newlines();
-
-        if self.current_token != Some(Token::Greater) {
-            return Err(CsmError::InvalidSyntax(
-                "Expected > at start of statement".to_string(),
-            ));
-        }
-        self.advance();
-
-        let path = self.parse_path()?;
-        let cube = self.parse_cube(prev_epoch)?;
-
-        Ok((path, cube))
-    }
-
-    fn parse_epoch(
-        &mut self,
-        prev_epoch: &Option<HashMap<Vec<Octant>, OctreeNode>>,
-    ) -> Result<HashMap<Vec<Octant>, OctreeNode>> {
-        let mut assignments = HashMap::new();
-
-        loop {
-            self.skip_newlines();
-
-            match &self.current_token {
-                Some(Token::Greater) => {
-                    let (path, cube) = self.parse_statement(prev_epoch)?;
-                    assignments.insert(path, cube);
-                }
-                Some(Token::Pipe) => {
-                    self.advance();
-                    break;
-                }
-                None => break,
-                _ => {
-                    self.advance();
-                }
-            }
-        }
-
-        Ok(assignments)
-    }
-
-    fn parse_model(&mut self) -> Result<Octree> {
-        let mut prev_epoch: Option<HashMap<Vec<Octant>, OctreeNode>> = None;
-        let mut current_epoch = HashMap::new();
-
-        loop {
-            self.skip_newlines();
-
-            if self.current_token.is_none() {
-                break;
-            }
-
-            let epoch = self.parse_epoch(&prev_epoch)?;
-            if !epoch.is_empty() {
-                current_epoch = epoch.clone();
-                prev_epoch = Some(epoch);
-            }
-
-            if self.current_token.is_none() {
-                break;
-            }
-        }
-
-        // Build octree from final epoch
-        let mut builder = OctreeBuilder::new();
-        for (path, node) in current_epoch {
-            builder.set(path, node);
-        }
-
-        Ok(builder.build())
-    }
+    Cube::cubes(children.try_into().unwrap())
 }
 
 /// Parse CSM text into an Octree
 pub fn parse_csm(input: &str) -> Result<Octree> {
-    let mut parser = Parser::new(input);
-    parser.parse_model()
+    match parse_model(input) {
+        Ok((_, tree)) => Ok(tree),
+        Err(e) => Err(CsmError::ParseError(format!("{:?}", e))),
+    }
 }
 
 #[cfg(test)]
@@ -405,7 +326,8 @@ mod tests {
         "#;
         let tree = parse_csm(csm).unwrap();
         let voxels = tree.collect_voxels();
-        assert!(voxels.len() > 8);
+        // Should have 8 children from >aa subdivision (>a gets replaced)
+        assert_eq!(voxels.len(), 8);
     }
 
     #[test]
@@ -420,7 +342,18 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_transform() {
+    fn test_parse_swap() {
+        let csm = r#"
+            >a [1 2 3 4 5 6 7 8]
+            | >b ^x <a
+        "#;
+        let tree = parse_csm(csm).unwrap();
+        let voxels = tree.collect_voxels();
+        assert!(!voxels.is_empty());
+    }
+
+    #[test]
+    fn test_parse_mirror() {
         let csm = r#"
             >a [1 2 3 4 5 6 7 8]
             | >b /x <a

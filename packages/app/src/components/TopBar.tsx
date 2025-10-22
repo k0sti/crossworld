@@ -30,15 +30,13 @@ export function TopBar({ pubkey, onLogin, onOpenPanel, onOpenProfile, activePane
         <ProfileButton pubkey={pubkey} onLogin={onLogin} onOpenProfile={onOpenProfile} />
 
         <HStack spacing={2}>
-          {pubkey && (
-            <IconButton
-              aria-label="Network settings"
-              icon={<FiGlobe />}
-              onClick={() => onOpenPanel(activePanelType === 'network' ? null : 'network')}
-              variant={activePanelType === 'network' ? 'solid' : 'ghost'}
-              size="sm"
-            />
-          )}
+          <IconButton
+            aria-label="Network settings"
+            icon={<FiGlobe />}
+            onClick={() => onOpenPanel(activePanelType === 'network' ? null : 'network')}
+            variant={activePanelType === 'network' ? 'solid' : 'ghost'}
+            size="sm"
+          />
           <IconButton
             aria-label="About"
             icon={<FiInfo />}

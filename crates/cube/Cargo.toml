@@ -9,6 +9,7 @@ crate-type = ["cdylib", "rlib"]
 [features]
 default = []
 wasm = []
+image = ["dep:image"]
 
 [dependencies]
 # WASM bindings
@@ -33,6 +34,12 @@ console_error_panic_hook = "0.1"
 
 # Error handling
 thiserror = "2.0"
+
+# Parsing
+nom = "7.1"
+
+# Image loading (optional)
+image = { version = "0.25", optional = true }
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3"
