@@ -26,8 +26,132 @@ impl Default for MeshData {
     }
 }
 
-/// Generate a mesh from an octree
+/// Trait for mapping voxel indices to RGB colors
+pub trait ColorMapper {
+    fn map(&self, index: i32) -> [f32; 3];
+}
+
+/// HSV-based color mapper (existing behavior)
+pub struct HsvColorMapper {
+    pub saturation: f32,
+    pub value: f32,
+}
+
+impl HsvColorMapper {
+    pub fn new() -> Self {
+        HsvColorMapper {
+            saturation: 0.8,
+            value: 0.9,
+        }
+    }
+
+    pub fn with_params(saturation: f32, value: f32) -> Self {
+        HsvColorMapper { saturation, value }
+    }
+}
+
+impl Default for HsvColorMapper {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ColorMapper for HsvColorMapper {
+    fn map(&self, index: i32) -> [f32; 3] {
+        if index < 0 {
+            [1.0, 0.0, 0.0] // Red for negative
+        } else if index == 0 {
+            [0.0, 0.0, 0.0] // Black for zero
+        } else {
+            let hue = (index % 360) as f32;
+            hsv_to_rgb(hue, self.saturation, self.value)
+        }
+    }
+}
+
+/// Palette-based color mapper
+pub struct PaletteColorMapper {
+    colors: Vec<[f32; 3]>,
+}
+
+impl PaletteColorMapper {
+    pub fn new(colors: Vec<[f32; 3]>) -> Self {
+        PaletteColorMapper { colors }
+    }
+
+    /// Load palette from image data (RGB/RGBA bytes)
+    #[cfg(feature = "image")]
+    pub fn from_image_bytes(bytes: &[u8]) -> Result<Self, String> {
+        use image::GenericImageView;
+
+        let img =
+            image::load_from_memory(bytes).map_err(|e| format!("Failed to load image: {}", e))?;
+
+        let mut colors = Vec::new();
+        for pixel in img.pixels() {
+            let rgba = pixel.2;
+            colors.push([
+                rgba[0] as f32 / 255.0,
+                rgba[1] as f32 / 255.0,
+                rgba[2] as f32 / 255.0,
+            ]);
+        }
+
+        Ok(PaletteColorMapper { colors })
+    }
+
+    /// Load palette from image file path
+    #[cfg(feature = "image")]
+    pub fn from_image_path(path: &str) -> Result<Self, String> {
+        use image::GenericImageView;
+
+        let img =
+            image::open(path).map_err(|e| format!("Failed to open image at {}: {}", path, e))?;
+
+        let mut colors = Vec::new();
+        for pixel in img.pixels() {
+            let rgba = pixel.2;
+            colors.push([
+                rgba[0] as f32 / 255.0,
+                rgba[1] as f32 / 255.0,
+                rgba[2] as f32 / 255.0,
+            ]);
+        }
+
+        Ok(PaletteColorMapper { colors })
+    }
+
+    pub fn len(&self) -> usize {
+        self.colors.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.colors.is_empty()
+    }
+}
+
+impl ColorMapper for PaletteColorMapper {
+    fn map(&self, index: i32) -> [f32; 3] {
+        if self.colors.is_empty() {
+            return [1.0, 0.0, 1.0]; // Magenta for error
+        }
+
+        if index <= 0 {
+            return [0.0, 0.0, 0.0]; // Black for zero/negative
+        }
+
+        let idx = ((index - 1) as usize) % self.colors.len();
+        self.colors[idx]
+    }
+}
+
+/// Generate a mesh from an octree with default HSV coloring
 pub fn generate_mesh(octree: &Octree) -> MeshData {
+    generate_mesh_with_mapper(octree, &HsvColorMapper::new())
+}
+
+/// Generate a mesh from an octree with custom color mapper
+pub fn generate_mesh_with_mapper(octree: &Octree, mapper: &dyn ColorMapper) -> MeshData {
     let mut mesh = MeshData::new();
 
     // Collect all voxels from the octree
@@ -39,27 +163,11 @@ pub fn generate_mesh(octree: &Octree) -> MeshData {
             continue; // Skip empty voxels
         }
 
-        // Convert value to color (simple grayscale for now)
-        let color = value_to_color(value);
-
+        let color = mapper.map(value);
         add_cube(&mut mesh, x, y, z, size, color);
     }
 
     mesh
-}
-
-/// Convert a voxel value to RGB color
-fn value_to_color(value: i32) -> [f32; 3] {
-    // Simple color mapping - can be made more sophisticated
-    if value < 0 {
-        [1.0, 0.0, 0.0] // Red for negative values
-    } else if value == 0 {
-        [0.0, 0.0, 0.0] // Black for zero (shouldn't happen)
-    } else {
-        // Use value as hue for positive values
-        let hue = (value % 360) as f32;
-        hsv_to_rgb(hue, 0.8, 0.9)
-    }
 }
 
 /// Convert HSV to RGB
@@ -136,10 +244,10 @@ fn add_cube(mesh: &mut MeshData, x: f32, y: f32, z: f32, size: f32, color: [f32;
         mesh.indices.push(base_index + indices[2]);
         mesh.indices.push(base_index + indices[3]);
 
-        // Add normals for all 4 vertices of this face (flipped to point outward)
-        let flipped_normal = [-normal[0], -normal[1], -normal[2]];
-        for _ in 0..4 {
-            mesh.normals.extend_from_slice(&flipped_normal);
+        // Add normals for the 6 triangle vertices (3 + 3)
+        // Normals already point outward, no need to flip
+        for _ in 0..6 {
+            mesh.normals.extend_from_slice(normal);
         }
     }
 }
@@ -147,11 +255,12 @@ fn add_cube(mesh: &mut MeshData, x: f32, y: f32, z: f32, size: f32, color: [f32;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::octree::{Octree, OctreeNode};
+    use crate::octree::{Cube, Octree};
+    use std::rc::Rc;
 
     #[test]
     fn test_generate_mesh_simple() {
-        let tree = Octree::new(OctreeNode::Value(42));
+        let tree = Octree::new(Cube::Solid(42));
         let mesh = generate_mesh(&tree);
 
         assert!(!mesh.vertices.is_empty());
@@ -166,5 +275,123 @@ mod tests {
 
         let green = hsv_to_rgb(120.0, 1.0, 1.0);
         assert!((green[1] - 1.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_hsv_color_mapper() {
+        let mapper = HsvColorMapper::new();
+
+        let color1 = mapper.map(1);
+        let color42 = mapper.map(42);
+
+        // Different indices should give different colors
+        assert_ne!(color1, color42);
+
+        // Negative should be red
+        assert_eq!(mapper.map(-1), [1.0, 0.0, 0.0]);
+
+        // Zero should be black
+        assert_eq!(mapper.map(0), [0.0, 0.0, 0.0]);
+    }
+
+    #[test]
+    fn test_palette_color_mapper() {
+        let palette = vec![
+            [1.0, 0.0, 0.0], // Red
+            [0.0, 1.0, 0.0], // Green
+            [0.0, 0.0, 1.0], // Blue
+        ];
+
+        let mapper = PaletteColorMapper::new(palette);
+
+        // Index 1 -> first color (red)
+        assert_eq!(mapper.map(1), [1.0, 0.0, 0.0]);
+        // Index 2 -> second color (green)
+        assert_eq!(mapper.map(2), [0.0, 1.0, 0.0]);
+        // Index 3 -> third color (blue)
+        assert_eq!(mapper.map(3), [0.0, 0.0, 1.0]);
+        // Index 4 -> wraps to first color (red)
+        assert_eq!(mapper.map(4), [1.0, 0.0, 0.0]);
+
+        // Zero/negative should be black
+        assert_eq!(mapper.map(0), [0.0, 0.0, 0.0]);
+        assert_eq!(mapper.map(-1), [0.0, 0.0, 0.0]);
+    }
+
+    #[test]
+    fn test_generate_mesh_with_palette() {
+        let palette = vec![[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+        let mapper = PaletteColorMapper::new(palette);
+
+        let cube = Cube::cubes([
+            Rc::new(Cube::Solid(1)),
+            Rc::new(Cube::Solid(2)),
+            Rc::new(Cube::Solid(3)),
+            Rc::new(Cube::Solid(1)),
+            Rc::new(Cube::Solid(2)),
+            Rc::new(Cube::Solid(3)),
+            Rc::new(Cube::Solid(1)),
+            Rc::new(Cube::Solid(2)),
+        ]);
+
+        let tree = Octree::new(cube);
+        let mesh = generate_mesh_with_mapper(&tree, &mapper);
+
+        assert!(!mesh.vertices.is_empty());
+        assert!(!mesh.colors.is_empty());
+    }
+
+    #[cfg(feature = "image")]
+    #[test]
+    fn test_dawnbringer_32_palette() {
+        use crate::parser::parse_csm;
+
+        // Path relative to workspace root
+        let path = if std::path::Path::new("../../assets/palettes/dawnbringer-32.png").exists() {
+            "../../assets/palettes/dawnbringer-32.png"
+        } else {
+            "assets/palettes/dawnbringer-32.png"
+        };
+
+        let palette = match PaletteColorMapper::from_image_path(path) {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("Warning: Could not load palette ({}). Skipping test.", e);
+                eprintln!("Please place dawnbringer-32.png (32x1 or any size) in assets/palettes/");
+                return; // Skip test if palette not found
+            }
+        };
+
+        // Verify palette has colors
+        assert!(palette.len() > 0, "Palette should have colors");
+
+        // Create test octree using CSM
+        let csm = r#"
+            >a [1 2 3 4 5 6 7 8]
+            >b [10 11 12 13 14 15 16 17]
+            >c [20 21 22 23 24 25 26 27]
+        "#;
+
+        let tree = parse_csm(csm).expect("Failed to parse CSM");
+        let mesh = generate_mesh_with_mapper(&tree, &palette);
+
+        assert!(!mesh.vertices.is_empty());
+        assert!(!mesh.colors.is_empty());
+        assert_eq!(mesh.vertices.len() / 3, mesh.colors.len() / 3);
+
+        // Verify colors are from palette (not black or magenta error colors)
+        let mut has_valid_colors = false;
+        for i in 0..mesh.colors.len() / 3 {
+            let r = mesh.colors[i * 3];
+            let g = mesh.colors[i * 3 + 1];
+            let b = mesh.colors[i * 3 + 2];
+
+            // Check it's not black (0,0,0) or magenta error (1,0,1)
+            if (r > 0.01 || g > 0.01 || b > 0.01) && !(r > 0.99 && g < 0.01 && b > 0.99) {
+                has_valid_colors = true;
+                break;
+            }
+        }
+        assert!(has_valid_colors, "Mesh should have valid palette colors");
     }
 }

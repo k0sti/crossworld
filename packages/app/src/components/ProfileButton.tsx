@@ -14,6 +14,7 @@ import { useAccountManager } from 'applesauce-react/hooks'
 import { Relay } from 'applesauce-relay'
 import { DEFAULT_RELAYS } from '../config'
 import { NostrExtensionInfoModal } from './NostrExtensionInfoModal'
+import { LoginSettingsService } from '../services/login-settings'
 
 // Check if we're on Android
 const IS_WEB_ANDROID = /android/i.test(navigator.userAgent)
@@ -129,16 +130,23 @@ export function ProfileButton({ pubkey, onLogin, onOpenProfile }: ProfileButtonP
         }
       }
 
-      // Save guest account to localStorage
+      // Save guest account data (persistent)
       try {
         const serializedAccount = account.toJSON()
-        localStorage.setItem('guestAccount', JSON.stringify({
+        LoginSettingsService.saveGuestAccount({
           account: serializedAccount,
           name,
-        }))
+        })
       } catch (error) {
-        console.error('Failed to save guest account to localStorage:', error)
+        console.error('Failed to save guest account:', error)
       }
+
+      // Save login settings
+      LoginSettingsService.save({
+        method: 'guest',
+        pubkey: account.pubkey,
+        lastLogin: Date.now(),
+      })
 
       toast({
         title: 'Guest login successful',
@@ -213,6 +221,13 @@ export function ProfileButton({ pubkey, onLogin, onOpenProfile }: ProfileButtonP
         manager.setActive(existingAccount)
       }
 
+      // Save login settings
+      LoginSettingsService.save({
+        method: 'amber',
+        pubkey: publicKey,
+        lastLogin: Date.now(),
+      })
+
       toast({
         title: 'Amber connected',
         description: 'Successfully connected to Amber',
@@ -227,6 +242,12 @@ export function ProfileButton({ pubkey, onLogin, onOpenProfile }: ProfileButtonP
       console.error('Amber connection error:', error)
       return false
     }
+  }
+
+  const handleLoginButtonClick = () => {
+    // Always show the login modal when user clicks login button
+    // This allows user to choose login method
+    onOpen()
   }
 
   const handleExtensionLogin = async () => {
@@ -263,6 +284,13 @@ export function ProfileButton({ pubkey, onLogin, onOpenProfile }: ProfileButtonP
         manager.setActive(existingAccount)
       }
 
+      // Save login settings
+      LoginSettingsService.save({
+        method: 'extension',
+        pubkey: publicKey,
+        lastLogin: Date.now(),
+      })
+
       toast({
         title: 'Connected',
         description: 'Successfully connected to extension',
@@ -292,13 +320,14 @@ export function ProfileButton({ pubkey, onLogin, onOpenProfile }: ProfileButtonP
         <IconButton
           aria-label="Login"
           icon={<FiLogIn />}
-          onClick={handleExtensionLogin}
+          onClick={handleLoginButtonClick}
           isLoading={isLoading}
         />
         <NostrExtensionInfoModal
           isOpen={isOpen}
           onClose={onClose}
           onGuestLogin={handleGuestLogin}
+          onExtensionLogin={handleExtensionLogin}
           onLogin={onLogin}
         />
       </>

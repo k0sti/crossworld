@@ -1,8 +1,9 @@
-import { Box, VStack, Text, Input, Button, HStack, IconButton, useToast, Tooltip, InputGroup, InputRightElement, Badge } from '@chakra-ui/react'
+import { VStack, Text, Input, Button, HStack, IconButton, useToast, Tooltip, InputGroup, InputRightElement, Badge, Box } from '@chakra-ui/react'
 import { useState, useEffect, useRef } from 'react'
 import { FiPlus, FiTrash2, FiRefreshCw } from 'react-icons/fi'
 import { Relay } from 'applesauce-relay'
 import { DEFAULT_RELAYS, DEFAULT_RELAY_STATES } from '../config'
+import { ResponsivePanel } from './ResponsivePanel'
 
 interface RelayStats {
   sent: number
@@ -19,10 +20,11 @@ interface RelayConfig {
 }
 
 interface NetworkConfigPanelProps {
-  // Panel can be closed via sidebar
+  isOpen: boolean
+  onClose: () => void
 }
 
-export function NetworkConfigPanel(_props: NetworkConfigPanelProps) {
+export function NetworkConfigPanel({ isOpen, onClose }: NetworkConfigPanelProps) {
   const toast = useToast()
   const [relays, setRelays] = useState<RelayConfig[]>([])
   const [newRelay, setNewRelay] = useState('')
@@ -450,40 +452,29 @@ export function NetworkConfigPanel(_props: NetworkConfigPanelProps) {
   }
 
   return (
-    <Box
-      position="fixed"
-      top="60px"
-      left="68px"
-      zIndex={1500}
-      bg="rgba(0, 0, 0, 0.1)"
-      backdropFilter="blur(8px)"
-      p={4}
-      minW="400px"
-      maxW="500px"
-      _before={{
-        content: '""',
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        background: `
-          radial-gradient(ellipse at 20% 30%, rgba(255, 255, 255, 0.03) 0%, transparent 50%),
-          radial-gradient(ellipse at 80% 70%, rgba(255, 255, 255, 0.03) 0%, transparent 50%),
-          repeating-linear-gradient(
-            45deg,
-            transparent,
-            transparent 10px,
-            rgba(255, 255, 255, 0.01) 10px,
-            rgba(255, 255, 255, 0.01) 20px
-          )
-        `,
-        pointerEvents: 'none',
-        zIndex: -1,
-      }}
+    <ResponsivePanel
+      isOpen={isOpen}
+      onClose={onClose}
+      forceFullscreen={true}
+      title="🌐 Relays"
+      actions={
+        <HStack spacing={3}>
+          <Button
+            onClick={handleResetDefaults}
+            size="sm"
+            variant="outline"
+            leftIcon={<FiRefreshCw />}
+            color="white"
+          >
+            Defaults
+          </Button>
+          <Button onClick={onClose} size="sm" colorScheme="blue">
+            Done
+          </Button>
+        </HStack>
+      }
     >
-      <VStack align="stretch" gap={3}>
-        <Text fontSize="md" fontWeight="semibold" color="white">🌐 Relays</Text>
+      <VStack align="stretch" gap={3} maxW="800px" mx="auto">
 
         {relays.map(relay => renderRelayRow(relay))}
 
@@ -509,22 +500,12 @@ export function NetworkConfigPanel(_props: NetworkConfigPanelProps) {
           </Button>
         </HStack>
 
-        <HStack justify="space-between" pt={2}>
-          <Button
-            onClick={handleResetDefaults}
-            size="xs"
-            variant="ghost"
-            leftIcon={<FiRefreshCw />}
-            color="whiteAlpha.700"
-            _hover={{ color: 'white', bg: 'rgba(255, 255, 255, 0.1)' }}
-          >
-            Reset to Defaults
-          </Button>
+        <HStack justify="flex-end" pt={2}>
           <Text fontSize="xs" color="whiteAlpha.600">
             {relays.filter(r => r.status === 'connected').length} connected
           </Text>
         </HStack>
       </VStack>
-    </Box>
+    </ResponsivePanel>
   )
 }

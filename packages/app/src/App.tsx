@@ -18,6 +18,12 @@ import { useVoice } from './hooks/useVoice'
 import { npubEncode } from 'nostr-tools/nip19'
 import type { TeleportAnimationType } from './renderer/teleport-animation'
 import { VOICE_CONFIG } from './config'
+import { LoginSettingsService } from './services/login-settings'
+import { ExtensionAccount, SimpleAccount } from 'applesauce-accounts/accounts'
+import { ExtensionSigner } from 'applesauce-signers'
+
+const ENABLE_CAMERA_CONTROL = false
+const ENABLE_CUBE_GROUND = false
 
 function App() {
   const [pubkey, setPubkey] = useState<string | null>(null)
@@ -52,6 +58,7 @@ function App() {
   const [showRestoreModal, setShowRestoreModal] = useState(false)
   const restoreTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const initialStatePublished = useRef(false)
+  const voiceAutoConnected = useRef(false)
 
   // Ground render mode
   const [useCubeGround, setUseCubeGround] = useState(false)
@@ -83,6 +90,26 @@ function App() {
     }
   }, [])
 
+  // Auto-connect to voice when user logs in and streaming URL is available
+  useEffect(() => {
+    if (!pubkey || !streamingUrl || voiceAutoConnected.current) return
+
+    const autoConnect = async () => {
+      try {
+        const npub = npubEncode(pubkey)
+        await voice.connect(streamingUrl, npub)
+        voiceAutoConnected.current = true
+        console.log('[App] Auto-connected to voice chat')
+      } catch (err) {
+        console.error('[App] Failed to auto-connect to voice:', err)
+      }
+    }
+
+    // Use a small delay to ensure this only runs on initial login
+    const timer = setTimeout(autoConnect, 100)
+    return () => clearTimeout(timer)
+  }, [pubkey, streamingUrl, voice])
+
   // Start avatar state subscription on mount
   useEffect(() => {
     avatarStateService.startSubscription()
@@ -91,6 +118,100 @@ function App() {
       avatarStateService.stopSubscription()
     }
   }, [avatarStateService])
+
+  // Auto-login on mount if login settings exist
+  useEffect(() => {
+    const autoLogin = async () => {
+      const loginSettings = LoginSettingsService.load()
+
+      if (!loginSettings) {
+        console.log('[App] No login settings found')
+        return
+      }
+
+      console.log('[App] Auto-login with method:', loginSettings.method)
+
+      try {
+        if (loginSettings.method === 'guest') {
+          // Restore guest account
+          const guestData = LoginSettingsService.loadGuestAccount()
+          if (!guestData) {
+            console.error('[App] Guest account data missing')
+            LoginSettingsService.clear()
+            return
+          }
+
+          const account = SimpleAccount.fromJSON(guestData.account)
+          accountManager.addAccount(account)
+          accountManager.setActive(account)
+
+          toast({
+            title: 'Welcome back',
+            description: `Logged in as ${guestData.name}`,
+            status: 'success',
+            duration: 3000,
+            isClosable: true,
+          })
+
+          setPubkey(account.pubkey)
+        } else if (loginSettings.method === 'extension') {
+          // Try to reconnect with extension
+          if (!window.nostr) {
+            console.log('[App] Extension not available, clearing settings')
+            LoginSettingsService.clear()
+            return
+          }
+
+          const signer = new ExtensionSigner()
+          const publicKey = await signer.getPublicKey()
+
+          if (publicKey !== loginSettings.pubkey) {
+            console.warn('[App] Extension pubkey mismatch, clearing settings')
+            LoginSettingsService.clear()
+            return
+          }
+
+          const existingAccount = accountManager.accounts.find(
+            (a) => a.type === ExtensionAccount.type && a.pubkey === publicKey
+          )
+
+          if (!existingAccount) {
+            const account = new ExtensionAccount(publicKey, signer)
+            accountManager.addAccount(account)
+            accountManager.setActive(account)
+          } else {
+            accountManager.setActive(existingAccount)
+          }
+
+          toast({
+            title: 'Welcome back',
+            description: 'Reconnected to extension',
+            status: 'success',
+            duration: 3000,
+            isClosable: true,
+          })
+
+          setPubkey(publicKey)
+        } else if (loginSettings.method === 'amber') {
+          // Amber auto-login not supported (requires user interaction)
+          console.log('[App] Amber auto-login not supported, clearing settings')
+          LoginSettingsService.clear()
+        }
+      } catch (error) {
+        console.error('[App] Auto-login failed:', error)
+        LoginSettingsService.clear()
+        toast({
+          title: 'Auto-login failed',
+          description: 'Please log in again',
+          status: 'warning',
+          duration: 3000,
+          isClosable: true,
+        })
+      }
+    }
+
+    autoLogin()
+  }, [accountManager, toast])
 
   // Query last state when logging in
   useEffect(() => {
@@ -316,8 +437,12 @@ function App() {
       avatarStateService.removeUserState(pubkey)
     }
 
+    // Clear login settings
+    LoginSettingsService.clear()
+
     // Reset state
     initialStatePublished.current = false
+    voiceAutoConnected.current = false
     setPubkey(null)
     setIsChatOpen(false)
     setIsClientListOpen(false)
@@ -452,6 +577,8 @@ function App() {
             onToggleEditMode={setIsEditMode}
             isCameraMode={isCameraMode}
             onToggleCameraMode={() => setIsCameraMode(!isCameraMode)}
+            enableCameraControl={ENABLE_CAMERA_CONTROL}
+            enableCubeGround={ENABLE_CUBE_GROUND}
             isChatOpen={isChatOpen}
             onToggleChat={() => setIsChatOpen(!isChatOpen)}
             isClientListOpen={isClientListOpen}
@@ -459,8 +586,8 @@ function App() {
             voiceConnected={voice.isConnected}
             voiceConnecting={voice.status === 'connecting'}
             micEnabled={voice.micEnabled}
-            speaking={voice.speaking}
             participantCount={voice.participantCount}
+            voiceError={voice.error}
             onToggleVoice={handleToggleVoice}
             onToggleMic={handleToggleMic}
             useCubeGround={useCubeGround}
@@ -475,18 +602,23 @@ function App() {
         )}
 
         {/* Config Panels */}
-        {activePanelType === 'network' && <NetworkConfigPanel />}
-        {activePanelType === 'info' && <InfoPanel />}
-        {activePanelType === 'profile' && (
-          <ProfilePanel
-            pubkey={viewedProfilePubkey || pubkey}
-            onClose={() => setActivePanelType(null)}
-            local_user={!viewedProfilePubkey || viewedProfilePubkey === pubkey}
-            onLogout={handleLogout}
-            onOpenAvatarSelection={() => setActivePanelType('avatar')}
-            onRestart={handleRestart}
-          />
-        )}
+        <NetworkConfigPanel
+          isOpen={activePanelType === 'network'}
+          onClose={() => setActivePanelType(null)}
+        />
+        <InfoPanel
+          isOpen={activePanelType === 'info'}
+          onClose={() => setActivePanelType(null)}
+        />
+        <ProfilePanel
+          pubkey={viewedProfilePubkey || pubkey}
+          isOpen={activePanelType === 'profile'}
+          onClose={() => setActivePanelType(null)}
+          local_user={!viewedProfilePubkey || viewedProfilePubkey === pubkey}
+          onLogout={handleLogout}
+          onOpenAvatarSelection={() => setActivePanelType('avatar')}
+          onRestart={handleRestart}
+        />
         {activePanelType === 'avatar' && (
           <SelectAvatar
             isOpen={true}
