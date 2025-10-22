@@ -105,8 +105,7 @@ impl Cube<i32> {
         match self {
             Cube::Solid(v) => Cube::Solid(*v),
             Cube::Cubes(children) => {
-                let mut new_children: Vec<Rc<Cube<i32>>> =
-                    children.iter().cloned().collect();
+                let mut new_children: Vec<Rc<Cube<i32>>> = children.to_vec();
 
                 for axis in axes {
                     match axis {
@@ -152,8 +151,10 @@ impl Cube<i32> {
         match self {
             Cube::Solid(v) => Cube::Solid(*v),
             Cube::Cubes(children) => {
-                let mut new_children: Vec<Rc<Cube<i32>>> =
-                    children.iter().map(|c| Rc::new(c.apply_mirror(axes))).collect();
+                let mut new_children: Vec<Rc<Cube<i32>>> = children
+                    .iter()
+                    .map(|c| Rc::new(c.apply_mirror(axes)))
+                    .collect();
 
                 for axis in axes {
                     match axis {

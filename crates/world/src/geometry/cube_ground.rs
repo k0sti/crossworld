@@ -26,18 +26,16 @@ impl CubeGround {
 
     fn build_ground_octree(noise: &Perlin, fbm: &Fbm<Perlin>) -> Cube<i32> {
         // Build 8 children at level 1 (each represents 8x8x8 space)
-        let level1_children: [Rc<Cube<i32>>; 8] = std::array::from_fn(|i| {
-            Rc::new(Self::build_level2(i, noise, fbm))
-        });
+        let level1_children: [Rc<Cube<i32>>; 8] =
+            std::array::from_fn(|i| Rc::new(Self::build_level2(i, noise, fbm)));
 
         Cube::cubes(level1_children)
     }
 
     fn build_level2(parent_idx: usize, noise: &Perlin, fbm: &Fbm<Perlin>) -> Cube<i32> {
         // Build 8 children at level 2 (each represents 4x4x4 space)
-        let level2_children: [Rc<Cube<i32>>; 8] = std::array::from_fn(|i| {
-            Rc::new(Self::build_level3(parent_idx, i, noise, fbm))
-        });
+        let level2_children: [Rc<Cube<i32>>; 8] =
+            std::array::from_fn(|i| Rc::new(Self::build_level3(parent_idx, i, noise, fbm)));
 
         Cube::cubes(level2_children)
     }
