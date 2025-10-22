@@ -466,9 +466,9 @@ export function NetworkConfigPanel({ isOpen, onClose }: NetworkConfigPanelProps)
             leftIcon={<FiRefreshCw />}
             color="white"
           >
-            Reset to Defaults
+            Defaults
           </Button>
-          <Button onClick={onClose} colorScheme="blue">
+          <Button onClick={onClose} size="sm" colorScheme="blue">
             Done
           </Button>
         </HStack>

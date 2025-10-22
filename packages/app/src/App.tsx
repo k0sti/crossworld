@@ -19,6 +19,9 @@ import { npubEncode } from 'nostr-tools/nip19'
 import type { TeleportAnimationType } from './renderer/teleport-animation'
 import { VOICE_CONFIG } from './config'
 
+const ENABLE_CAMERA_CONTROL = false
+const ENABLE_CUBE_GROUND = false
+
 function App() {
   const [pubkey, setPubkey] = useState<string | null>(null)
   const [isEditMode, setIsEditMode] = useState(false)
@@ -474,6 +477,8 @@ function App() {
             onToggleEditMode={setIsEditMode}
             isCameraMode={isCameraMode}
             onToggleCameraMode={() => setIsCameraMode(!isCameraMode)}
+            enableCameraControl={ENABLE_CAMERA_CONTROL}
+            enableCubeGround={ENABLE_CUBE_GROUND}
             isChatOpen={isChatOpen}
             onToggleChat={() => setIsChatOpen(!isChatOpen)}
             isClientListOpen={isClientListOpen}
@@ -505,16 +510,15 @@ function App() {
           isOpen={activePanelType === 'info'}
           onClose={() => setActivePanelType(null)}
         />
-        {activePanelType === 'profile' && (
-          <ProfilePanel
-            pubkey={viewedProfilePubkey || pubkey}
-            onClose={() => setActivePanelType(null)}
-            local_user={!viewedProfilePubkey || viewedProfilePubkey === pubkey}
-            onLogout={handleLogout}
-            onOpenAvatarSelection={() => setActivePanelType('avatar')}
-            onRestart={handleRestart}
-          />
-        )}
+        <ProfilePanel
+          pubkey={viewedProfilePubkey || pubkey}
+          isOpen={activePanelType === 'profile'}
+          onClose={() => setActivePanelType(null)}
+          local_user={!viewedProfilePubkey || viewedProfilePubkey === pubkey}
+          onLogout={handleLogout}
+          onOpenAvatarSelection={() => setActivePanelType('avatar')}
+          onRestart={handleRestart}
+        />
         {activePanelType === 'avatar' && (
           <SelectAvatar
             isOpen={true}

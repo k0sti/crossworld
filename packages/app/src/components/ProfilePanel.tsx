@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
-import { Box, VStack, Text, Avatar, HStack, Divider, Flex, IconButton, Tooltip, useToast, SimpleGrid, Button } from '@chakra-ui/react'
-import { FiUser, FiCopy, FiExternalLink, FiLogOut, FiRefreshCw } from 'react-icons/fi'
+import { VStack, Text, Avatar, HStack, Divider, Flex, IconButton, Tooltip, useToast, SimpleGrid, Button, AlertDialog, AlertDialogBody, AlertDialogFooter, AlertDialogHeader, AlertDialogContent, AlertDialogOverlay, useDisclosure } from '@chakra-ui/react'
+import { FiUser, FiCopy, FiExternalLink, FiRefreshCw, FiLogOut } from 'react-icons/fi'
 import { npubEncode } from 'nostr-tools/nip19'
 import { Relay } from 'applesauce-relay'
 import { pubkey_to_emoji } from '@workspace/wasm'
 import { DEFAULT_RELAYS } from '../config'
+import { ResponsivePanel } from './ResponsivePanel'
 
 interface ProfileMetadata {
   name?: string
@@ -20,45 +21,29 @@ interface RelayConfig {
   status: 'connected' | 'connecting' | 'error' | 'disconnected'
 }
 
+const SHOW_EMOJI_HASH = false
+
 interface ProfilePanelProps {
   pubkey: string | null
-  onClose?: () => void
+  isOpen: boolean
+  onClose: () => void
   local_user?: boolean
   onLogout?: () => void
   onOpenAvatarSelection?: () => void
   onRestart?: () => void
 }
 
-export function ProfilePanel({ pubkey, onClose, local_user = false, onLogout, onOpenAvatarSelection, onRestart }: ProfilePanelProps) {
+export function ProfilePanel({ pubkey, isOpen, onClose, local_user = false, onLogout, onOpenAvatarSelection, onRestart }: ProfilePanelProps) {
   const [profile, setProfile] = useState<ProfileMetadata | null>(null)
   const [enabledRelays, setEnabledRelays] = useState<string[]>([])
   const toast = useToast()
-  const panelRef = useRef<HTMLDivElement>(null)
+  const cancelRef = useRef<HTMLButtonElement>(null)
+  const { isOpen: isLogoutOpen, onOpen: onLogoutOpen, onClose: onLogoutClose } = useDisclosure()
+  const { isOpen: isRestartOpen, onOpen: onRestartOpen, onClose: onRestartClose } = useDisclosure()
   const npub = pubkey ? npubEncode(pubkey) : ''
   const displayNpub = npub ? `${npub.slice(0, 12)}...${npub.slice(-8)}` : ''
   const emojiHash = pubkey ? pubkey_to_emoji(pubkey) : ''
   const emojiArray = Array.from(emojiHash)
-
-  // Handle click outside to close panel
-  useEffect(() => {
-    if (!onClose) return
-
-    const handleClickOutside = (event: MouseEvent) => {
-      if (panelRef.current && !panelRef.current.contains(event.target as Node)) {
-        onClose()
-      }
-    }
-
-    // Add listener after a small delay to prevent immediate closing
-    const timeoutId = setTimeout(() => {
-      document.addEventListener('mousedown', handleClickOutside)
-    }, 100)
-
-    return () => {
-      clearTimeout(timeoutId)
-      document.removeEventListener('mousedown', handleClickOutside)
-    }
-  }, [onClose])
 
   // Load enabled relays from localStorage
   useEffect(() => {
@@ -167,16 +152,17 @@ export function ProfilePanel({ pubkey, onClose, local_user = false, onLogout, on
 
   const displayName = profile?.display_name || profile?.name || 'Anonymous'
 
-  const handleLogout = () => {
+  const handleLogoutConfirm = () => {
+    onLogoutClose()
     if (onLogout) {
       onLogout()
     }
-    if (onClose) {
-      onClose()
-    }
+    onClose()
   }
 
-  const handleRestart = () => {
+  const handleRestartConfirm = () => {
+    onRestartClose()
+
     // Clear avatar settings from localStorage
     localStorage.removeItem('avatarSelection')
 
@@ -189,9 +175,7 @@ export function ProfilePanel({ pubkey, onClose, local_user = false, onLogout, on
     })
 
     // Close profile panel
-    if (onClose) {
-      onClose()
-    }
+    onClose()
 
     // Call restart handler to reset avatar config
     if (onRestart) {
@@ -205,95 +189,100 @@ export function ProfilePanel({ pubkey, onClose, local_user = false, onLogout, on
   }
 
   return (
-    <Box
-      ref={panelRef}
-      position="fixed"
-      top="60px"
-      left="68px"
-      zIndex={1500}
-      bg="rgba(0, 0, 0, 0.1)"
-      backdropFilter="blur(8px)"
-      p={4}
-      minW="400px"
-      maxW="500px"
-      _before={{
-        content: '""',
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        background: `
-          radial-gradient(ellipse at 20% 30%, rgba(255, 255, 255, 0.03) 0%, transparent 50%),
-          radial-gradient(ellipse at 80% 70%, rgba(255, 255, 255, 0.03) 0%, transparent 50%),
-          repeating-linear-gradient(
-            45deg,
-            transparent,
-            transparent 10px,
-            rgba(255, 255, 255, 0.01) 10px,
-            rgba(255, 255, 255, 0.01) 20px
-          )
-        `,
-        pointerEvents: 'none',
-        zIndex: -1,
-      }}
-    >
+    <>
+      <ResponsivePanel
+        isOpen={isOpen}
+        onClose={onClose}
+        title="Profile"
+        forceFullscreen={true}
+        closeOnClickOutside={!isLogoutOpen && !isRestartOpen}
+        actions={
+          <HStack spacing={3}>
+            {local_user && (
+              <>
+                <Button
+                  leftIcon={<FiRefreshCw />}
+                  onClick={onRestartOpen}
+                  size="sm"
+                  colorScheme="blue"
+                  variant="outline"
+                >
+                  Restart
+                </Button>
+                <Button
+                  leftIcon={<FiLogOut />}
+                  onClick={onLogoutOpen}
+                  size="sm"
+                  colorScheme="red"
+                  variant="outline"
+                >
+                  Logout
+                </Button>
+              </>
+            )}
+            <Button
+              onClick={onClose}
+              size="sm"
+              colorScheme="blue"
+            >
+              Close
+            </Button>
+          </HStack>
+        }
+      >
+        <VStack align="stretch" gap={4}>
+          {pubkey ? (
+            <>
+              <Flex justify="center" py={4}>
+                <Avatar
+                  size="2xl"
+                  src={profile?.picture}
+                  icon={<FiUser />}
+                  name={displayName}
+                />
+              </Flex>
 
-      <VStack align="stretch" gap={4}>
-        {pubkey ? (
-          <>
-            <Flex justify="center" py={4}>
-              <Avatar
-                size="2xl"
-                src={profile?.picture}
-                icon={<FiUser />}
-                name={displayName}
-              />
-            </Flex>
+              <Text fontSize="xl" color="white" fontWeight="semibold" textAlign="center">
+                {displayName}
+              </Text>
 
-            <Text fontSize="xl" color="white" fontWeight="semibold" textAlign="center">
-              {displayName}
-            </Text>
-
-            <Flex justify="center" py={2}>
-              <SimpleGrid columns={9} gap={1}>
-                {emojiArray.map((emoji, index) => (
-                  <Text key={index} fontSize="2xl" lineHeight="1">
-                    {String(emoji)}
-                  </Text>
-                ))}
-              </SimpleGrid>
-            </Flex>
-
-            <VStack align="stretch" gap={2}>
-              <HStack justify="space-between">
-                <Text fontSize="sm" color="whiteAlpha.600">Public Key:</Text>
-                <HStack>
-                  <Text fontSize="xs" color="white" fontFamily="monospace">{displayNpub}</Text>
-                  <Tooltip label="Copy npub">
-                    <IconButton
-                      aria-label="Copy npub"
-                      icon={<FiCopy />}
-                      size="xs"
-                      variant="ghost"
-                      onClick={copyNpub}
-                      color="whiteAlpha.700"
-                      _hover={{ color: 'white' }}
-                    />
-                  </Tooltip>
-                  <Tooltip label="Open on nostr.eu">
-                    <IconButton
-                      aria-label="Open profile"
-                      icon={<FiExternalLink />}
-                      size="xs"
-                      variant="ghost"
-                      onClick={openExternal}
-                      color="whiteAlpha.700"
-                      _hover={{ color: 'white' }}
-                    />
-                  </Tooltip>
-                </HStack>
+              <HStack justify="center">
+                <Text fontSize="xs" color="white" fontFamily="monospace">{displayNpub}</Text>
+                <Tooltip label="Copy npub">
+                  <IconButton
+                    aria-label="Copy npub"
+                    icon={<FiCopy />}
+                    size="xs"
+                    variant="ghost"
+                    onClick={copyNpub}
+                    color="whiteAlpha.700"
+                    _hover={{ color: 'white' }}
+                  />
+                </Tooltip>
+                <Tooltip label="Open on nostr.eu">
+                  <IconButton
+                    aria-label="Open profile"
+                    icon={<FiExternalLink />}
+                    size="xs"
+                    variant="ghost"
+                    onClick={openExternal}
+                    color="whiteAlpha.700"
+                    _hover={{ color: 'white' }}
+                  />
+                </Tooltip>
               </HStack>
+
+              {SHOW_EMOJI_HASH && (
+                <Flex justify="center" py={2}>
+                  <SimpleGrid columns={9} gap={1}>
+                    {emojiArray.map((emoji, index) => (
+                      <Text key={index} fontSize="2xl" lineHeight="1">
+                        {String(emoji)}
+                      </Text>
+                    ))}
+                  </SimpleGrid>
+                </Flex>
+              )}
 
               {profile?.about && (
                 <>
@@ -304,47 +293,74 @@ export function ProfilePanel({ pubkey, onClose, local_user = false, onLogout, on
                   </VStack>
                 </>
               )}
-            </VStack>
+            </>
+          ) : (
+            <Text fontSize="sm" color="whiteAlpha.700" textAlign="center" py={8}>
+              Please log in to view your profile
+            </Text>
+          )}
+        </VStack>
+      </ResponsivePanel>
 
-            {local_user && (
-              <>
-                <Divider borderColor="whiteAlpha.200" />
-                <VStack align="stretch" gap={2}>
-                  <Text fontSize="sm" color="whiteAlpha.600" fontWeight="semibold">
-                    Profile Settings
-                  </Text>
-                  <HStack gap={2}>
-                    <Button
-                      leftIcon={<FiRefreshCw />}
-                      onClick={handleRestart}
-                      size="sm"
-                      colorScheme="blue"
-                      variant="outline"
-                      flex={1}
-                    >
-                      Restart
-                    </Button>
-                    <Button
-                      leftIcon={<FiLogOut />}
-                      onClick={handleLogout}
-                      size="sm"
-                      colorScheme="red"
-                      variant="outline"
-                      flex={1}
-                    >
-                      Logout
-                    </Button>
-                  </HStack>
-                </VStack>
-              </>
-            )}
-          </>
-        ) : (
-          <Text fontSize="sm" color="whiteAlpha.700" textAlign="center" py={8}>
-            Please log in to view your profile
-          </Text>
-        )}
-      </VStack>
-    </Box>
+      {/* Logout Confirmation Dialog */}
+      {isLogoutOpen && (
+        <AlertDialog
+          isOpen={isLogoutOpen}
+          leastDestructiveRef={cancelRef}
+          onClose={onLogoutClose}
+        >
+          <AlertDialogOverlay zIndex={2000}>
+            <AlertDialogContent bg="gray.800" color="white">
+              <AlertDialogHeader fontSize="lg" fontWeight="bold">
+                Logout
+              </AlertDialogHeader>
+
+              <AlertDialogBody>
+                Are you sure you want to logout? You will need to log in again to access your account.
+              </AlertDialogBody>
+
+              <AlertDialogFooter>
+                <Button ref={cancelRef} onClick={onLogoutClose}>
+                  Cancel
+                </Button>
+                <Button colorScheme="red" onClick={handleLogoutConfirm} ml={3}>
+                  Logout
+                </Button>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialogOverlay>
+        </AlertDialog>
+      )}
+
+      {/* Restart Confirmation Dialog */}
+      {isRestartOpen && (
+        <AlertDialog
+          isOpen={isRestartOpen}
+          leastDestructiveRef={cancelRef}
+          onClose={onRestartClose}
+        >
+          <AlertDialogOverlay zIndex={2000}>
+            <AlertDialogContent bg="gray.800" color="white">
+              <AlertDialogHeader fontSize="lg" fontWeight="bold">
+                Restart Avatar Selection
+              </AlertDialogHeader>
+
+              <AlertDialogBody>
+                Are you sure you want to restart? This will clear your current avatar settings.
+              </AlertDialogBody>
+
+              <AlertDialogFooter>
+                <Button ref={cancelRef} onClick={onRestartClose}>
+                  Cancel
+                </Button>
+                <Button colorScheme="blue" onClick={handleRestartConfirm} ml={3}>
+                  Restart
+                </Button>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialogOverlay>
+        </AlertDialog>
+      )}
+    </>
   )
 }
