@@ -7,5 +7,7 @@ mod parser;
 mod wasm;
 
 pub use mesh::generate_mesh;
-pub use octree::{Octant, Octree, OctreeNode};
+pub use octree::{
+    octant_char_to_index, octant_index_to_char, Axis, Cube, Octree, Quad,
+};
 pub use parser::{parse_csm, CsmError};

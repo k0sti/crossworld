@@ -602,6 +602,7 @@ version = "0.0.1"
 dependencies = [
  "console_error_panic_hook",
  "js-sys",
+ "nom",
  "serde",
  "serde-wasm-bindgen",
  "serde_json",

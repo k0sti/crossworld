@@ -147,11 +147,11 @@ fn add_cube(mesh: &mut MeshData, x: f32, y: f32, z: f32, size: f32, color: [f32;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::octree::{Octree, OctreeNode};
+    use crate::octree::{Cube, Octree};
 
     #[test]
     fn test_generate_mesh_simple() {
-        let tree = Octree::new(OctreeNode::Value(42));
+        let tree = Octree::new(Cube::Solid(42));
         let mesh = generate_mesh(&tree);
 
         assert!(!mesh.vertices.is_empty());
