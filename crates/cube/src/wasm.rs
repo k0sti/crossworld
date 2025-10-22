@@ -1,7 +1,7 @@
-use wasm_bindgen::prelude::*;
 use serde::{Deserialize, Serialize};
+use wasm_bindgen::prelude::*;
 
-use crate::{parse_csm, generate_mesh};
+use crate::{generate_mesh, parse_csm};
 
 #[derive(Serialize, Deserialize)]
 pub struct MeshResult {
