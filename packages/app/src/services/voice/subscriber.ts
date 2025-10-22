@@ -285,7 +285,7 @@ export class AudioSubscriber {
         this.watchers.delete(npub)
 
         // Create new watcher with new session
-        this.createWatcher(connection, npub, sessionId, source)
+        this.createWatcher(connection, npub, sessionId, source === 'both' ? 'moq' : source)
       } else {
         console.log('[MoQ Subscriber] Same session, marking as dual discovery')
         existing.markDualDiscovery()
@@ -329,7 +329,7 @@ export class AudioSubscriber {
    * Watchers will be created when MoQ announcements arrive
    */
   private handleClientListUpdate(
-    connection: Moq.Connection.Established,
+    _connection: Moq.Connection.Established,
     states: Map<string, AvatarState>
   ): void {
     // Track which npubs should be active via Nostr
@@ -382,10 +382,10 @@ export class AudioSubscriber {
   /**
    * Create watcher for a participant
    */
-  private createWatcher(connection: Moq.Connection.Established, npub: string, sessionId: string, source: 'nostr' | 'moq' = 'nostr'): void {
+  private createWatcher(_connection: Moq.Connection.Established, npub: string, sessionId: string, source: 'nostr' | 'moq' = 'nostr'): void {
     try {
       console.log('[MoQ Subscriber] Creating watcher for:', npub, 'session:', sessionId, 'via', source)
-      const watcher = new ParticipantWatcher(this.connection.established, npub, sessionId, source)
+      const watcher = new ParticipantWatcher(this.connection.established as Signal<Moq.Connection.Established | undefined>, npub, sessionId, source)
 
       // Subscribe to speaking changes
       watcher.speaking.subscribe(() => {

@@ -156,7 +156,12 @@ impl OctreeNode {
     }
 
     /// Traverse the octree and collect all leaf voxels with their positions
-    pub fn collect_voxels(&self, position: (f32, f32, f32), size: f32, voxels: &mut Vec<(f32, f32, f32, f32, i32)>) {
+    pub fn collect_voxels(
+        &self,
+        position: (f32, f32, f32),
+        size: f32,
+        voxels: &mut Vec<(f32, f32, f32, f32, i32)>,
+    ) {
         match self {
             OctreeNode::Value(value) => {
                 if *value != 0 {
@@ -237,9 +242,10 @@ impl OctreeBuilder {
 
     fn build_node(&self, prefix: &[Octant]) -> OctreeNode {
         // Check if any assignments exist deeper than this path
-        let has_deeper_children = self.assignments.keys().any(|path| {
-            path.len() > prefix.len() && path[..prefix.len()] == *prefix
-        });
+        let has_deeper_children = self
+            .assignments
+            .keys()
+            .any(|path| path.len() > prefix.len() && path[..prefix.len()] == *prefix);
 
         // Check if there's a direct assignment for this path
         let direct_assignment = self.assignments.get(prefix);
@@ -274,7 +280,8 @@ impl OctreeBuilder {
 
                     // Check if there's anything at or below this child path
                     let has_child_assignment = self.assignments.keys().any(|path| {
-                        path.len() >= child_prefix.len() && path[..child_prefix.len()] == *child_prefix
+                        path.len() >= child_prefix.len()
+                            && path[..child_prefix.len()] == *child_prefix
                     });
 
                     if has_child_assignment {

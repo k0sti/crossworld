@@ -92,14 +92,14 @@ fn add_cube(mesh: &mut MeshData, x: f32, y: f32, z: f32, size: f32, color: [f32;
 
     // Define 8 vertices of the cube
     let vertices = [
-        [x, y, z],                           // 0: left-bottom-back
-        [x + size, y, z],                    // 1: right-bottom-back
-        [x + size, y + size, z],             // 2: right-top-back
-        [x, y + size, z],                    // 3: left-top-back
-        [x, y, z + size],                    // 4: left-bottom-front
-        [x + size, y, z + size],             // 5: right-bottom-front
-        [x + size, y + size, z + size],      // 6: right-top-front
-        [x, y + size, z + size],             // 7: left-top-front
+        [x, y, z],                      // 0: left-bottom-back
+        [x + size, y, z],               // 1: right-bottom-back
+        [x + size, y + size, z],        // 2: right-top-back
+        [x, y + size, z],               // 3: left-top-back
+        [x, y, z + size],               // 4: left-bottom-front
+        [x + size, y, z + size],        // 5: right-bottom-front
+        [x + size, y + size, z + size], // 6: right-top-front
+        [x, y + size, z + size],        // 7: left-top-front
     ];
 
     // Add vertices
@@ -147,7 +147,7 @@ fn add_cube(mesh: &mut MeshData, x: f32, y: f32, z: f32, size: f32, color: [f32;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::octree::{OctreeNode, Octree};
+    use crate::octree::{Octree, OctreeNode};
 
     #[test]
     fn test_generate_mesh_simple() {

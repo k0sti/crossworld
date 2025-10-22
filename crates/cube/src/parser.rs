@@ -28,14 +28,14 @@ type Result<T> = std::result::Result<T, CsmError>;
 /// Token types for the lexer
 #[derive(Debug, Clone, PartialEq)]
 enum Token {
-    Greater,              // >
-    LeftBracket,          // [
-    RightBracket,         // ]
-    LeftAngle,            // <
-    Slash,                // /
-    Pipe,                 // |
-    Octant(Octant),       // a-h
-    Axis(char),           // x, y, z
+    Greater,        // >
+    LeftBracket,    // [
+    RightBracket,   // ]
+    LeftAngle,      // <
+    Slash,          // /
+    Pipe,           // |
+    Octant(Octant), // a-h
+    Axis(char),     // x, y, z
     Integer(i32),
     Newline,
 }
@@ -217,7 +217,10 @@ impl Parser {
         Ok(axes)
     }
 
-    fn parse_cube(&mut self, prev_epoch: &Option<HashMap<Vec<Octant>, OctreeNode>>) -> Result<OctreeNode> {
+    fn parse_cube(
+        &mut self,
+        prev_epoch: &Option<HashMap<Vec<Octant>, OctreeNode>>,
+    ) -> Result<OctreeNode> {
         self.skip_newlines();
 
         match &self.current_token {
@@ -250,14 +253,12 @@ impl Parser {
                     });
                 }
 
-                Ok(OctreeNode::new_children(
-                    children.try_into().map_err(|_| {
-                        CsmError::InvalidChildCount {
-                            expected: 8,
-                            actual: len,
-                        }
-                    })?,
-                ))
+                Ok(OctreeNode::new_children(children.try_into().map_err(
+                    |_| CsmError::InvalidChildCount {
+                        expected: 8,
+                        actual: len,
+                    },
+                )?))
             }
             Some(Token::LeftAngle) => {
                 self.advance();
@@ -270,9 +271,7 @@ impl Parser {
                     } else {
                         Err(CsmError::PathNotFound(format!(
                             "Path not found: {}",
-                            path.iter()
-                                .map(|o| o.to_char())
-                                .collect::<String>()
+                            path.iter().map(|o| o.to_char()).collect::<String>()
                         )))
                     }
                 } else {
@@ -293,7 +292,10 @@ impl Parser {
         }
     }
 
-    fn parse_statement(&mut self, prev_epoch: &Option<HashMap<Vec<Octant>, OctreeNode>>) -> Result<(Vec<Octant>, OctreeNode)> {
+    fn parse_statement(
+        &mut self,
+        prev_epoch: &Option<HashMap<Vec<Octant>, OctreeNode>>,
+    ) -> Result<(Vec<Octant>, OctreeNode)> {
         self.skip_newlines();
 
         if self.current_token != Some(Token::Greater) {
@@ -309,7 +311,10 @@ impl Parser {
         Ok((path, cube))
     }
 
-    fn parse_epoch(&mut self, prev_epoch: &Option<HashMap<Vec<Octant>, OctreeNode>>) -> Result<HashMap<Vec<Octant>, OctreeNode>> {
+    fn parse_epoch(
+        &mut self,
+        prev_epoch: &Option<HashMap<Vec<Octant>, OctreeNode>>,
+    ) -> Result<HashMap<Vec<Octant>, OctreeNode>> {
         let mut assignments = HashMap::new();
 
         loop {
