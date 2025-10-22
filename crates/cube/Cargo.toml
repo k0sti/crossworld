@@ -34,5 +34,8 @@ console_error_panic_hook = "0.1"
 # Error handling
 thiserror = "2.0"
 
+# Parsing
+nom = "7.1"
+
 [dev-dependencies]
 wasm-bindgen-test = "0.3"
