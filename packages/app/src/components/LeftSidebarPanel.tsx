@@ -2,7 +2,6 @@ import { useEffect, useCallback } from 'react'
 import { Box, VStack, Text, Divider } from '@chakra-ui/react'
 import { ConfigPanelType } from './ConfigPanel'
 import { VoiceButton } from './VoiceButton'
-import { MicButton } from './MicButton'
 import { ENABLE_EDIT_MODE, ENABLE_VOICE_CHAT } from '../constants/features'
 
 interface SidebarIconProps {
@@ -57,8 +56,8 @@ interface LeftSidebarPanelProps {
   voiceConnected: boolean
   voiceConnecting: boolean
   micEnabled: boolean
-  speaking: boolean
   participantCount: number
+  voiceError: string | null
   onToggleVoice: () => void
   onToggleMic: () => void
   // Ground render mode
@@ -80,8 +79,8 @@ export function LeftSidebarPanel({
   voiceConnected,
   voiceConnecting,
   micEnabled,
-  speaking,
   participantCount,
+  voiceError,
   onToggleVoice,
   onToggleMic,
   useCubeGround,
@@ -246,22 +245,16 @@ export function LeftSidebarPanel({
           <>
             <Divider borderColor="rgba(255, 255, 255, 0.1)" my={1} />
 
-            {/* Voice Chat */}
+            {/* Voice Chat with integrated mic button */}
             <VoiceButton
               isConnected={voiceConnected}
               isConnecting={voiceConnecting}
-              onClick={onToggleVoice}
+              onToggleConnection={onToggleVoice}
+              onToggleMic={onToggleMic}
+              micEnabled={micEnabled}
+              micError={voiceError}
               participantCount={participantCount}
             />
-
-            {/* Mic Button (only shown when voice is connected) */}
-            {voiceConnected && (
-              <MicButton
-                micEnabled={micEnabled}
-                speaking={speaking}
-                onClick={onToggleMic}
-              />
-            )}
 
             <Divider borderColor="rgba(255, 255, 255, 0.1)" my={1} />
           </>
