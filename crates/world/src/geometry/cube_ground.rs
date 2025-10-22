@@ -1,6 +1,6 @@
 use crate::GeometryData;
-use crossworld_cube::{Octree, OctreeNode, Octant};
-use noise::{NoiseFn, Perlin, Fbm};
+use crossworld_cube::{Octant, Octree, OctreeNode};
+use noise::{Fbm, NoiseFn, Perlin};
 
 pub struct CubeGround {
     octree: Octree,
@@ -25,32 +25,39 @@ impl CubeGround {
 
     fn build_ground_octree(noise: &Perlin, fbm: &Fbm<Perlin>) -> OctreeNode {
         // Build 8 children at level 1 (each represents 8x8x8 space)
-        let level1_children = Octant::all().map(|octant| {
-            Self::build_level2(octant, noise, fbm)
-        });
+        let level1_children = Octant::all().map(|octant| Self::build_level2(octant, noise, fbm));
 
         OctreeNode::new_children(level1_children)
     }
 
     fn build_level2(parent: Octant, noise: &Perlin, fbm: &Fbm<Perlin>) -> OctreeNode {
         // Build 8 children at level 2 (each represents 4x4x4 space)
-        let level2_children = Octant::all().map(|octant| {
-            Self::build_level3(parent, octant, noise, fbm)
-        });
+        let level2_children =
+            Octant::all().map(|octant| Self::build_level3(parent, octant, noise, fbm));
 
         OctreeNode::new_children(level2_children)
     }
 
-    fn build_level3(parent1: Octant, parent2: Octant, noise: &Perlin, fbm: &Fbm<Perlin>) -> OctreeNode {
+    fn build_level3(
+        parent1: Octant,
+        parent2: Octant,
+        noise: &Perlin,
+        fbm: &Fbm<Perlin>,
+    ) -> OctreeNode {
         // Build 8 children at level 3 (each represents 2x2x2 space)
-        let level3_children = Octant::all().map(|octant| {
-            Self::build_level4(parent1, parent2, octant, noise, fbm)
-        });
+        let level3_children =
+            Octant::all().map(|octant| Self::build_level4(parent1, parent2, octant, noise, fbm));
 
         OctreeNode::new_children(level3_children)
     }
 
-    fn build_level4(parent1: Octant, parent2: Octant, parent3: Octant, noise: &Perlin, fbm: &Fbm<Perlin>) -> OctreeNode {
+    fn build_level4(
+        parent1: Octant,
+        parent2: Octant,
+        parent3: Octant,
+        noise: &Perlin,
+        fbm: &Fbm<Perlin>,
+    ) -> OctreeNode {
         // Build 8 children at level 4 (each represents 1x1x1 voxel)
         // Calculate position in 16x16x16 grid (0-15 range)
         let (p1x, p1y, p1z) = parent1.offset();
@@ -130,7 +137,8 @@ impl CubeGround {
         // - x: 0-8 world units (scale by 0.5)
         // - y: -8 to 8 world units (scale by 1.0, offset by -8)
         // - z: 0-8 world units (scale by 0.5)
-        let scaled_vertices: Vec<f32> = mesh_data.vertices
+        let scaled_vertices: Vec<f32> = mesh_data
+            .vertices
             .chunks(3)
             .flat_map(|chunk| {
                 let x = chunk[0] * 0.5 * 16.0; // 0.5 * 16 = 8 units
