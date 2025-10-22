@@ -6,7 +6,10 @@ mod parser;
 #[cfg(feature = "wasm")]
 mod wasm;
 
-pub use mesh::generate_mesh;
+pub use mesh::{
+    generate_mesh, generate_mesh_with_mapper, ColorMapper, HsvColorMapper, MeshData,
+    PaletteColorMapper,
+};
 pub use octree::{
     octant_char_to_index, octant_index_to_char, Axis, Cube, Octree, Quad,
 };
