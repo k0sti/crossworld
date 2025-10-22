@@ -497,8 +497,14 @@ function App() {
         )}
 
         {/* Config Panels */}
-        {activePanelType === 'network' && <NetworkConfigPanel />}
-        {activePanelType === 'info' && <InfoPanel />}
+        <NetworkConfigPanel
+          isOpen={activePanelType === 'network'}
+          onClose={() => setActivePanelType(null)}
+        />
+        <InfoPanel
+          isOpen={activePanelType === 'info'}
+          onClose={() => setActivePanelType(null)}
+        />
         {activePanelType === 'profile' && (
           <ProfilePanel
             pubkey={viewedProfilePubkey || pubkey}

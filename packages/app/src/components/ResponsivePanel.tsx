@@ -70,7 +70,7 @@ export function ResponsivePanel({
   closeOnEsc = true,
 }: ResponsivePanelProps) {
   const panelRef = useRef<HTMLDivElement>(null)
-  const [isFullscreen, setIsFullscreen] = useState(false)
+  const [isFullscreen, setIsFullscreen] = useState(forceFullscreen)
   const resizeObserverRef = useRef<ResizeObserver | null>(null)
 
   // Check if content overflows viewport
