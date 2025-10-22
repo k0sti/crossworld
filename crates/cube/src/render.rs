@@ -1,6 +1,33 @@
 use crate::mesh::ColorMapper;
 use crate::octree::{Cube, Octree};
 
+/// Type alias for voxel data: (position, size, color)
+type VoxelData = ((f32, f32, f32), f32, [u8; 3]);
+
+/// Parameters for 2D cube rendering
+struct RenderParams2D<'a> {
+    position: (f32, f32, f32),
+    size: f32,
+    current_depth: usize,
+    max_depth: usize,
+    direction: ViewDirection,
+    image: &'a mut RenderedImage,
+    mapper: &'a dyn ColorMapper,
+}
+
+/// Parameters for 3D mesh voxel drawing
+struct DrawParams3D<'a> {
+    position: (f32, f32, f32),
+    size: f32,
+    color: [u8; 3],
+    #[allow(dead_code)]
+    voxel_pixel_size: usize,
+    direction: ViewDirection,
+    image: &'a mut RenderedImage,
+    min_bound: (f32, f32, f32),
+    max_bound: (f32, f32, f32),
+}
+
 /// View direction for orthographic projection
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ViewDirection {
@@ -140,13 +167,15 @@ pub fn render_orthographic_2d(
     // Render the octree
     render_cube_2d(
         &octree.root,
-        (0.0, 0.0, 0.0),
-        1.0,
-        0,
-        depth,
-        direction,
-        &mut image,
-        mapper,
+        RenderParams2D {
+            position: (0.0, 0.0, 0.0),
+            size: 1.0,
+            current_depth: 0,
+            max_depth: depth,
+            direction,
+            image: &mut image,
+            mapper,
+        },
     );
 
     image
@@ -191,49 +220,58 @@ pub fn render_orthographic_3d(
 
     // Render each voxel cube from the mesh
     for (pos, size, color) in voxels {
-        draw_mesh_voxel_3d(pos, size, color, voxel_pixel_size, direction, &mut image, min_bound, max_bound);
+        draw_mesh_voxel_3d(DrawParams3D {
+            position: pos,
+            size,
+            color,
+            voxel_pixel_size,
+            direction,
+            image: &mut image,
+            min_bound,
+            max_bound,
+        });
     }
 
     image
 }
 
 /// Recursively render a cube to the image (2D pixel-level rendering)
-fn render_cube_2d(
-    cube: &Cube<i32>,
-    position: (f32, f32, f32),
-    size: f32,
-    current_depth: usize,
-    max_depth: usize,
-    direction: ViewDirection,
-    image: &mut RenderedImage,
-    mapper: &dyn ColorMapper,
-) {
+fn render_cube_2d(cube: &Cube<i32>, params: RenderParams2D) {
     match cube {
         Cube::Solid(value) => {
             if *value != 0 {
                 // Draw this voxel to the image
-                draw_voxel_2d(position, size, *value, direction, image, mapper);
+                draw_voxel_2d(
+                    params.position,
+                    params.size,
+                    *value,
+                    params.direction,
+                    params.image,
+                    params.mapper,
+                );
             }
         }
-        Cube::Cubes(children) if current_depth < max_depth => {
+        Cube::Cubes(children) if params.current_depth < params.max_depth => {
             // Recursively render children
-            let half_size = size / 2.0;
+            let half_size = params.size / 2.0;
             for (idx, child) in children.iter().enumerate() {
                 let offset = octant_offset(idx);
                 let child_pos = (
-                    position.0 + offset.0 * size,
-                    position.1 + offset.1 * size,
-                    position.2 + offset.2 * size,
+                    params.position.0 + offset.0 * params.size,
+                    params.position.1 + offset.1 * params.size,
+                    params.position.2 + offset.2 * params.size,
                 );
                 render_cube_2d(
                     child,
-                    child_pos,
-                    half_size,
-                    current_depth + 1,
-                    max_depth,
-                    direction,
-                    image,
-                    mapper,
+                    RenderParams2D {
+                        position: child_pos,
+                        size: half_size,
+                        current_depth: params.current_depth + 1,
+                        max_depth: params.max_depth,
+                        direction: params.direction,
+                        image: params.image,
+                        mapper: params.mapper,
+                    },
                 );
             }
         }
@@ -249,7 +287,7 @@ fn render_cube_2d(
 
 /// Extract voxel information from mesh data
 /// Returns vec of (position, size, color_rgb_u8)
-fn extract_voxels_from_mesh(mesh: &crate::mesh::MeshData) -> Vec<((f32, f32, f32), f32, [u8; 3])> {
+fn extract_voxels_from_mesh(mesh: &crate::mesh::MeshData) -> Vec<VoxelData> {
     let mut voxels = Vec::new();
 
     // The mesh contains cubes with 8 vertices each
@@ -298,7 +336,7 @@ fn extract_voxels_from_mesh(mesh: &crate::mesh::MeshData) -> Vec<((f32, f32, f32
 }
 
 /// Calculate bounding box of voxels
-fn calculate_bounds(voxels: &[((f32, f32, f32), f32, [u8; 3])]) -> ((f32, f32, f32), (f32, f32, f32)) {
+fn calculate_bounds(voxels: &[VoxelData]) -> ((f32, f32, f32), (f32, f32, f32)) {
     let mut min_x = f32::INFINITY;
     let mut min_y = f32::INFINITY;
     let mut min_z = f32::INFINITY;
@@ -351,31 +389,22 @@ fn calculate_image_size(
 }
 
 /// Draw a voxel from mesh data to the image buffer (3D rendering with voxel size)
-fn draw_mesh_voxel_3d(
-    position: (f32, f32, f32),
-    size: f32,
-    color: [u8; 3],
-    _voxel_pixel_size: usize,
-    direction: ViewDirection,
-    image: &mut RenderedImage,
-    min_bound: (f32, f32, f32),
-    max_bound: (f32, f32, f32),
-) {
+fn draw_mesh_voxel_3d(params: DrawParams3D) {
     // Normalize position to [0, 1] range based on bounds
-    let (min_x, min_y, min_z) = min_bound;
-    let (max_x, max_y, max_z) = max_bound;
+    let (min_x, min_y, min_z) = params.min_bound;
+    let (max_x, max_y, max_z) = params.max_bound;
 
-    let (x, y, z) = position;
+    let (x, y, z) = params.position;
 
     // Project to 2D based on view direction and normalize
-    let (u_norm, v_norm, u_size, v_size) = match direction {
+    let (u_norm, v_norm, u_size, v_size) = match params.direction {
         ViewDirection::PosX | ViewDirection::NegX => {
             // U=Z, V=Y
             let u = (z - min_z) / (max_z - min_z);
             let v = (y - min_y) / (max_y - min_y);
-            let u_s = size / (max_z - min_z);
-            let v_s = size / (max_y - min_y);
-            if matches!(direction, ViewDirection::NegX) {
+            let u_s = params.size / (max_z - min_z);
+            let v_s = params.size / (max_y - min_y);
+            if matches!(params.direction, ViewDirection::NegX) {
                 (1.0 - u - u_s, v, u_s, v_s)
             } else {
                 (u, v, u_s, v_s)
@@ -385,9 +414,9 @@ fn draw_mesh_voxel_3d(
             // U=X, V=Z
             let u = (x - min_x) / (max_x - min_x);
             let v = (z - min_z) / (max_z - min_z);
-            let u_s = size / (max_x - min_x);
-            let v_s = size / (max_z - min_z);
-            if matches!(direction, ViewDirection::NegY) {
+            let u_s = params.size / (max_x - min_x);
+            let v_s = params.size / (max_z - min_z);
+            if matches!(params.direction, ViewDirection::NegY) {
                 (u, 1.0 - v - v_s, u_s, v_s)
             } else {
                 (u, v, u_s, v_s)
@@ -397,9 +426,9 @@ fn draw_mesh_voxel_3d(
             // U=X, V=Y
             let u = (x - min_x) / (max_x - min_x);
             let v = (y - min_y) / (max_y - min_y);
-            let u_s = size / (max_x - min_x);
-            let v_s = size / (max_y - min_y);
-            if matches!(direction, ViewDirection::NegZ) {
+            let u_s = params.size / (max_x - min_x);
+            let v_s = params.size / (max_y - min_y);
+            if matches!(params.direction, ViewDirection::NegZ) {
                 (1.0 - u - u_s, v, u_s, v_s)
             } else {
                 (u, v, u_s, v_s)
@@ -408,17 +437,17 @@ fn draw_mesh_voxel_3d(
     };
 
     // Convert to pixel coordinates
-    let u_pixels = (u_norm * image.width as f32) as usize;
-    let v_pixels = (v_norm * image.height as f32) as usize;
-    let u_size_pixels = (u_size * image.width as f32).ceil() as usize;
-    let v_size_pixels = (v_size * image.height as f32).ceil() as usize;
+    let u_pixels = (u_norm * params.image.width as f32) as usize;
+    let v_pixels = (v_norm * params.image.height as f32) as usize;
+    let u_size_pixels = (u_size * params.image.width as f32).ceil() as usize;
+    let v_size_pixels = (v_size * params.image.height as f32).ceil() as usize;
 
     // Draw the voxel
-    for v in v_pixels..usize::min(v_pixels + v_size_pixels, image.height) {
-        for u in u_pixels..usize::min(u_pixels + u_size_pixels, image.width) {
-            let idx = v * image.width + u;
-            if idx < image.pixels.len() {
-                image.pixels[idx] = color;
+    for v in v_pixels..usize::min(v_pixels + v_size_pixels, params.image.height) {
+        for u in u_pixels..usize::min(u_pixels + u_size_pixels, params.image.width) {
+            let idx = v * params.image.width + u;
+            if idx < params.image.pixels.len() {
+                params.image.pixels[idx] = params.color;
             }
         }
     }
@@ -463,7 +492,6 @@ fn draw_voxel_2d(
         }
     }
 }
-
 
 /// Project 3D voxel to 2D coordinates based on view direction
 /// Returns (u_range, v_range, depth) where ranges are in [0, 1]
@@ -548,7 +576,11 @@ mod tests {
         assert_eq!(image.pixels.len(), 16);
 
         // Should have non-black pixels
-        let colored_count = image.pixels.iter().filter(|p| p[0] > 0 || p[1] > 0 || p[2] > 0).count();
+        let colored_count = image
+            .pixels
+            .iter()
+            .filter(|p| p[0] > 0 || p[1] > 0 || p[2] > 0)
+            .count();
         assert!(colored_count > 0);
     }
 
@@ -566,8 +598,16 @@ mod tests {
             assert_eq!(image.height, 4);
 
             // Each direction should render something
-            let colored_count = image.pixels.iter().filter(|p| p[0] > 0 || p[1] > 0 || p[2] > 0).count();
-            assert!(colored_count > 0, "Direction {:?} has no colored pixels", direction);
+            let colored_count = image
+                .pixels
+                .iter()
+                .filter(|p| p[0] > 0 || p[1] > 0 || p[2] > 0)
+                .count();
+            assert!(
+                colored_count > 0,
+                "Direction {:?} has no colored pixels",
+                direction
+            );
         }
     }
 
@@ -625,7 +665,11 @@ mod tests {
 
             // Verify image properties
             assert_eq!(image.width, 32, "Direction {:?} has wrong width", direction);
-            assert_eq!(image.height, 32, "Direction {:?} has wrong height", direction);
+            assert_eq!(
+                image.height, 32,
+                "Direction {:?} has wrong height",
+                direction
+            );
 
             // Check that we have colored pixels
             let colored_count = image
@@ -660,7 +704,9 @@ mod tests {
         let mapper = HsvColorMapper::new();
 
         let image_orig = render_orthographic(&tree, ViewDirection::PosZ, Some(3), &mapper);
-        image_orig.save_png("test_output/mirror/original.png").unwrap();
+        image_orig
+            .save_png("test_output/mirror/original.png")
+            .unwrap();
 
         // Test X mirror
         let csm_mirror_x = r#"
@@ -669,7 +715,9 @@ mod tests {
         "#;
         let tree_mx = parse_csm(csm_mirror_x).unwrap();
         let image_mx = render_orthographic(&tree_mx, ViewDirection::PosZ, Some(3), &mapper);
-        image_mx.save_png("test_output/mirror/mirror_x.png").unwrap();
+        image_mx
+            .save_png("test_output/mirror/mirror_x.png")
+            .unwrap();
 
         // Test Y mirror
         let csm_mirror_y = r#"
@@ -678,7 +726,9 @@ mod tests {
         "#;
         let tree_my = parse_csm(csm_mirror_y).unwrap();
         let image_my = render_orthographic(&tree_my, ViewDirection::PosZ, Some(3), &mapper);
-        image_my.save_png("test_output/mirror/mirror_y.png").unwrap();
+        image_my
+            .save_png("test_output/mirror/mirror_y.png")
+            .unwrap();
 
         // Test Z mirror
         let csm_mirror_z = r#"
@@ -687,10 +737,15 @@ mod tests {
         "#;
         let tree_mz = parse_csm(csm_mirror_z).unwrap();
         let image_mz = render_orthographic(&tree_mz, ViewDirection::PosZ, Some(3), &mapper);
-        image_mz.save_png("test_output/mirror/mirror_z.png").unwrap();
+        image_mz
+            .save_png("test_output/mirror/mirror_z.png")
+            .unwrap();
 
         // Verify images are different (mirrors should change appearance)
-        assert_ne!(image_orig.pixels, image_mx.pixels, "X mirror should change appearance");
+        assert_ne!(
+            image_orig.pixels, image_mx.pixels,
+            "X mirror should change appearance"
+        );
     }
 
     #[cfg(feature = "image")]
@@ -708,7 +763,9 @@ mod tests {
         let mapper = HsvColorMapper::new();
 
         let image_base = render_orthographic(&tree_base, ViewDirection::PosZ, Some(4), &mapper);
-        image_base.save_png("test_output/swap_vs_mirror/base.png").unwrap();
+        image_base
+            .save_png("test_output/swap_vs_mirror/base.png")
+            .unwrap();
 
         // Swap (non-recursive)
         let csm_swap = r#"
@@ -717,7 +774,9 @@ mod tests {
         "#;
         let tree_swap = parse_csm(csm_swap).unwrap();
         let image_swap = render_orthographic(&tree_swap, ViewDirection::PosZ, Some(4), &mapper);
-        image_swap.save_png("test_output/swap_vs_mirror/swap_x.png").unwrap();
+        image_swap
+            .save_png("test_output/swap_vs_mirror/swap_x.png")
+            .unwrap();
 
         // Mirror (recursive)
         let csm_mirror = r#"
@@ -726,10 +785,15 @@ mod tests {
         "#;
         let tree_mirror = parse_csm(csm_mirror).unwrap();
         let image_mirror = render_orthographic(&tree_mirror, ViewDirection::PosZ, Some(4), &mapper);
-        image_mirror.save_png("test_output/swap_vs_mirror/mirror_x.png").unwrap();
+        image_mirror
+            .save_png("test_output/swap_vs_mirror/mirror_x.png")
+            .unwrap();
 
         // Verify they're different
-        assert_ne!(image_swap.pixels, image_mirror.pixels, "Swap and mirror should be different");
+        assert_ne!(
+            image_swap.pixels, image_mirror.pixels,
+            "Swap and mirror should be different"
+        );
     }
 
     #[cfg(feature = "image")]
@@ -753,12 +817,19 @@ mod tests {
 
             if image.width != expected_size {
                 save_on_failure(&image, &format!("depth_{}_wrong_size", depth));
-                panic!("Depth {} should produce {}x{} image, got {}x{}",
-                    depth, expected_size, expected_size, image.width, image.height);
+                panic!(
+                    "Depth {} should produce {}x{} image, got {}x{}",
+                    depth, expected_size, expected_size, image.width, image.height
+                );
             }
 
-            let path = format!("test_output/depth/depth_{}_size_{}.png", depth, expected_size);
-            image.save_png(&path).expect("Failed to save depth test output");
+            let path = format!(
+                "test_output/depth/depth_{}_size_{}.png",
+                depth, expected_size
+            );
+            image
+                .save_png(&path)
+                .expect("Failed to save depth test output");
         }
     }
 
@@ -783,7 +854,11 @@ mod tests {
         let mapper = HsvColorMapper::new();
 
         // Render from multiple angles
-        for direction in [ViewDirection::PosX, ViewDirection::PosY, ViewDirection::PosZ] {
+        for direction in [
+            ViewDirection::PosX,
+            ViewDirection::PosY,
+            ViewDirection::PosZ,
+        ] {
             let image = render_orthographic(&tree, direction, Some(6), &mapper);
 
             // Check for reasonable color distribution
@@ -867,7 +942,10 @@ mod tests {
 
             // Require at least 3 different colors (lenient for orthographic views)
             if non_black_colors < 3 {
-                save_on_failure(&image, &format!("deep_colorful_{}_low_variety", direction.name()));
+                save_on_failure(
+                    &image,
+                    &format!("deep_colorful_{}_low_variety", direction.name()),
+                );
                 panic!(
                     "Deep colorful structure from {:?} has only {} unique colors, expected at least 3",
                     direction, non_black_colors
@@ -883,7 +961,10 @@ mod tests {
             let colored_ratio = colored_count as f32 / image.pixels.len() as f32;
 
             if colored_ratio < 0.1 {
-                save_on_failure(&image, &format!("deep_colorful_{}_too_sparse", direction.name()));
+                save_on_failure(
+                    &image,
+                    &format!("deep_colorful_{}_too_sparse", direction.name()),
+                );
                 panic!(
                     "Deep colorful structure from {:?} has only {:.2}% colored pixels",
                     direction,
@@ -892,7 +973,9 @@ mod tests {
             }
 
             let path = format!("test_output/deep_colorful/{}.png", direction.name());
-            image.save_png(&path).expect("Failed to save deep colorful structure");
+            image
+                .save_png(&path)
+                .expect("Failed to save deep colorful structure");
 
             println!(
                 "Rendered {} from {:?}: {} unique colors, {:.1}% filled",
@@ -905,12 +988,14 @@ mod tests {
 
         // Also render at higher resolution (depth 6 = 64x64) for better detail
         let image_hires = render_orthographic(&tree, ViewDirection::PosZ, Some(6), &mapper);
-        image_hires.save_png("test_output/deep_colorful/pos_z_hires_64x64.png")
+        image_hires
+            .save_png("test_output/deep_colorful/pos_z_hires_64x64.png")
             .expect("Failed to save high-res image");
 
         // And at depth 7 for maximum detail (128x128)
         let image_ultra = render_orthographic(&tree, ViewDirection::PosZ, Some(7), &mapper);
-        image_ultra.save_png("test_output/deep_colorful/pos_z_ultra_128x128.png")
+        image_ultra
+            .save_png("test_output/deep_colorful/pos_z_ultra_128x128.png")
             .expect("Failed to save ultra-res image");
     }
 
@@ -964,7 +1049,8 @@ mod tests {
         // Test different voxel sizes
         // The mesh contains 8 voxels, each at positions that span [0, 1]
         for voxel_size_log2 in [1, 2, 3, 4] {
-            let image = render_orthographic_3d(&tree, ViewDirection::PosZ, voxel_size_log2, &mapper);
+            let image =
+                render_orthographic_3d(&tree, ViewDirection::PosZ, voxel_size_log2, &mapper);
 
             // Image size depends on voxel bounds from mesh
             // For subdivided octree [0,1] range: each half-cube gets drawn
@@ -977,7 +1063,11 @@ mod tests {
                 .iter()
                 .filter(|p| p[0] > 0 || p[1] > 0 || p[2] > 0)
                 .count();
-            assert!(colored_count > 0, "Voxel size 2^{} should have colored pixels", voxel_size_log2);
+            assert!(
+                colored_count > 0,
+                "Voxel size 2^{} should have colored pixels",
+                voxel_size_log2
+            );
         }
     }
 
@@ -1009,12 +1099,20 @@ mod tests {
         let comparison = RenderedImage::side_by_side(&image_2d, &image_3d);
 
         // Save outputs
-        image_2d.save_png("test_output/comparison/2d_render.png").unwrap();
-        image_3d.save_png("test_output/comparison/3d_render.png").unwrap();
-        comparison.save_png("test_output/comparison/side_by_side.png").unwrap();
+        image_2d
+            .save_png("test_output/comparison/2d_render.png")
+            .unwrap();
+        image_3d
+            .save_png("test_output/comparison/3d_render.png")
+            .unwrap();
+        comparison
+            .save_png("test_output/comparison/side_by_side.png")
+            .unwrap();
 
-        println!("Saved comparison images to test_output/comparison/ (2D: {}x{}, 3D: {}x{})",
-            image_2d.width, image_2d.height, image_3d.width, image_3d.height);
+        println!(
+            "Saved comparison images to test_output/comparison/ (2D: {}x{}, 3D: {}x{})",
+            image_2d.width, image_2d.height, image_3d.width, image_3d.height
+        );
     }
 
     #[cfg(feature = "image")]
@@ -1047,10 +1145,16 @@ mod tests {
             let path = format!("test_output/comparison_dirs/{}.png", direction.name());
             comparison.save_png(&path).unwrap();
 
-            println!("Saved {} (2D: {}x{}, 3D: {}x{}, total: {}x{})",
-                path, image_2d.width, image_2d.height,
-                image_3d.width, image_3d.height,
-                comparison.width, comparison.height);
+            println!(
+                "Saved {} (2D: {}x{}, 3D: {}x{}, total: {}x{})",
+                path,
+                image_2d.width,
+                image_2d.height,
+                image_3d.width,
+                image_3d.height,
+                comparison.width,
+                comparison.height
+            );
         }
     }
 
@@ -1082,17 +1186,31 @@ mod tests {
             .count();
 
         let colored_ratio = colored_count as f32 / image.pixels.len() as f32;
-        assert!(colored_ratio > 0.1, "Should have reasonable fill ratio, got {:.2}%",
-            colored_ratio * 100.0);
+        assert!(
+            colored_ratio > 0.1,
+            "Should have reasonable fill ratio, got {:.2}%",
+            colored_ratio * 100.0
+        );
 
-        image.save_png("test_output/3d_render/large_voxels_64x64.png").unwrap();
-        println!("3D render saved: {}x{} with {:.1}% filled",
-            image.width, image.height, colored_ratio * 100.0);
+        image
+            .save_png("test_output/3d_render/large_voxels_64x64.png")
+            .unwrap();
+        println!(
+            "3D render saved: {}x{} with {:.1}% filled",
+            image.width,
+            image.height,
+            colored_ratio * 100.0
+        );
 
         // Also test at higher resolution (16x16 pixels per voxel)
         let image_hires = render_orthographic_3d(&tree, ViewDirection::PosZ, 4, &mapper);
-        image_hires.save_png("test_output/3d_render/large_voxels_128x128.png").unwrap();
-        println!("3D hi-res render saved: {}x{}", image_hires.width, image_hires.height);
+        image_hires
+            .save_png("test_output/3d_render/large_voxels_128x128.png")
+            .unwrap();
+        println!(
+            "3D hi-res render saved: {}x{}",
+            image_hires.width, image_hires.height
+        );
     }
 
     #[cfg(feature = "image")]
@@ -1118,7 +1236,9 @@ mod tests {
         assert_eq!(combined.width, img1.width + img2.width);
         assert_eq!(combined.height, img1.height.max(img2.height));
 
-        combined.save_png("test_output/side_by_side/combined.png").unwrap();
+        combined
+            .save_png("test_output/side_by_side/combined.png")
+            .unwrap();
     }
 
     /// Verify that mesh normals are correct
@@ -1132,8 +1252,11 @@ mod tests {
         let normal_count = mesh.normals.len() / 3;
 
         // We should have normals for every vertex referenced in indices
-        assert_eq!(normal_count, index_count,
-            "Normal count ({}) should match index count ({})", normal_count, index_count);
+        assert_eq!(
+            normal_count, index_count,
+            "Normal count ({}) should match index count ({})",
+            normal_count, index_count
+        );
 
         // Verify normals are unit length and point in valid directions
         for i in 0..normal_count {
@@ -1145,17 +1268,24 @@ mod tests {
             let length = (nx * nx + ny * ny + nz * nz).sqrt();
 
             // Should be unit length (allow small epsilon for floating point)
-            assert!((length - 1.0).abs() < 0.01,
-                "Normal {} should be unit length, got length {}", i, length);
+            assert!(
+                (length - 1.0).abs() < 0.01,
+                "Normal {} should be unit length, got length {}",
+                i,
+                length
+            );
 
             // Should be axis-aligned for cube faces (one component is ±1, others are 0)
             let is_axis_aligned =
-                (nx.abs() - 1.0).abs() < 0.01 && ny.abs() < 0.01 && nz.abs() < 0.01 ||
-                nx.abs() < 0.01 && (ny.abs() - 1.0).abs() < 0.01 && nz.abs() < 0.01 ||
-                nx.abs() < 0.01 && ny.abs() < 0.01 && (nz.abs() - 1.0).abs() < 0.01;
+                (nx.abs() - 1.0).abs() < 0.01 && ny.abs() < 0.01 && nz.abs() < 0.01
+                    || nx.abs() < 0.01 && (ny.abs() - 1.0).abs() < 0.01 && nz.abs() < 0.01
+                    || nx.abs() < 0.01 && ny.abs() < 0.01 && (nz.abs() - 1.0).abs() < 0.01;
 
-            assert!(is_axis_aligned,
-                "Normal {} should be axis-aligned, got ({}, {}, {})", i, nx, ny, nz);
+            assert!(
+                is_axis_aligned,
+                "Normal {} should be axis-aligned, got ({}, {}, {})",
+                i, nx, ny, nz
+            );
         }
 
         // Verify that each face has consistent normals
@@ -1168,18 +1298,50 @@ mod tests {
             let idx2 = mesh.indices[tri_idx * 3 + 2] as usize;
 
             // Get vertices
-            let v0 = [mesh.vertices[idx0 * 3], mesh.vertices[idx0 * 3 + 1], mesh.vertices[idx0 * 3 + 2]];
-            let v1 = [mesh.vertices[idx1 * 3], mesh.vertices[idx1 * 3 + 1], mesh.vertices[idx1 * 3 + 2]];
-            let v2 = [mesh.vertices[idx2 * 3], mesh.vertices[idx2 * 3 + 1], mesh.vertices[idx2 * 3 + 2]];
+            let v0 = [
+                mesh.vertices[idx0 * 3],
+                mesh.vertices[idx0 * 3 + 1],
+                mesh.vertices[idx0 * 3 + 2],
+            ];
+            let v1 = [
+                mesh.vertices[idx1 * 3],
+                mesh.vertices[idx1 * 3 + 1],
+                mesh.vertices[idx1 * 3 + 2],
+            ];
+            let v2 = [
+                mesh.vertices[idx2 * 3],
+                mesh.vertices[idx2 * 3 + 1],
+                mesh.vertices[idx2 * 3 + 2],
+            ];
 
             // Get normals for this triangle's vertices
-            let n0 = [mesh.normals[tri_idx * 9], mesh.normals[tri_idx * 9 + 1], mesh.normals[tri_idx * 9 + 2]];
-            let n1 = [mesh.normals[tri_idx * 9 + 3], mesh.normals[tri_idx * 9 + 4], mesh.normals[tri_idx * 9 + 5]];
-            let n2 = [mesh.normals[tri_idx * 9 + 6], mesh.normals[tri_idx * 9 + 7], mesh.normals[tri_idx * 9 + 8]];
+            let n0 = [
+                mesh.normals[tri_idx * 9],
+                mesh.normals[tri_idx * 9 + 1],
+                mesh.normals[tri_idx * 9 + 2],
+            ];
+            let n1 = [
+                mesh.normals[tri_idx * 9 + 3],
+                mesh.normals[tri_idx * 9 + 4],
+                mesh.normals[tri_idx * 9 + 5],
+            ];
+            let n2 = [
+                mesh.normals[tri_idx * 9 + 6],
+                mesh.normals[tri_idx * 9 + 7],
+                mesh.normals[tri_idx * 9 + 8],
+            ];
 
             // All three normals in a triangle should be the same (flat shading for cubes)
-            assert_eq!(n0, n1, "Triangle {} normals inconsistent: vertex 0 vs 1", tri_idx);
-            assert_eq!(n1, n2, "Triangle {} normals inconsistent: vertex 1 vs 2", tri_idx);
+            assert_eq!(
+                n0, n1,
+                "Triangle {} normals inconsistent: vertex 0 vs 1",
+                tri_idx
+            );
+            assert_eq!(
+                n1, n2,
+                "Triangle {} normals inconsistent: vertex 1 vs 2",
+                tri_idx
+            );
 
             // Calculate face normal from triangle vertices using cross product
             let edge1 = [v1[0] - v0[0], v1[1] - v0[1], v1[2] - v0[2]];
@@ -1191,7 +1353,8 @@ mod tests {
                 edge1[0] * edge2[1] - edge1[1] * edge2[0],
             ];
 
-            let cross_length = (cross[0] * cross[0] + cross[1] * cross[1] + cross[2] * cross[2]).sqrt();
+            let cross_length =
+                (cross[0] * cross[0] + cross[1] * cross[1] + cross[2] * cross[2]).sqrt();
 
             if cross_length > 0.001 {
                 let cross_normalized = [
@@ -1202,7 +1365,9 @@ mod tests {
 
                 // The stored normal should match the computed normal (pointing outward)
                 // Allow for both directions since we're just checking consistency
-                let dot = n0[0] * cross_normalized[0] + n0[1] * cross_normalized[1] + n0[2] * cross_normalized[2];
+                let dot = n0[0] * cross_normalized[0]
+                    + n0[1] * cross_normalized[1]
+                    + n0[2] * cross_normalized[2];
 
                 assert!(dot.abs() > 0.99,
                     "Triangle {} normal ({:?}) should align with computed normal ({:?}), dot product: {}",
@@ -1210,8 +1375,11 @@ mod tests {
             }
         }
 
-        println!("✓ Mesh normals verified: {} cubes, {} triangles, all normals correct",
-            vertex_count / 8, triangles_count);
+        println!(
+            "✓ Mesh normals verified: {} cubes, {} triangles, all normals correct",
+            vertex_count / 8,
+            triangles_count
+        );
     }
 
     #[cfg(feature = "image")]
@@ -1252,33 +1420,64 @@ mod tests {
             let image_3d = render_orthographic_3d(&tree, direction, 4, &mapper);
 
             // Verify minimum size
-            assert!(image_3d.width >= 4, "{:?}: width {} should be >= 4", direction, image_3d.width);
-            assert!(image_3d.height >= 4, "{:?}: height {} should be >= 4", direction, image_3d.height);
+            assert!(
+                image_3d.width >= 4,
+                "{:?}: width {} should be >= 4",
+                direction,
+                image_3d.width
+            );
+            assert!(
+                image_3d.height >= 4,
+                "{:?}: height {} should be >= 4",
+                direction,
+                image_3d.height
+            );
 
             // Verify we have colored pixels
-            let colored_count = image_3d.pixels.iter()
+            let colored_count = image_3d
+                .pixels
+                .iter()
                 .filter(|p| p[0] > 0 || p[1] > 0 || p[2] > 0)
                 .count();
             let colored_ratio = colored_count as f32 / image_3d.pixels.len() as f32;
 
-            assert!(colored_count > 0, "{:?}: should have colored pixels", direction);
+            assert!(
+                colored_count > 0,
+                "{:?}: should have colored pixels",
+                direction
+            );
 
             let path = format!("test_output/3d_deep_directions/{}.png", direction.name());
             image_3d.save_png(&path).unwrap();
 
-            println!("3D deep render {}: {}x{} ({:.1}% filled, {} colored pixels)",
-                direction.name(), image_3d.width, image_3d.height,
-                colored_ratio * 100.0, colored_count);
+            println!(
+                "3D deep render {}: {}x{} ({:.1}% filled, {} colored pixels)",
+                direction.name(),
+                image_3d.width,
+                image_3d.height,
+                colored_ratio * 100.0,
+                colored_count
+            );
         }
 
         // Also create high-resolution versions
         let image_hires = render_orthographic_3d(&tree, ViewDirection::PosZ, 6, &mapper);
-        image_hires.save_png("test_output/3d_deep_directions/pos_z_hires.png").unwrap();
-        println!("High-res 3D render: {}x{}", image_hires.width, image_hires.height);
+        image_hires
+            .save_png("test_output/3d_deep_directions/pos_z_hires.png")
+            .unwrap();
+        println!(
+            "High-res 3D render: {}x{}",
+            image_hires.width, image_hires.height
+        );
 
         let image_ultra = render_orthographic_3d(&tree, ViewDirection::PosZ, 7, &mapper);
-        image_ultra.save_png("test_output/3d_deep_directions/pos_z_ultra.png").unwrap();
-        println!("Ultra-res 3D render: {}x{}", image_ultra.width, image_ultra.height);
+        image_ultra
+            .save_png("test_output/3d_deep_directions/pos_z_ultra.png")
+            .unwrap();
+        println!(
+            "Ultra-res 3D render: {}x{}",
+            image_ultra.width, image_ultra.height
+        );
     }
 
     #[cfg(feature = "image")]
@@ -1299,7 +1498,7 @@ mod tests {
             // Each child is subdivided in level 2
 
             // Child 0 (aaa-aah): mix of transparent and opaque
-            0, 1, 0, 2, 3, 0, 4, 0,  // 4 transparent, 4 opaque
+            0, 1, 0, 2, 3, 0, 4, 0, // 4 transparent, 4 opaque
             // Child 1 (aba-abh): mostly opaque
             5, 6, 0, 7, 8, 0, 9, 10, // 2 transparent, 6 opaque
             // Child 2 (aca-ach): mostly transparent
@@ -1362,20 +1561,48 @@ mod tests {
             let image_3d = render_orthographic_3d(&tree, direction, 3, &mapper);
 
             // Verify that we have black (transparent) pixels
-            let black_2d = image_2d.pixels.iter().filter(|p| p[0] == 0 && p[1] == 0 && p[2] == 0).count();
-            let colored_2d = image_2d.pixels.iter().filter(|p| p[0] > 0 || p[1] > 0 || p[2] > 0).count();
+            let black_2d = image_2d
+                .pixels
+                .iter()
+                .filter(|p| p[0] == 0 && p[1] == 0 && p[2] == 0)
+                .count();
+            let colored_2d = image_2d
+                .pixels
+                .iter()
+                .filter(|p| p[0] > 0 || p[1] > 0 || p[2] > 0)
+                .count();
 
-            let black_3d = image_3d.pixels.iter().filter(|p| p[0] == 0 && p[1] == 0 && p[2] == 0).count();
-            let colored_3d = image_3d.pixels.iter().filter(|p| p[0] > 0 || p[1] > 0 || p[2] > 0).count();
+            let black_3d = image_3d
+                .pixels
+                .iter()
+                .filter(|p| p[0] == 0 && p[1] == 0 && p[2] == 0)
+                .count();
+            let colored_3d = image_3d
+                .pixels
+                .iter()
+                .filter(|p| p[0] > 0 || p[1] > 0 || p[2] > 0)
+                .count();
 
             // 2D rendering should always show both transparent and colored
             // (since we render at pixel level with no occlusion within a view plane)
-            assert!(black_2d > 0, "{:?}: 2D should have transparent pixels", direction);
-            assert!(colored_2d > 0, "{:?}: 2D should have colored pixels", direction);
+            assert!(
+                black_2d > 0,
+                "{:?}: 2D should have transparent pixels",
+                direction
+            );
+            assert!(
+                colored_2d > 0,
+                "{:?}: 2D should have colored pixels",
+                direction
+            );
 
             // 3D rendering might not show transparent pixels from all angles due to occlusion,
             // but should have colored pixels
-            assert!(colored_3d > 0, "{:?}: 3D should have colored pixels", direction);
+            assert!(
+                colored_3d > 0,
+                "{:?}: 3D should have colored pixels",
+                direction
+            );
 
             // Create side-by-side comparison
             let comparison = RenderedImage::side_by_side(&image_2d, &image_3d);
@@ -1394,10 +1621,16 @@ mod tests {
         let image_3d_hires = render_orthographic_3d(&tree, ViewDirection::PosZ, 5, &mapper);
 
         let comparison_hires = RenderedImage::side_by_side(&image_2d_hires, &image_3d_hires);
-        comparison_hires.save_png("test_output/transparency/pos_z_hires.png").unwrap();
+        comparison_hires
+            .save_png("test_output/transparency/pos_z_hires.png")
+            .unwrap();
 
-        println!("High-res transparency test saved: 2D={}x{}, 3D={}x{}",
-            image_2d_hires.width, image_2d_hires.height,
-            image_3d_hires.width, image_3d_hires.height);
+        println!(
+            "High-res transparency test saved: 2D={}x{}, 3D={}x{}",
+            image_2d_hires.width,
+            image_2d_hires.height,
+            image_3d_hires.width,
+            image_3d_hires.height
+        );
     }
 }

@@ -40,13 +40,9 @@ fn comment(input: &str) -> IResult<&str, ()> {
 fn ws_or_comment(input: &str) -> IResult<&str, ()> {
     let (input, _) = multispace0(input)?;
     let mut remaining = input;
-    loop {
-        if let Ok((input, _)) = comment(remaining) {
-            let (input, _) = multispace0(input)?;
-            remaining = input;
-        } else {
-            break;
-        }
+    while let Ok((input, _)) = comment(remaining) {
+        let (input, _) = multispace0(input)?;
+        remaining = input;
     }
     Ok((remaining, ()))
 }
@@ -257,7 +253,7 @@ fn parse_model(input: &str) -> IResult<&str, Octree> {
         (**cube).clone()
     } else {
         // Build from partial assignments
-        build_cube_from_assignments(&current_epoch, &vec![])
+        build_cube_from_assignments(&current_epoch, &[])
     };
 
     Ok((remaining, Octree::new(root)))

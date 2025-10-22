@@ -84,8 +84,8 @@ impl PaletteColorMapper {
     pub fn from_image_bytes(bytes: &[u8]) -> Result<Self, String> {
         use image::GenericImageView;
 
-        let img = image::load_from_memory(bytes)
-            .map_err(|e| format!("Failed to load image: {}", e))?;
+        let img =
+            image::load_from_memory(bytes).map_err(|e| format!("Failed to load image: {}", e))?;
 
         let mut colors = Vec::new();
         for pixel in img.pixels() {
@@ -320,11 +320,7 @@ mod tests {
 
     #[test]
     fn test_generate_mesh_with_palette() {
-        let palette = vec![
-            [1.0, 0.0, 0.0],
-            [0.0, 1.0, 0.0],
-            [0.0, 0.0, 1.0],
-        ];
+        let palette = vec![[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
         let mapper = PaletteColorMapper::new(palette);
 
         let cube = Cube::cubes([
