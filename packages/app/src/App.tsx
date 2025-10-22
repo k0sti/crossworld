@@ -52,6 +52,7 @@ function App() {
   const [showRestoreModal, setShowRestoreModal] = useState(false)
   const restoreTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const initialStatePublished = useRef(false)
+  const voiceAutoConnected = useRef(false)
 
   // Ground render mode
   const [useCubeGround, setUseCubeGround] = useState(false)
@@ -82,6 +83,26 @@ function App() {
       })
     }
   }, [])
+
+  // Auto-connect to voice when user logs in and streaming URL is available
+  useEffect(() => {
+    if (!pubkey || !streamingUrl || voiceAutoConnected.current) return
+
+    const autoConnect = async () => {
+      try {
+        const npub = npubEncode(pubkey)
+        await voice.connect(streamingUrl, npub)
+        voiceAutoConnected.current = true
+        console.log('[App] Auto-connected to voice chat')
+      } catch (err) {
+        console.error('[App] Failed to auto-connect to voice:', err)
+      }
+    }
+
+    // Use a small delay to ensure this only runs on initial login
+    const timer = setTimeout(autoConnect, 100)
+    return () => clearTimeout(timer)
+  }, [pubkey, streamingUrl, voice])
 
   // Start avatar state subscription on mount
   useEffect(() => {
@@ -318,6 +339,7 @@ function App() {
 
     // Reset state
     initialStatePublished.current = false
+    voiceAutoConnected.current = false
     setPubkey(null)
     setIsChatOpen(false)
     setIsClientListOpen(false)
@@ -459,8 +481,8 @@ function App() {
             voiceConnected={voice.isConnected}
             voiceConnecting={voice.status === 'connecting'}
             micEnabled={voice.micEnabled}
-            speaking={voice.speaking}
             participantCount={voice.participantCount}
+            voiceError={voice.error}
             onToggleVoice={handleToggleVoice}
             onToggleMic={handleToggleMic}
             useCubeGround={useCubeGround}
