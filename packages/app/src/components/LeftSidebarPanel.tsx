@@ -48,6 +48,8 @@ interface LeftSidebarPanelProps {
   onToggleEditMode: (isEditMode: boolean) => void
   isCameraMode: boolean
   onToggleCameraMode: () => void
+  enableCameraControl?: boolean
+  enableCubeGround?: boolean
   isChatOpen: boolean
   onToggleChat: () => void
   isClientListOpen: boolean
@@ -72,6 +74,8 @@ export function LeftSidebarPanel({
   onToggleEditMode,
   isCameraMode,
   onToggleCameraMode,
+  enableCameraControl = true,
+  enableCubeGround = true,
   isChatOpen,
   onToggleChat,
   isClientListOpen,
@@ -116,15 +120,19 @@ export function LeftSidebarPanel({
         actions.push(() => onToggleEditMode(!isEditMode))
       }
 
-      // 2. Camera mode
-      actions.push(() => {
-        if (!isCameraMode) {
-          onToggleCameraMode()
-        }
-      })
+      // 2. Camera mode (if enabled)
+      if (enableCameraControl) {
+        actions.push(() => {
+          if (!isCameraMode) {
+            onToggleCameraMode()
+          }
+        })
+      }
 
-      // 3. Ground render mode
-      actions.push(onToggleGroundRenderMode)
+      // 3. Ground render mode (if enabled)
+      if (enableCubeGround) {
+        actions.push(onToggleGroundRenderMode)
+      }
 
       // 4. Avatar panel
       actions.push(() => handleOpenPanel('avatar'))
@@ -167,6 +175,8 @@ export function LeftSidebarPanel({
     isChatOpen,
     isClientListOpen,
     voiceConnected,
+    enableCameraControl,
+    enableCubeGround,
     onToggleEditMode,
     onToggleCameraMode,
     onToggleGroundRenderMode,
@@ -203,26 +213,34 @@ export function LeftSidebarPanel({
         )}
 
         {/* Camera Mode Button */}
-        <SidebarIcon
-          icon="📷"
-          onClick={() => {
-            // Only enter camera mode, don't toggle
-            if (!isCameraMode) {
-              onToggleCameraMode()
-            }
-          }}
-          isActive={isCameraMode}
-          activeBgColor="rgba(255, 215, 0, 0.4)" // Yellow when active
-        />
-        <Divider borderColor="rgba(255, 255, 255, 0.1)" my={1} />
+        {enableCameraControl && (
+          <>
+            <SidebarIcon
+              icon="📷"
+              onClick={() => {
+                // Only enter camera mode, don't toggle
+                if (!isCameraMode) {
+                  onToggleCameraMode()
+                }
+              }}
+              isActive={isCameraMode}
+              activeBgColor="rgba(255, 215, 0, 0.4)" // Yellow when active
+            />
+            <Divider borderColor="rgba(255, 255, 255, 0.1)" my={1} />
+          </>
+        )}
 
         {/* Ground Render Mode Toggle */}
-        <SidebarIcon
-          icon={useCubeGround ? "🧊" : "🟩"}
-          onClick={onToggleGroundRenderMode}
-          isActive={useCubeGround}
-        />
-        <Divider borderColor="rgba(255, 255, 255, 0.1)" my={1} />
+        {enableCubeGround && (
+          <>
+            <SidebarIcon
+              icon={useCubeGround ? "🧊" : "🟩"}
+              onClick={onToggleGroundRenderMode}
+              isActive={useCubeGround}
+            />
+            <Divider borderColor="rgba(255, 255, 255, 0.1)" my={1} />
+          </>
+        )}
 
         {/* Config Icons */}
         <SidebarIcon
