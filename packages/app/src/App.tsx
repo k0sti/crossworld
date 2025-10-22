@@ -18,6 +18,9 @@ import { useVoice } from './hooks/useVoice'
 import { npubEncode } from 'nostr-tools/nip19'
 import type { TeleportAnimationType } from './renderer/teleport-animation'
 import { VOICE_CONFIG } from './config'
+import { LoginSettingsService } from './services/login-settings'
+import { ExtensionAccount, SimpleAccount } from 'applesauce-accounts/accounts'
+import { ExtensionSigner } from 'applesauce-signers'
 
 const ENABLE_CAMERA_CONTROL = false
 const ENABLE_CUBE_GROUND = false
@@ -115,6 +118,100 @@ function App() {
       avatarStateService.stopSubscription()
     }
   }, [avatarStateService])
+
+  // Auto-login on mount if login settings exist
+  useEffect(() => {
+    const autoLogin = async () => {
+      const loginSettings = LoginSettingsService.load()
+
+      if (!loginSettings) {
+        console.log('[App] No login settings found')
+        return
+      }
+
+      console.log('[App] Auto-login with method:', loginSettings.method)
+
+      try {
+        if (loginSettings.method === 'guest') {
+          // Restore guest account
+          const guestData = LoginSettingsService.loadGuestAccount()
+          if (!guestData) {
+            console.error('[App] Guest account data missing')
+            LoginSettingsService.clear()
+            return
+          }
+
+          const account = SimpleAccount.fromJSON(guestData.account)
+          accountManager.addAccount(account)
+          accountManager.setActive(account)
+
+          toast({
+            title: 'Welcome back',
+            description: `Logged in as ${guestData.name}`,
+            status: 'success',
+            duration: 3000,
+            isClosable: true,
+          })
+
+          setPubkey(account.pubkey)
+        } else if (loginSettings.method === 'extension') {
+          // Try to reconnect with extension
+          if (!window.nostr) {
+            console.log('[App] Extension not available, clearing settings')
+            LoginSettingsService.clear()
+            return
+          }
+
+          const signer = new ExtensionSigner()
+          const publicKey = await signer.getPublicKey()
+
+          if (publicKey !== loginSettings.pubkey) {
+            console.warn('[App] Extension pubkey mismatch, clearing settings')
+            LoginSettingsService.clear()
+            return
+          }
+
+          const existingAccount = accountManager.accounts.find(
+            (a) => a.type === ExtensionAccount.type && a.pubkey === publicKey
+          )
+
+          if (!existingAccount) {
+            const account = new ExtensionAccount(publicKey, signer)
+            accountManager.addAccount(account)
+            accountManager.setActive(account)
+          } else {
+            accountManager.setActive(existingAccount)
+          }
+
+          toast({
+            title: 'Welcome back',
+            description: 'Reconnected to extension',
+            status: 'success',
+            duration: 3000,
+            isClosable: true,
+          })
+
+          setPubkey(publicKey)
+        } else if (loginSettings.method === 'amber') {
+          // Amber auto-login not supported (requires user interaction)
+          console.log('[App] Amber auto-login not supported, clearing settings')
+          LoginSettingsService.clear()
+        }
+      } catch (error) {
+        console.error('[App] Auto-login failed:', error)
+        LoginSettingsService.clear()
+        toast({
+          title: 'Auto-login failed',
+          description: 'Please log in again',
+          status: 'warning',
+          duration: 3000,
+          isClosable: true,
+        })
+      }
+    }
+
+    autoLogin()
+  }, [accountManager, toast])
 
   // Query last state when logging in
   useEffect(() => {
@@ -339,6 +436,9 @@ function App() {
     if (pubkey) {
       avatarStateService.removeUserState(pubkey)
     }
+
+    // Clear login settings
+    LoginSettingsService.clear()
 
     // Reset state
     initialStatePublished.current = false
