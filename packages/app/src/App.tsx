@@ -1,7 +1,8 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { useToast } from '@chakra-ui/react'
+import { useToast, IconButton } from '@chakra-ui/react'
 import { useAccountManager } from 'applesauce-react/hooks'
 import { TopBar, ConfigPanelType, ProfilePanel } from '@crossworld/common'
+import { FiEdit3 } from 'react-icons/fi'
 import { WorldCanvas } from './components/WorldCanvas'
 import { LeftSidebarPanel } from './components/LeftSidebarPanel'
 import { NetworkConfigPanel } from './components/NetworkConfigPanel'
@@ -564,6 +565,16 @@ function App() {
           onOpenPanel={setActivePanelType}
           onOpenProfile={() => setActivePanelType('profile')}
           activePanelType={activePanelType}
+          centerContent={
+            <IconButton
+              aria-label="Open editor"
+              icon={<FiEdit3 />}
+              onClick={() => window.location.href = 'editor/'}
+              variant="ghost"
+              size="sm"
+              title="Voxel Editor"
+            />
+          }
         />
         {pubkey && (
           <LeftSidebarPanel
