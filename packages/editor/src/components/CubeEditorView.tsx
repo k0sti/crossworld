@@ -1,26 +1,49 @@
 import { useEffect, useRef, useState } from 'react'
-import { Box, IconButton, VStack, HStack } from '@chakra-ui/react'
+import { Box, IconButton, VStack } from '@chakra-ui/react'
 import { FiRotateCcw, FiSave, FiDownload } from 'react-icons/fi'
 import * as THREE from 'three'
 import { PaletteSelector } from './PaletteSelector'
+import { BottomBar } from './BottomBar'
+import { generateHSVPalette } from '../palettes/hsv'
 
 interface CubeEditorViewProps {
   onSave?: (voxelData: Uint8Array) => void
 }
 
-const GRID_SIZE = 16
-const VOXEL_SIZE = 0.1
+const CUBE_MAX_DEPTH = 4  // 2^4 = 16x16x16
+const CUBE_SIZE = 1 << CUBE_MAX_DEPTH  // 16
+const MODEL_ID = 'editor-model'
 
-export function CubeEditorView({ onSave }: CubeEditorViewProps) {
+export function CubeEditorView(_props: CubeEditorViewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const sceneRef = useRef<THREE.Scene | null>(null)
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null)
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null)
-  const voxelMeshesRef = useRef<Map<string, THREE.Mesh>>(new Map())
-  const [selectedColor, setSelectedColor] = useState('#FF0000')
+  const geometryMeshRef = useRef<THREE.Mesh | null>(null)
+  const gridHelperRef = useRef<THREE.GridHelper | null>(null)
+  const previewPlaneRef = useRef<THREE.Mesh | null>(null)
+  const raycasterRef = useRef<THREE.Raycaster>(new THREE.Raycaster())
+  const mouseRef = useRef<THREE.Vector2>(new THREE.Vector2())
+  const [palette, setPalette] = useState<string[]>(() => generateHSVPalette(16))
+  const [selectedColor, setSelectedColor] = useState(() => generateHSVPalette(16)[0])
+  const [selectedColorIndex, setSelectedColorIndex] = useState(0)
   const [isPaletteOpen, setIsPaletteOpen] = useState(false)
+  const [wasmModule, setWasmModule] = useState<any>(null)
+  const depth = CUBE_MAX_DEPTH // Always use max depth
 
-  // Initialize Three.js scene
+  // Initialize WASM module
+  useEffect(() => {
+    import('@workspace/wasm-cube').then(async (wasmModule) => {
+      await wasmModule.default()  // Initialize WASM
+      const wasm = wasmModule as any // Type assertion needed for dynamic import
+      wasm.create_model(MODEL_ID, CUBE_MAX_DEPTH)
+      wasm.set_model_palette(MODEL_ID, palette)
+      setWasmModule(wasm)
+      console.log('[CubeEditor] WASM module initialized')
+    }).catch(console.error)
+  }, [palette])
+
+  // Initialize Three.js scene (only once)
   useEffect(() => {
     if (!canvasRef.current) return
 
@@ -36,8 +59,8 @@ export function CubeEditorView({ onSave }: CubeEditorViewProps) {
       0.1,
       1000
     )
-    camera.position.set(2, 2, 3)
-    camera.lookAt(0, 0, 0)
+    camera.position.set(10, 10, 15)
+    camera.lookAt(CUBE_SIZE / 2, CUBE_SIZE / 2, CUBE_SIZE / 2)
     cameraRef.current = camera
 
     // Renderer
@@ -49,20 +72,55 @@ export function CubeEditorView({ onSave }: CubeEditorViewProps) {
     rendererRef.current = renderer
 
     // Lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5)
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6)
     scene.add(ambientLight)
 
     const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8)
-    directionalLight.position.set(5, 5, 5)
+    directionalLight.position.set(20, 20, 20)
     scene.add(directionalLight)
 
-    // Grid helper
-    const gridHelper = new THREE.GridHelper(GRID_SIZE * VOXEL_SIZE, GRID_SIZE, 0x444444, 0x222222)
+    // Create helpers (always visible)
+    const gridHelper = new THREE.GridHelper(CUBE_SIZE, CUBE_SIZE, 0x444444, 0x222222)
+    gridHelper.position.set(CUBE_SIZE / 2, 0, CUBE_SIZE / 2)
     scene.add(gridHelper)
+    gridHelperRef.current = gridHelper
 
-    // Axes helper
-    const axesHelper = new THREE.AxesHelper(1)
+    const axesHelper = new THREE.AxesHelper(CUBE_SIZE)
     scene.add(axesHelper)
+
+    // Wireframe box for edit area borders (same color as grid center line)
+    const boxGeometry = new THREE.BoxGeometry(CUBE_SIZE, CUBE_SIZE, CUBE_SIZE)
+    const boxEdges = new THREE.EdgesGeometry(boxGeometry)
+    const boxMaterial = new THREE.LineBasicMaterial({ color: 0x444444 })
+    const wireframeBox = new THREE.LineSegments(boxEdges, boxMaterial)
+    wireframeBox.position.set(CUBE_SIZE / 2, CUBE_SIZE / 2, CUBE_SIZE / 2)
+    scene.add(wireframeBox)
+
+    // Ground plane for raycasting
+    const groundGeometry = new THREE.PlaneGeometry(CUBE_SIZE, CUBE_SIZE)
+    const groundMaterial = new THREE.MeshBasicMaterial({
+      visible: false,
+      side: THREE.DoubleSide
+    })
+    const groundPlane = new THREE.Mesh(groundGeometry, groundMaterial)
+    groundPlane.rotation.x = -Math.PI / 2
+    groundPlane.position.set(CUBE_SIZE / 2, 0, CUBE_SIZE / 2)
+    scene.add(groundPlane)
+
+    // Preview plane (shows where voxel will be placed)
+    const voxelSize = CUBE_SIZE / (1 << depth)
+    const previewGeometry = new THREE.PlaneGeometry(voxelSize, voxelSize)
+    const previewMaterial = new THREE.MeshBasicMaterial({
+      color: 0x00ff00,
+      transparent: true,
+      opacity: 0.3,
+      side: THREE.DoubleSide
+    })
+    const previewPlane = new THREE.Mesh(previewGeometry, previewMaterial)
+    previewPlane.rotation.x = -Math.PI / 2
+    previewPlane.visible = false
+    scene.add(previewPlane)
+    previewPlaneRef.current = previewPlane
 
     // Animation loop
     const animate = () => {
@@ -80,7 +138,7 @@ export function CubeEditorView({ onSave }: CubeEditorViewProps) {
     }
     window.addEventListener('resize', handleResize)
 
-    // Mouse controls - simple rotation
+    // Mouse controls - rotation
     let isDragging = false
     let previousMousePosition = { x: 0, y: 0 }
 
@@ -90,48 +148,118 @@ export function CubeEditorView({ onSave }: CubeEditorViewProps) {
     }
 
     const handleMouseMove = (e: MouseEvent) => {
-      if (!isDragging || !camera) return
+      if (isDragging && camera) {
+        const deltaX = e.clientX - previousMousePosition.x
+        const deltaY = e.clientY - previousMousePosition.y
 
-      const deltaX = e.clientX - previousMousePosition.x
-      const deltaY = e.clientY - previousMousePosition.y
+        // Rotate camera around the cube center
+        const center = new THREE.Vector3(CUBE_SIZE / 2, CUBE_SIZE / 2, CUBE_SIZE / 2)
+        const offset = camera.position.clone().sub(center)
+        const radius = offset.length()
 
-      // Rotate camera around the origin
-      const radius = Math.sqrt(
-        camera.position.x ** 2 + camera.position.y ** 2 + camera.position.z ** 2
-      )
+        const theta = Math.atan2(offset.z, offset.x) - deltaX * 0.01
+        const phi = Math.acos(offset.y / radius) + deltaY * 0.01
+        const phiClamped = Math.max(0.1, Math.min(Math.PI - 0.1, phi))
 
-      const theta = Math.atan2(camera.position.z, camera.position.x) - deltaX * 0.01
-      const phi = Math.acos(camera.position.y / radius) + deltaY * 0.01
+        offset.x = radius * Math.sin(phiClamped) * Math.cos(theta)
+        offset.y = radius * Math.cos(phiClamped)
+        offset.z = radius * Math.sin(phiClamped) * Math.sin(theta)
 
-      camera.position.x = radius * Math.sin(phi) * Math.cos(theta)
-      camera.position.y = radius * Math.cos(phi)
-      camera.position.z = radius * Math.sin(phi) * Math.sin(theta)
+        camera.position.copy(center.clone().add(offset))
+        camera.lookAt(center)
 
-      camera.lookAt(0, 0, 0)
+        previousMousePosition = { x: e.clientX, y: e.clientY }
+      } else if (!isDragging && canvasRef.current) {
+        // Update preview plane position
+        const rect = canvasRef.current.getBoundingClientRect()
+        mouseRef.current.x = ((e.clientX - rect.left) / rect.width) * 2 - 1
+        mouseRef.current.y = -((e.clientY - rect.top) / rect.height) * 2 + 1
 
-      previousMousePosition = { x: e.clientX, y: e.clientY }
+        if (camera && previewPlane) {
+          raycasterRef.current.setFromCamera(mouseRef.current, camera)
+          const intersects = raycasterRef.current.intersectObject(groundPlane)
+
+          if (intersects.length > 0) {
+            const point = intersects[0].point
+            const voxelSize = CUBE_SIZE / (1 << depth)
+
+            // Convert to grid coordinates and back to world position at voxel center
+            const gridX = Math.floor(point.x / voxelSize)
+            const gridZ = Math.floor(point.z / voxelSize)
+
+            // Calculate world position at center of voxel
+            const worldX = gridX * voxelSize + voxelSize / 2
+            const worldZ = gridZ * voxelSize + voxelSize / 2
+
+            // Clamp to bounds
+            const clampedX = Math.max(voxelSize / 2, Math.min(CUBE_SIZE - voxelSize / 2, worldX))
+            const clampedZ = Math.max(voxelSize / 2, Math.min(CUBE_SIZE - voxelSize / 2, worldZ))
+
+            previewPlane.position.set(clampedX, 0.01, clampedZ)
+            previewPlane.visible = true
+          } else {
+            previewPlane.visible = false
+          }
+        }
+      }
     }
 
     const handleMouseUp = () => {
       isDragging = false
     }
 
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      if (!camera) return
+
+      const center = new THREE.Vector3(CUBE_SIZE / 2, CUBE_SIZE / 2, CUBE_SIZE / 2)
+      const offset = camera.position.clone().sub(center)
+      const radius = offset.length()
+
+      const newRadius = Math.max(5, Math.min(50, radius + e.deltaY * 0.01))
+      const scale = newRadius / radius
+
+      offset.multiplyScalar(scale)
+      camera.position.copy(center.clone().add(offset))
+      camera.lookAt(center)
+    }
+
     canvasRef.current.addEventListener('mousedown', handleMouseDown)
-    window.addEventListener('mousemove', handleMouseMove)
+    canvasRef.current.addEventListener('wheel', handleWheel, { passive: false })
+    canvasRef.current.addEventListener('mousemove', handleMouseMove)
     window.addEventListener('mouseup', handleMouseUp)
 
     return () => {
       window.removeEventListener('resize', handleResize)
       canvasRef.current?.removeEventListener('mousedown', handleMouseDown)
-      window.removeEventListener('mousemove', handleMouseMove)
+      canvasRef.current?.removeEventListener('wheel', handleWheel)
+      canvasRef.current?.removeEventListener('mousemove', handleMouseMove)
       window.removeEventListener('mouseup', handleMouseUp)
       renderer.dispose()
     }
-  }, [])
+  }, []) // Remove depth dependency - scene should only initialize once
+
+  // Update preview plane size when depth changes
+  useEffect(() => {
+    if (previewPlaneRef.current) {
+      const voxelSize = CUBE_SIZE / (1 << depth)
+      const newGeometry = new THREE.PlaneGeometry(voxelSize, voxelSize)
+      previewPlaneRef.current.geometry.dispose()
+      previewPlaneRef.current.geometry = newGeometry
+    }
+  }, [depth])
+
+  // Update WASM palette when it changes
+  useEffect(() => {
+    if (wasmModule) {
+      wasmModule.set_model_palette(MODEL_ID, palette)
+      updateMesh() // Regenerate mesh with new colors
+    }
+  }, [palette, wasmModule])
 
   // Handle canvas click to place voxel
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!sceneRef.current || !cameraRef.current || !canvasRef.current) return
+    if (!canvasRef.current || !cameraRef.current || !wasmModule) return
 
     const rect = canvasRef.current.getBoundingClientRect()
     const x = ((e.clientX - rect.left) / rect.width) * 2 - 1
@@ -140,80 +268,179 @@ export function CubeEditorView({ onSave }: CubeEditorViewProps) {
     const raycaster = new THREE.Raycaster()
     raycaster.setFromCamera(new THREE.Vector2(x, y), cameraRef.current)
 
-    // Check intersection with existing voxels
-    const meshArray = Array.from(voxelMeshesRef.current.values())
-    const intersects = raycaster.intersectObjects(meshArray)
+    // Find ground plane
+    const scene = sceneRef.current
+    if (!scene) return
+
+    const groundPlane = scene.children.find(
+      child => child instanceof THREE.Mesh && child.material && !(child.material as THREE.MeshBasicMaterial).visible
+    )
+    if (!groundPlane) return
+
+    const intersects = raycaster.intersectObject(groundPlane)
 
     if (intersects.length > 0) {
-      // Place voxel adjacent to clicked voxel
-      const intersect = intersects[0]
-      const normal = intersect.face?.normal
-      if (!normal) return
+      const point = intersects[0].point
 
-      const gridPosition = intersect.object.position.clone()
-      gridPosition.add(normal.clone().multiplyScalar(VOXEL_SIZE))
+      // Convert world coordinates to grid coordinates at max depth
+      // World coordinates are [0, CUBE_SIZE], grid coordinates are [0, CUBE_SIZE)
+      const gridX = Math.floor(point.x)
+      const gridY = 0  // Draw on y=0 plane
+      const gridZ = Math.floor(point.z)
 
-      // Snap to grid
-      const voxelX = Math.round(gridPosition.x / VOXEL_SIZE)
-      const voxelY = Math.round(gridPosition.y / VOXEL_SIZE)
-      const voxelZ = Math.round(gridPosition.z / VOXEL_SIZE)
+      // Clamp to valid range [0, CUBE_SIZE)
+      const clampedX = Math.max(0, Math.min(CUBE_SIZE - 1, gridX))
+      const clampedZ = Math.max(0, Math.min(CUBE_SIZE - 1, gridZ))
 
-      placeVoxel(voxelX, voxelY, voxelZ)
-    } else {
-      // Place voxel at origin if no intersection
-      placeVoxel(0, 0, 0)
+      console.log(`[CubeEditor] Drawing at (${clampedX}, ${gridY}, ${clampedZ}) with depth ${depth}, color index ${selectedColorIndex}, color ${selectedColor}`)
+
+      // Call WASM draw function
+      const result = wasmModule.draw(MODEL_ID, selectedColorIndex, clampedX, gridY, clampedZ, depth)
+
+      // Check for errors
+      if (result && result.error) {
+        console.error('[CubeEditor] Draw error:', result.error)
+        return
+      }
+
+      console.log('[CubeEditor] Draw result:', result)
+
+      // Update mesh
+      updateMesh()
     }
   }
 
-  const placeVoxel = (x: number, y: number, z: number) => {
-    if (!sceneRef.current) return
+  const updateMesh = () => {
+    if (!wasmModule || !sceneRef.current) return
 
-    const key = `${x},${y},${z}`
+    const meshResult = wasmModule.get_model_mesh(MODEL_ID)
 
-    // Check if voxel already exists
-    if (voxelMeshesRef.current.has(key)) {
-      // Remove existing voxel
-      const mesh = voxelMeshesRef.current.get(key)!
-      sceneRef.current.remove(mesh)
-      mesh.geometry.dispose()
-      ;(mesh.material as THREE.Material).dispose()
-      voxelMeshesRef.current.delete(key)
-    } else {
-      // Add new voxel
-      const geometry = new THREE.BoxGeometry(VOXEL_SIZE, VOXEL_SIZE, VOXEL_SIZE)
-      const material = new THREE.MeshLambertMaterial({ color: selectedColor })
+    if (meshResult && meshResult.error) {
+      console.error('[CubeEditor] Mesh error:', meshResult.error)
+      return
+    }
+
+    console.log('[CubeEditor] Mesh stats:', {
+      vertices: meshResult.vertices.length / 3,
+      indices: meshResult.indices.length / 3,
+      triangles: meshResult.indices.length / 3,
+      colors: meshResult.colors.length / 3,
+      normals: meshResult.normals.length / 3,
+    })
+
+    // Debug: log first few vertices
+    if (meshResult.vertices.length > 0) {
+      console.log('[CubeEditor] First vertex:',
+        meshResult.vertices[0],
+        meshResult.vertices[1],
+        meshResult.vertices[2]
+      )
+      console.log('[CubeEditor] First color:',
+        meshResult.colors[0],
+        meshResult.colors[1],
+        meshResult.colors[2]
+      )
+    }
+
+    // Remove old geometry mesh
+    if (geometryMeshRef.current) {
+      sceneRef.current.remove(geometryMeshRef.current)
+      geometryMeshRef.current.geometry.dispose()
+      if (geometryMeshRef.current.material instanceof THREE.Material) {
+        geometryMeshRef.current.material.dispose()
+      }
+    }
+
+    if (meshResult.vertices.length === 0) {
+      console.log('[CubeEditor] Empty mesh, nothing to render')
+      geometryMeshRef.current = null
+      return
+    }
+
+    // Validate mesh data
+    if (meshResult.vertices.length % 3 !== 0 ||
+        meshResult.normals.length % 3 !== 0 ||
+        meshResult.colors.length % 3 !== 0) {
+      console.error('[CubeEditor] Invalid mesh data: vertex/normal/color arrays not divisible by 3')
+      return
+    }
+
+    if (meshResult.vertices.length !== meshResult.normals.length ||
+        meshResult.vertices.length !== meshResult.colors.length) {
+      console.error('[CubeEditor] Mesh data mismatch:', {
+        vertices: meshResult.vertices.length,
+        normals: meshResult.normals.length,
+        colors: meshResult.colors.length
+      })
+      return
+    }
+
+    try {
+      // Create new geometry
+      const geometry = new THREE.BufferGeometry()
+      geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(meshResult.vertices), 3))
+      geometry.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(meshResult.normals), 3))
+      geometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(meshResult.colors), 3))
+      geometry.setIndex(new THREE.BufferAttribute(new Uint32Array(meshResult.indices), 1))
+      geometry.computeBoundingSphere()
+
+      // Create material with vertex colors and lighting
+      const material = new THREE.MeshLambertMaterial({
+        vertexColors: true,
+        side: THREE.DoubleSide
+      })
+
       const mesh = new THREE.Mesh(geometry, material)
-
-      mesh.position.set(x * VOXEL_SIZE, y * VOXEL_SIZE, z * VOXEL_SIZE)
       sceneRef.current.add(mesh)
-      voxelMeshesRef.current.set(key, mesh)
+      geometryMeshRef.current = mesh
+
+      console.log('[CubeEditor] Mesh updated successfully')
+    } catch (error) {
+      console.error('[CubeEditor] Failed to create mesh:', error)
     }
   }
 
   const handleClear = () => {
-    if (!sceneRef.current) return
+    if (!wasmModule) return
 
-    voxelMeshesRef.current.forEach(mesh => {
-      sceneRef.current!.remove(mesh)
-      mesh.geometry.dispose()
-      ;(mesh.material as THREE.Material).dispose()
-    })
-    voxelMeshesRef.current.clear()
+    // Recreate model
+    wasmModule.create_model(MODEL_ID, CUBE_MAX_DEPTH)
+
+    // Clear mesh
+    if (geometryMeshRef.current && sceneRef.current) {
+      sceneRef.current.remove(geometryMeshRef.current)
+      geometryMeshRef.current.geometry.dispose()
+      if (geometryMeshRef.current.material instanceof THREE.Material) {
+        geometryMeshRef.current.material.dispose()
+      }
+      geometryMeshRef.current = null
+    }
   }
 
   const handleSave = () => {
     // TODO: Implement save functionality
-    console.log('Save voxel data')
-    if (onSave) {
-      // Convert voxel meshes to data format
-      const data = new Uint8Array(GRID_SIZE * GRID_SIZE * GRID_SIZE * 4)
-      onSave(data)
-    }
+    console.log('[CubeEditor] Save not yet implemented')
   }
 
   const handleExport = () => {
     // TODO: Implement export functionality
-    console.log('Export as CSM')
+    console.log('[CubeEditor] Export not yet implemented')
+  }
+
+  const handleColorSelect = (color: string, index: number) => {
+    setSelectedColor(color)
+    setSelectedColorIndex(index)
+  }
+
+  const handleColorChange = (index: number, newColor: string) => {
+    const newPalette = [...palette]
+    newPalette[index] = newColor
+    setPalette(newPalette)
+
+    // Update selected color if it's the one being changed
+    if (index === selectedColorIndex) {
+      setSelectedColor(newColor)
+    }
   }
 
   return (
@@ -246,6 +473,7 @@ export function CubeEditorView({ onSave }: CubeEditorViewProps) {
           onClick={() => setIsPaletteOpen(!isPaletteOpen)}
           size="md"
         />
+
         <IconButton
           aria-label="Clear all"
           icon={<FiRotateCcw />}
@@ -273,7 +501,16 @@ export function CubeEditorView({ onSave }: CubeEditorViewProps) {
         isOpen={isPaletteOpen}
         onClose={() => setIsPaletteOpen(false)}
         selectedColor={selectedColor}
-        onColorSelect={setSelectedColor}
+        onColorSelect={handleColorSelect}
+      />
+
+      {/* Bottom Bar with Color Grid */}
+      <BottomBar
+        palette={palette}
+        selectedColor={selectedColor}
+        selectedColorIndex={selectedColorIndex}
+        onColorSelect={handleColorSelect}
+        onColorChange={handleColorChange}
       />
     </Box>
   )

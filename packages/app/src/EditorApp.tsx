@@ -8,7 +8,7 @@ import { InfoPanel } from './components/InfoPanel'
 export function EditorApp() {
   const [pubkey, setPubkey] = useState<string | null>(null)
   const [activePanelType, setActivePanelType] = useState<ConfigPanelType>(null)
-  const [viewedProfilePubkey, setViewedProfilePubkey] = useState<string | null>(null)
+  const [viewedProfilePubkey, _setViewedProfilePubkey] = useState<string | null>(null)
 
   const handleLogin = (publicKey: string) => {
     setPubkey(publicKey)
