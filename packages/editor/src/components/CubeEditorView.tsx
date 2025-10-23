@@ -339,8 +339,8 @@ export function CubeEditorView(_props: CubeEditorViewProps) {
 
       console.log(`[CubeEditor] Drawing at (${clampedX}, ${gridY}, ${clampedZ}) with depth ${depth}, color index ${selectedColorIndex}, color ${selectedColor}`)
 
-      // Call WASM draw function
-      const result = wasmModule.draw(MODEL_ID, selectedColorIndex, clampedX, gridY, clampedZ, depth)
+      // Call WASM draw function (add 1 to index because palette mapper uses index-1)
+      const result = wasmModule.draw(MODEL_ID, selectedColorIndex + 1, clampedX, gridY, clampedZ, depth)
 
       // Check for errors
       if (result && result.error) {

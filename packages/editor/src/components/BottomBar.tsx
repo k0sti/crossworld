@@ -1,5 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
-import { Box, HStack, Grid, Input, VStack, Text } from '@chakra-ui/react'
+import { Box, HStack, Grid, VStack, Text } from '@chakra-ui/react'
 
 interface BottomBarProps {
   palette: string[]
