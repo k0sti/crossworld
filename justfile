@@ -48,7 +48,7 @@ preview:
 
 # Initialize Crossworld Nostr live event
 start-live:
-    cd crates/worldtool && cargo run -- init-live --streaming https://moq.justinmoon.com/anon
+    cd crates/worldtool && cargo run -- init-live --streaming https://moq-a21.nexel.space:4443/anon
 
 # Run all tests
 test:
