@@ -204,7 +204,7 @@ impl Cube<i32> {
     ) {
         match self {
             Cube::Solid(value) => {
-                if *value != 0 {
+                if *value > 0 {
                     voxels.push((position.0, position.1, position.2, size, *value));
                 }
             }

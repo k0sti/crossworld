@@ -7,6 +7,7 @@ interface BottomBarProps {
   selectedColorIndex: number
   onColorSelect: (color: string, index: number) => void
   onColorChange: (index: number, newColor: string) => void
+  cursorPosition?: { x: number; y: number; z: number } | null
 }
 
 export function BottomBar({
@@ -14,6 +15,7 @@ export function BottomBar({
   selectedColor,
   selectedColorIndex,
   onColorSelect,
+  cursorPosition,
 }: BottomBarProps) {
   const handleColorClick = (color: string, index: number) => {
     onColorSelect(color, index)
@@ -80,6 +82,22 @@ export function BottomBar({
             </Text>
           </VStack>
         </HStack>
+
+        {/* Cursor Position */}
+        {cursorPosition && (
+          <VStack align="end" spacing={0} minW="100px">
+            <Text fontSize="xs" color="whiteAlpha.700">Cursor</Text>
+            <Text fontSize="xs" fontFamily="mono" color="white">
+              X: {cursorPosition.x}
+            </Text>
+            <Text fontSize="xs" fontFamily="mono" color="white">
+              Y: {cursorPosition.y}
+            </Text>
+            <Text fontSize="xs" fontFamily="mono" color="white">
+              Z: {cursorPosition.z}
+            </Text>
+          </VStack>
+        )}
       </HStack>
     </Box>
   )

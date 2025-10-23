@@ -2,6 +2,7 @@ import { Box, Flex, IconButton, HStack } from '@chakra-ui/react'
 import { FiGlobe, FiInfo } from 'react-icons/fi'
 import { ProfileButton } from './ProfileButton'
 import { ConfigPanelType } from '../types/config'
+import { ReactNode } from 'react'
 
 interface TopBarProps {
   pubkey: string | null
@@ -9,9 +10,10 @@ interface TopBarProps {
   onOpenPanel: (type: ConfigPanelType) => void
   onOpenProfile: () => void
   activePanelType: ConfigPanelType
+  centerContent?: ReactNode
 }
 
-export function TopBar({ pubkey, onLogin, onOpenPanel, onOpenProfile, activePanelType }: TopBarProps) {
+export function TopBar({ pubkey, onLogin, onOpenPanel, onOpenProfile, activePanelType, centerContent }: TopBarProps) {
   return (
     <Box
       as="header"
@@ -28,6 +30,12 @@ export function TopBar({ pubkey, onLogin, onOpenPanel, onOpenProfile, activePane
     >
       <Flex justify="space-between" align="center">
         <ProfileButton pubkey={pubkey} onLogin={onLogin} onOpenProfile={onOpenProfile} />
+
+        {centerContent && (
+          <Box position="absolute" left="50%" transform="translateX(-50%)">
+            {centerContent}
+          </Box>
+        )}
 
         <HStack spacing={2}>
           <IconButton

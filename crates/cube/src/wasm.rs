@@ -207,12 +207,18 @@ pub fn get_model_mesh(model_id: &str) -> JsValue {
             let octree = Octree::new(model_data.cube.clone());
 
             // Use palette if available, otherwise HSV
-            let mesh = if let Some(ref palette) = model_data.palette {
+            let mut mesh = if let Some(ref palette) = model_data.palette {
                 let mapper = PaletteColorMapper::new(palette.clone());
                 generate_mesh_with_mapper(&octree, &mapper)
             } else {
                 generate_mesh(&octree)
             };
+
+            // Scale mesh from [0,1] space to [0, 2^max_depth] world space
+            let scale = (1 << model_data.max_depth) as f32;
+            for i in 0..mesh.vertices.len() {
+                mesh.vertices[i] *= scale;
+            }
 
             let result = MeshResult {
                 vertices: mesh.vertices,

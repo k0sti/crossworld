@@ -21,7 +21,8 @@ export function CubeEditorView(_props: CubeEditorViewProps) {
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null)
   const geometryMeshRef = useRef<THREE.Mesh | null>(null)
   const gridHelperRef = useRef<THREE.GridHelper | null>(null)
-  const previewPlaneRef = useRef<THREE.Mesh | null>(null)
+  const previewBoxRef = useRef<THREE.Mesh | null>(null)
+  const previewWireframeRef = useRef<THREE.LineSegments | null>(null)
   const raycasterRef = useRef<THREE.Raycaster>(new THREE.Raycaster())
   const mouseRef = useRef<THREE.Vector2>(new THREE.Vector2())
   const [palette, setPalette] = useState<string[]>(() => generateHSVPalette(16))
@@ -29,6 +30,7 @@ export function CubeEditorView(_props: CubeEditorViewProps) {
   const [selectedColorIndex, setSelectedColorIndex] = useState(0)
   const [isPaletteOpen, setIsPaletteOpen] = useState(false)
   const [wasmModule, setWasmModule] = useState<any>(null)
+  const [cursorPosition, setCursorPosition] = useState<{ x: number; y: number; z: number } | null>(null)
   const depth = CUBE_MAX_DEPTH // Always use max depth
 
   // Initialize WASM module
@@ -85,7 +87,8 @@ export function CubeEditorView(_props: CubeEditorViewProps) {
     scene.add(gridHelper)
     gridHelperRef.current = gridHelper
 
-    const axesHelper = new THREE.AxesHelper(CUBE_SIZE)
+    const axesHelper = new THREE.AxesHelper(CUBE_SIZE / 2)
+    axesHelper.position.set(0, 0, 0)
     scene.add(axesHelper)
 
     // Wireframe box for edit area borders (same color as grid center line)
@@ -107,20 +110,27 @@ export function CubeEditorView(_props: CubeEditorViewProps) {
     groundPlane.position.set(CUBE_SIZE / 2, 0, CUBE_SIZE / 2)
     scene.add(groundPlane)
 
-    // Preview plane (shows where voxel will be placed)
+    // Preview box (50% transparent voxel box on top of ground)
     const voxelSize = CUBE_SIZE / (1 << depth)
-    const previewGeometry = new THREE.PlaneGeometry(voxelSize, voxelSize)
-    const previewMaterial = new THREE.MeshBasicMaterial({
+    const previewBoxGeometry = new THREE.BoxGeometry(voxelSize, voxelSize, voxelSize)
+    const previewBoxMaterial = new THREE.MeshBasicMaterial({
       color: 0x00ff00,
       transparent: true,
-      opacity: 0.3,
-      side: THREE.DoubleSide
+      opacity: 0.5,
+      depthWrite: false
     })
-    const previewPlane = new THREE.Mesh(previewGeometry, previewMaterial)
-    previewPlane.rotation.x = -Math.PI / 2
-    previewPlane.visible = false
-    scene.add(previewPlane)
-    previewPlaneRef.current = previewPlane
+    const previewBox = new THREE.Mesh(previewBoxGeometry, previewBoxMaterial)
+    previewBox.visible = false
+    scene.add(previewBox)
+    previewBoxRef.current = previewBox
+
+    // Preview wireframe (solid wireframe same color)
+    const previewWireframeGeometry = new THREE.EdgesGeometry(previewBoxGeometry)
+    const previewWireframeMaterial = new THREE.LineBasicMaterial({ color: 0x00ff00 })
+    const previewWireframe = new THREE.LineSegments(previewWireframeGeometry, previewWireframeMaterial)
+    previewWireframe.visible = false
+    scene.add(previewWireframe)
+    previewWireframeRef.current = previewWireframe
 
     // Animation loop
     const animate = () => {
@@ -170,12 +180,15 @@ export function CubeEditorView(_props: CubeEditorViewProps) {
 
         previousMousePosition = { x: e.clientX, y: e.clientY }
       } else if (!isDragging && canvasRef.current) {
-        // Update preview plane position
+        // Update preview position
         const rect = canvasRef.current.getBoundingClientRect()
         mouseRef.current.x = ((e.clientX - rect.left) / rect.width) * 2 - 1
         mouseRef.current.y = -((e.clientY - rect.top) / rect.height) * 2 + 1
 
-        if (camera && previewPlane) {
+        const previewBox = previewBoxRef.current
+        const previewWireframe = previewWireframeRef.current
+
+        if (camera && previewBox && previewWireframe) {
           raycasterRef.current.setFromCamera(mouseRef.current, camera)
           const intersects = raycasterRef.current.intersectObject(groundPlane)
 
@@ -195,10 +208,24 @@ export function CubeEditorView(_props: CubeEditorViewProps) {
             const clampedX = Math.max(voxelSize / 2, Math.min(CUBE_SIZE - voxelSize / 2, worldX))
             const clampedZ = Math.max(voxelSize / 2, Math.min(CUBE_SIZE - voxelSize / 2, worldZ))
 
-            previewPlane.position.set(clampedX, 0.01, clampedZ)
-            previewPlane.visible = true
+            // Update cursor position state
+            setCursorPosition({
+              x: gridX,
+              y: 0,
+              z: gridZ
+            })
+
+            // Position preview box on top of ground (y = voxelSize / 2)
+            const boxY = voxelSize / 2
+            previewBox.position.set(clampedX, boxY, clampedZ)
+            previewWireframe.position.set(clampedX, boxY, clampedZ)
+
+            previewBox.visible = true
+            previewWireframe.visible = true
           } else {
-            previewPlane.visible = false
+            setCursorPosition(null)
+            previewBox.visible = false
+            previewWireframe.visible = false
           }
         }
       }
@@ -239,13 +266,21 @@ export function CubeEditorView(_props: CubeEditorViewProps) {
     }
   }, []) // Remove depth dependency - scene should only initialize once
 
-  // Update preview plane size when depth changes
+  // Update preview box size when depth changes
   useEffect(() => {
-    if (previewPlaneRef.current) {
-      const voxelSize = CUBE_SIZE / (1 << depth)
-      const newGeometry = new THREE.PlaneGeometry(voxelSize, voxelSize)
-      previewPlaneRef.current.geometry.dispose()
-      previewPlaneRef.current.geometry = newGeometry
+    const voxelSize = CUBE_SIZE / (1 << depth)
+
+    if (previewBoxRef.current) {
+      const newBoxGeometry = new THREE.BoxGeometry(voxelSize, voxelSize, voxelSize)
+      previewBoxRef.current.geometry.dispose()
+      previewBoxRef.current.geometry = newBoxGeometry
+    }
+
+    if (previewWireframeRef.current) {
+      const newBoxGeometry = new THREE.BoxGeometry(voxelSize, voxelSize, voxelSize)
+      const newWireframeGeometry = new THREE.EdgesGeometry(newBoxGeometry)
+      previewWireframeRef.current.geometry.dispose()
+      previewWireframeRef.current.geometry = newWireframeGeometry
     }
   }, [depth])
 
@@ -256,6 +291,16 @@ export function CubeEditorView(_props: CubeEditorViewProps) {
       updateMesh() // Regenerate mesh with new colors
     }
   }, [palette, wasmModule])
+
+  // Update preview box color when selected color changes
+  useEffect(() => {
+    if (previewBoxRef.current?.material instanceof THREE.MeshBasicMaterial) {
+      previewBoxRef.current.material.color.set(selectedColor)
+    }
+    if (previewWireframeRef.current?.material instanceof THREE.LineBasicMaterial) {
+      previewWireframeRef.current.material.color.set(selectedColor)
+    }
+  }, [selectedColor])
 
   // Handle canvas click to place voxel
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -285,7 +330,7 @@ export function CubeEditorView(_props: CubeEditorViewProps) {
       // Convert world coordinates to grid coordinates at max depth
       // World coordinates are [0, CUBE_SIZE], grid coordinates are [0, CUBE_SIZE)
       const gridX = Math.floor(point.x)
-      const gridY = 0  // Draw on y=0 plane
+      const gridY = 0  // Draw at ground level (voxel will be positioned at y=0.5)
       const gridZ = Math.floor(point.z)
 
       // Clamp to valid range [0, CUBE_SIZE)
@@ -511,6 +556,7 @@ export function CubeEditorView(_props: CubeEditorViewProps) {
         selectedColorIndex={selectedColorIndex}
         onColorSelect={handleColorSelect}
         onColorChange={handleColorChange}
+        cursorPosition={cursorPosition}
       />
     </Box>
   )
