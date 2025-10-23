@@ -210,30 +210,51 @@ fn add_cube(mesh: &mut MeshData, x: f32, y: f32, z: f32, size: f32, color: [f32;
         [x, y + size, z + size],        // 7: left-top-front
     ];
 
-    // Add vertices
+    // Add vertices and colors
     for vertex in &vertices {
         mesh.vertices.extend_from_slice(vertex);
         mesh.colors.extend_from_slice(&color);
     }
 
-    // Define faces with their normals
+    // Add normals for each vertex
+    // For a cube, we can use averaged normals or per-face normals
+    // Using simple averaged normals pointing outward from cube center
+    let center = [x + size / 2.0, y + size / 2.0, z + size / 2.0];
+    for vertex in &vertices {
+        let normal = [
+            (vertex[0] - center[0]).signum(),
+            (vertex[1] - center[1]).signum(),
+            (vertex[2] - center[2]).signum(),
+        ];
+        // Normalize
+        let len = (normal[0] * normal[0] + normal[1] * normal[1] + normal[2] * normal[2]).sqrt();
+        if len > 0.0 {
+            mesh.normals.push(normal[0] / len);
+            mesh.normals.push(normal[1] / len);
+            mesh.normals.push(normal[2] / len);
+        } else {
+            mesh.normals.extend_from_slice(&[0.0, 1.0, 0.0]);
+        }
+    }
+
+    // Define faces
     // Each face is defined by 4 vertices (2 triangles)
     let faces = [
         // Back face (z = 0)
-        ([0, 1, 2, 3], [0.0, 0.0, -1.0]),
+        [0, 1, 2, 3],
         // Front face (z = size)
-        ([5, 4, 7, 6], [0.0, 0.0, 1.0]),
+        [5, 4, 7, 6],
         // Left face (x = 0)
-        ([4, 0, 3, 7], [-1.0, 0.0, 0.0]),
+        [4, 0, 3, 7],
         // Right face (x = size)
-        ([1, 5, 6, 2], [1.0, 0.0, 0.0]),
+        [1, 5, 6, 2],
         // Bottom face (y = 0)
-        ([4, 5, 1, 0], [0.0, -1.0, 0.0]),
+        [4, 5, 1, 0],
         // Top face (y = size)
-        ([3, 2, 6, 7], [0.0, 1.0, 0.0]),
+        [3, 2, 6, 7],
     ];
 
-    for (indices, normal) in &faces {
+    for indices in &faces {
         // First triangle
         mesh.indices.push(base_index + indices[0]);
         mesh.indices.push(base_index + indices[1]);
@@ -243,12 +264,6 @@ fn add_cube(mesh: &mut MeshData, x: f32, y: f32, z: f32, size: f32, color: [f32;
         mesh.indices.push(base_index + indices[0]);
         mesh.indices.push(base_index + indices[2]);
         mesh.indices.push(base_index + indices[3]);
-
-        // Add normals for the 6 triangle vertices (3 + 3)
-        // Normals already point outward, no need to flip
-        for _ in 0..6 {
-            mesh.normals.extend_from_slice(normal);
-        }
     }
 }
 

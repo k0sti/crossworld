@@ -32,7 +32,7 @@ export function Screen({
   actions,
   zIndex = 1500,
   padding = 4,
-  closeOnClickOutside = true,
+  closeOnClickOutside: _closeOnClickOutside = true,
   className,
   closeOnEsc = true,
 }: ScreenProps) {

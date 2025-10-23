@@ -10,7 +10,7 @@ interface PaletteSelectorProps {
   isOpen: boolean
   onClose: () => void
   selectedColor: string
-  onColorSelect: (color: string) => void
+  onColorSelect: (color: string, index: number) => void
 }
 
 export function PaletteSelector({ isOpen, onClose, selectedColor, onColorSelect }: PaletteSelectorProps) {
@@ -128,13 +128,13 @@ export function PaletteSelector({ isOpen, onClose, selectedColor, onColorSelect 
                 borderRadius="sm"
                 border={selectedColor === color ? '2px solid white' : '1px solid rgba(255, 255, 255, 0.2)'}
                 cursor="pointer"
-                onClick={() => onColorSelect(color)}
+                onClick={() => onColorSelect(color, index)}
                 _hover={{
                   transform: 'scale(1.1)',
                   borderColor: 'white',
                 }}
                 transition="all 0.1s"
-                title={color}
+                title={`${color} (${index})`}
               />
             ))}
           </Grid>
