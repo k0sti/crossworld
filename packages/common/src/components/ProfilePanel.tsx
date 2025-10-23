@@ -3,9 +3,8 @@ import { VStack, Text, Avatar, HStack, Divider, Flex, IconButton, Tooltip, useTo
 import { FiUser, FiCopy, FiExternalLink, FiRefreshCw, FiLogOut } from 'react-icons/fi'
 import { npubEncode } from 'nostr-tools/nip19'
 import { Relay } from 'applesauce-relay'
-import { pubkey_to_emoji } from '@workspace/wasm'
 import { DEFAULT_RELAYS } from '../config'
-import { ResponsivePanel } from './ResponsivePanel'
+import { Screen } from './Screen'
 
 interface ProfileMetadata {
   name?: string
@@ -31,9 +30,11 @@ interface ProfilePanelProps {
   onLogout?: () => void
   onOpenAvatarSelection?: () => void
   onRestart?: () => void
+  /** Optional function to get emoji hash from pubkey (WASM function) */
+  getEmojiHash?: (pubkey: string) => string
 }
 
-export function ProfilePanel({ pubkey, isOpen, onClose, local_user = false, onLogout, onOpenAvatarSelection, onRestart }: ProfilePanelProps) {
+export function ProfilePanel({ pubkey, isOpen, onClose, local_user = false, onLogout, onOpenAvatarSelection, onRestart, getEmojiHash }: ProfilePanelProps) {
   const [profile, setProfile] = useState<ProfileMetadata | null>(null)
   const [enabledRelays, setEnabledRelays] = useState<string[]>([])
   const toast = useToast()
@@ -42,7 +43,16 @@ export function ProfilePanel({ pubkey, isOpen, onClose, local_user = false, onLo
   const { isOpen: isRestartOpen, onOpen: onRestartOpen, onClose: onRestartClose } = useDisclosure()
   const npub = pubkey ? npubEncode(pubkey) : ''
   const displayNpub = npub ? `${npub.slice(0, 12)}...${npub.slice(-8)}` : ''
-  const emojiHash = pubkey ? pubkey_to_emoji(pubkey) : ''
+
+  // Get emoji hash if function provided
+  let emojiHash = ''
+  if (getEmojiHash && pubkey) {
+    try {
+      emojiHash = getEmojiHash(pubkey)
+    } catch (error) {
+      console.warn('[ProfilePanel] Failed to get emoji hash:', error)
+    }
+  }
   const emojiArray = Array.from(emojiHash)
 
   // Load enabled relays from localStorage
@@ -190,25 +200,27 @@ export function ProfilePanel({ pubkey, isOpen, onClose, local_user = false, onLo
 
   return (
     <>
-      <ResponsivePanel
+      <Screen
         isOpen={isOpen}
         onClose={onClose}
         title="Profile"
-        forceFullscreen={true}
         closeOnClickOutside={!isLogoutOpen && !isRestartOpen}
+        closeOnEsc={!isLogoutOpen && !isRestartOpen}
         actions={
           <HStack spacing={3}>
             {local_user && (
               <>
-                <Button
-                  leftIcon={<FiRefreshCw />}
-                  onClick={onRestartOpen}
-                  size="sm"
-                  colorScheme="blue"
-                  variant="outline"
-                >
-                  Restart
-                </Button>
+                {onRestart && (
+                  <Button
+                    leftIcon={<FiRefreshCw />}
+                    onClick={onRestartOpen}
+                    size="sm"
+                    colorScheme="blue"
+                    variant="outline"
+                  >
+                    Restart
+                  </Button>
+                )}
                 <Button
                   leftIcon={<FiLogOut />}
                   onClick={onLogoutOpen}
@@ -300,7 +312,7 @@ export function ProfilePanel({ pubkey, isOpen, onClose, local_user = false, onLo
             </Text>
           )}
         </VStack>
-      </ResponsivePanel>
+      </Screen>
 
       {/* Logout Confirmation Dialog */}
       {isLogoutOpen && (
@@ -333,7 +345,7 @@ export function ProfilePanel({ pubkey, isOpen, onClose, local_user = false, onLo
       )}
 
       {/* Restart Confirmation Dialog */}
-      {isRestartOpen && (
+      {onRestart && isRestartOpen && (
         <AlertDialog
           isOpen={isRestartOpen}
           leastDestructiveRef={cancelRef}

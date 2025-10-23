@@ -1,14 +1,11 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { ChakraProvider, useToast } from '@chakra-ui/react'
-import { AccountsProvider } from 'applesauce-react/providers'
-import { AccountManager } from 'applesauce-accounts'
-import { TopBar } from './components/TopBar'
+import { useToast } from '@chakra-ui/react'
+import { useAccountManager } from 'applesauce-react/hooks'
+import { TopBar, ConfigPanelType, ProfilePanel } from '@crossworld/common'
 import { WorldCanvas } from './components/WorldCanvas'
 import { LeftSidebarPanel } from './components/LeftSidebarPanel'
-import { ConfigPanelType } from './components/ConfigPanel'
 import { NetworkConfigPanel } from './components/NetworkConfigPanel'
 import { InfoPanel } from './components/InfoPanel'
-import { ProfilePanel } from './components/ProfilePanel'
 import { SelectAvatar, type AvatarSelection } from './components/SelectAvatar'
 import { ChatPanel } from './components/ChatPanel'
 import { ClientListPanel } from './components/ClientListPanel'
@@ -18,7 +15,7 @@ import { useVoice } from './hooks/useVoice'
 import { npubEncode } from 'nostr-tools/nip19'
 import type { TeleportAnimationType } from './renderer/teleport-animation'
 import { VOICE_CONFIG } from './config'
-import { LoginSettingsService } from './services/login-settings'
+import { LoginSettingsService } from '@crossworld/common'
 import { ExtensionAccount, SimpleAccount } from 'applesauce-accounts/accounts'
 import { ExtensionSigner } from 'applesauce-signers'
 
@@ -33,7 +30,7 @@ function App() {
   const [isChatOpen, setIsChatOpen] = useState(false)
   const [isClientListOpen, setIsClientListOpen] = useState(false)
   const [viewedProfilePubkey, setViewedProfilePubkey] = useState<string | null>(null)
-  const accountManager = useMemo(() => new AccountManager(), [])
+  const accountManager = useAccountManager()
   const avatarStateService = useMemo(() => new AvatarStateService(accountManager), [accountManager])
   const toast = useToast()
 
@@ -549,8 +546,7 @@ function App() {
   }
 
   return (
-    <AccountsProvider manager={accountManager}>
-      <ChakraProvider>
+      <>
         <WorldCanvas
           isLoggedIn={pubkey !== null}
           isEditMode={isEditMode}
@@ -618,6 +614,10 @@ function App() {
           onLogout={handleLogout}
           onOpenAvatarSelection={() => setActivePanelType('avatar')}
           onRestart={handleRestart}
+          getEmojiHash={(pk) => {
+            const { pubkey_to_emoji } = require('@workspace/wasm')
+            return pubkey_to_emoji(pk)
+          }}
         />
         {activePanelType === 'avatar' && (
           <SelectAvatar
@@ -664,8 +664,7 @@ function App() {
             teleportAnimationType,
           }}
         />
-      </ChakraProvider>
-    </AccountsProvider>
+      </>
   )
 }
 
