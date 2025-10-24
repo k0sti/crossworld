@@ -45,7 +45,6 @@ function App() {
   // Avatar state - unified configuration
   const [avatarConfig, setAvatarConfig] = useState<AvatarConfig>({
     avatarType: 'vox',
-    avatarId: 'boy',
   })
   const [teleportAnimationType, setTeleportAnimationType] = useState<TeleportAnimationType>('fade')
 
@@ -88,25 +87,25 @@ function App() {
     }
   }, [])
 
-  // Auto-connect to voice when user logs in and streaming URL is available
-  useEffect(() => {
-    if (!pubkey || !streamingUrl || voiceAutoConnected.current) return
+  // Voice auto-connect disabled - user must manually connect
+  // useEffect(() => {
+  //   if (!pubkey || !streamingUrl || voiceAutoConnected.current) return
 
-    const autoConnect = async () => {
-      try {
-        const npub = npubEncode(pubkey)
-        await voice.connect(streamingUrl, npub)
-        voiceAutoConnected.current = true
-        console.log('[App] Auto-connected to voice chat')
-      } catch (err) {
-        console.error('[App] Failed to auto-connect to voice:', err)
-      }
-    }
+  //   const autoConnect = async () => {
+  //     try {
+  //       const npub = npubEncode(pubkey)
+  //       await voice.connect(streamingUrl, npub)
+  //       voiceAutoConnected.current = true
+  //       console.log('[App] Auto-connected to voice chat')
+  //     } catch (err) {
+  //       console.error('[App] Failed to auto-connect to voice:', err)
+  //     }
+  //   }
 
-    // Use a small delay to ensure this only runs on initial login
-    const timer = setTimeout(autoConnect, 100)
-    return () => clearTimeout(timer)
-  }, [pubkey, streamingUrl, voice])
+  //   // Use a small delay to ensure this only runs on initial login
+  //   const timer = setTimeout(autoConnect, 100)
+  //   return () => clearTimeout(timer)
+  // }, [pubkey, streamingUrl, voice])
 
   // Start avatar state subscription on mount
   useEffect(() => {
@@ -460,9 +459,14 @@ function App() {
     setTeleportAnimationType(selection.teleportAnimationType)
     setShowSelectAvatar(false)
 
-    // If this is first login, publish initial state
+    // If this is first login, publish initial state with the new config
     if (pubkey && !initialStatePublished.current) {
-      publishInitialState()
+      publishInitialState({
+        avatarType: config.avatarType,
+        avatarId: config.avatarId,
+        avatarUrl: config.avatarUrl,
+        avatarData: config.avatarData,
+      })
     }
   }
 
