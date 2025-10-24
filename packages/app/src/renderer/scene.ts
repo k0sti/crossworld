@@ -623,6 +623,7 @@ export class SceneManager {
 
       // Generate or load geometry (use undefined for npub to preserve original colors)
       if (avatarId && avatarId !== 'generated') {
+        console.log(`[Scene] Loading VOX model from avatarId: ${avatarId}`);
         // Load from .vox file using model config
         import('../utils/modelConfig').then(({ getModelUrl }) => {
           const voxUrl = getModelUrl(avatarId, 'vox');
@@ -648,6 +649,7 @@ export class SceneManager {
         }).catch(console.error);
       } else {
         // Use procedurally generated model
+        console.log(`[Scene] No avatarId for ${npub}, using procedurally generated avatar`);
         const geometryData = this.avatarEngine.generate_avatar(npub);
         voxelAvatar.applyGeometry(geometryData);
       }

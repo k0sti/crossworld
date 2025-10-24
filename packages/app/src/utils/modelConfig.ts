@@ -33,7 +33,7 @@ export function getModelFilename(modelId: string, type: 'vox' | 'glb'): string |
 
   const models = type === 'vox' ? modelsConfigCache.vox : modelsConfigCache.glb;
 
-  // First try to find by ID (filename without extension)
+  // Find by ID (filename without extension)
   for (const [_label, filename] of models) {
     const id = filename.replace(`.${type}`, '');
     if (id === modelId) {
@@ -41,13 +41,7 @@ export function getModelFilename(modelId: string, type: 'vox' | 'glb'): string |
     }
   }
 
-  // Backwards compatibility for old IDs
-  const legacyMapping: Record<string, string> = {
-    'boy': 'chr_army1.vox',  // Map old 'boy' to first army character
-    'girl': 'chr_lady1.vox', // Map old 'girl' to first lady character
-  };
-
-  return legacyMapping[modelId] || null;
+  return null;
 }
 
 export function getModelUrl(modelId: string, type: 'vox' | 'glb'): string | null {
