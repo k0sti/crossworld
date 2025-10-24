@@ -36,7 +36,6 @@ export function ChatPanel({ isOpen, currentPubkey, onViewProfile }: ChatPanelPro
   // Keep relay instances in ref to reuse for both subscribing and publishing
   const relayInstancesRef = useRef<Map<string, Relay>>(new Map())
   const subscriptionsRef = useRef<any[]>([])
-  const [profilesVersion, setProfilesVersion] = useState(0) // Trigger re-render when profiles update
 
   // Get enabled relays from configuration
   const [enabledRelays, setEnabledRelays] = useState<string[]>([])
@@ -71,7 +70,6 @@ export function ChatPanel({ isOpen, currentPubkey, onViewProfile }: ChatPanelPro
       loadEnabledRelays()
       // Clear profile cache when relay config changes
       profileCache.clearCache()
-      setProfilesVersion(v => v + 1)
     }
 
     window.addEventListener('relayConfigChanged', handleRelayConfigChanged)
@@ -94,11 +92,7 @@ export function ChatPanel({ isOpen, currentPubkey, onViewProfile }: ChatPanelPro
     if (profileRelays.length === 0) return
 
     // Fetch from cache (will return cached if valid, or fetch from relays)
-    const profile = await profileCache.getProfile(pubkey, profileRelays)
-    if (profile) {
-      // Trigger re-render
-      setProfilesVersion(v => v + 1)
-    }
+    await profileCache.getProfile(pubkey, profileRelays)
   }
 
   // Fetch profiles for new messages
@@ -108,7 +102,9 @@ export function ChatPanel({ isOpen, currentPubkey, onViewProfile }: ChatPanelPro
         fetchProfile(msg.pubkey)
       }
     })
-  }, [messages, profileRelays, profilesVersion])
+    // Note: profilesVersion intentionally excluded from deps to prevent re-fetch loop
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages, profileRelays])
 
   // Manage streaming subscription
   useEffect(() => {

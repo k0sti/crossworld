@@ -12,12 +12,31 @@ import { ExtensionAccount, SimpleAccount, NostrConnectAccount } from 'applesauce
 import { ExtensionSigner, NostrConnectSigner } from 'applesauce-signers'
 import { useAccountManager } from 'applesauce-react/hooks'
 import { Relay } from 'applesauce-relay'
-import { DEFAULT_RELAYS } from '../config'
+import { DEFAULT_RELAYS, DEFAULT_RELAY_STATES } from '../config'
 import { NostrExtensionInfoModal } from './NostrExtensionInfoModal'
 import { LoginSettingsService } from '../services/login-settings'
 
 // Check if we're on Android
 const IS_WEB_ANDROID = /android/i.test(navigator.userAgent)
+
+// Get world relays from configuration
+function getWorldRelays(): string[] {
+  try {
+    const savedRelays = localStorage.getItem('crossworld_relays')
+    if (savedRelays) {
+      const relays = JSON.parse(savedRelays)
+      return relays.filter((r: any) => r.enabledForWorld).map((r: any) => r.url)
+    }
+  } catch (error) {
+    console.error('[ProfileButton] Failed to load relay config:', error)
+  }
+
+  // Fallback to default world relays
+  return DEFAULT_RELAYS.filter(url => {
+    const state = DEFAULT_RELAY_STATES[url as keyof typeof DEFAULT_RELAY_STATES]
+    return state?.enabledForWorld
+  })
+}
 
 interface ProfileMetadata {
   name?: string
@@ -118,7 +137,12 @@ export function ProfileButton({ pubkey, onLogin, onOpenProfile }: ProfileButtonP
 
       const signedEvent = await account.signer.signEvent(metadataEvent)
 
-      for (const relayUrl of DEFAULT_RELAYS) {
+      // Publish guest account profile metadata only to world relays
+      // (Never publish to profile relays - they are read-only for querying existing profiles)
+      const worldRelays = getWorldRelays()
+      console.log('[ProfileButton] Publishing guest profile to world relays:', worldRelays)
+
+      for (const relayUrl of worldRelays) {
         try {
           const relay = new Relay(relayUrl)
           relay.publish(signedEvent)
