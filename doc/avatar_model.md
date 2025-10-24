@@ -18,8 +18,9 @@ Avatar configuration is stored in state events using the following tags:
 
 ### Optional Fields
 
-- `avatar_id` (string): Predefined model identifier (e.g., 'boy', 'girl', 'man')
-  - Used to load existing models from local assets
+- `avatar_id` (string): Model identifier matching filename (without extension)
+  - Used to load models from local assets defined in `models.json`
+  - Example: `chr_army1` for `chr_army1.vox`
   - Takes priority over other sources
 
 - `avatar_url` (string): Direct URL to avatar model file
@@ -39,10 +40,10 @@ Avatar configuration is stored in state events using the following tags:
 
 Avatars are loaded in the following priority order:
 
-1. **avatar_id**: Load from predefined local assets
+1. **avatar_id**: Load from local assets defined in models.json
    - Fastest loading
    - Reliable, no network dependency
-   - Example: `boy` → `chr_peasant_guy_blackhair.vox`
+   - Example: `chr_army1` → `chr_army1.vox`
 
 2. **avatar_url**: Load from custom URL
    - Allows user-provided models
@@ -58,20 +59,24 @@ Avatars are loaded in the following priority order:
    - Post-processing of loaded avatar
    - Accessories, colors, etc.
 
-## Predefined Models
+## Available Models
 
-### Vox Models (avatar_type: 'vox')
+Models are defined dynamically in `public/assets/models.json`. Each model's `avatar_id` is derived from its filename (without extension).
 
-| avatar_id | File                              |
-|-----------|-----------------------------------|
-| `boy`     | chr_peasant_guy_blackhair.vox     |
-| `girl`    | chr_peasant_girl_orangehair.vox   |
+Example structure:
+```json
+{
+  "vox": [
+    ["Army Character 1", "chr_army1.vox"],
+    ["Lady Character 1", "chr_lady1.vox"]
+  ],
+  "glb": [
+    ["Default Avatar", "default.glb"]
+  ]
+}
+```
 
-### GLB Models (avatar_type: 'glb')
-
-| avatar_id | File      |
-|-----------|-----------|
-| `man`     | man.glb   |
+To use a model, set `avatar_id` to the filename without extension (e.g., `chr_army1` for `chr_army1.vox`).
 
 ## Example State Event
 
@@ -83,7 +88,7 @@ Avatars are loaded in the following priority order:
     ["a", "30311:pubkey:world"],
     ["expiration", "1234567890"],
     ["avatar_type", "vox"],
-    ["avatar_id", "boy"],
+    ["avatar_id", "chr_army1"],
     ["client", "Crossworld Web"],
     ["position", "{\"x\":4,\"y\":0,\"z\":4}"],
     ["status", "active"],
@@ -110,9 +115,10 @@ When loading an avatar, clients should:
 
 ### Fallback Behavior
 
-If loading fails at any step:
-- Vox avatars: Fall back to procedurally generated simple voxel avatar
-- GLB avatars: Fall back to default `man.glb` model
+If loading fails at any step or invalid data is detected:
+- Reset to initial state (no avatar loaded)
+- User must select a new avatar from available models
+- Invalid or legacy avatar IDs are not supported and will be ignored
 
 ### Color Handling
 

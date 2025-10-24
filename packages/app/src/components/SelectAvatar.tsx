@@ -92,6 +92,25 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
     setAvatarUrl('');
   };
 
+  // Randomize avatar selection
+  const randomizeAvatar = () => {
+    // Randomize avatar model
+    if (avatarType === 'vox' && voxModels.length > 0) {
+      const randomIndex = Math.floor(Math.random() * voxModels.length);
+      setSelectedId(voxModels[randomIndex].id);
+      setAvatarUrl('');
+    } else if (avatarType === 'glb' && glbModels.length > 0) {
+      const randomIndex = Math.floor(Math.random() * glbModels.length);
+      setSelectedId(glbModels[randomIndex].id);
+      setAvatarUrl('');
+    }
+
+    // Randomize teleport animation
+    const teleportTypes: TeleportAnimationType[] = ['fade', 'scale', 'spin', 'slide', 'burst'];
+    const randomTeleportIndex = Math.floor(Math.random() * teleportTypes.length);
+    setTeleportAnimationType(teleportTypes[randomTeleportIndex]);
+  };
+
   // Load models configuration
   useEffect(() => {
     console.log('[SelectAvatar] Loading models config...');
@@ -111,15 +130,12 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
       setGlbModels(glb);
       setModelsLoaded(true);
 
-      // Select random VOX model if no avatar is selected
-      if (!currentSelection?.avatarId && vox.length > 0) {
+      // Always select random VOX model when opening selector
+      if (vox.length > 0) {
         const randomIndex = Math.floor(Math.random() * vox.length);
         console.log('[SelectAvatar] Auto-selecting random VOX model:', vox[randomIndex].id);
         setSelectedId(vox[randomIndex].id);
         setAvatarType('vox');
-      } else if ((!selectedId || selectedId === 'boy' || selectedId === 'girl') && vox.length > 0) {
-        console.log('[SelectAvatar] Setting default selection to:', vox[0].id);
-        setSelectedId(vox[0].id);
       }
     }).catch(error => {
       console.error('[SelectAvatar] Failed to load models config:', error);
@@ -565,14 +581,12 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
       zIndex={2000}
       title="Select Avatar"
       actions={
-        <HStack spacing={3}>
-          {hasPreviousSelection && (
-            <Button flex={1} onClick={onClose} variant="ghost" color="white">
-              Cancel
-            </Button>
-          )}
-          <Button flex={1} colorScheme="blue" onClick={handleSave}>
-            Save
+        <HStack spacing={2} width="100%">
+          <Button flex={1} colorScheme="blue" onClick={handleSave} size="lg">
+            That's me!
+          </Button>
+          <Button flex={1} variant="outline" onClick={randomizeAvatar} size="lg">
+            Not me
           </Button>
         </HStack>
       }
@@ -608,8 +622,8 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
                 />
               </Box>
 
-              {/* Left/Right Cycle Buttons (VOX only) */}
-              {avatarType === 'vox' && voxModels.length > 0 && (
+              {/* Left/Right Cycle Buttons (VOX only, shown when More Settings is open) */}
+              {showMoreSettings && avatarType === 'vox' && voxModels.length > 0 && (
                 <>
                   <IconButton
                     aria-label="Previous model"

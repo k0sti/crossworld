@@ -458,17 +458,6 @@ export class AvatarStateService {
 
       console.log('[AvatarState] Parsed state event:', { avatarType, avatarId, avatarUrl, avatarDataLength: avatarData?.length, pubkey: event.pubkey.slice(0, 8) })
 
-      // Validate consistency between avatarType and avatarId (skip for csm)
-      if (avatarId && avatarType !== 'csm') {
-        const isVoxId = avatarId === 'boy' || avatarId === 'girl'
-        const isGlbId = avatarId === 'man'
-
-        if ((isVoxId && avatarType !== 'vox') || (isGlbId && avatarType !== 'glb')) {
-          console.warn(`[AvatarState] Skipping event: avatarType '${avatarType}' doesn't match avatarId '${avatarId}'`)
-          return null
-        }
-      }
-
       const clientName = getTag('client') || 'Unknown'
       const clientVersion = getTag('client_version')
 
