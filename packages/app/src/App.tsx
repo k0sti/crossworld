@@ -625,10 +625,6 @@ function App() {
           onLogout={handleLogout}
           onOpenAvatarSelection={() => setActivePanelType('avatar')}
           onRestart={handleRestart}
-          getEmojiHash={(pk) => {
-            const { pubkey_to_emoji } = require('@workspace/wasm')
-            return pubkey_to_emoji(pk)
-          }}
         />
         {activePanelType === 'avatar' && (
           <SelectAvatar
