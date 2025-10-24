@@ -5,8 +5,10 @@ import { CubeEditorView } from '@crossworld/editor'
 import { NetworkConfigPanel } from './components/NetworkConfigPanel'
 import { InfoPanel } from './components/InfoPanel'
 import { FiGlobe } from 'react-icons/fi'
+import { useNavigate } from 'react-router-dom'
 
 export function EditorApp() {
+  const navigate = useNavigate()
   const [pubkey, setPubkey] = useState<string | null>(null)
   const [activePanelType, setActivePanelType] = useState<ConfigPanelType>(null)
   const [viewedProfilePubkey, _setViewedProfilePubkey] = useState<string | null>(null)
@@ -32,7 +34,7 @@ export function EditorApp() {
           <IconButton
             aria-label="Open world"
             icon={<FiGlobe />}
-            onClick={() => window.location.href = '/'}
+            onClick={() => navigate('/')}
             variant="ghost"
             size="sm"
             title="3D World"

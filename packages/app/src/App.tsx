@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useToast, IconButton } from '@chakra-ui/react'
+import { useNavigate } from 'react-router-dom'
 import { useAccountManager } from 'applesauce-react/hooks'
 import { TopBar, ConfigPanelType, ProfilePanel } from '@crossworld/common'
 import { FiEdit3 } from 'react-icons/fi'
@@ -24,6 +25,7 @@ const ENABLE_CAMERA_CONTROL = false
 const ENABLE_CUBE_GROUND = false
 
 function App() {
+  const navigate = useNavigate()
   const [pubkey, setPubkey] = useState<string | null>(null)
   const [isEditMode, setIsEditMode] = useState(false)
   const [isCameraMode, setIsCameraMode] = useState(false)
@@ -573,7 +575,7 @@ function App() {
             <IconButton
               aria-label="Open editor"
               icon={<FiEdit3 />}
-              onClick={() => window.location.href = 'editor/'}
+              onClick={() => navigate('/editor')}
               variant="ghost"
               size="sm"
               title="Voxel Editor"
