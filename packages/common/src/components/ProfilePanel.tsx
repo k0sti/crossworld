@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { VStack, Text, Avatar, HStack, Divider, Flex, IconButton, Tooltip, useToast, SimpleGrid, Button, AlertDialog, AlertDialogBody, AlertDialogFooter, AlertDialogHeader, AlertDialogContent, AlertDialogOverlay, useDisclosure } from '@chakra-ui/react'
+import { VStack, Text, Avatar, HStack, Divider, Flex, IconButton, Tooltip, useToast, Button, AlertDialog, AlertDialogBody, AlertDialogFooter, AlertDialogHeader, AlertDialogContent, AlertDialogOverlay, useDisclosure } from '@chakra-ui/react'
 import { FiUser, FiCopy, FiExternalLink, FiRefreshCw, FiLogOut } from 'react-icons/fi'
 import { npubEncode } from 'nostr-tools/nip19'
 import { Relay } from 'applesauce-relay'
