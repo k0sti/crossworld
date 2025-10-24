@@ -1,9 +1,7 @@
 mod avatar;
-mod emoji_hash;
 mod geometry;
 
 use avatar::AvatarManager;
-use emoji_hash::pubkey_to_emoji_hash;
 use geometry::GeometryEngine as GeometryEngineInternal;
 use std::cell::RefCell;
 use wasm_bindgen::prelude::*;
@@ -185,12 +183,6 @@ impl AvatarEngine {
     pub fn cache_size(&self) -> usize {
         self.manager.cache_size()
     }
-}
-
-/// Convert a hex pubkey to a 5-emoji hash for display
-#[wasm_bindgen]
-pub fn pubkey_to_emoji(pubkey_hex: String) -> String {
-    pubkey_to_emoji_hash(&pubkey_hex)
 }
 
 /// Load a .vox file from bytes and generate geometry

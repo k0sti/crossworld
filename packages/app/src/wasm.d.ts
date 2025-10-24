@@ -1,6 +1,5 @@
 declare module '@workspace/wasm' {
   export function init(): Promise<void>;
-  export function pubkey_to_emoji(pubkey_hex: string): string;
   export function load_vox_from_bytes(bytes: Uint8Array, user_npub?: string | null): GeometryData;
   
   export class AvatarEngine {
