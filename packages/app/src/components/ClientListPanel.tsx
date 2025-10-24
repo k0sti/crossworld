@@ -1,20 +1,14 @@
 import { Box, VStack, HStack, Text, Avatar, Tooltip, Badge, Wrap } from '@chakra-ui/react'
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { FiMapPin, FiMessageSquare, FiCompass, FiEdit3, FiMic, FiHeadphones } from 'react-icons/fi'
 import { type AvatarStateService, type AvatarState } from '../services/avatar-state'
-import { Relay } from 'applesauce-relay'
+import { profileCache } from '../services/profile-cache'
 import { DEFAULT_RELAYS } from '../config'
 
 interface ClientListPanelProps {
   isOpen: boolean
   statusService: AvatarStateService
   onOpenProfile?: (pubkey: string) => void
-}
-
-interface ProfileMetadata {
-  name?: string
-  picture?: string
-  display_name?: string
 }
 
 interface RelayConfig {
@@ -26,9 +20,7 @@ interface RelayConfig {
 
 export function ClientListPanel({ isOpen, statusService, onOpenProfile }: ClientListPanelProps) {
   const [clients, setClients] = useState<Map<string, AvatarState>>(new Map())
-  const [profiles, setProfiles] = useState<Map<string, ProfileMetadata>>(new Map())
   const [enabledRelays, setEnabledRelays] = useState<string[]>([])
-  const profileFetchQueueRef = useRef<Set<string>>(new Set())
 
   // Load enabled relays from localStorage
   useEffect(() => {
@@ -53,6 +45,8 @@ export function ClientListPanel({ isOpen, statusService, onOpenProfile }: Client
     // Listen for relay config changes
     const handleRelayConfigChanged = () => {
       loadEnabledRelays()
+      // Clear profile cache when relay config changes
+      profileCache.clearCache()
     }
 
     window.addEventListener('relayConfigChanged', handleRelayConfigChanged)
@@ -62,68 +56,12 @@ export function ClientListPanel({ isOpen, statusService, onOpenProfile }: Client
     }
   }, [])
 
-  // Fetch profile metadata for a pubkey
+  // Fetch profile metadata for a pubkey using cache
   const fetchProfile = useCallback(async (pubkey: string) => {
     if (enabledRelays.length === 0) return
 
-    // Don't fetch if already in progress
-    if (profileFetchQueueRef.current.has(pubkey)) {
-      return
-    }
-
-    profileFetchQueueRef.current.add(pubkey)
-
-    for (const relayUrl of enabledRelays) {
-      try {
-        const relay = new Relay(relayUrl)
-        const events = await new Promise<any[]>((resolve) => {
-          const collectedEvents: any[] = []
-          let isResolved = false
-
-          const cleanup = () => {
-            if (!isResolved) {
-              isResolved = true
-              try { relay.close() } catch (e) {}
-              resolve(collectedEvents)
-            }
-          }
-
-          relay.request({
-            kinds: [0],
-            authors: [pubkey],
-            limit: 1
-          }).subscribe({
-            next: (event: any) => {
-              if (event === 'EOSE') {
-                cleanup()
-              } else if (event && event.kind === 0) {
-                collectedEvents.push(event)
-              }
-            },
-            error: () => cleanup(),
-            complete: () => cleanup()
-          })
-
-          setTimeout(cleanup, 3000)
-        })
-
-        if (events.length > 0) {
-          const latestEvent = events.sort((a, b) => b.created_at - a.created_at)[0]
-          try {
-            const metadata = JSON.parse(latestEvent.content)
-            setProfiles((prev) => new Map(prev).set(pubkey, metadata))
-            profileFetchQueueRef.current.delete(pubkey)
-            return
-          } catch (e) {
-            console.error('Failed to parse profile metadata:', e)
-          }
-        }
-      } catch (error) {
-        console.error(`Failed to fetch profile from ${relayUrl}:`, error)
-      }
-    }
-
-    profileFetchQueueRef.current.delete(pubkey)
+    // Use profile cache to prevent duplicate fetches
+    await profileCache.getProfile(pubkey, enabledRelays)
   }, [enabledRelays])
 
   // Subscribe to client changes
@@ -132,7 +70,7 @@ export function ClientListPanel({ isOpen, statusService, onOpenProfile }: Client
       setClients(clientsMap)
       // Fetch profiles for all new clients
       clientsMap.forEach((client) => {
-        if (!profiles.has(client.pubkey)) {
+        if (!profileCache.isCached(client.pubkey)) {
           fetchProfile(client.pubkey).catch(console.error)
         }
       })
@@ -142,7 +80,9 @@ export function ClientListPanel({ isOpen, statusService, onOpenProfile }: Client
     setClients(statusService.getUserStates())
 
     return unsubscribe
-  }, [statusService, profiles, fetchProfile])
+    // Note: fetchProfile and profilesVersion intentionally excluded to prevent re-fetch loop
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusService, enabledRelays])
 
   const clientList = Array.from(clients.values()).sort((a, b) => {
     // Sort alphabetically by npub
@@ -150,8 +90,13 @@ export function ClientListPanel({ isOpen, statusService, onOpenProfile }: Client
   })
 
   const getDisplayName = (client: AvatarState): string => {
-    const profile = profiles.get(client.pubkey)
+    const profile = profileCache.getCached(client.pubkey)
     return profile?.display_name || profile?.name || client.npub.slice(0, 12) + '...'
+  }
+
+  const getProfilePicture = (client: AvatarState): string | undefined => {
+    const profile = profileCache.getCached(client.pubkey)
+    return profile?.picture
   }
 
   const formatPosition = (pos?: { x: number; y: number; z: number }): string => {
@@ -261,7 +206,7 @@ export function ClientListPanel({ isOpen, statusService, onOpenProfile }: Client
                   <Avatar
                     size="sm"
                     name={getDisplayName(client)}
-                    src={profiles.get(client.pubkey)?.picture}
+                    src={getProfilePicture(client)}
                   />
 
                   {/* Client Info */}
