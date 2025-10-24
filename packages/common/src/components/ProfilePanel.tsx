@@ -20,8 +20,6 @@ interface RelayConfig {
   status: 'connected' | 'connecting' | 'error' | 'disconnected'
 }
 
-const SHOW_EMOJI_HASH = false
-
 interface ProfilePanelProps {
   pubkey: string | null
   isOpen: boolean
@@ -30,11 +28,9 @@ interface ProfilePanelProps {
   onLogout?: () => void
   onOpenAvatarSelection?: () => void
   onRestart?: () => void
-  /** Optional function to get emoji hash from pubkey (WASM function) */
-  getEmojiHash?: (pubkey: string) => string
 }
 
-export function ProfilePanel({ pubkey, isOpen, onClose, local_user = false, onLogout, onOpenAvatarSelection, onRestart, getEmojiHash }: ProfilePanelProps) {
+export function ProfilePanel({ pubkey, isOpen, onClose, local_user = false, onLogout, onOpenAvatarSelection, onRestart }: ProfilePanelProps) {
   const [profile, setProfile] = useState<ProfileMetadata | null>(null)
   const [enabledRelays, setEnabledRelays] = useState<string[]>([])
   const toast = useToast()
@@ -43,17 +39,6 @@ export function ProfilePanel({ pubkey, isOpen, onClose, local_user = false, onLo
   const { isOpen: isRestartOpen, onOpen: onRestartOpen, onClose: onRestartClose } = useDisclosure()
   const npub = pubkey ? npubEncode(pubkey) : ''
   const displayNpub = npub ? `${npub.slice(0, 12)}...${npub.slice(-8)}` : ''
-
-  // Get emoji hash if function provided
-  let emojiHash = ''
-  if (getEmojiHash && pubkey) {
-    try {
-      emojiHash = getEmojiHash(pubkey)
-    } catch (error) {
-      console.warn('[ProfilePanel] Failed to get emoji hash:', error)
-    }
-  }
-  const emojiArray = Array.from(emojiHash)
 
   // Load enabled relays from localStorage
   useEffect(() => {
@@ -283,18 +268,6 @@ export function ProfilePanel({ pubkey, isOpen, onClose, local_user = false, onLo
                   />
                 </Tooltip>
               </HStack>
-
-              {SHOW_EMOJI_HASH && (
-                <Flex justify="center" py={2}>
-                  <SimpleGrid columns={9} gap={1}>
-                    {emojiArray.map((emoji, index) => (
-                      <Text key={index} fontSize="2xl" lineHeight="1">
-                        {String(emoji)}
-                      </Text>
-                    ))}
-                  </SimpleGrid>
-                </Flex>
-              )}
 
               {profile?.about && (
                 <>
