@@ -98,6 +98,7 @@ export default defineConfig({
   publicDir: false,
   // Serve assets from project root during dev
   server: {
+    host: '0.0.0.0',  // Listen on all interfaces
     fs: {
       allow: ['..', '../..']
     }
