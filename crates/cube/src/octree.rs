@@ -195,6 +195,60 @@ impl Cube<i32> {
         }
     }
 
+    /// Set a voxel at the given position and depth
+    ///
+    /// # Arguments
+    /// * `x`, `y`, `z` - Voxel coordinates in range [0, 2^depth)
+    /// * `depth` - Current depth level (0 = leaf)
+    /// * `value` - Value to set
+    ///
+    /// # Returns
+    /// A new Cube with the voxel set
+    pub fn set_voxel(&self, x: i32, y: i32, z: i32, depth: u32, value: i32) -> Self {
+        if depth == 0 {
+            // Base case: set leaf value
+            return Cube::Solid(value);
+        }
+
+        // Determine which octant contains the target position
+        let half_size = 1 << (depth - 1); // 2^(depth-1)
+
+        // Calculate octant index based on which half of each axis
+        let octant_x = if x >= half_size { 1 } else { 0 };
+        let octant_y = if y >= half_size { 1 } else { 0 };
+        let octant_z = if z >= half_size { 1 } else { 0 };
+        let octant_idx = (octant_x << 2) | (octant_y << 1) | octant_z;
+
+        // Calculate child position (relative to child's coordinate space)
+        let child_x = x % half_size;
+        let child_y = y % half_size;
+        let child_z = z % half_size;
+
+        // Get or create children
+        let children: [Rc<Cube<i32>>; 8] = match self {
+            Cube::Cubes(existing_children) => {
+                // Clone existing children
+                existing_children.iter().cloned().collect::<Vec<_>>().try_into().unwrap()
+            }
+            Cube::Solid(v) => {
+                // Expand solid into 8 children with the same value
+                std::array::from_fn(|_| Rc::new(Cube::Solid(*v)))
+            }
+            _ => {
+                // For Planes and Slices, treat as Solid(0)
+                std::array::from_fn(|_| Rc::new(Cube::Solid(0)))
+            }
+        };
+
+        // Update the target child
+        let mut new_children = children;
+        new_children[octant_idx] = Rc::new(
+            new_children[octant_idx].set_voxel(child_x, child_y, child_z, depth - 1, value)
+        );
+
+        Cube::Cubes(Box::new(new_children))
+    }
+
     /// Traverse and collect all leaf voxels with positions
     pub fn collect_voxels(
         &self,
@@ -290,6 +344,21 @@ impl Octree {
         let mut voxels = Vec::new();
         self.root.collect_voxels((0.0, 0.0, 0.0), 1.0, &mut voxels);
         voxels
+    }
+
+    /// Set a voxel at the given position and depth
+    ///
+    /// # Arguments
+    /// * `x`, `y`, `z` - Voxel coordinates in range [0, 2^depth)
+    /// * `depth` - Tree depth (0 = single voxel, 4 = 16x16x16 grid)
+    /// * `value` - Value to set
+    ///
+    /// # Returns
+    /// A new Octree with the voxel set
+    pub fn set_voxel(&self, x: i32, y: i32, z: i32, depth: u32, value: i32) -> Self {
+        Octree {
+            root: self.root.set_voxel(x, y, z, depth, value),
+        }
     }
 }
 

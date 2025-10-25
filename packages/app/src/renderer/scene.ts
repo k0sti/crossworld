@@ -37,9 +37,14 @@ export class SceneManager {
   // Mouse mode: 1 = free pointer (paint/erase), 2 = grabbed pointer (camera rotation)
   private mouseMode: 1 | 2 = 1;
   private canvas: HTMLCanvasElement | null = null;
+  private crosshair: HTMLElement | null = null;
 
   // Depth voxel select mode: 1 = near side (y=0), 2 = far side (y=-1)
   private depthSelectMode: 1 | 2 = 1;
+
+  // Cursor depth (controls voxel size: size = 2^(4-depth))
+  // depth=4: size=1, depth=5: size=0.5, depth=3: size=2
+  private cursorDepth: number = 4;
 
   // Remote avatars for other users
   private remoteAvatars: Map<string, IAvatar> = new Map();
@@ -91,6 +96,7 @@ export class SceneManager {
     this.setupMouseMoveListener(canvas);
     this.setupKeyboardListener(canvas);
     this.setupEditModeHelpers();
+    this.setupCrosshair();
     this.setupFlatGround();
 
     // Initialize camera controller and enable it for both walk and edit modes
@@ -102,8 +108,9 @@ export class SceneManager {
   }
 
   private setupFlatGround(): void {
-    // Create flat ground plane (8x8 grid)
-    const geometry = new THREE.PlaneGeometry(8, 8, 8, 8);
+    // Create flat ground plane (8x8 grid with 64 segments for crisp checkerboard)
+    // Each unit square needs at least 8x8 segments to show clear pattern
+    const geometry = new THREE.PlaneGeometry(8, 8, 64, 64);
     geometry.rotateX(-Math.PI / 2); // Rotate to be horizontal
 
     // Create checkerboard pattern with vertex colors
@@ -111,10 +118,16 @@ export class SceneManager {
     const positions = geometry.attributes.position;
 
     for (let i = 0; i < positions.count; i++) {
-      const x = Math.floor((positions.getX(i) + 4) / 1);
-      const z = Math.floor((positions.getZ(i) + 4) / 1);
-      const isLight = (x + z) % 2 === 0;
-      const color = isLight ? 0.8 : 0.6;
+      const worldX = positions.getX(i);
+      const worldZ = positions.getZ(i);
+
+      // Convert world position to grid coordinates (0-7)
+      const gridX = Math.floor(worldX + 4);
+      const gridZ = Math.floor(worldZ + 4);
+
+      // Create checkerboard pattern
+      const isLight = (gridX + gridZ) % 2 === 0;
+      const color = isLight ? 0.9 : 0.5;
 
       colors[i * 3] = color;
       colors[i * 3 + 1] = color;
@@ -126,13 +139,13 @@ export class SceneManager {
     const material = new THREE.MeshPhongMaterial({
       vertexColors: true,
       transparent: true,
-      opacity: 0.66,
+      opacity: 0.4,
       side: THREE.DoubleSide,
       depthWrite: false
     });
 
     this.flatGroundMesh = new THREE.Mesh(geometry, material);
-    this.flatGroundMesh.position.set(4, 0, 4);
+    this.flatGroundMesh.position.set(4, 0.02, 4); // Raised slightly to avoid z-fighting
     this.flatGroundMesh.receiveShadow = true;
     this.scene.add(this.flatGroundMesh);
   }
@@ -194,7 +207,7 @@ export class SceneManager {
 
     // Mouse down handler - track continuous paint
     canvas.addEventListener('mousedown', (event) => {
-      if (this.isEditMode && this.mouseMode === 1) {
+      if (this.isEditMode) {
         if (event.button === 0) {
           // Left mouse button
           this.isLeftMousePressed = true;
@@ -235,9 +248,18 @@ export class SceneManager {
 
   private handleEditModeClick(event: MouseEvent, canvas: HTMLCanvasElement, isLeftClick: boolean): void {
     // Calculate mouse position
-    const rect = canvas.getBoundingClientRect();
-    this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    // In mode 2 (shift rotate), raycast from center of screen
+    // In mode 1 (free pointer), raycast from mouse position
+    if (this.mouseMode === 2) {
+      // Center of screen
+      this.mouse.x = 0;
+      this.mouse.y = 0;
+    } else {
+      // Mouse position
+      const rect = canvas.getBoundingClientRect();
+      this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    }
 
     // Update raycaster
     this.raycaster.setFromCamera(this.mouse, this.camera);
@@ -247,22 +269,25 @@ export class SceneManager {
     const didIntersect = this.raycaster.ray.intersectPlane(this.groundPlane, intersectPoint);
 
     if (didIntersect) {
-      // Snap to grid (1 unit grid)
-      const snappedX = Math.floor(intersectPoint.x);
-      const snappedZ = Math.floor(intersectPoint.z);
+      const size = this.getCursorSize();
+
+      // Snap to grid based on cursor size
+      const voxelX = Math.floor(intersectPoint.x / size) * size;
+      const voxelZ = Math.floor(intersectPoint.z / size) * size;
 
       // Depth select mode: 1 = y=0 (near), 2 = y=-1 (far)
-      const voxelY = this.depthSelectMode === 1 ? 0 : -1;
+      const voxelY = this.depthSelectMode === 1 ? 0 : -size;
 
-      // Check if within valid world cube range (x: 0-7, z: 0-7)
-      if (snappedX >= 0 && snappedX < 8 && snappedZ >= 0 && snappedZ < 8) {
+      // Check if within valid world cube range
+      const minBound = 0;
+      const maxBound = 8 - size;
+      if (voxelX >= minBound && voxelX <= maxBound && voxelZ >= minBound && voxelZ <= maxBound) {
         if (isLeftClick) {
           // Left click: use current color/erase mode
-          this.paintVoxel(snappedX, voxelY, snappedZ);
+          this.paintVoxelWithSize(voxelX, voxelY, voxelZ, size);
         } else {
           // Right click always removes voxel
-          console.log(`[Voxel Erase] coords: (${snappedX}, ${voxelY}, ${snappedZ}), depth: ${voxelY}, value: removed`);
-          this.onVoxelEdit?.(snappedX, voxelY, snappedZ, 0);
+          this.eraseVoxelWithSize(voxelX, voxelY, voxelZ, size);
         }
       }
     }
@@ -278,20 +303,25 @@ export class SceneManager {
     this.selectedColorIndex = colorIndex;
   }
 
-  private paintVoxel(x: number, y: number, z: number): void {
+  private paintVoxelWithSize(x: number, y: number, z: number, size: number): void {
     // Check if clear/eraser mode is selected (index -1)
     const isClearMode = this.selectedColorIndex === -1;
 
     if (isClearMode) {
-      // Clear mode: remove voxel
-      console.log(`[Voxel Erase] coords: (${x}, ${y}, ${z}), depth: ${y}, value: removed`);
-      this.onVoxelEdit?.(x, y, z, 0);
-    } else {
-      // Place voxel with selected color (palette 0-31 maps to voxel values 32-63)
-      const colorValue = this.selectedColorIndex + 32;
-      console.log(`[Voxel Draw] coords: (${x}, ${y}, ${z}), depth: ${y}, value: ${colorValue}`);
-      this.onVoxelEdit?.(x, y, z, colorValue);
+      this.eraseVoxelWithSize(x, y, z, size);
+      return;
     }
+
+    // Place voxel with selected color (palette 0-31 maps to voxel values 32-63)
+    const colorValue = this.selectedColorIndex + 32;
+
+    // Call onVoxelEdit (depth support coming in phase 2)
+    this.onVoxelEdit?.(x, y, z, colorValue);
+  }
+
+  private eraseVoxelWithSize(x: number, y: number, z: number, size: number): void {
+    // Call onVoxelEdit (depth support coming in phase 2)
+    this.onVoxelEdit?.(x, y, z, 0);
   }
 
   private setupKeyboardListener(canvas: HTMLCanvasElement): void {
@@ -303,9 +333,9 @@ export class SceneManager {
         this.mouseMode = 2;
         // Request pointer lock for grabbed mode
         canvas.requestPointerLock();
-        // Hide preview cube in camera mode
-        if (this.previewCube) {
-          this.previewCube.visible = false;
+        // Show crosshair
+        if (this.crosshair) {
+          this.crosshair.style.display = 'block';
         }
         console.log('[Mouse Mode] Switched to mode 2 (first-person camera rotation)');
       }
@@ -315,6 +345,21 @@ export class SceneManager {
         event.preventDefault();
         this.depthSelectMode = this.depthSelectMode === 1 ? 2 : 1;
         console.log(`[Depth Select] Switched to mode ${this.depthSelectMode} (y=${this.depthSelectMode === 1 ? 0 : -1})`);
+      }
+
+      // Cursor depth control with Arrow Up/Down
+      if (event.code === 'ArrowUp') {
+        event.preventDefault();
+        this.cursorDepth = Math.min(10, this.cursorDepth + 1); // Max depth 10
+        this.updateCursorSize();
+        console.log(`[Cursor Depth] Increased to ${this.cursorDepth} (size=${this.getCursorSize()})`);
+      }
+
+      if (event.code === 'ArrowDown') {
+        event.preventDefault();
+        this.cursorDepth = Math.max(0, this.cursorDepth - 1); // Min depth 0
+        this.updateCursorSize();
+        console.log(`[Cursor Depth] Decreased to ${this.cursorDepth} (size=${this.getCursorSize()})`);
       }
     });
 
@@ -326,6 +371,10 @@ export class SceneManager {
         this.mouseMode = 1;
         // Exit pointer lock
         document.exitPointerLock();
+        // Hide crosshair
+        if (this.crosshair) {
+          this.crosshair.style.display = 'none';
+        }
         // Reset paint state
         this.isLeftMousePressed = false;
         this.isRightMousePressed = false;
@@ -339,6 +388,10 @@ export class SceneManager {
       if (!document.pointerLockElement && this.mouseMode === 2) {
         // Pointer lock was exited, reset to mode 1
         this.mouseMode = 1;
+        // Hide crosshair
+        if (this.crosshair) {
+          this.crosshair.style.display = 'none';
+        }
         this.isLeftMousePressed = false;
         this.isRightMousePressed = false;
         this.lastPaintedVoxel = null;
@@ -384,13 +437,118 @@ export class SceneManager {
     const lineMaterial = new THREE.LineBasicMaterial({
       color: 0x00ff00,
       linewidth: 2,
-      opacity: 0.7,
-      transparent: true
+      opacity: 0.8,
+      transparent: true,
+      depthTest: false, // Always render on top
+      depthWrite: false
     });
     this.previewCube = new THREE.LineSegments(edges, lineMaterial);
     this.previewCube.position.set(0.5, 0.5, 0.5); // Start at y=0 (on ground plane)
     this.previewCube.visible = false;
+    this.previewCube.renderOrder = 999; // Render last
     this.scene.add(this.previewCube);
+  }
+
+  private setupCrosshair(): void {
+    // Create crosshair element for first-person mode
+    this.crosshair = document.createElement('div');
+    this.crosshair.style.position = 'fixed';
+    this.crosshair.style.top = '50%';
+    this.crosshair.style.left = '50%';
+    this.crosshair.style.transform = 'translate(-50%, -50%)';
+    this.crosshair.style.width = '20px';
+    this.crosshair.style.height = '20px';
+    this.crosshair.style.pointerEvents = 'none';
+    this.crosshair.style.zIndex = '1000';
+    this.crosshair.style.display = 'none';
+
+    // Create crosshair lines
+    this.crosshair.innerHTML = `
+      <div style="position: absolute; top: 50%; left: 0; width: 100%; height: 2px; background: rgba(255, 255, 255, 0.8); transform: translateY(-50%);"></div>
+      <div style="position: absolute; left: 50%; top: 0; height: 100%; width: 2px; background: rgba(255, 255, 255, 0.8); transform: translateX(-50%);"></div>
+      <div style="position: absolute; top: 50%; left: 50%; width: 4px; height: 4px; background: rgba(255, 255, 255, 0.9); border-radius: 50%; transform: translate(-50%, -50%);"></div>
+    `;
+
+    document.body.appendChild(this.crosshair);
+  }
+
+  private getCursorSize(): number {
+    // Calculate voxel size from depth: size = 2^(4-depth)
+    // depth=4: size=1, depth=5: size=0.5, depth=3: size=2
+    return Math.pow(2, 4 - this.cursorDepth);
+  }
+
+  private updateCursorSize(): void {
+    if (!this.previewCube) return;
+
+    const size = this.getCursorSize();
+    const scale = size;
+    this.previewCube.scale.set(scale, scale, scale);
+  }
+
+  private updateVoxelCursorAtCenter(): void {
+    if (!this.previewCube) return;
+
+    // Raycast from center of screen
+    this.mouse.x = 0;
+    this.mouse.y = 0;
+    this.raycaster.setFromCamera(this.mouse, this.camera);
+
+    // Raycast to ground plane at y=0
+    const intersectPoint = new THREE.Vector3();
+    const didIntersect = this.raycaster.ray.intersectPlane(this.groundPlane, intersectPoint);
+
+    if (didIntersect) {
+      const size = this.getCursorSize();
+      const halfSize = size / 2;
+
+      // Snap to grid based on cursor size
+      const snappedX = Math.floor(intersectPoint.x / size) * size + halfSize;
+      const snappedZ = Math.floor(intersectPoint.z / size) * size + halfSize;
+
+      // Check if within ground bounds (0-8 range)
+      const minBound = halfSize;
+      const maxBound = 8 - halfSize;
+      if (snappedX >= minBound && snappedX <= maxBound && snappedZ >= minBound && snappedZ <= maxBound) {
+        // Position preview cube based on depth select mode
+        const previewY = this.depthSelectMode === 1 ? halfSize : -halfSize;
+        this.currentGridPosition.set(snappedX, previewY, snappedZ);
+        this.previewCube.position.copy(this.currentGridPosition);
+        this.previewCube.visible = true;
+
+        // Continuous paint in shift mode: if mouse button is pressed, paint/erase voxel at new position
+        if (this.isLeftMousePressed || this.isRightMousePressed) {
+          const voxelX = Math.floor(intersectPoint.x / size) * size;
+          const voxelZ = Math.floor(intersectPoint.z / size) * size;
+          // Depth select mode: 1 = y=0 (near), 2 = y=-1 (far)
+          const voxelY = this.depthSelectMode === 1 ? 0 : -size;
+
+          // Check if this is a new voxel position (different from last painted)
+          const isNewPosition = !this.lastPaintedVoxel ||
+            this.lastPaintedVoxel.x !== voxelX ||
+            this.lastPaintedVoxel.y !== voxelY ||
+            this.lastPaintedVoxel.z !== voxelZ;
+
+          const minBound = 0;
+          const maxBound = 8 - size;
+          if (isNewPosition && voxelX >= minBound && voxelX <= maxBound && voxelZ >= minBound && voxelZ <= maxBound) {
+            if (this.isLeftMousePressed) {
+              // Left mouse: draw with selected color
+              this.paintVoxelWithSize(voxelX, voxelY, voxelZ, size);
+            } else if (this.isRightMousePressed) {
+              // Right mouse: erase
+              this.eraseVoxelWithSize(voxelX, voxelY, voxelZ, size);
+            }
+            this.lastPaintedVoxel = { x: voxelX, y: voxelY, z: voxelZ };
+          }
+        }
+      } else {
+        // Outside bounds - hide cursor
+        this.previewCube.visible = false;
+      }
+    } else {
+      this.previewCube.visible = false;
+    }
   }
 
   private setupMouseMoveListener(canvas: HTMLCanvasElement): void {
@@ -407,9 +565,11 @@ export class SceneManager {
         const euler = new THREE.Euler().setFromQuaternion(this.camera.quaternion, 'YXZ');
 
         // Update yaw (left/right rotation around Y axis)
+        // Moving mouse right rotates camera right
         euler.y -= deltaX;
 
         // Update pitch (up/down rotation around X axis)
+        // Moving mouse down looks down
         euler.x -= deltaY;
 
         // Clamp pitch to prevent camera flipping
@@ -419,14 +579,22 @@ export class SceneManager {
         // Apply rotation back to camera
         this.camera.quaternion.setFromEuler(euler);
 
-        return;
+        // Don't return - continue to update voxel cursor below
       }
 
-      // Mode 1: Free pointer with painting
       // Calculate mouse position in normalized device coordinates
+      // In mode 2 (shift rotate), raycast from center of screen
+      // In mode 1 (free pointer), raycast from mouse position
       const rect = canvas.getBoundingClientRect();
-      this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-      this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      if (this.mouseMode === 2) {
+        // Center of screen
+        this.mouse.x = 0;
+        this.mouse.y = 0;
+      } else {
+        // Mouse position
+        this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      }
 
       // Update raycaster
       this.raycaster.setFromCamera(this.mouse, this.camera);
@@ -436,24 +604,29 @@ export class SceneManager {
       const didIntersect = this.raycaster.ray.intersectPlane(this.groundPlane, intersectPoint);
 
       if (didIntersect) {
-        // Snap to grid (1 unit grid)
-        const snappedX = Math.floor(intersectPoint.x) + 0.5;
-        const snappedZ = Math.floor(intersectPoint.z) + 0.5;
+        const size = this.getCursorSize();
+        const halfSize = size / 2;
+
+        // Snap to grid based on cursor size
+        const snappedX = Math.floor(intersectPoint.x / size) * size + halfSize;
+        const snappedZ = Math.floor(intersectPoint.z / size) * size + halfSize;
 
         // Check if within ground bounds (0-8 range)
-        if (snappedX >= 0.5 && snappedX <= 7.5 && snappedZ >= 0.5 && snappedZ <= 7.5) {
+        const minBound = halfSize;
+        const maxBound = 8 - halfSize;
+        if (snappedX >= minBound && snappedX <= maxBound && snappedZ >= minBound && snappedZ <= maxBound) {
           // Position preview cube based on depth select mode
-          const previewY = this.depthSelectMode === 1 ? 0.5 : -0.5;
+          const previewY = this.depthSelectMode === 1 ? halfSize : -halfSize;
           this.currentGridPosition.set(snappedX, previewY, snappedZ);
           this.previewCube.position.copy(this.currentGridPosition);
           this.previewCube.visible = true;
 
           // Continuous paint: if mouse button is pressed, paint/erase voxel at new position
           if (this.isLeftMousePressed || this.isRightMousePressed) {
-            const voxelX = Math.floor(intersectPoint.x);
-            const voxelZ = Math.floor(intersectPoint.z);
+            const voxelX = Math.floor(intersectPoint.x / size) * size;
+            const voxelZ = Math.floor(intersectPoint.z / size) * size;
             // Depth select mode: 1 = y=0 (near), 2 = y=-1 (far)
-            const voxelY = this.depthSelectMode === 1 ? 0 : -1;
+            const voxelY = this.depthSelectMode === 1 ? 0 : -size;
 
             // Check if this is a new voxel position (different from last painted)
             const isNewPosition = !this.lastPaintedVoxel ||
@@ -461,14 +634,15 @@ export class SceneManager {
               this.lastPaintedVoxel.y !== voxelY ||
               this.lastPaintedVoxel.z !== voxelZ;
 
-            if (isNewPosition && voxelX >= 0 && voxelX < 8 && voxelZ >= 0 && voxelZ < 8) {
+            const minVoxelBound = 0;
+            const maxVoxelBound = 8 - size;
+            if (isNewPosition && voxelX >= minVoxelBound && voxelX <= maxVoxelBound && voxelZ >= minVoxelBound && voxelZ <= maxVoxelBound) {
               if (this.isLeftMousePressed) {
                 // Left mouse: draw with selected color
-                this.paintVoxel(voxelX, voxelY, voxelZ);
+                this.paintVoxelWithSize(voxelX, voxelY, voxelZ, size);
               } else if (this.isRightMousePressed) {
                 // Right mouse: erase
-                console.log(`[Voxel Erase] coords: (${voxelX}, ${voxelY}, ${voxelZ}), depth: ${voxelY}, value: removed`);
-                this.onVoxelEdit?.(voxelX, voxelY, voxelZ, 0);
+                this.eraseVoxelWithSize(voxelX, voxelY, voxelZ, size);
               }
               this.lastPaintedVoxel = { x: voxelX, y: voxelY, z: voxelZ };
             }
@@ -523,9 +697,14 @@ export class SceneManager {
     const deltaTime_s = (currentTime - this.lastTime) / 1000;
     this.lastTime = currentTime;
 
-    // Update camera controller (always active unless in mouse grab mode for first-person rotation)
-    if (this.cameraController && this.mouseMode !== 2) {
+    // Update camera controller (always active for keyboard movement)
+    if (this.cameraController) {
       this.cameraController.update(deltaTime_s);
+    }
+
+    // Update voxel cursor in shift rotate mode (center screen raycast)
+    if (this.isEditMode && this.mouseMode === 2 && this.previewCube) {
+      this.updateVoxelCursorAtCenter();
     }
 
     // Update current avatar
@@ -741,6 +920,10 @@ export class SceneManager {
       if (this.mouseMode === 2) {
         this.mouseMode = 1;
         document.exitPointerLock();
+        // Hide crosshair
+        if (this.crosshair) {
+          this.crosshair.style.display = 'none';
+        }
       }
       this.isLeftMousePressed = false;
       this.isRightMousePressed = false;
