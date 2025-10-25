@@ -15,7 +15,7 @@ export const ENABLE_AVATAR_COLOR_SELECTION = false;
  * - Edit/Walk mode toggle button in left sidebar
  * - Grid helpers and voxel editing functionality
  */
-export const ENABLE_EDIT_MODE = false;
+export const ENABLE_EDIT_MODE = true;
 
 /**
  * Enable voice chat features

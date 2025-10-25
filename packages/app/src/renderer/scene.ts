@@ -25,6 +25,7 @@ export class SceneManager {
   private currentGridPosition: THREE.Vector3 = new THREE.Vector3();
   private onPositionUpdate?: (x: number, y: number, z: number, quaternion: [number, number, number, number], moveStyle?: string) => void;
   private cameraController: CameraController | null = null;
+  private selectedColorIndex: number = 0;
 
   // Remote avatars for other users
   private remoteAvatars: Map<string, IAvatar> = new Map();
@@ -82,9 +83,16 @@ export class SceneManager {
   }
 
   private setupMouseListener(canvas: HTMLCanvasElement): void {
+    // Left click handler
     canvas.addEventListener('click', (event) => {
-      // Don't move avatar in edit mode or camera mode
-      if (this.isEditMode || this.isCameraMode) return;
+      // Handle edit mode - place voxel
+      if (this.isEditMode && this.avatarEngine) {
+        this.handleEditModeClick(event, canvas, true);
+        return;
+      }
+
+      // Don't move avatar in camera mode
+      if (this.isCameraMode) return;
 
       // Need avatar and geometry mesh to handle clicks
       if (!this.currentAvatar || !this.geometryMesh) return;
@@ -131,6 +139,96 @@ export class SceneManager {
         }
       }
     });
+
+    // Right click handler - remove voxel in edit mode
+    canvas.addEventListener('contextmenu', (event) => {
+      if (this.isEditMode && this.avatarEngine) {
+        event.preventDefault();
+        this.handleEditModeClick(event, canvas, false);
+      }
+    });
+  }
+
+  private handleEditModeClick(event: MouseEvent, canvas: HTMLCanvasElement, isLeftClick: boolean): void {
+    if (!this.avatarEngine || !this.currentAvatar) return;
+
+    // Calculate mouse position
+    const rect = canvas.getBoundingClientRect();
+    this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+    // Update raycaster
+    this.raycaster.setFromCamera(this.mouse, this.camera);
+
+    // Get current avatar position to determine voxel coordinates
+    const avatarPos = this.currentAvatar.getPosition();
+
+    // Raycast to find clicked position
+    const intersects = this.raycaster.intersectObjects(this.scene.children, true);
+
+    if (intersects.length > 0) {
+      const point = intersects[0].point;
+
+      // Convert world coordinates to voxel grid coordinates
+      // Assuming avatar is 16x32x16 voxels at 0.1 scale
+      const voxelScale = 0.1;
+      const offsetX = avatarPos.x;
+      const offsetZ = avatarPos.z;
+
+      // Calculate voxel coordinates relative to avatar
+      const voxelX = Math.floor((point.x - offsetX + 0.8) / voxelScale);
+      const voxelY = Math.floor(point.y / voxelScale);
+      const voxelZ = Math.floor((point.z - offsetZ + 0.8) / voxelScale);
+
+      // Clamp to valid voxel range (16x32x16)
+      if (voxelX >= 0 && voxelX < 16 && voxelY >= 0 && voxelY < 32 && voxelZ >= 0 && voxelZ < 16) {
+        if (isLeftClick) {
+          // Place voxel with selected color
+          console.log(`[Voxel Draw] coords: (${voxelX}, ${voxelY}, ${voxelZ}), depth: ${voxelY}, value: ${this.selectedColorIndex}`);
+          this.avatarEngine.set_voxel(voxelX, voxelY, voxelZ, this.selectedColorIndex);
+        } else {
+          // Remove voxel
+          console.log(`[Voxel Erase] coords: (${voxelX}, ${voxelY}, ${voxelZ}), depth: ${voxelY}, value: removed`);
+          this.avatarEngine.remove_voxel(voxelX, voxelY, voxelZ);
+        }
+
+        // Regenerate mesh
+        this.regenerateAvatarMesh();
+      }
+    }
+  }
+
+  private regenerateAvatarMesh(): void {
+    if (!this.avatarEngine || !this.currentAvatar) return;
+
+    // Get current user npub for regeneration
+    const npub = 'npub1default'; // TODO: Use actual user npub
+    const geometryData = this.avatarEngine.regenerate_mesh(npub);
+
+    // Update the avatar mesh
+    if (this.currentAvatar instanceof VoxelAvatar) {
+      const currentTransform = this.currentAvatar.getTransform();
+      // Remove old avatar
+      this.removeAvatar();
+      // Create new avatar with updated geometry
+      const newAvatar = new VoxelAvatar({
+        userNpub: npub,
+        scale: 1.0,
+      }, currentTransform, this.scene);
+
+      // Apply geometry
+      newAvatar.applyGeometry(geometryData);
+
+      // Add to scene
+      this.scene.add(newAvatar.getObject3D());
+      this.currentAvatar = newAvatar;
+
+      console.log('[Voxel Edit] Mesh regenerated');
+    }
+  }
+
+  setSelectedColorIndex(colorIndex: number): void {
+    this.selectedColorIndex = colorIndex;
   }
 
   private setupLights(): void {
