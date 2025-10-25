@@ -8,6 +8,9 @@ declare module '@workspace/wasm' {
     generate_avatar(user_npub: string): GeometryData;
     clear_cache(): void;
     cache_size(): number;
+    set_voxel(x: number, y: number, z: number, color_index: number): void;
+    remove_voxel(x: number, y: number, z: number): void;
+    regenerate_mesh(user_npub: string): GeometryData;
   }
 
   export class GeometryData {

@@ -12,6 +12,7 @@ import { SelectAvatar, type AvatarSelection } from './components/SelectAvatar'
 import { ChatPanel } from './components/ChatPanel'
 import { ClientListPanel } from './components/ClientListPanel'
 import { RestoreStateModal } from './components/RestoreStateModal'
+import { ColorPalette } from './components/ColorPalette'
 import { AvatarStateService, type AvatarConfig, type AvatarState } from './services/avatar-state'
 import { useVoice } from './hooks/useVoice'
 import { npubEncode } from 'nostr-tools/nip19'
@@ -22,7 +23,7 @@ import { ExtensionAccount, SimpleAccount } from 'applesauce-accounts/accounts'
 import { ExtensionSigner } from 'applesauce-signers'
 
 const ENABLE_CAMERA_CONTROL = false
-const ENABLE_CUBE_GROUND = false
+const ENABLE_CUBE_GROUND = true
 
 function App() {
   const navigate = useNavigate()
@@ -63,6 +64,7 @@ function App() {
   const [useCubeGround, setUseCubeGround] = useState(false)
   const geometryControllerRef = useRef<any>(null)
   const sceneManagerRef = useRef<any>(null)
+  const [selectedColorIndex, setSelectedColorIndex] = useState<number>(0)
 
   // MoQ streaming URL state
   const [streamingUrl, setStreamingUrl] = useState<string | null>(VOICE_CONFIG.DEBUG_RELAY_URL)
@@ -552,6 +554,13 @@ function App() {
     }
   }
 
+  const handleColorSelect = (color: string, index: number) => {
+    setSelectedColorIndex(index)
+    if (sceneManagerRef.current) {
+      sceneManagerRef.current.setSelectedColorIndex(index)
+    }
+  }
+
   return (
       <>
         <WorldCanvas
@@ -677,6 +686,9 @@ function App() {
             teleportAnimationType,
           }}
         />
+
+        {/* Color Palette (edit mode) */}
+        <ColorPalette isVisible={isEditMode} onColorSelect={handleColorSelect} />
       </>
   )
 }

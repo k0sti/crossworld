@@ -75,6 +75,34 @@ impl AvatarManager {
     pub fn cache_size(&self) -> usize {
         self.user_meshes.len()
     }
+
+    /// Set voxel in base model
+    pub fn set_voxel(&mut self, x: u8, y: u8, z: u8, color_index: u8) {
+        self.base_model.set_voxel(x, y, z, color_index);
+        // Clear cache to force regeneration
+        self.clear_cache();
+    }
+
+    /// Remove voxel from base model
+    pub fn remove_voxel(&mut self, x: u8, y: u8, z: u8) {
+        self.base_model.remove_voxel(x, y, z);
+        // Clear cache to force regeneration
+        self.clear_cache();
+    }
+
+    /// Get the base model (for editing purposes)
+    #[allow(dead_code)]
+    pub fn get_base_model(&self) -> &VoxelModel {
+        &self.base_model
+    }
+
+    /// Replace the entire base model
+    #[allow(dead_code)]
+    pub fn set_base_model(&mut self, model: VoxelModel) {
+        self.base_palette = model.palette.clone();
+        self.base_model = model;
+        self.clear_cache();
+    }
 }
 
 impl Default for AvatarManager {

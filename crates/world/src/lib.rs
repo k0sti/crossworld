@@ -183,6 +183,24 @@ impl AvatarEngine {
     pub fn cache_size(&self) -> usize {
         self.manager.cache_size()
     }
+
+    /// Set voxel in the base avatar model
+    #[wasm_bindgen]
+    pub fn set_voxel(&mut self, x: u8, y: u8, z: u8, color_index: u8) {
+        self.manager.set_voxel(x, y, z, color_index);
+    }
+
+    /// Remove voxel from the base avatar model
+    #[wasm_bindgen]
+    pub fn remove_voxel(&mut self, x: u8, y: u8, z: u8) {
+        self.manager.remove_voxel(x, y, z);
+    }
+
+    /// Regenerate mesh for a user (after modifications)
+    #[wasm_bindgen]
+    pub fn regenerate_mesh(&mut self, user_npub: String) -> GeometryData {
+        self.generate_avatar(user_npub)
+    }
 }
 
 /// Load a .vox file from bytes and generate geometry
