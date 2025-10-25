@@ -139,10 +139,10 @@ export class CameraController {
         this.moveBackward = true;
         break;
       case 'a':
-        this.moveRight = true; // Swapped: A now moves right
+        this.moveLeft = true;
         break;
       case 'd':
-        this.moveLeft = true; // Swapped: D now moves left
+        this.moveRight = true;
         break;
       case 'v':
         this.moveDown = true;
@@ -167,10 +167,10 @@ export class CameraController {
         this.moveBackward = false;
         break;
       case 'a':
-        this.moveRight = false; // Swapped: A now moves right
+        this.moveLeft = false;
         break;
       case 'd':
-        this.moveLeft = false; // Swapped: D now moves left
+        this.moveRight = false;
         break;
       case 'v':
         this.moveDown = false;
@@ -187,10 +187,9 @@ export class CameraController {
     // In pointer lock mode, require pointer lock
     if (this.usePointerLock && document.pointerLockElement !== this.canvas) return;
 
-    // In non-pointer-lock mode, only rotate on right mouse button drag
+    // In non-pointer-lock mode, don't rotate camera (mouselook handled by scene manager)
     if (!this.usePointerLock) {
-      // Only respond to right mouse button being held
-      if (event.buttons !== 2) return;
+      return;
     }
 
     // Update camera rotation based on mouse movement
@@ -232,18 +231,16 @@ export class CameraController {
 
     const moveDistance = this.moveSpeed * deltaTime;
 
-    // Calculate movement direction based on camera orientation
-    const forward = new THREE.Vector3(
-      Math.sin(this.yaw),
-      0,
-      Math.cos(this.yaw)
-    ).normalize();
+    // Calculate movement direction based on camera's actual orientation
+    // This ensures movement follows camera direction even when camera is rotated externally
+    const direction = new THREE.Vector3();
+    this.camera.getWorldDirection(direction);
 
-    const right = new THREE.Vector3(
-      Math.sin(this.yaw + Math.PI / 2),
-      0,
-      Math.cos(this.yaw + Math.PI / 2)
-    ).normalize();
+    // Forward direction (projected onto XZ plane)
+    const forward = new THREE.Vector3(direction.x, 0, direction.z).normalize();
+
+    // Right direction (perpendicular to forward on XZ plane)
+    const right = new THREE.Vector3(-forward.z, 0, forward.x).normalize();
 
     const up = new THREE.Vector3(0, 1, 0);
 
