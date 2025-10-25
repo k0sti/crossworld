@@ -33,10 +33,8 @@ impl GeometryEngine {
     }
 
     pub fn generate_frame(&self) -> GeometryData {
-        match self.render_mode {
-            GroundRenderMode::Flat => self.ground.generate_mesh(),
-            GroundRenderMode::Cube => self.cube_ground.generate_mesh(),
-        }
+        // Only render cube ground (flat ground removed as per user request)
+        self.cube_ground.generate_mesh()
     }
 
     /// Set a voxel in the cube ground

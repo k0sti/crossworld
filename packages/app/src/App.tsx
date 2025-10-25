@@ -60,8 +60,6 @@ function App() {
   const initialStatePublished = useRef(false)
   const voiceAutoConnected = useRef(false)
 
-  // Ground render mode
-  const [useCubeGround, setUseCubeGround] = useState(true)
   const geometryControllerRef = useRef<any>(null)
   const sceneManagerRef = useRef<any>(null)
 
@@ -561,10 +559,11 @@ function App() {
 
   // Initialize ground render mode when geometry controller is ready
   useEffect(() => {
-    if (geometryControllerRef.current && useCubeGround) {
+    if (geometryControllerRef.current) {
+      // Always use combined ground mode (cube + flat)
       geometryControllerRef.current.setGroundRenderMode(true)
     }
-  }, [useCubeGround])
+  }, [])
 
   return (
       <>
@@ -614,14 +613,6 @@ function App() {
             voiceError={voice.error}
             onToggleVoice={handleToggleVoice}
             onToggleMic={handleToggleMic}
-            useCubeGround={useCubeGround}
-            onToggleGroundRenderMode={() => {
-              const newMode = !useCubeGround
-              setUseCubeGround(newMode)
-              if (geometryControllerRef.current) {
-                geometryControllerRef.current.setGroundRenderMode(newMode)
-              }
-            }}
           />
         )}
 

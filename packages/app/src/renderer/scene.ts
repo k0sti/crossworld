@@ -13,6 +13,7 @@ export class SceneManager {
   private camera: THREE.PerspectiveCamera;
   private renderer: THREE.WebGLRenderer;
   private geometryMesh: THREE.Mesh | null = null;
+  private flatGroundMesh: THREE.Mesh | null = null;
   private currentAvatar: IAvatar | null = null;
   private avatarEngine: AvatarEngine | null = null;
   private raycaster: THREE.Raycaster;
@@ -75,11 +76,48 @@ export class SceneManager {
     this.setupMouseListener(canvas);
     this.setupMouseMoveListener(canvas);
     this.setupEditModeHelpers();
+    this.setupFlatGround();
 
     // Initialize camera controller
     this.cameraController = new CameraController(this.camera, canvas);
 
     this.lastTime = performance.now();
+  }
+
+  private setupFlatGround(): void {
+    // Create flat ground plane (8x8 grid)
+    const geometry = new THREE.PlaneGeometry(8, 8, 8, 8);
+    geometry.rotateX(-Math.PI / 2); // Rotate to be horizontal
+
+    // Create checkerboard pattern with vertex colors
+    const colors = new Float32Array(geometry.attributes.position.count * 3);
+    const positions = geometry.attributes.position;
+
+    for (let i = 0; i < positions.count; i++) {
+      const x = Math.floor((positions.getX(i) + 4) / 1);
+      const z = Math.floor((positions.getZ(i) + 4) / 1);
+      const isLight = (x + z) % 2 === 0;
+      const color = isLight ? 0.8 : 0.6;
+
+      colors[i * 3] = color;
+      colors[i * 3 + 1] = color;
+      colors[i * 3 + 2] = color;
+    }
+
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+    const material = new THREE.MeshPhongMaterial({
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.66,
+      side: THREE.DoubleSide,
+      depthWrite: false
+    });
+
+    this.flatGroundMesh = new THREE.Mesh(geometry, material);
+    this.flatGroundMesh.position.set(4, 0, 4);
+    this.flatGroundMesh.receiveShadow = true;
+    this.scene.add(this.flatGroundMesh);
   }
 
   private setupMouseListener(canvas: HTMLCanvasElement): void {
