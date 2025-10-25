@@ -50,6 +50,22 @@ export class GeometryGenerator {
     }
     return this.engine.getGroundRenderMode();
   }
+
+  setVoxel(x: number, y: number, z: number, colorIndex: number): void {
+    if (!this.engine) {
+      console.error('GeometryEngine not initialized');
+      return;
+    }
+    this.engine.setVoxel(x, y, z, colorIndex);
+  }
+
+  removeVoxel(x: number, y: number, z: number): void {
+    if (!this.engine) {
+      console.error('GeometryEngine not initialized');
+      return;
+    }
+    this.engine.removeVoxel(x, y, z);
+  }
 }
 
 export { GeometryEngine, GeometryData };

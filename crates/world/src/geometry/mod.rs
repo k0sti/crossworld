@@ -38,4 +38,14 @@ impl GeometryEngine {
             GroundRenderMode::Cube => self.cube_ground.generate_mesh(),
         }
     }
+
+    /// Set a voxel in the cube ground
+    pub fn set_voxel(&mut self, x: i32, y: i32, z: i32, color_index: i32) {
+        self.cube_ground.set_voxel(x, y, z, color_index);
+    }
+
+    /// Remove a voxel from the cube ground
+    pub fn remove_voxel(&mut self, x: i32, y: i32, z: i32) {
+        self.cube_ground.remove_voxel(x, y, z);
+    }
 }

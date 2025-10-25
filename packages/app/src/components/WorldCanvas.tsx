@@ -71,6 +71,15 @@ export function WorldCanvas({
       });
     }
 
+    // Set voxel edit callback for world cube editing
+    sceneManager.setOnVoxelEdit((x, y, z, colorIndex) => {
+      if (colorIndex === 0) {
+        geometryController.removeVoxel(x, y, z);
+      } else {
+        geometryController.setVoxel(x, y, z, colorIndex);
+      }
+    });
+
     // Initialize WASM and avatar engine
     init().then(() => {
       const avatarEngine = new AvatarEngine();

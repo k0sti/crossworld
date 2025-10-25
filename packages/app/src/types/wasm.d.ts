@@ -28,6 +28,8 @@ declare module '@workspace/wasm' {
     generate_frame(): GeometryData;
     setGroundRenderMode(use_cube: boolean): void;
     getGroundRenderMode(): boolean;
+    setVoxel(x: number, y: number, z: number, color_index: number): void;
+    removeVoxel(x: number, y: number, z: number): void;
   }
 
   export class NetworkClient {
