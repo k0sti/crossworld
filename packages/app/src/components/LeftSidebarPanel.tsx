@@ -59,9 +59,6 @@ interface LeftSidebarPanelProps {
   voiceError: string | null
   onToggleVoice: () => void
   onToggleMic: () => void
-  // Ground render mode
-  useCubeGround: boolean
-  onToggleGroundRenderMode: () => void
 }
 
 export function LeftSidebarPanel({
@@ -81,8 +78,6 @@ export function LeftSidebarPanel({
   voiceError,
   onToggleVoice,
   onToggleMic,
-  useCubeGround,
-  onToggleGroundRenderMode,
 }: LeftSidebarPanelProps) {
   const handleOpenPanel = useCallback((type: ConfigPanelType) => {
     // If clicking the same panel, close it; otherwise open the new panel
@@ -114,26 +109,21 @@ export function LeftSidebarPanel({
         actions.push(() => onToggleEditMode(!isEditMode))
       }
 
-      // 2. Ground render mode (if enabled)
-      if (enableCubeGround) {
-        actions.push(onToggleGroundRenderMode)
-      }
-
-      // 3. Avatar panel
+      // 2. Avatar panel
       actions.push(() => handleOpenPanel('avatar'))
 
-      // 4. Chat
+      // 3. Chat
       actions.push(onToggleChat)
 
-      // 5. Client list
+      // 4. Client list
       actions.push(onToggleClientList)
 
-      // 6. Voice (if enabled)
+      // 5. Voice (if enabled)
       if (ENABLE_VOICE_CHAT) {
         actions.push(onToggleVoice)
       }
 
-      // 7. Mic (if voice connected)
+      // 6. Mic (if voice connected)
       if (ENABLE_VOICE_CHAT && voiceConnected) {
         actions.push(onToggleMic)
       }
@@ -154,14 +144,11 @@ export function LeftSidebarPanel({
     }
   }, [
     isEditMode,
-    useCubeGround,
     activePanelType,
     isChatOpen,
     isClientListOpen,
     voiceConnected,
-    enableCubeGround,
     onToggleEditMode,
-    onToggleGroundRenderMode,
     onToggleChat,
     onToggleClientList,
     onToggleVoice,
@@ -189,18 +176,6 @@ export function LeftSidebarPanel({
               icon={isEditMode ? "✏️" : "🚶"}
               onClick={() => onToggleEditMode(!isEditMode)}
               isActive={isEditMode}
-            />
-            <Divider borderColor="rgba(255, 255, 255, 0.1)" my={1} />
-          </>
-        )}
-
-        {/* Ground Render Mode Toggle */}
-        {enableCubeGround && (
-          <>
-            <SidebarIcon
-              icon={useCubeGround ? "🧊" : "🟩"}
-              onClick={onToggleGroundRenderMode}
-              isActive={useCubeGround}
             />
             <Divider borderColor="rgba(255, 255, 255, 0.1)" my={1} />
           </>
