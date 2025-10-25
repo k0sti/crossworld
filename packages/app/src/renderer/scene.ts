@@ -14,6 +14,7 @@ export class SceneManager {
   private renderer: THREE.WebGLRenderer;
   private geometryMesh: THREE.Mesh | null = null;
   private flatGroundMesh: THREE.Mesh | null = null;
+  private groundPlane: THREE.Plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0); // Plane at y=0
   private currentAvatar: IAvatar | null = null;
   private avatarEngine: AvatarEngine | null = null;
   private raycaster: THREE.Raycaster;
@@ -27,6 +28,18 @@ export class SceneManager {
   private onPositionUpdate?: (x: number, y: number, z: number, quaternion: [number, number, number, number], moveStyle?: string) => void;
   private cameraController: CameraController | null = null;
   private selectedColorIndex: number = 0;
+
+  // Continuous paint state
+  private isLeftMousePressed: boolean = false;
+  private isRightMousePressed: boolean = false;
+  private lastPaintedVoxel: { x: number; y: number; z: number } | null = null;
+
+  // Mouse mode: 1 = free pointer (paint/erase), 2 = grabbed pointer (camera rotation)
+  private mouseMode: 1 | 2 = 1;
+  private canvas: HTMLCanvasElement | null = null;
+
+  // Depth voxel select mode: 1 = near side (y=0), 2 = far side (y=-1)
+  private depthSelectMode: 1 | 2 = 1;
 
   // Remote avatars for other users
   private remoteAvatars: Map<string, IAvatar> = new Map();
@@ -55,6 +68,7 @@ export class SceneManager {
   }
 
   initialize(canvas: HTMLCanvasElement): void {
+    this.canvas = canvas;
     this.renderer = new THREE.WebGLRenderer({
       canvas,
       antialias: true,
@@ -75,11 +89,14 @@ export class SceneManager {
     this.setupLights();
     this.setupMouseListener(canvas);
     this.setupMouseMoveListener(canvas);
+    this.setupKeyboardListener(canvas);
     this.setupEditModeHelpers();
     this.setupFlatGround();
 
-    // Initialize camera controller
+    // Initialize camera controller and enable it for both walk and edit modes
     this.cameraController = new CameraController(this.camera, canvas);
+    this.cameraController.setUsePointerLock(false); // Don't use pointer lock by default
+    this.cameraController.enable();
 
     this.lastTime = performance.now();
   }
@@ -129,9 +146,6 @@ export class SceneManager {
         return;
       }
 
-      // Don't move avatar in camera mode
-      if (this.isCameraMode) return;
-
       // Need avatar and geometry mesh to handle clicks
       if (!this.currentAvatar || !this.geometryMesh) return;
 
@@ -178,6 +192,39 @@ export class SceneManager {
       }
     });
 
+    // Mouse down handler - track continuous paint
+    canvas.addEventListener('mousedown', (event) => {
+      if (this.isEditMode && this.mouseMode === 1) {
+        if (event.button === 0) {
+          // Left mouse button
+          this.isLeftMousePressed = true;
+          this.lastPaintedVoxel = null;
+        } else if (event.button === 2) {
+          // Right mouse button
+          this.isRightMousePressed = true;
+          this.lastPaintedVoxel = null;
+        }
+      }
+    });
+
+    // Mouse up handler - end continuous paint
+    canvas.addEventListener('mouseup', (event) => {
+      if (event.button === 0) {
+        this.isLeftMousePressed = false;
+        this.lastPaintedVoxel = null;
+      } else if (event.button === 2) {
+        this.isRightMousePressed = false;
+        this.lastPaintedVoxel = null;
+      }
+    });
+
+    // Mouse leave handler - end continuous paint when mouse leaves canvas
+    canvas.addEventListener('mouseleave', () => {
+      this.isLeftMousePressed = false;
+      this.isRightMousePressed = false;
+      this.lastPaintedVoxel = null;
+    });
+
     // Right click handler - prevent context menu in edit mode (used for camera look)
     canvas.addEventListener('contextmenu', (event) => {
       if (this.isEditMode) {
@@ -187,8 +234,6 @@ export class SceneManager {
   }
 
   private handleEditModeClick(event: MouseEvent, canvas: HTMLCanvasElement, isLeftClick: boolean): void {
-    if (!this.geometryMesh) return;
-
     // Calculate mouse position
     const rect = canvas.getBoundingClientRect();
     this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
@@ -197,35 +242,23 @@ export class SceneManager {
     // Update raycaster
     this.raycaster.setFromCamera(this.mouse, this.camera);
 
-    // Raycast to find clicked position on ground mesh only
-    const intersects = this.raycaster.intersectObject(this.geometryMesh);
+    // Raycast to ground plane at y=0
+    const intersectPoint = new THREE.Vector3();
+    const didIntersect = this.raycaster.ray.intersectPlane(this.groundPlane, intersectPoint);
 
-    if (intersects.length > 0) {
-      const point = intersects[0].point;
-
+    if (didIntersect) {
       // Snap to grid (1 unit grid)
-      const snappedX = Math.floor(point.x);
-      const snappedZ = Math.floor(point.z);
+      const snappedX = Math.floor(intersectPoint.x);
+      const snappedZ = Math.floor(intersectPoint.z);
 
-      // Only place blocks on y=0 (ground surface)
-      const voxelY = 0;
+      // Depth select mode: 1 = y=0 (near), 2 = y=-1 (far)
+      const voxelY = this.depthSelectMode === 1 ? 0 : -1;
 
-      // Clamp to valid world cube range (x: 0-7, z: 0-7)
+      // Check if within valid world cube range (x: 0-7, z: 0-7)
       if (snappedX >= 0 && snappedX < 8 && snappedZ >= 0 && snappedZ < 8) {
-        // Check if clear/eraser mode is selected (index -1)
-        const isClearMode = this.selectedColorIndex === -1;
-
         if (isLeftClick) {
-          if (isClearMode) {
-            // Clear mode: remove voxel
-            console.log(`[Voxel Erase] coords: (${snappedX}, ${voxelY}, ${snappedZ}), depth: ${voxelY}, value: removed`);
-            this.onVoxelEdit?.(snappedX, voxelY, snappedZ, 0);
-          } else {
-            // Place voxel with selected color (palette 0-31 maps to voxel values 32-63)
-            const colorValue = this.selectedColorIndex + 32;
-            console.log(`[Voxel Draw] coords: (${snappedX}, ${voxelY}, ${snappedZ}), depth: ${voxelY}, value: ${colorValue}`);
-            this.onVoxelEdit?.(snappedX, voxelY, snappedZ, colorValue);
-          }
+          // Left click: use current color/erase mode
+          this.paintVoxel(snappedX, voxelY, snappedZ);
         } else {
           // Right click always removes voxel
           console.log(`[Voxel Erase] coords: (${snappedX}, ${voxelY}, ${snappedZ}), depth: ${voxelY}, value: removed`);
@@ -243,6 +276,75 @@ export class SceneManager {
 
   setSelectedColorIndex(colorIndex: number): void {
     this.selectedColorIndex = colorIndex;
+  }
+
+  private paintVoxel(x: number, y: number, z: number): void {
+    // Check if clear/eraser mode is selected (index -1)
+    const isClearMode = this.selectedColorIndex === -1;
+
+    if (isClearMode) {
+      // Clear mode: remove voxel
+      console.log(`[Voxel Erase] coords: (${x}, ${y}, ${z}), depth: ${y}, value: removed`);
+      this.onVoxelEdit?.(x, y, z, 0);
+    } else {
+      // Place voxel with selected color (palette 0-31 maps to voxel values 32-63)
+      const colorValue = this.selectedColorIndex + 32;
+      console.log(`[Voxel Draw] coords: (${x}, ${y}, ${z}), depth: ${y}, value: ${colorValue}`);
+      this.onVoxelEdit?.(x, y, z, colorValue);
+    }
+  }
+
+  private setupKeyboardListener(canvas: HTMLCanvasElement): void {
+    window.addEventListener('keydown', (event) => {
+      if (!this.isEditMode) return;
+
+      // Toggle mouse mode with Shift key
+      if (event.key === 'Shift' && this.mouseMode === 1) {
+        this.mouseMode = 2;
+        // Request pointer lock for grabbed mode
+        canvas.requestPointerLock();
+        // Hide preview cube in camera mode
+        if (this.previewCube) {
+          this.previewCube.visible = false;
+        }
+        console.log('[Mouse Mode] Switched to mode 2 (first-person camera rotation)');
+      }
+
+      // Toggle depth select mode with Spacebar
+      if (event.code === 'Space') {
+        event.preventDefault();
+        this.depthSelectMode = this.depthSelectMode === 1 ? 2 : 1;
+        console.log(`[Depth Select] Switched to mode ${this.depthSelectMode} (y=${this.depthSelectMode === 1 ? 0 : -1})`);
+      }
+    });
+
+    window.addEventListener('keyup', (event) => {
+      if (!this.isEditMode) return;
+
+      // Exit grabbed mode when Shift is released
+      if (event.key === 'Shift' && this.mouseMode === 2) {
+        this.mouseMode = 1;
+        // Exit pointer lock
+        document.exitPointerLock();
+        // Reset paint state
+        this.isLeftMousePressed = false;
+        this.isRightMousePressed = false;
+        this.lastPaintedVoxel = null;
+        console.log('[Mouse Mode] Switched to mode 1 (paint/erase)');
+      }
+    });
+
+    // Handle pointer lock change
+    document.addEventListener('pointerlockchange', () => {
+      if (!document.pointerLockElement && this.mouseMode === 2) {
+        // Pointer lock was exited, reset to mode 1
+        this.mouseMode = 1;
+        this.isLeftMousePressed = false;
+        this.isRightMousePressed = false;
+        this.lastPaintedVoxel = null;
+        console.log('[Mouse Mode] Pointer lock exited, switched to mode 1');
+      }
+    });
   }
 
   private setupLights(): void {
@@ -286,15 +388,41 @@ export class SceneManager {
       transparent: true
     });
     this.previewCube = new THREE.LineSegments(edges, lineMaterial);
-    this.previewCube.position.set(0.5, 0.5, 0.5); // Start at ground surface
+    this.previewCube.position.set(0.5, 0.5, 0.5); // Start at y=0 (on ground plane)
     this.previewCube.visible = false;
     this.scene.add(this.previewCube);
   }
 
   private setupMouseMoveListener(canvas: HTMLCanvasElement): void {
     canvas.addEventListener('mousemove', (event) => {
-      if (!this.isEditMode || !this.geometryMesh || !this.previewCube) return;
+      if (!this.isEditMode || !this.previewCube) return;
 
+      // Mode 2: First-person camera rotation with grabbed pointer
+      if (this.mouseMode === 2) {
+        const sensitivity = 0.002;
+        const deltaX = event.movementX * sensitivity;
+        const deltaY = event.movementY * sensitivity;
+
+        // Get current camera euler angles
+        const euler = new THREE.Euler().setFromQuaternion(this.camera.quaternion, 'YXZ');
+
+        // Update yaw (left/right rotation around Y axis)
+        euler.y -= deltaX;
+
+        // Update pitch (up/down rotation around X axis)
+        euler.x -= deltaY;
+
+        // Clamp pitch to prevent camera flipping
+        const maxPitch = Math.PI / 2 - 0.1;
+        euler.x = Math.max(-maxPitch, Math.min(maxPitch, euler.x));
+
+        // Apply rotation back to camera
+        this.camera.quaternion.setFromEuler(euler);
+
+        return;
+      }
+
+      // Mode 1: Free pointer with painting
       // Calculate mouse position in normalized device coordinates
       const rect = canvas.getBoundingClientRect();
       this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
@@ -303,24 +431,52 @@ export class SceneManager {
       // Update raycaster
       this.raycaster.setFromCamera(this.mouse, this.camera);
 
-      // Check intersection with ground plane
-      const intersects = this.raycaster.intersectObject(this.geometryMesh);
+      // Raycast to ground plane at y=0
+      const intersectPoint = new THREE.Vector3();
+      const didIntersect = this.raycaster.ray.intersectPlane(this.groundPlane, intersectPoint);
 
-      if (intersects.length > 0) {
-        const point = intersects[0].point;
-
+      if (didIntersect) {
         // Snap to grid (1 unit grid)
-        const snappedX = Math.floor(point.x) + 0.5;
-        const snappedZ = Math.floor(point.z) + 0.5;
+        const snappedX = Math.floor(intersectPoint.x) + 0.5;
+        const snappedZ = Math.floor(intersectPoint.z) + 0.5;
 
-        // Clamp to ground bounds (0-8 range)
-        const clampedX = Math.max(0.5, Math.min(7.5, snappedX));
-        const clampedZ = Math.max(0.5, Math.min(7.5, snappedZ));
+        // Check if within ground bounds (0-8 range)
+        if (snappedX >= 0.5 && snappedX <= 7.5 && snappedZ >= 0.5 && snappedZ <= 7.5) {
+          // Position preview cube based on depth select mode
+          const previewY = this.depthSelectMode === 1 ? 0.5 : -0.5;
+          this.currentGridPosition.set(snappedX, previewY, snappedZ);
+          this.previewCube.position.copy(this.currentGridPosition);
+          this.previewCube.visible = true;
 
-        // Position preview cube at ground level
-        this.currentGridPosition.set(clampedX, 0.5, clampedZ);
-        this.previewCube.position.copy(this.currentGridPosition);
-        this.previewCube.visible = true;
+          // Continuous paint: if mouse button is pressed, paint/erase voxel at new position
+          if (this.isLeftMousePressed || this.isRightMousePressed) {
+            const voxelX = Math.floor(intersectPoint.x);
+            const voxelZ = Math.floor(intersectPoint.z);
+            // Depth select mode: 1 = y=0 (near), 2 = y=-1 (far)
+            const voxelY = this.depthSelectMode === 1 ? 0 : -1;
+
+            // Check if this is a new voxel position (different from last painted)
+            const isNewPosition = !this.lastPaintedVoxel ||
+              this.lastPaintedVoxel.x !== voxelX ||
+              this.lastPaintedVoxel.y !== voxelY ||
+              this.lastPaintedVoxel.z !== voxelZ;
+
+            if (isNewPosition && voxelX >= 0 && voxelX < 8 && voxelZ >= 0 && voxelZ < 8) {
+              if (this.isLeftMousePressed) {
+                // Left mouse: draw with selected color
+                this.paintVoxel(voxelX, voxelY, voxelZ);
+              } else if (this.isRightMousePressed) {
+                // Right mouse: erase
+                console.log(`[Voxel Erase] coords: (${voxelX}, ${voxelY}, ${voxelZ}), depth: ${voxelY}, value: removed`);
+                this.onVoxelEdit?.(voxelX, voxelY, voxelZ, 0);
+              }
+              this.lastPaintedVoxel = { x: voxelX, y: voxelY, z: voxelZ };
+            }
+          }
+        } else {
+          // Outside bounds - hide cursor
+          this.previewCube.visible = false;
+        }
       } else {
         this.previewCube.visible = false;
       }
@@ -367,13 +523,13 @@ export class SceneManager {
     const deltaTime_s = (currentTime - this.lastTime) / 1000;
     this.lastTime = currentTime;
 
-    // Update camera controller if in camera mode
-    if (this.isCameraMode && this.cameraController) {
+    // Update camera controller (always active unless in mouse grab mode for first-person rotation)
+    if (this.cameraController && this.mouseMode !== 2) {
       this.cameraController.update(deltaTime_s);
     }
 
-    // Update current avatar (not in camera mode)
-    if (this.currentAvatar && !this.isCameraMode) {
+    // Update current avatar
+    if (this.currentAvatar) {
       const wasTeleporting = this.currentAvatar.isTeleporting();
       this.currentAvatar.update(deltaTime_s);
       const isTeleporting = this.currentAvatar.isTeleporting();
@@ -580,25 +736,29 @@ export class SceneManager {
       this.previewCube.visible = false;
     }
 
-    // Auto-enable/disable camera mode with edit mode
-    this.setCameraMode(isEditMode);
+    // Reset mouse mode and depth select when exiting edit mode
+    if (!isEditMode) {
+      if (this.mouseMode === 2) {
+        this.mouseMode = 1;
+        document.exitPointerLock();
+      }
+      this.isLeftMousePressed = false;
+      this.isRightMousePressed = false;
+      this.lastPaintedVoxel = null;
+      this.depthSelectMode = 1;
+    }
+
+    // Camera controller stays enabled in both walk and edit modes
+    // No need to toggle it based on edit mode
   }
 
   /**
    * Set camera mode to enable/disable free camera movement
+   * Note: Camera controller is now always enabled, this is kept for compatibility
    */
   setCameraMode(isCameraMode: boolean): void {
     this.isCameraMode = isCameraMode;
-
-    if (!this.cameraController) return;
-
-    if (isCameraMode) {
-      // In edit mode, don't use pointer lock (allows cursor to be visible for voxel placement)
-      this.cameraController.setUsePointerLock(!this.isEditMode);
-      this.cameraController.enable();
-    } else {
-      this.cameraController.disable();
-    }
+    // Camera controller stays enabled all the time now
   }
 
   /**

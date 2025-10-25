@@ -19,7 +19,7 @@ impl GeometryEngine {
     pub fn new() -> Self {
         Self {
             ground: ground::Ground::new(8, 8),
-            cube_ground: cube_ground::CubeGround::new(),
+            cube_ground: cube_ground::CubeGround::new(4), // Depth 4 = 16x16x16 grid
             render_mode: GroundRenderMode::Flat,
         }
     }
