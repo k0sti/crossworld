@@ -86,7 +86,7 @@ export class SceneManager {
     // Left click handler
     canvas.addEventListener('click', (event) => {
       // Handle edit mode - place voxel
-      if (this.isEditMode && this.avatarEngine) {
+      if (this.isEditMode) {
         this.handleEditModeClick(event, canvas, true);
         return;
       }
@@ -140,17 +140,16 @@ export class SceneManager {
       }
     });
 
-    // Right click handler - remove voxel in edit mode
+    // Right click handler - prevent context menu in edit mode (used for camera look)
     canvas.addEventListener('contextmenu', (event) => {
-      if (this.isEditMode && this.avatarEngine) {
+      if (this.isEditMode) {
         event.preventDefault();
-        this.handleEditModeClick(event, canvas, false);
       }
     });
   }
 
   private handleEditModeClick(event: MouseEvent, canvas: HTMLCanvasElement, isLeftClick: boolean): void {
-    if (!this.avatarEngine || !this.currentAvatar) return;
+    if (!this.geometryMesh) return;
 
     // Calculate mouse position
     const rect = canvas.getBoundingClientRect();
@@ -160,71 +159,48 @@ export class SceneManager {
     // Update raycaster
     this.raycaster.setFromCamera(this.mouse, this.camera);
 
-    // Get current avatar position to determine voxel coordinates
-    const avatarPos = this.currentAvatar.getPosition();
-
-    // Raycast to find clicked position
-    const intersects = this.raycaster.intersectObjects(this.scene.children, true);
+    // Raycast to find clicked position on ground mesh only
+    const intersects = this.raycaster.intersectObject(this.geometryMesh);
 
     if (intersects.length > 0) {
       const point = intersects[0].point;
 
-      // Convert world coordinates to voxel grid coordinates
-      // Assuming avatar is 16x32x16 voxels at 0.1 scale
-      const voxelScale = 0.1;
-      const offsetX = avatarPos.x;
-      const offsetZ = avatarPos.z;
+      // Snap to grid (1 unit grid)
+      const snappedX = Math.floor(point.x);
+      const snappedZ = Math.floor(point.z);
 
-      // Calculate voxel coordinates relative to avatar
-      const voxelX = Math.floor((point.x - offsetX + 0.8) / voxelScale);
-      const voxelY = Math.floor(point.y / voxelScale);
-      const voxelZ = Math.floor((point.z - offsetZ + 0.8) / voxelScale);
+      // Only place blocks on y=0 (ground surface)
+      const voxelY = 0;
 
-      // Clamp to valid voxel range (16x32x16)
-      if (voxelX >= 0 && voxelX < 16 && voxelY >= 0 && voxelY < 32 && voxelZ >= 0 && voxelZ < 16) {
+      // Clamp to valid world cube range (x: 0-7, z: 0-7)
+      if (snappedX >= 0 && snappedX < 8 && snappedZ >= 0 && snappedZ < 8) {
+        // Check if clear/eraser mode is selected (index -1)
+        const isClearMode = this.selectedColorIndex === -1;
+
         if (isLeftClick) {
-          // Place voxel with selected color
-          console.log(`[Voxel Draw] coords: (${voxelX}, ${voxelY}, ${voxelZ}), depth: ${voxelY}, value: ${this.selectedColorIndex}`);
-          this.avatarEngine.set_voxel(voxelX, voxelY, voxelZ, this.selectedColorIndex);
+          if (isClearMode) {
+            // Clear mode: remove voxel
+            console.log(`[Voxel Erase] coords: (${snappedX}, ${voxelY}, ${snappedZ}), depth: ${voxelY}, value: removed`);
+            this.onVoxelEdit?.(snappedX, voxelY, snappedZ, 0);
+          } else {
+            // Place voxel with selected color (palette 0-31 maps to voxel values 32-63)
+            const colorValue = this.selectedColorIndex + 32;
+            console.log(`[Voxel Draw] coords: (${snappedX}, ${voxelY}, ${snappedZ}), depth: ${voxelY}, value: ${colorValue}`);
+            this.onVoxelEdit?.(snappedX, voxelY, snappedZ, colorValue);
+          }
         } else {
-          // Remove voxel
-          console.log(`[Voxel Erase] coords: (${voxelX}, ${voxelY}, ${voxelZ}), depth: ${voxelY}, value: removed`);
-          this.avatarEngine.remove_voxel(voxelX, voxelY, voxelZ);
+          // Right click always removes voxel
+          console.log(`[Voxel Erase] coords: (${snappedX}, ${voxelY}, ${snappedZ}), depth: ${voxelY}, value: removed`);
+          this.onVoxelEdit?.(snappedX, voxelY, snappedZ, 0);
         }
-
-        // Regenerate mesh
-        this.regenerateAvatarMesh();
       }
     }
   }
 
-  private regenerateAvatarMesh(): void {
-    if (!this.avatarEngine || !this.currentAvatar) return;
+  private onVoxelEdit?: (x: number, y: number, z: number, colorIndex: number) => void;
 
-    // Get current user npub for regeneration
-    const npub = 'npub1default'; // TODO: Use actual user npub
-    const geometryData = this.avatarEngine.regenerate_mesh(npub);
-
-    // Update the avatar mesh
-    if (this.currentAvatar instanceof VoxelAvatar) {
-      const currentTransform = this.currentAvatar.getTransform();
-      // Remove old avatar
-      this.removeAvatar();
-      // Create new avatar with updated geometry
-      const newAvatar = new VoxelAvatar({
-        userNpub: npub,
-        scale: 1.0,
-      }, currentTransform, this.scene);
-
-      // Apply geometry
-      newAvatar.applyGeometry(geometryData);
-
-      // Add to scene
-      this.scene.add(newAvatar.getObject3D());
-      this.currentAvatar = newAvatar;
-
-      console.log('[Voxel Edit] Mesh regenerated');
-    }
+  setOnVoxelEdit(callback: (x: number, y: number, z: number, colorIndex: number) => void): void {
+    this.onVoxelEdit = callback;
   }
 
   setSelectedColorIndex(colorIndex: number): void {
@@ -272,6 +248,7 @@ export class SceneManager {
       transparent: true
     });
     this.previewCube = new THREE.LineSegments(edges, lineMaterial);
+    this.previewCube.position.set(0.5, 0.5, 0.5); // Start at ground surface
     this.previewCube.visible = false;
     this.scene.add(this.previewCube);
   }
@@ -564,6 +541,9 @@ export class SceneManager {
     if (this.previewCube && !isEditMode) {
       this.previewCube.visible = false;
     }
+
+    // Auto-enable/disable camera mode with edit mode
+    this.setCameraMode(isEditMode);
   }
 
   /**
@@ -575,6 +555,8 @@ export class SceneManager {
     if (!this.cameraController) return;
 
     if (isCameraMode) {
+      // In edit mode, don't use pointer lock (allows cursor to be visible for voxel placement)
+      this.cameraController.setUsePointerLock(!this.isEditMode);
       this.cameraController.enable();
     } else {
       this.cameraController.disable();

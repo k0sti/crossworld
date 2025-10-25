@@ -50,6 +50,18 @@ impl GeometryEngine {
             geometry::GroundRenderMode::Flat => false,
         }
     }
+
+    /// Set voxel in cube ground
+    #[wasm_bindgen(js_name = setVoxel)]
+    pub fn set_voxel(&self, x: i32, y: i32, z: i32, color_index: i32) {
+        self.engine.borrow_mut().set_voxel(x, y, z, color_index);
+    }
+
+    /// Remove voxel from cube ground
+    #[wasm_bindgen(js_name = removeVoxel)]
+    pub fn remove_voxel(&self, x: i32, y: i32, z: i32) {
+        self.engine.borrow_mut().remove_voxel(x, y, z);
+    }
 }
 
 impl Default for GeometryEngine {

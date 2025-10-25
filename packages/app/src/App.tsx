@@ -13,6 +13,7 @@ import { ChatPanel } from './components/ChatPanel'
 import { ClientListPanel } from './components/ClientListPanel'
 import { RestoreStateModal } from './components/RestoreStateModal'
 import { ColorPalette } from './components/ColorPalette'
+import { EditModeControls } from './components/EditModeControls'
 import { AvatarStateService, type AvatarConfig, type AvatarState } from './services/avatar-state'
 import { useVoice } from './hooks/useVoice'
 import { npubEncode } from 'nostr-tools/nip19'
@@ -22,7 +23,6 @@ import { LoginSettingsService } from '@crossworld/common'
 import { ExtensionAccount, SimpleAccount } from 'applesauce-accounts/accounts'
 import { ExtensionSigner } from 'applesauce-signers'
 
-const ENABLE_CAMERA_CONTROL = false
 const ENABLE_CUBE_GROUND = true
 
 function App() {
@@ -61,10 +61,9 @@ function App() {
   const voiceAutoConnected = useRef(false)
 
   // Ground render mode
-  const [useCubeGround, setUseCubeGround] = useState(false)
+  const [useCubeGround, setUseCubeGround] = useState(true)
   const geometryControllerRef = useRef<any>(null)
   const sceneManagerRef = useRef<any>(null)
-  const [selectedColorIndex, setSelectedColorIndex] = useState<number>(0)
 
   // MoQ streaming URL state
   const [streamingUrl, setStreamingUrl] = useState<string | null>(VOICE_CONFIG.DEBUG_RELAY_URL)
@@ -554,12 +553,18 @@ function App() {
     }
   }
 
-  const handleColorSelect = (color: string, index: number) => {
-    setSelectedColorIndex(index)
+  const handleColorSelect = (_color: string, index: number) => {
     if (sceneManagerRef.current) {
       sceneManagerRef.current.setSelectedColorIndex(index)
     }
   }
+
+  // Initialize ground render mode when geometry controller is ready
+  useEffect(() => {
+    if (geometryControllerRef.current && useCubeGround) {
+      geometryControllerRef.current.setGroundRenderMode(true)
+    }
+  }, [useCubeGround])
 
   return (
       <>
@@ -597,9 +602,6 @@ function App() {
             activePanelType={activePanelType}
             isEditMode={isEditMode}
             onToggleEditMode={setIsEditMode}
-            isCameraMode={isCameraMode}
-            onToggleCameraMode={() => setIsCameraMode(!isCameraMode)}
-            enableCameraControl={ENABLE_CAMERA_CONTROL}
             enableCubeGround={ENABLE_CUBE_GROUND}
             isChatOpen={isChatOpen}
             onToggleChat={() => setIsChatOpen(!isChatOpen)}
@@ -689,6 +691,9 @@ function App() {
 
         {/* Color Palette (edit mode) */}
         <ColorPalette isVisible={isEditMode} onColorSelect={handleColorSelect} />
+
+        {/* Edit Mode Controls Info */}
+        <EditModeControls isVisible={isEditMode} />
       </>
   )
 }

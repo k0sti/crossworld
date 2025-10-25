@@ -1,8 +1,12 @@
 import { GeometryGenerator } from '../geometry/geometry-lib';
 
 export interface GeometryMessage {
-  type: 'init' | 'update' | 'setGroundRenderMode';
+  type: 'init' | 'update' | 'setGroundRenderMode' | 'setVoxel' | 'removeVoxel';
   useCube?: boolean;
+  x?: number;
+  y?: number;
+  z?: number;
+  colorIndex?: number;
 }
 
 export interface GeometryResult {
@@ -91,6 +95,18 @@ class GeometryWorkerManager {
       this.generator.setGroundRenderMode(useCube);
     }
   }
+
+  setVoxel(x: number, y: number, z: number, colorIndex: number) {
+    if (this.generator) {
+      this.generator.setVoxel(x, y, z, colorIndex);
+    }
+  }
+
+  removeVoxel(x: number, y: number, z: number) {
+    if (this.generator) {
+      this.generator.removeVoxel(x, y, z);
+    }
+  }
 }
 
 // Worker message handler
@@ -111,6 +127,18 @@ self.addEventListener('message', async (event) => {
     case 'setGroundRenderMode':
       if (message.useCube !== undefined) {
         manager.setGroundRenderMode(message.useCube);
+      }
+      break;
+
+    case 'setVoxel':
+      if (message.x !== undefined && message.y !== undefined && message.z !== undefined && message.colorIndex !== undefined) {
+        manager.setVoxel(message.x, message.y, message.z, message.colorIndex);
+      }
+      break;
+
+    case 'removeVoxel':
+      if (message.x !== undefined && message.y !== undefined && message.z !== undefined) {
+        manager.removeVoxel(message.x, message.y, message.z);
       }
       break;
   }

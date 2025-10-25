@@ -55,6 +55,18 @@ export class GeometryController {
     }
   }
 
+  setVoxel(x: number, y: number, z: number, colorIndex: number) {
+    if (this.worker) {
+      this.worker.postMessage({ type: 'setVoxel', x, y, z, colorIndex });
+    }
+  }
+
+  removeVoxel(x: number, y: number, z: number) {
+    if (this.worker) {
+      this.worker.postMessage({ type: 'removeVoxel', x, y, z });
+    }
+  }
+
   destroy() {
     if (this.worker) {
       this.worker.terminate();

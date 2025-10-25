@@ -5,6 +5,7 @@ export class CameraController {
   private canvas: HTMLCanvasElement;
   private enabled: boolean = false;
   private onExitCallback: (() => void) | null = null;
+  private usePointerLock: boolean = true;
 
   // Movement state
   private moveForward = false;
@@ -47,6 +48,10 @@ export class CameraController {
     this.onExitCallback = callback;
   }
 
+  setUsePointerLock(usePointerLock: boolean): void {
+    this.usePointerLock = usePointerLock;
+  }
+
   enable(): void {
     if (this.enabled) return;
     this.enabled = true;
@@ -75,14 +80,19 @@ export class CameraController {
       this.pitch = Math.asin(-direction.y);
     }
 
-    // Request pointer lock
-    this.canvas.requestPointerLock();
+    // Request pointer lock only if enabled
+    if (this.usePointerLock) {
+      this.canvas.requestPointerLock();
+    }
 
     // Add event listeners
     document.addEventListener('keydown', this.boundKeyDown);
     document.addEventListener('keyup', this.boundKeyUp);
     document.addEventListener('mousemove', this.boundMouseMove);
-    document.addEventListener('pointerlockchange', this.boundPointerLockChange);
+
+    if (this.usePointerLock) {
+      document.addEventListener('pointerlockchange', this.boundPointerLockChange);
+    }
   }
 
   disable(): void {
@@ -93,7 +103,7 @@ export class CameraController {
     this.saveCameraState();
 
     // Release pointer lock
-    if (document.pointerLockElement === this.canvas) {
+    if (this.usePointerLock && document.pointerLockElement === this.canvas) {
       document.exitPointerLock();
     }
 
@@ -109,7 +119,10 @@ export class CameraController {
     document.removeEventListener('keydown', this.boundKeyDown);
     document.removeEventListener('keyup', this.boundKeyUp);
     document.removeEventListener('mousemove', this.boundMouseMove);
-    document.removeEventListener('pointerlockchange', this.boundPointerLockChange);
+
+    if (this.usePointerLock) {
+      document.removeEventListener('pointerlockchange', this.boundPointerLockChange);
+    }
 
     // Reset movement state
     this.resetMovementState();
@@ -169,7 +182,16 @@ export class CameraController {
   }
 
   private onMouseMove(event: MouseEvent): void {
-    if (!this.enabled || document.pointerLockElement !== this.canvas) return;
+    if (!this.enabled) return;
+
+    // In pointer lock mode, require pointer lock
+    if (this.usePointerLock && document.pointerLockElement !== this.canvas) return;
+
+    // In non-pointer-lock mode, only rotate on right mouse button drag
+    if (!this.usePointerLock) {
+      // Only respond to right mouse button being held
+      if (event.buttons !== 2) return;
+    }
 
     // Update camera rotation based on mouse movement
     this.yaw -= event.movementX * this.lookSpeed;

@@ -46,9 +46,6 @@ interface LeftSidebarPanelProps {
   activePanelType: ConfigPanelType
   isEditMode: boolean
   onToggleEditMode: (isEditMode: boolean) => void
-  isCameraMode: boolean
-  onToggleCameraMode: () => void
-  enableCameraControl?: boolean
   enableCubeGround?: boolean
   isChatOpen: boolean
   onToggleChat: () => void
@@ -72,9 +69,6 @@ export function LeftSidebarPanel({
   activePanelType,
   isEditMode,
   onToggleEditMode,
-  isCameraMode,
-  onToggleCameraMode,
-  enableCameraControl = true,
   enableCubeGround = true,
   isChatOpen,
   onToggleChat,
@@ -107,8 +101,8 @@ export function LeftSidebarPanel({
         return
       }
 
-      // Ignore if camera mode is active (WASD keys used there)
-      if (isCameraMode) {
+      // Ignore if edit mode is active (WASD keys used for camera there)
+      if (isEditMode) {
         return
       }
 
@@ -120,35 +114,26 @@ export function LeftSidebarPanel({
         actions.push(() => onToggleEditMode(!isEditMode))
       }
 
-      // 2. Camera mode (if enabled)
-      if (enableCameraControl) {
-        actions.push(() => {
-          if (!isCameraMode) {
-            onToggleCameraMode()
-          }
-        })
-      }
-
-      // 3. Ground render mode (if enabled)
+      // 2. Ground render mode (if enabled)
       if (enableCubeGround) {
         actions.push(onToggleGroundRenderMode)
       }
 
-      // 4. Avatar panel
+      // 3. Avatar panel
       actions.push(() => handleOpenPanel('avatar'))
 
-      // 5. Chat
+      // 4. Chat
       actions.push(onToggleChat)
 
-      // 6. Client list
+      // 5. Client list
       actions.push(onToggleClientList)
 
-      // 7. Voice (if enabled)
+      // 6. Voice (if enabled)
       if (ENABLE_VOICE_CHAT) {
         actions.push(onToggleVoice)
       }
 
-      // 8. Mic (if voice connected)
+      // 7. Mic (if voice connected)
       if (ENABLE_VOICE_CHAT && voiceConnected) {
         actions.push(onToggleMic)
       }
@@ -169,16 +154,13 @@ export function LeftSidebarPanel({
     }
   }, [
     isEditMode,
-    isCameraMode,
     useCubeGround,
     activePanelType,
     isChatOpen,
     isClientListOpen,
     voiceConnected,
-    enableCameraControl,
     enableCubeGround,
     onToggleEditMode,
-    onToggleCameraMode,
     onToggleGroundRenderMode,
     onToggleChat,
     onToggleClientList,
@@ -207,24 +189,6 @@ export function LeftSidebarPanel({
               icon={isEditMode ? "✏️" : "🚶"}
               onClick={() => onToggleEditMode(!isEditMode)}
               isActive={isEditMode}
-            />
-            <Divider borderColor="rgba(255, 255, 255, 0.1)" my={1} />
-          </>
-        )}
-
-        {/* Camera Mode Button */}
-        {enableCameraControl && (
-          <>
-            <SidebarIcon
-              icon="📷"
-              onClick={() => {
-                // Only enter camera mode, don't toggle
-                if (!isCameraMode) {
-                  onToggleCameraMode()
-                }
-              }}
-              isActive={isCameraMode}
-              activeBgColor="rgba(255, 215, 0, 0.4)" // Yellow when active
             />
             <Divider borderColor="rgba(255, 255, 255, 0.1)" my={1} />
           </>
