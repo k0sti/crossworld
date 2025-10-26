@@ -154,10 +154,12 @@ export function clampToWorldBounds(x: number, z: number): [number, number] {
  * Snap world coordinate to voxel grid
  * @param worldCoord World space coordinate
  * @param size Voxel size in world units
- * @returns Snapped center coordinate
+ * @returns Snapped center coordinate (voxel corners align with multiples of size at origin)
  */
 export function snapToGrid(worldCoord: number, size: number): number {
-  return Math.floor(worldCoord / size + 0.5) * size;
+  // Snap to voxel centers where corners align with 0, size, 2*size, etc.
+  // Centers are at size/2, size*1.5, size*2.5, etc.
+  return Math.floor(worldCoord / size) * size + size / 2;
 }
 
 /**

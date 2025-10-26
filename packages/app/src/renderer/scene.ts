@@ -11,12 +11,11 @@ import {
   worldToCube,
   type CubeCoord,
   WORLD_SIZE,
-  getVoxelSize,
   isWithinWorldBounds,
   clampToWorldBounds,
   snapToGrid
 } from '../types/cube-coord';
-import { DEFAULT_CURSOR_DEPTH, WORLD_DEPTH } from '../constants/geometry';
+import { DEFAULT_MACRO_DEPTH, DEFAULT_DEPTH, DEFAULT_MICRO_DEPTH, getVoxelSize } from '../constants/geometry';
 import { CheckerPlane } from './checker-plane';
 
 /**
@@ -66,8 +65,9 @@ export class SceneManager {
   private depthSelectMode: 1 | 2 = 1;
 
   // Cursor depth - single source of truth for current cursor depth
-  // depth=WORLD_DEPTH: smallest size, smaller depth=larger size
-  private cursorDepth: number = DEFAULT_CURSOR_DEPTH;
+  // depth can be 0 to DEFAULT_DEPTH (macro+micro, smaller depth = larger voxel size)
+  // initialized to DEFAULT_MACRO_DEPTH (3)
+  private cursorDepth: number = DEFAULT_MACRO_DEPTH;
 
   // Current cursor coordinate (null when not in edit mode or cursor not visible)
   private currentCursorCoord: CubeCoord | null = null;
@@ -122,6 +122,7 @@ export class SceneManager {
     this.setupMouseMoveListener(canvas);
     this.setupKeyboardListener(canvas);
     this.setupEditModeHelpers();
+    this.setupOriginHelpers();
     this.setupCrosshair();
     this.setupCheckerPlane();
 
@@ -265,8 +266,8 @@ export class SceneManager {
       const halfSize = size / 2;
 
       // Snap to grid centered on the intersection point
-      const voxelCenterX = Math.floor(intersectPoint.x / size + 0.5) * size;
-      const voxelCenterZ = Math.floor(intersectPoint.z / size + 0.5) * size;
+      const voxelCenterX = snapToGrid(intersectPoint.x, size);
+      const voxelCenterZ = snapToGrid(intersectPoint.z, size);
 
       // Calculate corner position (world space)
       const voxelX = voxelCenterX - halfSize;
@@ -383,7 +384,7 @@ export class SceneManager {
       // Cursor depth control with Arrow Up/Down
       if (event.code === 'ArrowUp') {
         event.preventDefault();
-        this.cursorDepth = Math.min(WORLD_DEPTH, this.cursorDepth + 1);
+        this.cursorDepth = Math.min(DEFAULT_DEPTH, this.cursorDepth + 1);
         this.updateCursorSize();
         console.log(`[Cursor Depth] Increased to ${this.cursorDepth} (size=${this.getCursorSize()})`);
       }
@@ -481,6 +482,27 @@ export class SceneManager {
     this.scene.add(this.previewCube);
   }
 
+  private setupOriginHelpers(): void {
+    // Create axis helper at origin
+    // Axis extends 50% beyond unit cube (1.5 units)
+    const axisHelper = new THREE.AxesHelper(1.5);
+    axisHelper.position.set(0, 0, 0);
+    this.scene.add(axisHelper);
+
+    // Create transparent wireframe for unit cube at origin
+    const unitCubeGeometry = new THREE.BoxGeometry(1, 1, 1);
+    const unitCubeEdges = new THREE.EdgesGeometry(unitCubeGeometry);
+    const unitCubeLineMaterial = new THREE.LineBasicMaterial({
+      color: 0xffffff,
+      opacity: 0.2,
+      transparent: true
+    });
+    const unitCubeWireframe = new THREE.LineSegments(unitCubeEdges, unitCubeLineMaterial);
+    // Position cube so its corner is at origin (center at 0.5, 0.5, 0.5)
+    unitCubeWireframe.position.set(0.5, 0.5, 0.5);
+    this.scene.add(unitCubeWireframe);
+  }
+
   private setupCrosshair(): void {
     // Create crosshair element for first-person mode
     this.crosshair = document.createElement('div');
@@ -505,7 +527,7 @@ export class SceneManager {
   }
 
   private getCursorSize(): number {
-    return getVoxelSize(this.cursorDepth);
+    return getVoxelSize(this.cursorDepth, DEFAULT_DEPTH, DEFAULT_MICRO_DEPTH);
   }
 
   private updateCursorSize(): void {
@@ -514,6 +536,25 @@ export class SceneManager {
     const size = this.getCursorSize();
     const scale = size;
     this.previewCube.scale.set(scale, scale, scale);
+
+    // Recalculate cursor coordinate with new depth if cursor is visible
+    if (this.currentCursorCoord && this.previewCube.visible) {
+      const halfSize = size / 2;
+      const voxelCenterX = this.currentGridPosition.x;
+      const voxelCenterZ = this.currentGridPosition.z;
+
+      // Recalculate corner position with new size
+      const voxelX = voxelCenterX - halfSize;
+      const voxelZ = voxelCenterZ - halfSize;
+      const voxelY = this.depthSelectMode === 1 ? 0 : -size;
+
+      // Update cursor coordinate with new depth
+      this.currentCursorCoord = worldToCube(voxelX, voxelY, voxelZ, this.cursorDepth);
+
+      // Update preview cube position
+      this.currentGridPosition.set(voxelCenterX, voxelY + halfSize, voxelCenterZ);
+      this.previewCube.position.copy(this.currentGridPosition);
+    }
   }
 
   private updateVoxelCursorAtCenter(): void {
@@ -1285,7 +1326,7 @@ export class SceneManager {
     return {
       cursorWorld: this.currentCursorCoord
         ? (() => {
-            const scale = WORLD_SIZE / (1 << WORLD_DEPTH);
+            const scale = WORLD_SIZE / (1 << DEFAULT_DEPTH);
             const halfWorld = WORLD_SIZE / 2;
             return {
               x: this.currentCursorCoord.x * scale - halfWorld,
