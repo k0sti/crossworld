@@ -28,54 +28,38 @@ impl CubeGround {
         }
     }
 
-    /// Convert world coordinates to voxel grid coordinates
-    /// World coords: x=0-15, y=-8-7, z=0-15
-    /// Voxel coords: x=0-15, y=0-15, z=0-15 (for depth=4)
-    fn world_to_voxel(&self, x: i32, y: i32, z: i32) -> IVec3 {
-        IVec3::new(
-            x,          // world 0-15 -> voxel 0-15
-            y + 8,      // world -8-7 -> voxel 0-15
-            z,          // world 0-15 -> voxel 0-15
-        )
-    }
-
     /// Set a voxel at world coordinates (x, y, z) at specified depth
     /// World coords: x=0-15, y=-8-7, z=0-15
     /// depth: octree depth level (4=single voxel, 3=2x2x2, 2=4x4x4, etc.)
     /// color_index: 0 = empty, 1+ = colored voxel
     pub fn set_voxel_at_depth(&mut self, x: i32, y: i32, z: i32, depth: u32, color_index: i32) {
-        // Clamp depth to valid range (depth 4 = single voxel)
+        // Clamp depth to valid range
         let depth = depth.clamp(0, self.depth);
 
-        // Calculate voxel size at this depth (number of voxels per side of cube)
-        let voxel_size = 1 << (self.depth - depth);
+        // Convert world coordinates to depth-4 voxel coordinates
+        let voxel_x = x;
+        let voxel_y = y + 8;
+        let voxel_z = z;
 
-        // Align coordinates to voxel grid at this depth
-        let aligned_x = (x / voxel_size) * voxel_size;
-        let aligned_y = ((y + 8) / voxel_size) * voxel_size - 8; // Account for y offset
-        let aligned_z = (z / voxel_size) * voxel_size;
-
-        // Fill all voxels in the cube at this depth
-        // For depth=4: voxel_size=1, fills 1x1x1 = 1 voxel
-        // For depth=3: voxel_size=2, fills 2x2x2 = 8 voxels
-        // For depth=2: voxel_size=4, fills 4x4x4 = 64 voxels
-        for dx in 0..voxel_size {
-            for dy in 0..voxel_size {
-                for dz in 0..voxel_size {
-                    let vx = aligned_x + dx;
-                    let vy = aligned_y + dy;
-                    let vz = aligned_z + dz;
-
-                    // Check bounds
-                    if (0..16).contains(&vx) && (-8..8).contains(&vy) && (0..16).contains(&vz) {
-                        let voxel_pos = self.world_to_voxel(vx, vy, vz);
-                        self.octree.root = self.octree.root
-                            .updated(Cube::Solid(color_index), self.depth, voxel_pos)
-                            .simplified();
-                    }
-                }
-            }
+        // Check bounds at depth 4 scale
+        if !(0..16).contains(&voxel_x) || !(0..16).contains(&voxel_y) || !(0..16).contains(&voxel_z) {
+            return;
         }
+
+        // Scale coordinates from depth 4 to target depth
+        // At depth N, coordinate range is 0..(2^N)
+        // depth 4: 0-15, depth 3: 0-7, depth 2: 0-3, depth 1: 0-1, depth 0: 0
+        let scale = 1 << (self.depth - depth);  // 2^(4-depth)
+        let pos_x = voxel_x / scale;
+        let pos_y = voxel_y / scale;
+        let pos_z = voxel_z / scale;
+
+        let pos = IVec3::new(pos_x, pos_y, pos_z);
+
+        // Update single octree node at the target depth
+        self.octree.root = self.octree.root
+            .updated(Cube::Solid(color_index), depth, pos)
+            .simplified();
     }
 
     /// Set a single voxel at world coordinates (convenience method)
