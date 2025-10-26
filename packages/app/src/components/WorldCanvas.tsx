@@ -38,6 +38,12 @@ export function WorldCanvas({
   const animationFrameRef = useRef<number | null>(null);
   const [debugInfo, setDebugInfo] = useState<DebugInfo>({});
 
+  // Scene configuration state
+  const [timeOfDay, setTimeOfDay] = useState(0.35); // Start slightly after sunrise
+  const [sunAutoMove, setSunAutoMove] = useState(false); // Start with sun fixed
+  const [sunSpeed, setSunSpeed] = useState(0.01);
+  const [speechEnabled, setSpeechEnabled] = useState(false); // Disabled by default
+
   const handleApplyDepthSettings = async (worldDepth: number, scaleDepth: number) => {
     const geometryController = localGeometryControllerRef.current;
     const sceneManager = localSceneManagerRef.current;
@@ -203,6 +209,28 @@ export function WorldCanvas({
     sceneManager.setTeleportAnimationType(teleportAnimationType);
   }, [teleportAnimationType]);
 
+  // Handle sun system changes
+  useEffect(() => {
+    const sceneManager = localSceneManagerRef.current;
+    if (!sceneManager) return;
+
+    sceneManager.setTimeOfDay(timeOfDay);
+  }, [timeOfDay]);
+
+  useEffect(() => {
+    const sceneManager = localSceneManagerRef.current;
+    if (!sceneManager) return;
+
+    sceneManager.setSunAutoMove(sunAutoMove);
+  }, [sunAutoMove]);
+
+  useEffect(() => {
+    const sceneManager = localSceneManagerRef.current;
+    if (!sceneManager) return;
+
+    sceneManager.setSunSpeed(sunSpeed);
+  }, [sunSpeed]);
+
   // Handle avatar loading based on new unified avatar config
   useEffect(() => {
     const sceneManager = localSceneManagerRef.current;
@@ -360,7 +388,18 @@ export function WorldCanvas({
       zIndex={0}
     >
       <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: '100%' }} />
-      <DebugPanel info={debugInfo} onApplyDepthSettings={handleApplyDepthSettings} />
+      <DebugPanel
+        info={debugInfo}
+        onApplyDepthSettings={handleApplyDepthSettings}
+        timeOfDay={timeOfDay}
+        onTimeOfDayChange={setTimeOfDay}
+        sunAutoMove={sunAutoMove}
+        onSunAutoMoveChange={setSunAutoMove}
+        sunSpeed={sunSpeed}
+        onSunSpeedChange={setSunSpeed}
+        speechEnabled={speechEnabled}
+        onSpeechEnabledChange={setSpeechEnabled}
+      />
     </Box>
   );
 }
