@@ -19,6 +19,8 @@ import {
 import { getWorldSize } from '../constants/geometry';
 import { getMacroDepth, getMicroDepth, getTotalDepth } from '../config/depth-config';
 import { CheckerPlane } from './checker-plane';
+import { SunSystem } from './sun-system';
+import { PostProcessing } from './post-processing';
 
 /**
  * SceneManager - Manages the 3D scene with centered coordinate system
@@ -87,6 +89,10 @@ export class SceneManager {
   // Current movement style for position updates
   private currentMoveStyle: string = 'walk';
 
+  // Sun system and post-processing
+  private sunSystem: SunSystem | null = null;
+  private postProcessing: PostProcessing | null = null;
+
   constructor() {
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(
@@ -110,16 +116,27 @@ export class SceneManager {
     this.renderer.setPixelRatio(window.devicePixelRatio);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.0;
 
     // Set fixed camera position for isometric-like view (centered at origin)
     // For 128-unit world (depth 7), position camera to see the whole world
     this.camera.position.set(100, 80, 100);
     this.camera.lookAt(0, 0, 0); // Look at origin (center of ground plane)
 
+    // Dynamic sky color will be managed by sun system
     this.scene.background = new THREE.Color(0x87ceeb); // Sky blue
-    this.scene.fog = new THREE.Fog(0x87ceeb, 10, 50);
+    this.scene.fog = new THREE.Fog(0x87ceeb, 100, 300);
 
-    this.setupLights();
+    // Initialize sun system (replaces old static lights)
+    this.sunSystem = new SunSystem(this.scene);
+    this.sunSystem.setTimeOfDay(0.35); // Start slightly after sunrise
+    this.sunSystem.setSunSpeed(0.01); // Slower movement for nice visuals
+    this.sunSystem.setAutoMove(false); // Start with sun in fixed position
+
+    // Initialize post-processing for bloom and sparkle effects
+    this.postProcessing = new PostProcessing(this.renderer, this.scene, this.camera);
+
     this.setupMouseListener(canvas);
     this.setupMouseMoveListener(canvas);
     this.setupKeyboardListener(canvas);
@@ -437,24 +454,7 @@ export class SceneManager {
     });
   }
 
-  private setupLights(): void {
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-    this.scene.add(ambientLight);
-
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    directionalLight.position.set(10, 15, 10);
-    directionalLight.castShadow = true;
-    directionalLight.shadow.camera.near = 0.1;
-    directionalLight.shadow.camera.far = 50;
-    directionalLight.shadow.camera.left = -10;
-    directionalLight.shadow.camera.right = 10;
-    directionalLight.shadow.camera.top = 10;
-    directionalLight.shadow.camera.bottom = -10;
-    this.scene.add(directionalLight);
-
-    const hemisphereLight = new THREE.HemisphereLight(0x87ceeb, 0x080820, 0.5);
-    this.scene.add(hemisphereLight);
-  }
+  // Removed: setupLights() - now using SunSystem for dynamic lighting
 
   private setupEditModeHelpers(): void {
     // Create grid helper (worldSize×worldSize grid centered at origin)
@@ -780,10 +780,11 @@ export class SceneManager {
     const material = new THREE.MeshPhongMaterial({
       vertexColors: colors && colors.length > 0,
       color: colors && colors.length > 0 ? 0xffffff : 0x44aa44,
-      specular: 0x111111,
-      shininess: 30,
+      specular: 0x333333,
+      shininess: 15,
       wireframe: false,
-      side: THREE.DoubleSide
+      side: THREE.FrontSide,
+      flatShading: false
     });
 
     this.geometryMesh = new THREE.Mesh(geometry, material);
@@ -801,6 +802,11 @@ export class SceneManager {
     // Update camera controller (always active for keyboard movement)
     if (this.cameraController) {
       this.cameraController.update(deltaTime_s);
+    }
+
+    // Update sun system for moving sun
+    if (this.sunSystem) {
+      this.sunSystem.update(deltaTime_s);
     }
 
     // Update voxel cursor in shift rotate mode (center screen raycast)
@@ -831,7 +837,12 @@ export class SceneManager {
       avatar.update(deltaTime_s);
     }
 
-    this.renderer.render(this.scene, this.camera);
+    // Render with post-processing (includes bloom for sparkle effects)
+    if (this.postProcessing) {
+      this.postProcessing.render(deltaTime_s);
+    } else {
+      this.renderer.render(this.scene, this.camera);
+    }
   }
 
   handleResize(): void {
@@ -841,6 +852,11 @@ export class SceneManager {
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(width, height);
+
+    // Update post-processing size
+    if (this.postProcessing) {
+      this.postProcessing.setSize(width, height);
+    }
   }
 
   getCamera(): THREE.PerspectiveCamera {
@@ -1373,7 +1389,36 @@ export class SceneManager {
         z: this.camera.position.z
       },
       worldSize: worldSize,
-      isEditMode: this.isEditMode
+      isEditMode: this.isEditMode,
+      timeOfDay: this.sunSystem?.getTimeOfDay()
     };
+  }
+
+  /**
+   * Get the sun system for external control
+   */
+  getSunSystem(): SunSystem | null {
+    return this.sunSystem;
+  }
+
+  /**
+   * Set time of day (0 to 1, where 0.5 is noon)
+   */
+  setTimeOfDay(time: number): void {
+    this.sunSystem?.setTimeOfDay(time);
+  }
+
+  /**
+   * Set sun movement speed
+   */
+  setSunSpeed(speed: number): void {
+    this.sunSystem?.setSunSpeed(speed);
+  }
+
+  /**
+   * Toggle automatic sun movement
+   */
+  setSunAutoMove(auto: boolean): void {
+    this.sunSystem?.setAutoMove(auto);
   }
 }

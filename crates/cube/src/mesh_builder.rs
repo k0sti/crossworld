@@ -28,41 +28,47 @@ impl Face {
     /// Get the four vertices for this face in counter-clockwise order when viewed from outside
     fn vertices(self, x: f32, y: f32, z: f32, size: f32) -> [[f32; 3]; 4] {
         match self {
+            // Top face: normal points up (+Y), viewed from above, CCW order
             Face::Top => [
-                [x, y + size, z],
-                [x + size, y + size, z],
-                [x + size, y + size, z + size],
-                [x, y + size, z + size],
+                [x, y + size, z],           // bottom-left
+                [x, y + size, z + size],    // top-left
+                [x + size, y + size, z + size], // top-right
+                [x + size, y + size, z],    // bottom-right
             ],
+            // Bottom face: normal points down (-Y), viewed from below, CCW order
             Face::Bottom => [
-                [x, y, z + size],
-                [x + size, y, z + size],
-                [x + size, y, z],
-                [x, y, z],
+                [x, y, z],                  // bottom-left
+                [x + size, y, z],           // bottom-right
+                [x + size, y, z + size],    // top-right
+                [x, y, z + size],           // top-left
             ],
+            // Left face: normal points left (-X), viewed from left, CCW order (flipped)
             Face::Left => [
-                [x, y, z],
-                [x, y, z + size],
-                [x, y + size, z + size],
-                [x, y + size, z],
+                [x, y, z + size],           // bottom-back
+                [x, y + size, z + size],    // top-back
+                [x, y + size, z],           // top-front
+                [x, y, z],                  // bottom-front
             ],
+            // Right face: normal points right (+X), viewed from right, CCW order (flipped)
             Face::Right => [
-                [x + size, y, z + size],
-                [x + size, y, z],
-                [x + size, y + size, z],
-                [x + size, y + size, z + size],
+                [x + size, y, z],           // bottom-front
+                [x + size, y + size, z],    // top-front
+                [x + size, y + size, z + size], // top-back
+                [x + size, y, z + size],    // bottom-back
             ],
+            // Front face: normal points forward (+Z), viewed from front, CCW order (flipped)
             Face::Front => [
-                [x, y, z + size],
-                [x + size, y, z + size],
-                [x + size, y + size, z + size],
-                [x, y + size, z + size],
+                [x + size, y, z + size],    // bottom-right
+                [x + size, y + size, z + size], // top-right
+                [x, y + size, z + size],    // top-left
+                [x, y, z + size],           // bottom-left
             ],
+            // Back face: normal points back (-Z), viewed from back, CCW order (flipped)
             Face::Back => [
-                [x + size, y, z],
-                [x, y, z],
-                [x, y + size, z],
-                [x + size, y + size, z],
+                [x, y, z],                  // bottom-left
+                [x, y + size, z],           // top-left
+                [x + size, y + size, z],    // top-right
+                [x + size, y, z],           // bottom-right
             ],
         }
     }
