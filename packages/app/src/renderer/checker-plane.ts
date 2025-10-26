@@ -4,48 +4,48 @@ import * as THREE from 'three';
  * CheckerPlane - A checkerboard pattern ground plane centered at origin
  *
  * Coordinate system:
- * - Size: 128×128 world units (for depth 7)
+ * - Size: 2^macroDepth × 2^macroDepth world units
  * - Centered at origin (0, 0, 0)
- * - Extends from [-64, 64] in X and Z axes
  * - Y position is configurable (default: 0)
  */
 export class CheckerPlane {
   private mesh: THREE.Mesh;
+  private texture: THREE.CanvasTexture;
 
-  constructor(size: number = 128, segments: number = 128, yPosition: number = 0.02) {
-    // Create plane geometry centered at origin
-    const geometry = new THREE.PlaneGeometry(size, size, segments, segments);
-    geometry.rotateX(-Math.PI / 2); // Rotate to be horizontal
+  constructor(size: number = 8, segments: number = 8, yPosition: number = 0.02) {
+    // Create checkerboard texture using canvas
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d')!;
 
-    // Create checkerboard pattern with vertex colors
-    const colors = new Float32Array(geometry.attributes.position.count * 3);
-    const positions = geometry.attributes.position;
+    // Set canvas size to match segments (one pixel per square)
+    canvas.width = segments;
+    canvas.height = segments;
 
-    for (let i = 0; i < positions.count; i++) {
-      const worldX = positions.getX(i);
-      const worldZ = positions.getZ(i);
-
-      // Convert world position to grid coordinates (centered at origin)
-      // World coords are [-64, 64], shift to [0, 128] for grid indexing
-      const gridX = Math.floor(worldX + size / 2);
-      const gridZ = Math.floor(worldZ + size / 2);
-
-      // Create checkerboard pattern
-      const isLight = (gridX + gridZ) % 2 === 0;
-      const color = isLight ? 0.9 : 0.5;
-
-      colors[i * 3] = color;
-      colors[i * 3 + 1] = color;
-      colors[i * 3 + 2] = color;
+    // Draw checkerboard pattern
+    for (let x = 0; x < segments; x++) {
+      for (let z = 0; z < segments; z++) {
+        const isLight = (x + z) % 2 === 0;
+        ctx.fillStyle = isLight ? '#ffffff' : '#000000';
+        ctx.fillRect(x, z, 1, 1);
+      }
     }
 
-    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    // Create texture from canvas
+    this.texture = new THREE.CanvasTexture(canvas);
+    this.texture.magFilter = THREE.NearestFilter;
+    this.texture.minFilter = THREE.NearestFilter;
+    this.texture.wrapS = THREE.ClampToEdgeWrapping;
+    this.texture.wrapT = THREE.ClampToEdgeWrapping;
 
-    // Create material with vertex colors
-    const material = new THREE.MeshPhongMaterial({
-      vertexColors: true,
+    // Create plane geometry centered at origin
+    const geometry = new THREE.PlaneGeometry(size, size, 1, 1);
+    geometry.rotateX(-Math.PI / 2); // Rotate to be horizontal
+
+    // Create material with checkerboard texture (50% transparency)
+    const material = new THREE.MeshBasicMaterial({
+      map: this.texture,
       transparent: true,
-      opacity: 0.4,
+      opacity: 0.1,
       side: THREE.DoubleSide,
       depthWrite: false
     });
@@ -77,7 +77,7 @@ export class CheckerPlane {
    * Set opacity of the checker plane
    */
   setOpacity(opacity: number): void {
-    const material = this.mesh.material as THREE.MeshPhongMaterial;
+    const material = this.mesh.material as THREE.MeshBasicMaterial;
     material.opacity = opacity;
   }
 
@@ -86,6 +86,7 @@ export class CheckerPlane {
    */
   dispose(): void {
     this.mesh.geometry.dispose();
+    this.texture.dispose();
     if (this.mesh.material instanceof THREE.Material) {
       this.mesh.material.dispose();
     }
