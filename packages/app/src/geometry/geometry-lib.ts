@@ -1,5 +1,5 @@
 import init, { GeometryEngine, GeometryData } from '@workspace/wasm';
-import { DEFAULT_DEPTH, DEFAULT_MICRO_DEPTH } from '../constants/geometry';
+import { getMicroDepth, getTotalDepth } from '../config/depth-config';
 
 let wasmInitialized = false;
 let initPromise: Promise<void> | null = null;
@@ -25,7 +25,7 @@ export class GeometryGenerator {
   private worldDepth: number;
   private scaleDepth: number;
 
-  constructor(worldDepth: number = DEFAULT_DEPTH, scaleDepth: number = DEFAULT_MICRO_DEPTH) {
+  constructor(worldDepth: number = getTotalDepth(), scaleDepth: number = getMicroDepth()) {
     this.worldDepth = worldDepth;
     this.scaleDepth = scaleDepth;
   }

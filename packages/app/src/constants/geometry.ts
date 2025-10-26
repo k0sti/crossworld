@@ -1,22 +1,15 @@
 /**
- * Geometry and coordinate system constants
+ * Geometry and coordinate system helper functions
  *
  * Architecture:
- * - MACRO_DEPTH: Octree subdivision depth (3 = 8^3 voxels in octree space)
- * - MICRO_DEPTH: Rendering scale depth (0 = each octree unit is 2^0 = 1 world unit)
- * - DEPTH: Total depth (macro + micro = 3)
- * - World size: 2^DEPTH * 2^MICRO_DEPTH = 8 * 1 = 8 units
+ * - Macro depth: Octree subdivision depth (3 = 8^3 voxels in octree space)
+ * - Micro depth: Rendering scale depth (0 = each octree unit is 2^0 = 1 world unit)
+ * - Total depth: macro + micro = 3
+ * - World size: 2^totalDepth * 2^microDepth = 8 * 1 = 8 units
  * - At macro depth (3), smallest voxel = 1 world unit (matches unit cube)
+ *
+ * Note: Actual depth values are managed by depth-config.ts
  */
-
-/** Default macro depth - octree subdivision levels */
-export const DEFAULT_MACRO_DEPTH = 3;
-
-/** Default micro depth - rendering scale depth */
-export const DEFAULT_MICRO_DEPTH = 0;
-
-/** Default total depth (macro + micro) */
-export const DEFAULT_DEPTH = DEFAULT_MACRO_DEPTH + DEFAULT_MICRO_DEPTH;
 
 /**
  * Calculate maximum voxels per side at finest detail level in octree space
@@ -94,25 +87,3 @@ export function getOctreeBounds(depth: number): { min: number; max: number } {
     max: getMaxVoxelsPerSide(depth) - 1
   };
 }
-
-// Legacy exports for backward compatibility (using default values)
-/** @deprecated Use getMaxVoxelsPerSide(depth) instead */
-export const MAX_VOXELS_PER_SIDE = getMaxVoxelsPerSide(DEFAULT_DEPTH); // 8 voxels
-
-/** @deprecated Use getWorldSize(depth, microDepth) instead */
-export const WORLD_SIZE = getWorldSize(DEFAULT_DEPTH, DEFAULT_MICRO_DEPTH); // 8 units
-
-/** @deprecated Use getHalfWorld(depth, microDepth) instead */
-export const HALF_WORLD = getHalfWorld(DEFAULT_DEPTH, DEFAULT_MICRO_DEPTH); // 4 units
-
-/** @deprecated Use getWorldToOctreeScale(microDepth) instead */
-export const WORLD_TO_OCTREE_SCALE = getWorldToOctreeScale(DEFAULT_MICRO_DEPTH); // 1.0
-
-/** @deprecated Use getDefaultCursorDepth(depth, microDepth) instead */
-export const DEFAULT_CURSOR_DEPTH = getDefaultCursorDepth(DEFAULT_DEPTH, DEFAULT_MICRO_DEPTH); // 3
-
-/** @deprecated Use DEFAULT_DEPTH instead */
-export const WORLD_DEPTH = DEFAULT_DEPTH; // 3
-
-/** @deprecated Use DEFAULT_MICRO_DEPTH instead */
-export const WORLD_SCALE_DEPTH = DEFAULT_MICRO_DEPTH; // 0
