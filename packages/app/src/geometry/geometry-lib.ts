@@ -51,6 +51,14 @@ export class GeometryGenerator {
     return this.engine.getGroundRenderMode();
   }
 
+  setVoxelAtDepth(x: number, y: number, z: number, depth: number, colorIndex: number): void {
+    if (!this.engine) {
+      console.error('GeometryEngine not initialized');
+      return;
+    }
+    this.engine.setVoxelAtDepth(x, y, z, depth, colorIndex);
+  }
+
   setVoxel(x: number, y: number, z: number, colorIndex: number): void {
     if (!this.engine) {
       console.error('GeometryEngine not initialized');
@@ -59,28 +67,12 @@ export class GeometryGenerator {
     this.engine.setVoxel(x, y, z, colorIndex);
   }
 
-  setVoxelCube(x: number, y: number, z: number, size: number, colorIndex: number): void {
-    if (!this.engine) {
-      console.error('GeometryEngine not initialized');
-      return;
-    }
-    this.engine.setVoxelCube(x, y, z, size, colorIndex);
-  }
-
   removeVoxel(x: number, y: number, z: number): void {
     if (!this.engine) {
       console.error('GeometryEngine not initialized');
       return;
     }
     this.engine.removeVoxel(x, y, z);
-  }
-
-  removeVoxelCube(x: number, y: number, z: number, size: number): void {
-    if (!this.engine) {
-      console.error('GeometryEngine not initialized');
-      return;
-    }
-    this.engine.removeVoxelCube(x, y, z, size);
   }
 }
 
