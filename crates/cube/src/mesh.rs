@@ -1,31 +1,3 @@
-use crate::octree::{Cube, Octree};
-use glam::IVec3;
-use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MeshData {
-    pub vertices: Vec<f32>,
-    pub indices: Vec<u32>,
-    pub normals: Vec<f32>,
-    pub colors: Vec<f32>,
-}
-
-impl MeshData {
-    pub fn new() -> Self {
-        MeshData {
-            vertices: Vec::new(),
-            indices: Vec::new(),
-            normals: Vec::new(),
-            colors: Vec::new(),
-        }
-    }
-}
-
-impl Default for MeshData {
-    fn default() -> Self {
-        Self::new()
-    }
-}
 
 /// Trait for mapping voxel indices to RGB colors
 pub trait ColorMapper {
@@ -146,53 +118,6 @@ impl ColorMapper for PaletteColorMapper {
     }
 }
 
-/// Generate a mesh from an octree with default HSV coloring
-pub fn generate_mesh(octree: &Octree) -> MeshData {
-    generate_mesh_with_mapper(octree, &HsvColorMapper::new())
-}
-
-/// Generate a mesh from an octree with custom color mapper
-pub fn generate_mesh_with_mapper(octree: &Octree, mapper: &dyn ColorMapper) -> MeshData {
-    generate_mesh_with_mapper_depth(octree, mapper, 16) // Use max depth of 16 (65536^3 voxels)
-}
-
-/// Generate a mesh from an octree with custom color mapper and known max depth
-/// Uses visitor pattern for zero-allocation traversal
-pub fn generate_mesh_with_mapper_depth(octree: &Octree, mapper: &dyn ColorMapper, max_depth: u32) -> MeshData {
-    let mut mesh = MeshData::new();
-
-    // Use visitor pattern to traverse leaves without allocating intermediate Vec
-    octree.root.visit_leaves(max_depth, IVec3::ZERO, &mut |cube, depth, pos| {
-        // Extract value from Cube::Solid
-        if let Cube::Solid(value) = cube {
-            if *value == 0 {
-                return; // Skip empty voxels
-            }
-
-            // Calculate size and position in normalized [0,1] space
-            let grid_size = 1 << max_depth; // 2^max_depth (16 for depth 4)
-            let voxel_size = 1.0 / grid_size as f32; // 1/16 for depth 4
-
-            // depth in visit_leaves is REMAINING depth
-            // At depth=N, coordinates are in range 0..(2^(max_depth-N))
-            // To scale to full resolution (0..(2^max_depth)), multiply by 2^N
-            let scale_factor = 1 << depth;
-
-            // Scale position from depth N to max_depth, then normalize to [0,1]
-            let x = (pos.x * scale_factor) as f32 * voxel_size;
-            let y = (pos.y * scale_factor) as f32 * voxel_size;
-            let z = (pos.z * scale_factor) as f32 * voxel_size;
-
-            // Size is scale_factor voxels wide (in world space)
-            let size = voxel_size * scale_factor as f32;
-
-            let color = mapper.map(*value);
-            add_cube(&mut mesh, x, y, z, size, color);
-        }
-    });
-
-    mesh
-}
 
 /// Convert HSV to RGB
 fn hsv_to_rgb(h: f32, s: f32, v: f32) -> [f32; 3] {
@@ -218,94 +143,9 @@ fn hsv_to_rgb(h: f32, s: f32, v: f32) -> [f32; 3] {
     [r + m, g + m, b + m]
 }
 
-/// Add a cube to the mesh
-fn add_cube(mesh: &mut MeshData, x: f32, y: f32, z: f32, size: f32, color: [f32; 3]) {
-    let base_index = (mesh.vertices.len() / 3) as u32;
-
-    // Define 8 vertices of the cube
-    let vertices = [
-        [x, y, z],                      // 0: left-bottom-back
-        [x + size, y, z],               // 1: right-bottom-back
-        [x + size, y + size, z],        // 2: right-top-back
-        [x, y + size, z],               // 3: left-top-back
-        [x, y, z + size],               // 4: left-bottom-front
-        [x + size, y, z + size],        // 5: right-bottom-front
-        [x + size, y + size, z + size], // 6: right-top-front
-        [x, y + size, z + size],        // 7: left-top-front
-    ];
-
-    // Add vertices and colors
-    for vertex in &vertices {
-        mesh.vertices.extend_from_slice(vertex);
-        mesh.colors.extend_from_slice(&color);
-    }
-
-    // Add normals for each vertex
-    // For a cube, we can use averaged normals or per-face normals
-    // Using simple averaged normals pointing outward from cube center
-    let center = [x + size / 2.0, y + size / 2.0, z + size / 2.0];
-    for vertex in &vertices {
-        let normal = [
-            (vertex[0] - center[0]).signum(),
-            (vertex[1] - center[1]).signum(),
-            (vertex[2] - center[2]).signum(),
-        ];
-        // Normalize
-        let len = (normal[0] * normal[0] + normal[1] * normal[1] + normal[2] * normal[2]).sqrt();
-        if len > 0.0 {
-            mesh.normals.push(normal[0] / len);
-            mesh.normals.push(normal[1] / len);
-            mesh.normals.push(normal[2] / len);
-        } else {
-            mesh.normals.extend_from_slice(&[0.0, 1.0, 0.0]);
-        }
-    }
-
-    // Define faces
-    // Each face is defined by 4 vertices (2 triangles)
-    let faces = [
-        // Back face (z = 0)
-        [0, 1, 2, 3],
-        // Front face (z = size)
-        [5, 4, 7, 6],
-        // Left face (x = 0)
-        [4, 0, 3, 7],
-        // Right face (x = size)
-        [1, 5, 6, 2],
-        // Bottom face (y = 0)
-        [4, 5, 1, 0],
-        // Top face (y = size)
-        [3, 2, 6, 7],
-    ];
-
-    for indices in &faces {
-        // First triangle
-        mesh.indices.push(base_index + indices[0]);
-        mesh.indices.push(base_index + indices[1]);
-        mesh.indices.push(base_index + indices[2]);
-
-        // Second triangle
-        mesh.indices.push(base_index + indices[0]);
-        mesh.indices.push(base_index + indices[2]);
-        mesh.indices.push(base_index + indices[3]);
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::octree::{Cube, Octree};
-    use std::rc::Rc;
-
-    #[test]
-    fn test_generate_mesh_simple() {
-        let tree = Octree::new(Cube::Solid(42));
-        let mesh = generate_mesh(&tree);
-
-        assert!(!mesh.vertices.is_empty());
-        assert!(!mesh.indices.is_empty());
-        assert_eq!(mesh.vertices.len() / 3, mesh.colors.len() / 3);
-    }
 
     #[test]
     fn test_hsv_to_rgb() {
@@ -355,82 +195,5 @@ mod tests {
         // Zero/negative should be black
         assert_eq!(mapper.map(0), [0.0, 0.0, 0.0]);
         assert_eq!(mapper.map(-1), [0.0, 0.0, 0.0]);
-    }
-
-    #[test]
-    fn test_generate_mesh_with_palette() {
-        let palette = vec![[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
-        let mapper = PaletteColorMapper::new(palette);
-
-        let cube = Cube::cubes([
-            Rc::new(Cube::Solid(1)),
-            Rc::new(Cube::Solid(2)),
-            Rc::new(Cube::Solid(3)),
-            Rc::new(Cube::Solid(1)),
-            Rc::new(Cube::Solid(2)),
-            Rc::new(Cube::Solid(3)),
-            Rc::new(Cube::Solid(1)),
-            Rc::new(Cube::Solid(2)),
-        ]);
-
-        let tree = Octree::new(cube);
-        let mesh = generate_mesh_with_mapper(&tree, &mapper);
-
-        assert!(!mesh.vertices.is_empty());
-        assert!(!mesh.colors.is_empty());
-    }
-
-    #[cfg(feature = "image")]
-    #[test]
-    fn test_dawnbringer_32_palette() {
-        use crate::parser::parse_csm;
-
-        // Path relative to workspace root
-        let path = if std::path::Path::new("../../assets/palettes/dawnbringer-32.png").exists() {
-            "../../assets/palettes/dawnbringer-32.png"
-        } else {
-            "assets/palettes/dawnbringer-32.png"
-        };
-
-        let palette = match PaletteColorMapper::from_image_path(path) {
-            Ok(p) => p,
-            Err(e) => {
-                eprintln!("Warning: Could not load palette ({}). Skipping test.", e);
-                eprintln!("Please place dawnbringer-32.png (32x1 or any size) in assets/palettes/");
-                return; // Skip test if palette not found
-            }
-        };
-
-        // Verify palette has colors
-        assert!(palette.len() > 0, "Palette should have colors");
-
-        // Create test octree using CSM
-        let csm = r#"
-            >a [1 2 3 4 5 6 7 8]
-            >b [10 11 12 13 14 15 16 17]
-            >c [20 21 22 23 24 25 26 27]
-        "#;
-
-        let tree = parse_csm(csm).expect("Failed to parse CSM");
-        let mesh = generate_mesh_with_mapper(&tree, &palette);
-
-        assert!(!mesh.vertices.is_empty());
-        assert!(!mesh.colors.is_empty());
-        assert_eq!(mesh.vertices.len() / 3, mesh.colors.len() / 3);
-
-        // Verify colors are from palette (not black or magenta error colors)
-        let mut has_valid_colors = false;
-        for i in 0..mesh.colors.len() / 3 {
-            let r = mesh.colors[i * 3];
-            let g = mesh.colors[i * 3 + 1];
-            let b = mesh.colors[i * 3 + 2];
-
-            // Check it's not black (0,0,0) or magenta error (1,0,1)
-            if (r > 0.01 || g > 0.01 || b > 0.01) && !(r > 0.99 && g < 0.01 && b > 0.99) {
-                has_valid_colors = true;
-                break;
-            }
-        }
-        assert!(has_valid_colors, "Mesh should have valid palette colors");
     }
 }

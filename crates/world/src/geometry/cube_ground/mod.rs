@@ -1,7 +1,7 @@
 mod builder;
 
 use crate::GeometryData;
-use crossworld_cube::{glam::IVec3, ColorMapper, Cube, Octree};
+use crossworld_cube::{glam::IVec3, ColorMapper, Cube, DefaultMeshBuilder, Octree};
 use noise::{Fbm, Perlin};
 
 pub struct CubeGround {
@@ -102,10 +102,16 @@ impl CubeGround {
     }
 
     pub fn generate_mesh(&self) -> GeometryData {
-        // Generate mesh from octree using the cube mesher with custom color mapper
-        // Use depth-aware version for efficient visitor-based traversal
+        // Generate mesh from octree using new hierarchical mesh builder
         let color_mapper = DawnbringerColorMapper::new();
-        let mesh_data = crossworld_cube::generate_mesh_with_mapper_depth(&self.octree, &color_mapper, self.depth);
+        let mut builder = DefaultMeshBuilder::new();
+
+        crossworld_cube::generate_mesh_hierarchical(
+            &self.octree,
+            &mut builder,
+            |index| color_mapper.map(index),
+            self.depth,
+        );
 
         // Scale and offset vertices to match world coordinates
         // The octree generates normalized [0,1] coordinates
@@ -119,7 +125,7 @@ impl CubeGround {
         let world_size = octree_size * scale as f32; // e.g. 64 for depth 5, scale 1
         let half_world = world_size / 2.0; // e.g. 32
 
-        let scaled_vertices: Vec<f32> = mesh_data
+        let scaled_vertices: Vec<f32> = builder
             .vertices
             .chunks(3)
             .flat_map(|chunk| {
@@ -132,9 +138,9 @@ impl CubeGround {
 
         GeometryData::new(
             scaled_vertices,
-            mesh_data.indices,
-            mesh_data.normals,
-            mesh_data.colors,
+            builder.indices,
+            builder.normals,
+            builder.colors,
         )
     }
 }
