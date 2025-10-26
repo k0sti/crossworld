@@ -74,8 +74,8 @@ export function WorldCanvas({
     // Set voxel edit callback for world cube editing
     sceneManager.setOnVoxelEdit((x, y, z, depth, colorIndex) => {
       if (colorIndex === 0) {
-        // Remove voxel (always use max depth for single voxel removal)
-        geometryController.removeVoxel(x, y, z);
+        // Remove voxel at specified depth
+        geometryController.removeVoxelAtDepth(x, y, z, depth);
       } else {
         // Set voxel at specified depth
         geometryController.setVoxelAtDepth(x, y, z, depth, colorIndex);

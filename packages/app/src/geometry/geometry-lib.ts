@@ -67,6 +67,14 @@ export class GeometryGenerator {
     this.engine.setVoxel(x, y, z, colorIndex);
   }
 
+  removeVoxelAtDepth(x: number, y: number, z: number, depth: number): void {
+    if (!this.engine) {
+      console.error('GeometryEngine not initialized');
+      return;
+    }
+    this.engine.removeVoxelAtDepth(x, y, z, depth);
+  }
+
   removeVoxel(x: number, y: number, z: number): void {
     if (!this.engine) {
       console.error('GeometryEngine not initialized');

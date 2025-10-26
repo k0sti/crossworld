@@ -67,6 +67,12 @@ export class GeometryController {
     }
   }
 
+  removeVoxelAtDepth(x: number, y: number, z: number, depth: number) {
+    if (this.worker) {
+      this.worker.postMessage({ type: 'removeVoxelAtDepth', x, y, z, depth });
+    }
+  }
+
   removeVoxel(x: number, y: number, z: number) {
     if (this.worker) {
       this.worker.postMessage({ type: 'removeVoxel', x, y, z });
