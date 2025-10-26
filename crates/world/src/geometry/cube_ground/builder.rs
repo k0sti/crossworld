@@ -5,19 +5,22 @@ use std::rc::Rc;
 /// Build octree for ground
 pub fn build_ground_octree(noise: &Perlin, fbm: &Fbm<Perlin>, depth: u32) -> Cube<i32> {
     // Start recursive build at (0,0,0) with specified depth
-    // e.g. Depth 4 -> 3 -> 2 -> 1 -> 0 (leaf voxels)
-    build_octree_recursive(0, 0, 0, depth, noise, fbm)
+    // e.g. Depth 7 -> 6 -> 5 -> ... -> 1 -> 0 (leaf voxels)
+    // Pass depth to know the grid size for centering
+    build_octree_recursive(0, 0, 0, depth, depth, noise, fbm)
 }
 
 /// Recursively build octree from given position and depth
 ///
-/// - base_x, base_y, base_z: Position in voxel grid coordinates (0-15 range for depth=4)
-/// - depth: Current depth level (4 = root, 0 = leaf voxel)
+/// - base_x, base_y, base_z: Position in voxel grid coordinates [0, 2^max_depth)
+/// - depth: Current depth level (max_depth = root, 0 = leaf voxel)
+/// - max_depth: Maximum octree depth (for centering calculations)
 fn build_octree_recursive(
     base_x: i32,
     base_y: i32,
     base_z: i32,
     depth: u32,
+    max_depth: u32,
     noise: &Perlin,
     fbm: &Fbm<Perlin>,
 ) -> Cube<i32> {
@@ -27,8 +30,10 @@ fn build_octree_recursive(
         let voxel_y = base_y;
         let voxel_z = base_z;
 
-        // Convert to world coordinates (offset y so 0-15 becomes -8 to 7)
-        let world_y = voxel_y - 8;
+        // Convert to centered coordinates
+        // For depth 7: grid is [0, 128), center is 64, so [-64, 64)
+        let half_grid = (1 << max_depth) / 2; // 2^max_depth / 2
+        let world_y = voxel_y - half_grid;
 
         let value = get_voxel_value(voxel_x, world_y, voxel_z, noise, fbm);
 
@@ -36,7 +41,7 @@ fn build_octree_recursive(
     }
 
     // Recursive case: create 8 children at next depth level
-    // Each level halves the step size: depth 4 -> step 8, depth 3 -> step 4, etc.
+    // Each level halves the step size: depth 7 -> step 64, depth 6 -> step 32, etc.
     let step = 1 << depth; // 2^depth
 
     let children: [Rc<Cube<i32>>; 8] = std::array::from_fn(|octant_idx| {
@@ -50,6 +55,7 @@ fn build_octree_recursive(
             child_y,
             child_z,
             depth - 1,
+            max_depth,
             noise,
             fbm,
         ))

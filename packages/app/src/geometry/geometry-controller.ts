@@ -56,24 +56,28 @@ export class GeometryController {
   }
 
   setVoxelAtDepth(x: number, y: number, z: number, depth: number, colorIndex: number) {
+    console.log('[GeometryController] setVoxelAtDepth', { x, y, z, depth, colorIndex, hasWorker: !!this.worker });
     if (this.worker) {
       this.worker.postMessage({ type: 'setVoxelAtDepth', x, y, z, depth, colorIndex });
     }
   }
 
   setVoxel(x: number, y: number, z: number, colorIndex: number) {
+    console.log('[GeometryController] setVoxel', { x, y, z, colorIndex, hasWorker: !!this.worker });
     if (this.worker) {
       this.worker.postMessage({ type: 'setVoxel', x, y, z, colorIndex });
     }
   }
 
   removeVoxelAtDepth(x: number, y: number, z: number, depth: number) {
+    console.log('[GeometryController] removeVoxelAtDepth', { x, y, z, depth, hasWorker: !!this.worker });
     if (this.worker) {
       this.worker.postMessage({ type: 'removeVoxelAtDepth', x, y, z, depth });
     }
   }
 
   removeVoxel(x: number, y: number, z: number) {
+    console.log('[GeometryController] removeVoxel', { x, y, z, hasWorker: !!this.worker });
     if (this.worker) {
       this.worker.postMessage({ type: 'removeVoxel', x, y, z });
     }

@@ -10,10 +10,20 @@ pub struct CubeGround {
 }
 
 impl CubeGround {
+    /// Create new CubeGround with specified depth
+    ///
+    /// # Arguments
+    /// * `depth` - Octree subdivision depth (e.g., 5 = 32^3 voxels)
+    ///
+    /// Architecture:
+    /// - Octree depth: 5 (32^3 voxels in octree space)
+    /// - World scale depth: 1 (each octree unit = 2^1 = 2 world units)
+    /// - World size: 32 * 2 = 64 units
+    /// - At max depth, 1 octree voxel = 2 world units
     pub fn new(depth: u32) -> Self {
         // Build octree with specified depth
-        // depth=4 creates 16x16x16 cube (2^4 = 16)
-        // This covers y=-8 to y=8 (after scaling)
+        // depth=5 creates 32x32x32 cube (2^5 = 32 octree voxels)
+        // World size is 64 units (32 * 2^WORLD_SCALE_DEPTH)
         // y >= 0: surface checkerboard pattern
         // y < 0: underground terrain generated with noise/waves
 
@@ -28,40 +38,44 @@ impl CubeGround {
         }
     }
 
-    /// Set a voxel at world coordinates (x, y, z) at specified depth
-    /// World coords: x=0-15, y=-8 to 7, z=0-15 (always 16 units regardless of depth)
-    /// depth: octree depth level (7=finest, 4=coarse, etc.)
+    /// Set a voxel at octree coordinates at max-depth level
+    /// Coordinates: x,y,z all in [0, 2^max_depth) octree space
+    /// World space is centered: [-32, 32] in all axes (64 world units for depth 5, scale 1)
+    /// depth: octree depth level (5=finest, 4=coarse, etc.)
     /// color_index: 0 = empty, 1+ = colored voxel
     pub fn set_voxel_at_depth(&mut self, x: i32, y: i32, z: i32, depth: u32, color_index: i32) {
+        tracing::info!(
+            "[Rust set_voxel_at_depth] input: x={}, y={}, z={}, depth={}, color={}, max_depth={}",
+            x, y, z, depth, color_index, self.depth
+        );
+
         // Clamp depth to valid range
         let depth = depth.clamp(0, self.depth);
 
-        // Convert world coordinates (0-16 range) to max-depth voxel coordinates
-        // World space is always 16 units, octree is 2^depth voxels
         let grid_size = 1 << self.depth; // 2^self.depth (e.g., 128 for depth 7)
-        let voxel_x = x;
-        let voxel_y = y + 8;
-        let voxel_z = z;
 
-        // Check bounds in world space
-        if !(0..16).contains(&voxel_x) || !(0..16).contains(&voxel_y) || !(0..16).contains(&voxel_z) {
+        // Coordinates are already in max-depth octree space (0 to 2^max_depth)
+        // Check bounds at max depth level
+        if x < 0 || x >= grid_size || y < 0 || y >= grid_size || z < 0 || z >= grid_size {
+            tracing::warn!(
+                "[Rust set_voxel_at_depth] out of bounds: ({}, {}, {}) not in [0, {})",
+                x, y, z, grid_size
+            );
             return;
         }
 
-        // Scale world coordinates to max-depth voxel coordinates
-        // World 0-16 maps to voxel 0-(2^depth)
-        let scale_to_max = grid_size / 16;
-        let max_depth_x = voxel_x * scale_to_max;
-        let max_depth_y = voxel_y * scale_to_max;
-        let max_depth_z = voxel_z * scale_to_max;
-
         // Scale from max-depth coordinates to target depth coordinates
         let scale = 1 << (self.depth - depth);  // 2^(depth_max - depth_target)
-        let pos_x = max_depth_x / scale;
-        let pos_y = max_depth_y / scale;
-        let pos_z = max_depth_z / scale;
+        let pos_x = x / scale;
+        let pos_y = y / scale;
+        let pos_z = z / scale;
 
         let pos = IVec3::new(pos_x, pos_y, pos_z);
+
+        tracing::info!(
+            "[Rust set_voxel_at_depth] scaled position: ({}, {}, {}) at depth={}, scale={}",
+            pos_x, pos_y, pos_z, depth, scale
+        );
 
         // Update single octree node at the target depth
         self.octree.root = self.octree.root
@@ -92,17 +106,24 @@ impl CubeGround {
 
         // Scale and offset vertices to match world coordinates
         // The octree generates normalized [0,1] coordinates
-        // World space is always 16 units regardless of octree depth
-        // - x: 0-16 world units
-        // - y: -8 to 8 world units (16 units total, offset by -8)
-        // - z: 0-16 world units
+        // Architecture:
+        // - Octree depth: 5 (32^3 voxels in octree space)
+        // - World scale depth: 1 (each octree unit = 2^1 = 2 world units)
+        // - World size: 32 * 2 = 64 units
+        // - Centered coordinate system: [0,1] -> [-32, 32]
+        const WORLD_SCALE_DEPTH: u32 = 1;
+        let scale = 1 << WORLD_SCALE_DEPTH; // 2
+        let octree_size = (1 << self.depth) as f32; // 32 for depth 5
+        let world_size = octree_size * scale as f32; // 64 for depth 5, scale 1
+        let half_world = world_size / 2.0; // 32
+
         let scaled_vertices: Vec<f32> = mesh_data
             .vertices
             .chunks(3)
             .flat_map(|chunk| {
-                let x = chunk[0] * 16.0; // [0,1] -> [0,16]
-                let y = chunk[1] * 16.0 - 8.0; // [0,1] -> [-8,8]
-                let z = chunk[2] * 16.0; // [0,1] -> [0,16]
+                let x = chunk[0] * world_size - half_world; // [0,1] -> [-32, 32]
+                let y = chunk[1] * world_size - half_world; // [0,1] -> [-32, 32]
+                let z = chunk[2] * world_size - half_world; // [0,1] -> [-32, 32]
                 vec![x, y, z]
             })
             .collect();
@@ -118,7 +139,7 @@ impl CubeGround {
 
 impl Default for CubeGround {
     fn default() -> Self {
-        Self::new(4) // Default depth of 4 (16x16x16 grid)
+        Self::new(5) // Default: depth 5 (32^3 voxels, 64×64×64 world with scale=1)
     }
 }
 

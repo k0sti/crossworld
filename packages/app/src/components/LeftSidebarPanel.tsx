@@ -46,7 +46,6 @@ interface LeftSidebarPanelProps {
   activePanelType: ConfigPanelType
   isEditMode: boolean
   onToggleEditMode: (isEditMode: boolean) => void
-  enableCubeGround?: boolean
   isChatOpen: boolean
   onToggleChat: () => void
   isClientListOpen: boolean
@@ -66,7 +65,6 @@ export function LeftSidebarPanel({
   activePanelType,
   isEditMode,
   onToggleEditMode,
-  enableCubeGround = true,
   isChatOpen,
   onToggleChat,
   isClientListOpen,

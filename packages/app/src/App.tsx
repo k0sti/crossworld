@@ -23,8 +23,6 @@ import { LoginSettingsService } from '@crossworld/common'
 import { ExtensionAccount, SimpleAccount } from 'applesauce-accounts/accounts'
 import { ExtensionSigner } from 'applesauce-signers'
 
-const ENABLE_CUBE_GROUND = true
-
 function App() {
   const navigate = useNavigate()
   const [pubkey, setPubkey] = useState<string | null>(null)
@@ -601,7 +599,6 @@ function App() {
             activePanelType={activePanelType}
             isEditMode={isEditMode}
             onToggleEditMode={setIsEditMode}
-            enableCubeGround={ENABLE_CUBE_GROUND}
             isChatOpen={isChatOpen}
             onToggleChat={() => setIsChatOpen(!isChatOpen)}
             isClientListOpen={isClientListOpen}

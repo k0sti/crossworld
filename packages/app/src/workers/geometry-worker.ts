@@ -1,8 +1,7 @@
 import { GeometryGenerator } from '../geometry/geometry-lib';
 
 export interface GeometryMessage {
-  type: 'init' | 'update' | 'setGroundRenderMode' | 'setVoxelAtDepth' | 'setVoxel' | 'removeVoxelAtDepth' | 'removeVoxel';
-  useCube?: boolean;
+  type: 'init' | 'update' | 'setVoxelAtDepth' | 'setVoxel' | 'removeVoxelAtDepth' | 'removeVoxel';
   x?: number;
   y?: number;
   z?: number;
@@ -91,31 +90,29 @@ class GeometryWorkerManager {
     this.isRunning = false;
   }
 
-  setGroundRenderMode(useCube: boolean) {
-    if (this.generator) {
-      this.generator.setGroundRenderMode(useCube);
-    }
-  }
-
   setVoxelAtDepth(x: number, y: number, z: number, depth: number, colorIndex: number) {
+    console.log('[GeometryWorker] setVoxelAtDepth', { x, y, z, depth, colorIndex, hasGenerator: !!this.generator });
     if (this.generator) {
       this.generator.setVoxelAtDepth(x, y, z, depth, colorIndex);
     }
   }
 
   setVoxel(x: number, y: number, z: number, colorIndex: number) {
+    console.log('[GeometryWorker] setVoxel', { x, y, z, colorIndex, hasGenerator: !!this.generator });
     if (this.generator) {
       this.generator.setVoxel(x, y, z, colorIndex);
     }
   }
 
   removeVoxelAtDepth(x: number, y: number, z: number, depth: number) {
+    console.log('[GeometryWorker] removeVoxelAtDepth', { x, y, z, depth, hasGenerator: !!this.generator });
     if (this.generator) {
       this.generator.removeVoxelAtDepth(x, y, z, depth);
     }
   }
 
   removeVoxel(x: number, y: number, z: number) {
+    console.log('[GeometryWorker] removeVoxel', { x, y, z, hasGenerator: !!this.generator });
     if (this.generator) {
       this.generator.removeVoxel(x, y, z);
     }
@@ -135,12 +132,6 @@ self.addEventListener('message', async (event) => {
 
     case 'update':
       // For now, we don't need to handle updates
-      break;
-
-    case 'setGroundRenderMode':
-      if (message.useCube !== undefined) {
-        manager.setGroundRenderMode(message.useCube);
-      }
       break;
 
     case 'setVoxelAtDepth':

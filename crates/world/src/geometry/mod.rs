@@ -1,39 +1,19 @@
 pub mod cube_ground;
-pub mod ground;
 
 use crate::GeometryData;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum GroundRenderMode {
-    Flat,
-    Cube,
-}
-
 pub struct GeometryEngine {
-    ground: ground::Ground,
     cube_ground: cube_ground::CubeGround,
-    render_mode: GroundRenderMode,
 }
 
 impl GeometryEngine {
     pub fn new() -> Self {
         Self {
-            ground: ground::Ground::new(8, 8),
-            cube_ground: cube_ground::CubeGround::new(7), // Depth 7 = 128x128x128 grid
-            render_mode: GroundRenderMode::Flat,
+            cube_ground: cube_ground::CubeGround::new(5), // Depth 5 (32^3 voxels, 64 world units with scale=1)
         }
     }
 
-    pub fn set_render_mode(&mut self, mode: GroundRenderMode) {
-        self.render_mode = mode;
-    }
-
-    pub fn get_render_mode(&self) -> GroundRenderMode {
-        self.render_mode
-    }
-
     pub fn generate_frame(&self) -> GeometryData {
-        // Only render cube ground (flat ground removed as per user request)
         self.cube_ground.generate_mesh()
     }
 
