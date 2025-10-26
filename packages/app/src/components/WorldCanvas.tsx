@@ -5,7 +5,7 @@ import { GeometryController } from '../geometry/geometry-controller';
 import init, { AvatarEngine } from '@workspace/wasm';
 import type { AvatarStateService, AvatarConfig } from '../services/avatar-state';
 import type { TeleportAnimationType } from '../renderer/teleport-animation';
-import { DebugPanel, type DebugInfo } from './DebugPanel';
+import { DebugPanel, type DebugInfo } from './WorldPanel';
 
 interface WorldCanvasProps {
   isLoggedIn: boolean;
@@ -36,6 +36,32 @@ export function WorldCanvas({
   const avatarEngineRef = useRef<AvatarEngine | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const [debugInfo, setDebugInfo] = useState<DebugInfo>({});
+
+  const handleApplyDepthSettings = async (worldDepth: number, scaleDepth: number) => {
+    const geometryController = localGeometryControllerRef.current;
+    const sceneManager = localSceneManagerRef.current;
+
+    if (!geometryController || !sceneManager) {
+      console.error('Cannot apply depth settings: geometry controller or scene manager not initialized');
+      return;
+    }
+
+    console.log(`Reinitializing geometry with worldDepth=${worldDepth}, scaleDepth=${scaleDepth}`);
+
+    try {
+      await geometryController.reinitialize(worldDepth, scaleDepth, (geometry) => {
+        sceneManager.updateGeometry(
+          geometry.vertices,
+          geometry.indices,
+          geometry.normals,
+          geometry.colors
+        );
+      });
+      console.log('Geometry reinitialized successfully');
+    } catch (error) {
+      console.error('Failed to reinitialize geometry:', error);
+    }
+  };
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -326,7 +352,7 @@ export function WorldCanvas({
       zIndex={0}
     >
       <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: '100%' }} />
-      <DebugPanel info={debugInfo} />
+      <DebugPanel info={debugInfo} onApplyDepthSettings={handleApplyDepthSettings} />
     </Box>
   );
 }

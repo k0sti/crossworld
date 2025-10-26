@@ -1294,14 +1294,7 @@ export class SceneManager {
             };
           })()
         : undefined,
-      cursorOctree: this.currentCursorCoord
-        ? {
-            x: this.currentCursorCoord.x,
-            y: this.currentCursorCoord.y,
-            z: this.currentCursorCoord.z,
-            depth: this.currentCursorCoord.depth
-          }
-        : undefined,
+      cursorOctree: this.currentCursorCoord,
       cursorDepth: this.cursorDepth,
       cursorSize: cursorSize,
       avatarPos: avatarPos

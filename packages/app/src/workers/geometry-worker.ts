@@ -7,6 +7,8 @@ export interface GeometryMessage {
   z?: number;
   depth?: number;
   colorIndex?: number;
+  worldDepth?: number;
+  scaleDepth?: number;
 }
 
 export interface GeometryResult {
@@ -27,8 +29,8 @@ class GeometryWorkerManager {
   private updateInterval = 33; // ~30 FPS for geometry updates
   private lastUpdate = 0;
 
-  async initialize() {
-    this.generator = new GeometryGenerator();
+  async initialize(worldDepth: number = 5, scaleDepth: number = 1) {
+    this.generator = new GeometryGenerator(worldDepth, scaleDepth);
     await this.generator.initialize();
     self.postMessage({ type: 'ready' });
     this.startUpdateLoop();
@@ -127,7 +129,7 @@ self.addEventListener('message', async (event) => {
 
   switch (message.type) {
     case 'init':
-      await manager.initialize();
+      await manager.initialize(message.worldDepth, message.scaleDepth);
       break;
 
     case 'update':

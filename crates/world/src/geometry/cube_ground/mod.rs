@@ -7,23 +7,25 @@ use noise::{Fbm, Perlin};
 pub struct CubeGround {
     octree: Octree,
     depth: u32,
+    scale_depth: u32,
 }
 
 impl CubeGround {
-    /// Create new CubeGround with specified depth
+    /// Create new CubeGround with specified depth and scale
     ///
     /// # Arguments
     /// * `depth` - Octree subdivision depth (e.g., 5 = 32^3 voxels)
+    /// * `scale_depth` - Rendering scale depth (e.g., 1 = each octree unit is 2^1 = 2 world units)
     ///
     /// Architecture:
     /// - Octree depth: 5 (32^3 voxels in octree space)
     /// - World scale depth: 1 (each octree unit = 2^1 = 2 world units)
     /// - World size: 32 * 2 = 64 units
     /// - At max depth, 1 octree voxel = 2 world units
-    pub fn new(depth: u32) -> Self {
+    pub fn new(depth: u32, scale_depth: u32) -> Self {
         // Build octree with specified depth
         // depth=5 creates 32x32x32 cube (2^5 = 32 octree voxels)
-        // World size is 64 units (32 * 2^WORLD_SCALE_DEPTH)
+        // World size is (2^depth) * (2^scale_depth) units
         // y >= 0: surface checkerboard pattern
         // y < 0: underground terrain generated with noise/waves
 
@@ -35,6 +37,7 @@ impl CubeGround {
         Self {
             octree: Octree::new(root),
             depth,
+            scale_depth,
         }
     }
 
@@ -107,23 +110,22 @@ impl CubeGround {
         // Scale and offset vertices to match world coordinates
         // The octree generates normalized [0,1] coordinates
         // Architecture:
-        // - Octree depth: 5 (32^3 voxels in octree space)
-        // - World scale depth: 1 (each octree unit = 2^1 = 2 world units)
+        // - Octree depth: e.g. 5 (32^3 voxels in octree space)
+        // - World scale depth: e.g. 1 (each octree unit = 2^1 = 2 world units)
         // - World size: 32 * 2 = 64 units
         // - Centered coordinate system: [0,1] -> [-32, 32]
-        const WORLD_SCALE_DEPTH: u32 = 1;
-        let scale = 1 << WORLD_SCALE_DEPTH; // 2
-        let octree_size = (1 << self.depth) as f32; // 32 for depth 5
-        let world_size = octree_size * scale as f32; // 64 for depth 5, scale 1
-        let half_world = world_size / 2.0; // 32
+        let scale = 1 << self.scale_depth; // 2^scale_depth
+        let octree_size = (1 << self.depth) as f32; // 2^depth (e.g. 32 for depth 5)
+        let world_size = octree_size * scale as f32; // e.g. 64 for depth 5, scale 1
+        let half_world = world_size / 2.0; // e.g. 32
 
         let scaled_vertices: Vec<f32> = mesh_data
             .vertices
             .chunks(3)
             .flat_map(|chunk| {
-                let x = chunk[0] * world_size - half_world; // [0,1] -> [-32, 32]
-                let y = chunk[1] * world_size - half_world; // [0,1] -> [-32, 32]
-                let z = chunk[2] * world_size - half_world; // [0,1] -> [-32, 32]
+                let x = chunk[0] * world_size - half_world; // [0,1] -> [-half_world, half_world]
+                let y = chunk[1] * world_size - half_world;
+                let z = chunk[2] * world_size - half_world;
                 vec![x, y, z]
             })
             .collect();
@@ -139,7 +141,7 @@ impl CubeGround {
 
 impl Default for CubeGround {
     fn default() -> Self {
-        Self::new(5) // Default: depth 5 (32^3 voxels, 64×64×64 world with scale=1)
+        Self::new(5, 1) // Default: depth 5, scale 1 (32^3 voxels, 64×64×64 world)
     }
 }
 

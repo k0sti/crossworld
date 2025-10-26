@@ -5,8 +5,13 @@ export class GeometryController {
   private latestGeometry: GeometryResult | null = null;
   private stats = { vertices: 0, triangles: 0 };
   private onGeometryUpdate?: (geometry: GeometryResult) => void;
+  private worldDepth: number;
+  private scaleDepth: number;
 
-  constructor() {}
+  constructor(worldDepth: number = 5, scaleDepth: number = 1) {
+    this.worldDepth = worldDepth;
+    this.scaleDepth = scaleDepth;
+  }
 
   async initialize(onGeometryUpdate: (geometry: GeometryResult) => void): Promise<void> {
     this.onGeometryUpdate = onGeometryUpdate;
@@ -26,7 +31,7 @@ export class GeometryController {
         }
       });
 
-      this.worker.postMessage({ type: 'init' });
+      this.worker.postMessage({ type: 'init', worldDepth: this.worldDepth, scaleDepth: this.scaleDepth });
     });
   }
 
@@ -81,6 +86,18 @@ export class GeometryController {
     if (this.worker) {
       this.worker.postMessage({ type: 'removeVoxel', x, y, z });
     }
+  }
+
+  async reinitialize(worldDepth: number, scaleDepth: number, onGeometryUpdate: (geometry: GeometryResult) => void): Promise<void> {
+    // Terminate existing worker
+    this.destroy();
+
+    // Update depths
+    this.worldDepth = worldDepth;
+    this.scaleDepth = scaleDepth;
+
+    // Reinitialize with new depths
+    await this.initialize(onGeometryUpdate);
   }
 
   destroy() {

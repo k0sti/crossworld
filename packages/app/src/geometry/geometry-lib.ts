@@ -21,10 +21,17 @@ export async function initializeWasm(): Promise<void> {
 
 export class GeometryGenerator {
   private engine: GeometryEngine | null = null;
+  private worldDepth: number;
+  private scaleDepth: number;
+
+  constructor(worldDepth: number = 5, scaleDepth: number = 1) {
+    this.worldDepth = worldDepth;
+    this.scaleDepth = scaleDepth;
+  }
 
   async initialize(): Promise<void> {
     await initializeWasm();
-    this.engine = new GeometryEngine();
+    this.engine = new GeometryEngine(this.worldDepth, this.scaleDepth);
   }
 
   generateFrame(): GeometryData | null {

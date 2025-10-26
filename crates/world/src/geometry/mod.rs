@@ -7,9 +7,14 @@ pub struct GeometryEngine {
 }
 
 impl GeometryEngine {
-    pub fn new() -> Self {
+    /// Create new GeometryEngine with specified depth and scale
+    ///
+    /// # Arguments
+    /// * `world_depth` - Octree subdivision depth (e.g., 5 = 32^3 voxels)
+    /// * `scale_depth` - Rendering scale depth (e.g., 1 = each octree unit is 2^1 = 2 world units)
+    pub fn new(world_depth: u32, scale_depth: u32) -> Self {
         Self {
-            cube_ground: cube_ground::CubeGround::new(5), // Depth 5 (32^3 voxels, 64 world units with scale=1)
+            cube_ground: cube_ground::CubeGround::new(world_depth, scale_depth),
         }
     }
 
