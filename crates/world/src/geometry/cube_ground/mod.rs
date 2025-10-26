@@ -44,10 +44,10 @@ impl CubeGround {
     /// depth: octree depth level (4=single voxel, 3=2x2x2, 2=4x4x4, etc.)
     /// color_index: 0 = empty, 1+ = colored voxel
     pub fn set_voxel_at_depth(&mut self, x: i32, y: i32, z: i32, depth: u32, color_index: i32) {
-        // Clamp depth to valid range
-        let depth = depth.min(self.depth);
+        // Clamp depth to valid range (depth 4 = single voxel)
+        let depth = depth.clamp(0, self.depth);
 
-        // Calculate voxel size at this depth
+        // Calculate voxel size at this depth (number of voxels per side of cube)
         let voxel_size = 1 << (self.depth - depth);
 
         // Align coordinates to voxel grid at this depth
@@ -55,17 +55,27 @@ impl CubeGround {
         let aligned_y = ((y + 8) / voxel_size) * voxel_size - 8; // Account for y offset
         let aligned_z = (z / voxel_size) * voxel_size;
 
-        // Clamp to valid world range
-        if !(0..16).contains(&aligned_x) || !(-8..8).contains(&aligned_y) || !(0..16).contains(&aligned_z) {
-            return;
+        // Fill all voxels in the cube at this depth
+        // For depth=4: voxel_size=1, fills 1x1x1 = 1 voxel
+        // For depth=3: voxel_size=2, fills 2x2x2 = 8 voxels
+        // For depth=2: voxel_size=4, fills 4x4x4 = 64 voxels
+        for dx in 0..voxel_size {
+            for dy in 0..voxel_size {
+                for dz in 0..voxel_size {
+                    let vx = aligned_x + dx;
+                    let vy = aligned_y + dy;
+                    let vz = aligned_z + dz;
+
+                    // Check bounds
+                    if (0..16).contains(&vx) && (-8..8).contains(&vy) && (0..16).contains(&vz) {
+                        let voxel_pos = self.world_to_voxel(vx, vy, vz);
+                        self.octree.root = self.octree.root
+                            .updated(Cube::Solid(color_index), self.depth, voxel_pos)
+                            .simplified();
+                    }
+                }
+            }
         }
-
-        let voxel_pos = self.world_to_voxel(aligned_x, aligned_y, aligned_z);
-
-        // Use the octree's depth parameter for efficient updates
-        self.octree.root = self.octree.root
-            .updated(Cube::Solid(color_index), depth, voxel_pos)
-            .simplified();
     }
 
     /// Set a single voxel at world coordinates (convenience method)
