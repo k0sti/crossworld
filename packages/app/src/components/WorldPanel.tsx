@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Box, Text, VStack, HStack, Input, Button, Slider, SliderTrack, SliderFilledTrack, SliderThumb, Switch } from '@chakra-ui/react';
-import { CubeCoord, printCubeCoord } from '../types/cube-coord';
-import { getMacroDepth, getMicroDepth, onDepthChange } from '../config/depth-config';
+import { Box, Text, VStack, HStack, Slider, SliderTrack, SliderFilledTrack, SliderThumb, Switch, Badge, Popover, PopoverTrigger, PopoverContent, PopoverBody, Button } from '@chakra-ui/react';
+import { CubeCoord } from '../types/cube-coord';
+import { getMacroDepth, getMicroDepth, onDepthChange, setMacroDepth as setGlobalMacroDepth } from '../config/depth-config';
 
 export interface DebugInfo {
   cursorWorld?: { x: number; y: number; z: number };
@@ -28,6 +28,9 @@ interface WorldPanelProps {
   // Speech feature
   speechEnabled: boolean;
   onSpeechEnabledChange: (enabled: boolean) => void;
+  // World Grid toggle
+  worldGridVisible: boolean;
+  onWorldGridVisibleChange: (visible: boolean) => void;
 }
 
 export function WorldPanel({
@@ -41,18 +44,37 @@ export function WorldPanel({
   onSunSpeedChange,
   speechEnabled,
   onSpeechEnabledChange,
+  worldGridVisible,
+  onWorldGridVisibleChange,
 }: WorldPanelProps) {
-  const [macroDepth, setMacroDepth] = useState(String(getMacroDepth()));
-  const [microDepth, setMicroDepth] = useState(String(getMicroDepth()));
+  const [macroDepth, setMacroDepth] = useState(getMacroDepth());
+  const [microDepth, setMicroDepth] = useState(getMicroDepth());
 
   // Subscribe to depth changes from config
   useEffect(() => {
     const unsubscribe = onDepthChange((newMacroDepth, newMicroDepth) => {
-      setMacroDepth(String(newMacroDepth));
-      setMicroDepth(String(newMicroDepth));
+      setMacroDepth(newMacroDepth);
+      setMicroDepth(newMicroDepth);
     });
     return unsubscribe;
   }, []);
+
+  const handleMacroChange = (newMacro: number) => {
+    setMacroDepth(newMacro);
+    setGlobalMacroDepth(newMacro);
+    if (onApplyDepthSettings) {
+      const totalDepth = newMacro + microDepth;
+      onApplyDepthSettings(totalDepth, microDepth);
+    }
+  };
+
+  const handleMicroChange = (newMicro: number) => {
+    setMicroDepth(newMicro);
+    if (onApplyDepthSettings) {
+      const totalDepth = macroDepth + newMicro;
+      onApplyDepthSettings(totalDepth, newMicro);
+    }
+  };
 
   const getTimeOfDayLabel = (time: number): string => {
     if (time < 0.25) return 'Night';
@@ -62,24 +84,16 @@ export function WorldPanel({
     return 'Night';
   };
 
+  const currentMacro = macroDepth;
+  const currentMicro = microDepth;
+  const worldSize = 1 << currentMacro; // 2^macro
+
   const formatNum = (n: number | undefined) => n?.toFixed(3) ?? 'N/A';
+  const formatInt = (n: number | undefined) => n !== undefined ? Math.round(n).toString() : 'N/A';
   const formatVec = (v: { x: number; y: number; z: number } | undefined) =>
     v ? `${formatNum(v.x)}, ${formatNum(v.y)}, ${formatNum(v.z)}` : 'N/A';
-
-  const handleApply = () => {
-    const macro = parseInt(macroDepth);
-    const micro = parseInt(microDepth);
-    if (!isNaN(macro) && !isNaN(micro) && onApplyDepthSettings) {
-      const totalDepth = macro + micro;
-      onApplyDepthSettings(totalDepth, micro);
-    }
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleApply();
-    }
-  };
+  const formatVecInt = (v: { x: number; y: number; z: number } | undefined) =>
+    v ? `${formatInt(v.x)}, ${formatInt(v.y)}, ${formatInt(v.z)}` : 'N/A';
 
   return (
     <Box
@@ -95,21 +109,93 @@ export function WorldPanel({
       userSelect="none"
       zIndex={1000}
       minWidth="320px"
-      maxHeight="95vh"
-      overflowY="auto"
     >
-      <VStack align="stretch" spacing={0.5}>
-        <Text fontWeight="bold" color="cyan.300">WORLD PANEL</Text>
-        <Text>World: {info.worldSize ?? 'N/A'}×{info.worldSize ?? 'N/A'}×{info.worldSize ?? 'N/A'}</Text>
-        <Text>Mode: {info.isEditMode ? 'EDIT' : 'WALK'}</Text>
+      <VStack align="stretch" spacing={1}>
+        {/* World info with badges */}
+        <HStack spacing={1}>
+          <Text color="cyan.300">World</Text>
 
-        <Text color="yellow.300">─ Sun System ─</Text>
+          {/* Macro depth selector */}
+          <Popover placement="top">
+            <PopoverTrigger>
+              <Badge
+                colorScheme="cyan"
+                fontSize="xs"
+                cursor="pointer"
+                _hover={{ opacity: 0.8 }}
+              >
+                macro {currentMacro}
+              </Badge>
+            </PopoverTrigger>
+            <PopoverContent bg="gray.800" borderColor="cyan.500" width="auto" pointerEvents="auto">
+              <PopoverBody p={1}>
+                <VStack spacing={1}>
+                  {[8, 7, 6, 5, 4, 3, 2, 1].map((depth) => (
+                    <Button
+                      key={depth}
+                      size="xs"
+                      variant={currentMacro === depth ? 'solid' : 'ghost'}
+                      colorScheme="cyan"
+                      onClick={() => handleMacroChange(depth)}
+                      width="100%"
+                    >
+                      {depth}
+                    </Button>
+                  ))}
+                </VStack>
+              </PopoverBody>
+            </PopoverContent>
+          </Popover>
+
+          {/* Micro depth selector */}
+          <Popover placement="top">
+            <PopoverTrigger>
+              <Badge
+                colorScheme="cyan"
+                fontSize="xs"
+                cursor="pointer"
+                _hover={{ opacity: 0.8 }}
+              >
+                micro {currentMicro}
+              </Badge>
+            </PopoverTrigger>
+            <PopoverContent bg="gray.800" borderColor="cyan.500" width="auto" pointerEvents="auto">
+              <PopoverBody p={1}>
+                <VStack spacing={1}>
+                  {[3, 2, 1, 0].map((depth) => (
+                    <Button
+                      key={depth}
+                      size="xs"
+                      variant={currentMicro === depth ? 'solid' : 'ghost'}
+                      colorScheme="cyan"
+                      onClick={() => handleMicroChange(depth)}
+                      width="100%"
+                    >
+                      {depth}
+                    </Button>
+                  ))}
+                </VStack>
+              </PopoverBody>
+            </PopoverContent>
+          </Popover>
+
+          <Badge colorScheme="blue" fontSize="xs">size {worldSize}×{worldSize}</Badge>
+        </HStack>
+
+        {/* Time of day */}
         <Box pointerEvents="auto">
           <HStack spacing={2} mb={1}>
-            <Text minWidth="80px">Time of Day:</Text>
+            <Text color="yellow.300">Time</Text>
             <Text color="yellow.200" fontWeight="bold" fontSize="xs">
               {getTimeOfDayLabel(timeOfDay)}
             </Text>
+            <Switch
+              isChecked={sunAutoMove}
+              onChange={(e) => onSunAutoMoveChange(e.target.checked)}
+              size="sm"
+              colorScheme="yellow"
+              ml="auto"
+            />
           </HStack>
           <Slider
             value={timeOfDay}
@@ -125,20 +211,11 @@ export function WorldPanel({
             </SliderTrack>
             <SliderThumb boxSize={3} />
           </Slider>
-          <HStack spacing={2} justify="space-between" mb={1}>
-            <Text minWidth="80px">Auto Move:</Text>
-            <Switch
-              isChecked={sunAutoMove}
-              onChange={(e) => onSunAutoMoveChange(e.target.checked)}
-              size="sm"
-              colorScheme="cyan"
-            />
-          </HStack>
           {sunAutoMove && (
             <Box mb={1}>
               <HStack spacing={2} mb={1}>
-                <Text minWidth="80px">Sun Speed:</Text>
-                <Text color="cyan.200" fontSize="xs">{sunSpeed.toFixed(3)}x</Text>
+                <Text color="yellow.300">Speed</Text>
+                <Text color="yellow.200" fontSize="xs">{sunSpeed.toFixed(3)}x</Text>
               </HStack>
               <Slider
                 value={sunSpeed}
@@ -149,7 +226,7 @@ export function WorldPanel({
                 size="sm"
               >
                 <SliderTrack bg="gray.700">
-                  <SliderFilledTrack bg="cyan.400" />
+                  <SliderFilledTrack bg="yellow.400" />
                 </SliderTrack>
                 <SliderThumb boxSize={3} />
               </Slider>
@@ -157,70 +234,40 @@ export function WorldPanel({
           )}
         </Box>
 
-        <Text color="yellow.300">─ Cursor ─</Text>
-        <Text>World: {formatVec(info.cursorWorld)}</Text>
-        <Text>Octree: {printCubeCoord(info.cursorOctree)}</Text>
-        <Text>Depth: {info.cursorDepth ?? 'N/A'} (size: {formatNum(info.cursorSize)})</Text>
+        {/* Cursor info with badge */}
+        <HStack spacing={1}>
+          <Text color="yellow.300">Cursor</Text>
+          <Badge colorScheme="yellow" fontSize="xs">depth {info.cursorDepth ?? 'N/A'}</Badge>
+          <Text fontSize="xs">({formatVecInt(info.cursorWorld)})</Text>
+        </HStack>
 
-        <Text color="green.300">─ Avatar ─</Text>
-        <Text>Pos: {formatVec(info.avatarPos)}</Text>
+        {/* Camera info */}
+        <HStack spacing={1}>
+          <Text color="blue.300">Camera</Text>
+          <Text fontSize="xs">({formatVec(info.cameraPos)})</Text>
+        </HStack>
 
-        <Text color="blue.300">─ Camera ─</Text>
-        <Text>Pos: {formatVec(info.cameraPos)}</Text>
+        {/* Speech toggle */}
+        <HStack spacing={2} justify="space-between" pointerEvents="auto">
+          <Text color="purple.300">Speech</Text>
+          <Switch
+            isChecked={speechEnabled}
+            onChange={(e) => onSpeechEnabledChange(e.target.checked)}
+            size="sm"
+            colorScheme="purple"
+          />
+        </HStack>
 
-        <Text color="orange.300">─ World Settings ─</Text>
-        <Box pointerEvents="auto">
-          <HStack spacing={2} mb={1}>
-            <Text minWidth="80px">Macro depth:</Text>
-            <Input
-              size="xs"
-              value={macroDepth}
-              onChange={(e) => setMacroDepth(e.target.value)}
-              onKeyDown={handleKeyDown}
-              bg="rgba(0, 0, 0, 0.5)"
-              border="1px solid"
-              borderColor="gray.600"
-              width="60px"
-              textAlign="center"
-            />
-          </HStack>
-          <HStack spacing={2} mb={1}>
-            <Text minWidth="80px">Micro depth:</Text>
-            <Input
-              size="xs"
-              value={microDepth}
-              onChange={(e) => setMicroDepth(e.target.value)}
-              onKeyDown={handleKeyDown}
-              bg="rgba(0, 0, 0, 0.5)"
-              border="1px solid"
-              borderColor="gray.600"
-              width="60px"
-              textAlign="center"
-            />
-          </HStack>
-          <Button
-            size="xs"
-            onClick={handleApply}
-            colorScheme="blue"
-            width="100%"
-            mb={1}
-          >
-            Apply World Settings
-          </Button>
-        </Box>
-
-        <Text color="purple.300">─ Features ─</Text>
-        <Box pointerEvents="auto">
-          <HStack spacing={2} justify="space-between">
-            <Text>Speech:</Text>
-            <Switch
-              isChecked={speechEnabled}
-              onChange={(e) => onSpeechEnabledChange(e.target.checked)}
-              size="sm"
-              colorScheme="purple"
-            />
-          </HStack>
-        </Box>
+        {/* World Grid toggle */}
+        <HStack spacing={2} justify="space-between" pointerEvents="auto">
+          <Text color="green.300">World Grid</Text>
+          <Switch
+            isChecked={worldGridVisible}
+            onChange={(e) => onWorldGridVisibleChange(e.target.checked)}
+            size="sm"
+            colorScheme="green"
+          />
+        </HStack>
       </VStack>
     </Box>
   );

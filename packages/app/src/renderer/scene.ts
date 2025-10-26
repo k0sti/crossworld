@@ -94,6 +94,9 @@ export class SceneManager {
   private sunSystem: SunSystem | null = null;
   private postProcessing: PostProcessing | null = null;
 
+  // World grid helpers
+  private worldGridHelpers: THREE.Object3D[] = [];
+
   constructor() {
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(
@@ -158,7 +161,9 @@ export class SceneManager {
     // Create checker plane (2^macroDepth × 2^macroDepth centered at origin)
     const checkerSize = 1 << getMacroDepth();
     this.checkerPlane = new CheckerPlane(checkerSize, checkerSize, 0.02);
-    this.scene.add(this.checkerPlane.getMesh());
+    const checkerMesh = this.checkerPlane.getMesh();
+    this.scene.add(checkerMesh);
+    this.worldGridHelpers.push(checkerMesh);
   }
 
   private setupMouseListener(canvas: HTMLCanvasElement): void {
@@ -507,6 +512,7 @@ export class SceneManager {
     }
     axisHelper.renderOrder = 999;
     this.scene.add(axisHelper);
+    this.worldGridHelpers.push(axisHelper);
 
     // Create transparent wireframe for unit cube at origin
     const unitCubeGeometry = new THREE.BoxGeometry(1, 1, 1);
@@ -520,6 +526,7 @@ export class SceneManager {
     // Position cube so its corner is at origin (center at 0.5, 0.5, 0.5)
     unitCubeWireframe.position.set(0.5, 0.5, 0.5);
     this.scene.add(unitCubeWireframe);
+    this.worldGridHelpers.push(unitCubeWireframe);
 
     // Create world bounds wireframe box
     // World is worldSize×worldSize×worldSize centered at origin
@@ -534,6 +541,7 @@ export class SceneManager {
     const worldBoxWireframe = new THREE.LineSegments(worldBoxEdges, worldBoxLineMaterial);
     worldBoxWireframe.position.set(0, 0, 0); // Centered at origin
     this.scene.add(worldBoxWireframe);
+    this.worldGridHelpers.push(worldBoxWireframe);
   }
 
   private setupCrosshair(): void {
@@ -1420,5 +1428,14 @@ export class SceneManager {
    */
   setSunAutoMove(auto: boolean): void {
     this.sunSystem?.setAutoMove(auto);
+  }
+
+  /**
+   * Set world grid visibility (origin axis, unit cube, world bounds, checkerboard)
+   */
+  setWorldGridVisible(visible: boolean): void {
+    for (const helper of this.worldGridHelpers) {
+      helper.visible = visible;
+    }
   }
 }

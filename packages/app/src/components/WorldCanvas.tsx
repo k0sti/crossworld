@@ -18,6 +18,8 @@ interface WorldCanvasProps {
   currentUserPubkey?: string | null;
   geometryControllerRef?: React.MutableRefObject<any>;
   sceneManagerRef?: React.MutableRefObject<any>;
+  speechEnabled?: boolean;
+  onSpeechEnabledChange?: (enabled: boolean) => void;
 }
 
 export function WorldCanvas({
@@ -30,6 +32,8 @@ export function WorldCanvas({
   currentUserPubkey,
   geometryControllerRef,
   sceneManagerRef,
+  speechEnabled: externalSpeechEnabled,
+  onSpeechEnabledChange: externalOnSpeechEnabledChange,
 }: WorldCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const localSceneManagerRef = useRef<SceneManager | null>(null);
@@ -42,7 +46,12 @@ export function WorldCanvas({
   const [timeOfDay, setTimeOfDay] = useState(0.35); // Start slightly after sunrise
   const [sunAutoMove, setSunAutoMove] = useState(false); // Start with sun fixed
   const [sunSpeed, setSunSpeed] = useState(0.01);
-  const [speechEnabled, setSpeechEnabled] = useState(false); // Disabled by default
+  const [internalSpeechEnabled, setInternalSpeechEnabled] = useState(false); // Disabled by default
+  const [worldGridVisible, setWorldGridVisible] = useState(true); // Show helpers by default
+
+  // Use external speechEnabled if provided, otherwise use internal state
+  const speechEnabled = externalSpeechEnabled ?? internalSpeechEnabled;
+  const setSpeechEnabled = externalOnSpeechEnabledChange ?? setInternalSpeechEnabled;
 
   const handleApplyDepthSettings = async (worldDepth: number, scaleDepth: number) => {
     const geometryController = localGeometryControllerRef.current;
@@ -231,6 +240,14 @@ export function WorldCanvas({
     sceneManager.setSunSpeed(sunSpeed);
   }, [sunSpeed]);
 
+  // Handle world grid visibility
+  useEffect(() => {
+    const sceneManager = localSceneManagerRef.current;
+    if (!sceneManager) return;
+
+    sceneManager.setWorldGridVisible(worldGridVisible);
+  }, [worldGridVisible]);
+
   // Handle avatar loading based on new unified avatar config
   useEffect(() => {
     const sceneManager = localSceneManagerRef.current;
@@ -399,6 +416,8 @@ export function WorldCanvas({
         onSunSpeedChange={setSunSpeed}
         speechEnabled={speechEnabled}
         onSpeechEnabledChange={setSpeechEnabled}
+        worldGridVisible={worldGridVisible}
+        onWorldGridVisibleChange={setWorldGridVisible}
       />
     </Box>
   );
