@@ -1,4 +1,5 @@
-use crate::octree::Octree;
+use crate::octree::{Cube, Octree};
+use glam::IVec3;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -152,20 +153,39 @@ pub fn generate_mesh(octree: &Octree) -> MeshData {
 
 /// Generate a mesh from an octree with custom color mapper
 pub fn generate_mesh_with_mapper(octree: &Octree, mapper: &dyn ColorMapper) -> MeshData {
+    generate_mesh_with_mapper_depth(octree, mapper, 16) // Use max depth of 16 (65536^3 voxels)
+}
+
+/// Generate a mesh from an octree with custom color mapper and known max depth
+/// Uses visitor pattern for zero-allocation traversal
+pub fn generate_mesh_with_mapper_depth(octree: &Octree, mapper: &dyn ColorMapper, max_depth: u32) -> MeshData {
     let mut mesh = MeshData::new();
 
-    // Collect all voxels from the octree
-    let voxels = octree.collect_voxels();
+    // Use visitor pattern to traverse leaves without allocating intermediate Vec
+    octree.root.visit_leaves(max_depth, IVec3::ZERO, &mut |cube, depth, pos| {
+        // Extract value from Cube::Solid
+        if let Cube::Solid(value) = cube {
+            if *value == 0 {
+                return; // Skip empty voxels
+            }
 
-    // For each voxel, generate a cube
-    for (x, y, z, size, value) in voxels {
-        if value == 0 {
-            continue; // Skip empty voxels
+            // Calculate size and position in normalized [0,1] space
+            let grid_size = 1 << max_depth; // 2^max_depth
+            let voxel_size = 1.0 / grid_size as f32;
+
+            // Position is normalized to [0,1] based on grid coordinates
+            let x = pos.x as f32 * voxel_size;
+            let y = pos.y as f32 * voxel_size;
+            let z = pos.z as f32 * voxel_size;
+
+            // Size depends on remaining depth
+            let depth_factor = 1 << depth; // 2^depth
+            let size = voxel_size * depth_factor as f32;
+
+            let color = mapper.map(*value);
+            add_cube(&mut mesh, x, y, z, size, color);
         }
-
-        let color = mapper.map(value);
-        add_cube(&mut mesh, x, y, z, size, color);
-    }
+    });
 
     mesh
 }

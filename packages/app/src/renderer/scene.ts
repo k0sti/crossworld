@@ -278,9 +278,9 @@ export class SceneManager {
       // Depth select mode: 1 = y=0 (near), 2 = y=-1 (far)
       const voxelY = this.depthSelectMode === 1 ? 0 : -size;
 
-      // Check if within valid world cube range
+      // Check if within valid world cube range (0-16)
       const minBound = 0;
-      const maxBound = 8 - size;
+      const maxBound = 16 - size;
       if (voxelX >= minBound && voxelX <= maxBound && voxelZ >= minBound && voxelZ <= maxBound) {
         if (isLeftClick) {
           // Left click: use current color/erase mode
@@ -506,9 +506,9 @@ export class SceneManager {
       const snappedX = Math.floor(intersectPoint.x / size) * size + halfSize;
       const snappedZ = Math.floor(intersectPoint.z / size) * size + halfSize;
 
-      // Check if within ground bounds (0-8 range)
+      // Check if within ground bounds (0-16 range)
       const minBound = halfSize;
-      const maxBound = 8 - halfSize;
+      const maxBound = 16 - halfSize;
       if (snappedX >= minBound && snappedX <= maxBound && snappedZ >= minBound && snappedZ <= maxBound) {
         // Position preview cube based on depth select mode
         const previewY = this.depthSelectMode === 1 ? halfSize : -halfSize;
@@ -530,7 +530,7 @@ export class SceneManager {
             this.lastPaintedVoxel.z !== voxelZ;
 
           const minBound = 0;
-          const maxBound = 8 - size;
+          const maxBound = 16 - size;
           if (isNewPosition && voxelX >= minBound && voxelX <= maxBound && voxelZ >= minBound && voxelZ <= maxBound) {
             if (this.isLeftMousePressed) {
               // Left mouse: draw with selected color
@@ -611,9 +611,9 @@ export class SceneManager {
         const snappedX = Math.floor(intersectPoint.x / size) * size + halfSize;
         const snappedZ = Math.floor(intersectPoint.z / size) * size + halfSize;
 
-        // Check if within ground bounds (0-8 range)
+        // Check if within ground bounds (0-16 range)
         const minBound = halfSize;
-        const maxBound = 8 - halfSize;
+        const maxBound = 16 - halfSize;
         if (snappedX >= minBound && snappedX <= maxBound && snappedZ >= minBound && snappedZ <= maxBound) {
           // Position preview cube based on depth select mode
           const previewY = this.depthSelectMode === 1 ? halfSize : -halfSize;
@@ -635,7 +635,7 @@ export class SceneManager {
               this.lastPaintedVoxel.z !== voxelZ;
 
             const minVoxelBound = 0;
-            const maxVoxelBound = 8 - size;
+            const maxVoxelBound = 16 - size;
             if (isNewPosition && voxelX >= minVoxelBound && voxelX <= maxVoxelBound && voxelZ >= minVoxelBound && voxelZ <= maxVoxelBound) {
               if (this.isLeftMousePressed) {
                 // Left mouse: draw with selected color

@@ -8,7 +8,7 @@ mod render;
 mod wasm;
 
 pub use mesh::{
-    generate_mesh, generate_mesh_with_mapper, ColorMapper, HsvColorMapper, MeshData,
+    generate_mesh, generate_mesh_with_mapper, generate_mesh_with_mapper_depth, ColorMapper, HsvColorMapper, MeshData,
     PaletteColorMapper,
 };
 pub use octree::{octant_char_to_index, octant_index_to_char, Axis, Cube, IVec3Ext, Octree, Quad};
