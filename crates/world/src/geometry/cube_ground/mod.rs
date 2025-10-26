@@ -14,17 +14,17 @@ impl CubeGround {
     /// Create new CubeGround with specified depth and scale
     ///
     /// # Arguments
-    /// * `depth` - Octree subdivision depth (e.g., 5 = 32^3 voxels)
-    /// * `scale_depth` - Rendering scale depth (e.g., 1 = each octree unit is 2^1 = 2 world units)
+    /// * `depth` - Total octree depth (macro + micro, e.g., 4 = 16^3 voxels)
+    /// * `scale_depth` - Micro depth / rendering scale (e.g., 1 = each octree unit is 2^1 = 2 world units)
     ///
-    /// Architecture:
-    /// - Octree depth: 5 (32^3 voxels in octree space)
-    /// - World scale depth: 1 (each octree unit = 2^1 = 2 world units)
-    /// - World size: 32 * 2 = 64 units
+    /// Architecture (default depth=4, scale_depth=1):
+    /// - Total depth: 4 (macro=3, micro=1)
+    /// - Octree voxels: 16^3 (2^4 = 16 voxels per side)
+    /// - World size: 16 * 2 = 32 units per side
     /// - At max depth, 1 octree voxel = 2 world units
     pub fn new(depth: u32, scale_depth: u32) -> Self {
         // Build octree with specified depth
-        // depth=5 creates 32x32x32 cube (2^5 = 32 octree voxels)
+        // depth=4 creates 16x16x16 cube (2^4 = 16 octree voxels)
         // World size is (2^depth) * (2^scale_depth) units
         // y >= 0: surface checkerboard pattern
         // y < 0: underground terrain generated with noise/waves
@@ -147,7 +147,7 @@ impl CubeGround {
 
 impl Default for CubeGround {
     fn default() -> Self {
-        Self::new(5, 1) // Default: depth 5, scale 1 (32^3 voxels, 64×64×64 world)
+        Self::new(4, 1) // Default: depth 4, scale 1 (16^3 voxels, 32×32×32 world)
     }
 }
 
