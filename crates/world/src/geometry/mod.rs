@@ -10,11 +10,11 @@ impl GeometryEngine {
     /// Create new GeometryEngine with specified depth and scale
     ///
     /// # Arguments
-    /// * `world_depth` - Total depth (macro + micro, e.g., 4 = 16^3 voxels)
-    /// * `scale_depth` - Micro depth / rendering scale (e.g., 1 = each octree unit is 2^1 = 2 world units)
+    /// * `world_depth` - Total depth (macro + micro, e.g., 3 = 8^3 voxels)
+    /// * `scale_depth` - Micro depth / rendering scale (e.g., 0 = each octree unit is 2^0 = 1 world unit)
     ///
-    /// Default values: world_depth=4 (macro=3, micro=1), scale_depth=1
-    /// This gives: 16x16x16 octree voxels, 32x32x32 world units
+    /// Default values: world_depth=3 (macro=3, micro=0), scale_depth=0
+    /// This gives: 8x8x8 octree voxels, 8x8x8 world units
     pub fn new(world_depth: u32, scale_depth: u32) -> Self {
         Self {
             cube_ground: cube_ground::CubeGround::new(world_depth, scale_depth),

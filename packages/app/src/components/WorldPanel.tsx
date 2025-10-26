@@ -20,8 +20,8 @@ interface WorldPanelProps {
 }
 
 export function WorldPanel({ info, onApplyDepthSettings }: WorldPanelProps) {
-  const [macroDepth, setMacroDepth] = useState(String(DEFAULT_MACRO_DEPTH));
-  const [microDepth, setMicroDepth] = useState(String(DEFAULT_MICRO_DEPTH));
+  const [macroDepth, setMacroDepth] = useState(String(DEFAULT_MACRO_DEPTH)); // 3
+  const [microDepth, setMicroDepth] = useState(String(DEFAULT_MICRO_DEPTH)); // 0
 
   const formatNum = (n: number | undefined) => n?.toFixed(3) ?? 'N/A';
   const formatVec = (v: { x: number; y: number; z: number } | undefined) =>
