@@ -487,6 +487,17 @@ export class SceneManager {
     // Axis extends 50% beyond unit cube (1.5 units)
     const axisHelper = new THREE.AxesHelper(1.5);
     axisHelper.position.set(0, 0, 0);
+    // Make axis always visible (no depth testing)
+    if (Array.isArray(axisHelper.material)) {
+      axisHelper.material.forEach(mat => {
+        mat.depthTest = false;
+        mat.depthWrite = false;
+      });
+    } else {
+      axisHelper.material.depthTest = false;
+      axisHelper.material.depthWrite = false;
+    }
+    axisHelper.renderOrder = 999;
     this.scene.add(axisHelper);
 
     // Create transparent wireframe for unit cube at origin
@@ -501,6 +512,19 @@ export class SceneManager {
     // Position cube so its corner is at origin (center at 0.5, 0.5, 0.5)
     unitCubeWireframe.position.set(0.5, 0.5, 0.5);
     this.scene.add(unitCubeWireframe);
+
+    // Create world bounds wireframe box
+    // World is WORLD_SIZE×WORLD_SIZE×WORLD_SIZE centered at origin
+    const worldBoxGeometry = new THREE.BoxGeometry(WORLD_SIZE, WORLD_SIZE, WORLD_SIZE);
+    const worldBoxEdges = new THREE.EdgesGeometry(worldBoxGeometry);
+    const worldBoxLineMaterial = new THREE.LineBasicMaterial({
+      color: 0xffffff,
+      opacity: 0.5,
+      transparent: true
+    });
+    const worldBoxWireframe = new THREE.LineSegments(worldBoxEdges, worldBoxLineMaterial);
+    worldBoxWireframe.position.set(0, 0, 0); // Centered at origin
+    this.scene.add(worldBoxWireframe);
   }
 
   private setupCrosshair(): void {
