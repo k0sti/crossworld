@@ -13,7 +13,6 @@ import { ChatPanel } from './components/ChatPanel'
 import { ClientListPanel } from './components/ClientListPanel'
 import { RestoreStateModal } from './components/RestoreStateModal'
 import { ColorPalette } from './components/ColorPalette'
-import { EditModeControls } from './components/EditModeControls'
 import { AvatarStateService, type AvatarConfig, type AvatarState } from './services/avatar-state'
 import { useVoice } from './hooks/useVoice'
 import { npubEncode } from 'nostr-tools/nip19'
@@ -680,8 +679,6 @@ function App() {
         {/* Color Palette (edit mode) */}
         <ColorPalette isVisible={isEditMode} onColorSelect={handleColorSelect} />
 
-        {/* Edit Mode Controls Info */}
-        <EditModeControls isVisible={isEditMode} />
       </>
   )
 }

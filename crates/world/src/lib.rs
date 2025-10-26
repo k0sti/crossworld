@@ -20,10 +20,10 @@ pub struct GeometryEngine {
 #[wasm_bindgen]
 impl GeometryEngine {
     #[wasm_bindgen(constructor)]
-    pub fn new() -> Self {
-        web_sys::console::log_1(&"GeometryEngine initialized".into());
+    pub fn new(world_depth: u32, scale_depth: u32) -> Self {
+        web_sys::console::log_1(&format!("GeometryEngine initialized with world_depth={}, scale_depth={}", world_depth, scale_depth).into());
         Self {
-            engine: RefCell::new(GeometryEngineInternal::new()),
+            engine: RefCell::new(GeometryEngineInternal::new(world_depth, scale_depth)),
         }
     }
 
@@ -60,7 +60,7 @@ impl GeometryEngine {
 
 impl Default for GeometryEngine {
     fn default() -> Self {
-        Self::new()
+        Self::new(5, 1) // Default: depth 5, scale 1
     }
 }
 

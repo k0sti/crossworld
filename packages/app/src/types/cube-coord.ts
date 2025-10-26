@@ -157,3 +157,13 @@ export function clampToWorldBounds(x: number, z: number): [number, number] {
 export function snapToGrid(worldCoord: number, size: number): number {
   return Math.floor(worldCoord / size + 0.5) * size;
 }
+
+/**
+ * Convert CubeCoord to a string representation
+ * @param coord CubeCoord to print
+ * @returns String representation of the coordinate
+ */
+export function printCubeCoord(coord: CubeCoord | undefined | null): string {
+  if (!coord) return 'N/A';
+  return `${coord.x}, ${coord.y}, ${coord.z} @d${coord.depth}`;
+}

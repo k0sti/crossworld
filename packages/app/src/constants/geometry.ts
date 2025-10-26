@@ -33,9 +33,6 @@ export const WORLD_TO_OCTREE_SCALE = 1 / (1 << WORLD_SCALE_DEPTH);
 /** Default cursor depth for edit mode (4 = 4 world unit voxels) */
 export const DEFAULT_CURSOR_DEPTH = WORLD_DEPTH - WORLD_SCALE_DEPTH;
 
-/** Backward compatibility alias */
-export const SUBDIVISION_DEPTH = WORLD_DEPTH;
-
 /**
  * Calculate voxel size in world units for a given depth level
  * @param depth Target octree depth (0-WORLD_DEPTH)
