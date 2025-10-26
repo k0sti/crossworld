@@ -1,14 +1,11 @@
 mod builder;
 
 use crate::GeometryData;
-use crossworld_cube::{ColorMapper, Octree};
+use crossworld_cube::{glam::IVec3, ColorMapper, Cube, Octree};
 use noise::{Fbm, Perlin};
-use std::collections::HashMap;
 
 pub struct CubeGround {
     octree: Octree,
-    // Track voxel modifications (position -> value, 0 = empty)
-    modifications: HashMap<(i32, i32, i32), i32>,
     depth: u32,
 }
 
@@ -27,9 +24,19 @@ impl CubeGround {
 
         Self {
             octree: Octree::new(root),
-            modifications: HashMap::new(),
             depth,
         }
+    }
+
+    /// Convert world coordinates to voxel grid coordinates
+    /// World coords: x=0-7, y=-8-7, z=0-7
+    /// Voxel coords: x=0-15, y=0-15, z=0-15 (for depth=4)
+    fn world_to_voxel(&self, x: i32, y: i32, z: i32) -> IVec3 {
+        IVec3::new(
+            x * 2,      // world 0-7 -> voxel 0-14
+            y + 8,      // world -8-7 -> voxel 0-15
+            z * 2,      // world 0-7 -> voxel 0-14
+        )
     }
 
     /// Set a voxel at world coordinates (x, y, z)
@@ -41,26 +48,18 @@ impl CubeGround {
             return;
         }
 
-        self.modifications.insert((x, y, z), color_index);
-        self.rebuild_octree();
+        let voxel_pos = self.world_to_voxel(x, y, z);
+
+        // Use the new functional update interface - O(log n) instead of O(n)
+        self.octree.root = self.octree.root
+            .updated(Cube::Solid(color_index), self.depth, voxel_pos)
+            .simplified();
     }
 
     /// Remove a voxel at world coordinates
     pub fn remove_voxel(&mut self, x: i32, y: i32, z: i32) {
-        if !(0..8).contains(&x) || !(-8..8).contains(&y) || !(0..8).contains(&z) {
-            return;
-        }
-
-        self.modifications.insert((x, y, z), 0);
-        self.rebuild_octree();
-    }
-
-    /// Rebuild octree with modifications applied
-    fn rebuild_octree(&mut self) {
-        let noise = Perlin::new(12345);
-        let fbm = Fbm::new(12345);
-        let root = builder::build_ground_octree_with_mods(&noise, &fbm, &self.modifications, self.depth);
-        self.octree = Octree::new(root);
+        // Removing is just setting to 0 (empty)
+        self.set_voxel(x, y, z, 0);
     }
 
     pub fn generate_mesh(&self) -> GeometryData {
