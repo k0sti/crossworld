@@ -32,25 +32,6 @@ impl GeometryEngine {
         self.engine.borrow().generate_frame()
     }
 
-    #[wasm_bindgen(js_name = setGroundRenderMode)]
-    pub fn set_ground_render_mode(&self, use_cube: bool) {
-        let mode = if use_cube {
-            geometry::GroundRenderMode::Cube
-        } else {
-            geometry::GroundRenderMode::Flat
-        };
-        self.engine.borrow_mut().set_render_mode(mode);
-        web_sys::console::log_1(&format!("Ground render mode set to: {:?}", mode).into());
-    }
-
-    #[wasm_bindgen(js_name = getGroundRenderMode)]
-    pub fn get_ground_render_mode(&self) -> bool {
-        match self.engine.borrow().get_render_mode() {
-            geometry::GroundRenderMode::Cube => true,
-            geometry::GroundRenderMode::Flat => false,
-        }
-    }
-
     /// Set voxel in cube ground at specified depth
     /// depth: octree depth (7=finest detail, 4=coarse, etc.)
     #[wasm_bindgen(js_name = setVoxelAtDepth)]

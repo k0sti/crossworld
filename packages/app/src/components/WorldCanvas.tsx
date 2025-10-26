@@ -1,10 +1,11 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Box } from '@chakra-ui/react';
 import { SceneManager } from '../renderer/scene';
 import { GeometryController } from '../geometry/geometry-controller';
 import init, { AvatarEngine } from '@workspace/wasm';
 import type { AvatarStateService, AvatarConfig } from '../services/avatar-state';
 import type { TeleportAnimationType } from '../renderer/teleport-animation';
+import { DebugPanel, type DebugInfo } from './DebugPanel';
 
 interface WorldCanvasProps {
   isLoggedIn: boolean;
@@ -34,6 +35,7 @@ export function WorldCanvas({
   const localGeometryControllerRef = useRef<GeometryController | null>(null);
   const avatarEngineRef = useRef<AvatarEngine | null>(null);
   const animationFrameRef = useRef<number | null>(null);
+  const [debugInfo, setDebugInfo] = useState<DebugInfo>({});
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -72,13 +74,14 @@ export function WorldCanvas({
     }
 
     // Set voxel edit callback for world cube editing
-    sceneManager.setOnVoxelEdit((x, y, z, depth, colorIndex) => {
+    sceneManager.setOnVoxelEdit((coord, colorIndex) => {
+      console.log('[WorldCanvas Voxel Edit]', { coord, colorIndex });
       if (colorIndex === 0) {
         // Remove voxel at specified depth
-        geometryController.removeVoxelAtDepth(x, y, z, depth);
+        geometryController.removeVoxelAtDepth(coord.x, coord.y, coord.z, coord.depth);
       } else {
         // Set voxel at specified depth
-        geometryController.setVoxelAtDepth(x, y, z, depth, colorIndex);
+        geometryController.setVoxelAtDepth(coord.x, coord.y, coord.z, coord.depth, colorIndex);
       }
     });
 
@@ -107,6 +110,10 @@ export function WorldCanvas({
     // Animation loop
     const animate = () => {
       sceneManager.render();
+
+      // Update debug info every frame
+      setDebugInfo(sceneManager.getDebugInfo());
+
       animationFrameRef.current = requestAnimationFrame(animate);
     };
     animate();
@@ -319,6 +326,7 @@ export function WorldCanvas({
       zIndex={0}
     >
       <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: '100%' }} />
+      <DebugPanel info={debugInfo} />
     </Box>
   );
 }
