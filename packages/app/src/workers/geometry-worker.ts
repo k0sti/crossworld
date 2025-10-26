@@ -1,11 +1,12 @@
 import { GeometryGenerator } from '../geometry/geometry-lib';
 
 export interface GeometryMessage {
-  type: 'init' | 'update' | 'setGroundRenderMode' | 'setVoxel' | 'removeVoxel';
+  type: 'init' | 'update' | 'setGroundRenderMode' | 'setVoxel' | 'setVoxelCube' | 'removeVoxel' | 'removeVoxelCube';
   useCube?: boolean;
   x?: number;
   y?: number;
   z?: number;
+  size?: number;
   colorIndex?: number;
 }
 
@@ -102,9 +103,21 @@ class GeometryWorkerManager {
     }
   }
 
+  setVoxelCube(x: number, y: number, z: number, size: number, colorIndex: number) {
+    if (this.generator) {
+      this.generator.setVoxelCube(x, y, z, size, colorIndex);
+    }
+  }
+
   removeVoxel(x: number, y: number, z: number) {
     if (this.generator) {
       this.generator.removeVoxel(x, y, z);
+    }
+  }
+
+  removeVoxelCube(x: number, y: number, z: number, size: number) {
+    if (this.generator) {
+      this.generator.removeVoxelCube(x, y, z, size);
     }
   }
 }
@@ -136,9 +149,21 @@ self.addEventListener('message', async (event) => {
       }
       break;
 
+    case 'setVoxelCube':
+      if (message.x !== undefined && message.y !== undefined && message.z !== undefined && message.size !== undefined && message.colorIndex !== undefined) {
+        manager.setVoxelCube(message.x, message.y, message.z, message.size, message.colorIndex);
+      }
+      break;
+
     case 'removeVoxel':
       if (message.x !== undefined && message.y !== undefined && message.z !== undefined) {
         manager.removeVoxel(message.x, message.y, message.z);
+      }
+      break;
+
+    case 'removeVoxelCube':
+      if (message.x !== undefined && message.y !== undefined && message.z !== undefined && message.size !== undefined) {
+        manager.removeVoxelCube(message.x, message.y, message.z, message.size);
       }
       break;
   }

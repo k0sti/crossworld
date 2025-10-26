@@ -56,10 +56,42 @@ impl CubeGround {
             .simplified();
     }
 
+    /// Set a cube of voxels at world coordinates
+    /// size: number of voxels in each dimension (1, 2, 4, 8, 16)
+    /// The cube is placed with (x,y,z) as the corner with minimum coordinates
+    pub fn set_voxel_cube(&mut self, x: i32, y: i32, z: i32, size: i32, color_index: i32) {
+        // For size=1, just set a single voxel
+        if size <= 1 {
+            self.set_voxel(x, y, z, color_index);
+            return;
+        }
+
+        // For larger sizes, fill a cube of voxels
+        for dx in 0..size {
+            for dy in 0..size {
+                for dz in 0..size {
+                    let vx = x + dx;
+                    let vy = y + dy;
+                    let vz = z + dz;
+
+                    // Check bounds
+                    if (0..16).contains(&vx) && (-8..8).contains(&vy) && (0..16).contains(&vz) {
+                        self.set_voxel(vx, vy, vz, color_index);
+                    }
+                }
+            }
+        }
+    }
+
     /// Remove a voxel at world coordinates
     pub fn remove_voxel(&mut self, x: i32, y: i32, z: i32) {
         // Removing is just setting to 0 (empty)
         self.set_voxel(x, y, z, 0);
+    }
+
+    /// Remove a cube of voxels at world coordinates
+    pub fn remove_voxel_cube(&mut self, x: i32, y: i32, z: i32, size: i32) {
+        self.set_voxel_cube(x, y, z, size, 0);
     }
 
     pub fn generate_mesh(&self) -> GeometryData {
