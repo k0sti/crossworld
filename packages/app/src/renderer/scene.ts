@@ -49,7 +49,6 @@ export class SceneManager {
   private mouse: THREE.Vector2;
   private lastTime: number = 0;
   private isEditMode: boolean = false;
-  private gridHelper: THREE.GridHelper | null = null;
   private previewCube: THREE.LineSegments | null = null;
   private currentGridPosition: THREE.Vector3 = new THREE.Vector3();
   private onPositionUpdate?: (x: number, y: number, z: number, quaternion: [number, number, number, number], moveStyle?: string) => void;
@@ -154,9 +153,9 @@ export class SceneManager {
   }
 
   private setupCheckerPlane(): void {
-    // Create checker plane (worldSize×worldSize centered at origin)
-    const worldSize = getWorldSize(getTotalDepth(), getMicroDepth());
-    this.checkerPlane = new CheckerPlane(worldSize, worldSize, 0.02);
+    // Create checker plane (2^macroDepth × 2^macroDepth centered at origin)
+    const checkerSize = 1 << getMacroDepth();
+    this.checkerPlane = new CheckerPlane(checkerSize, checkerSize, 0.02);
     this.scene.add(this.checkerPlane.getMesh());
   }
 
@@ -457,18 +456,6 @@ export class SceneManager {
   // Removed: setupLights() - now using SunSystem for dynamic lighting
 
   private setupEditModeHelpers(): void {
-    // Create grid helper (worldSize×worldSize grid centered at origin)
-    const worldSize = getWorldSize(getTotalDepth(), getMicroDepth());
-    this.gridHelper = new THREE.GridHelper(worldSize, worldSize, 0xffffff, 0xffffff);
-    this.gridHelper.position.set(0, 0.01, 0); // Centered at origin, slightly above ground
-    this.gridHelper.material = new THREE.LineBasicMaterial({
-      color: 0xffffff,
-      opacity: 0.3,
-      transparent: true
-    });
-    this.gridHelper.visible = false;
-    this.scene.add(this.gridHelper);
-
     // Create preview cube (1x1x1 cube wireframe)
     const cubeGeometry = new THREE.BoxGeometry(1, 1, 1);
     const edges = new THREE.EdgesGeometry(cubeGeometry);
@@ -1023,10 +1010,6 @@ export class SceneManager {
    */
   setEditMode(isEditMode: boolean): void {
     this.isEditMode = isEditMode;
-
-    if (this.gridHelper) {
-      this.gridHelper.visible = isEditMode;
-    }
 
     if (this.previewCube && !isEditMode) {
       this.previewCube.visible = false;
