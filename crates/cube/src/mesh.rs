@@ -173,9 +173,10 @@ pub fn generate_mesh_with_mapper_depth(octree: &Octree, mapper: &dyn ColorMapper
             let grid_size = 1 << max_depth; // 2^max_depth (16 for depth 4)
             let voxel_size = 1.0 / grid_size as f32; // 1/16 for depth 4
 
-            // Position at depth N is in range 0..2^N
-            // Scale up to max_depth coordinates: scale = 2^(max_depth - depth)
-            let scale_factor = 1 << (max_depth - depth);
+            // depth in visit_leaves is REMAINING depth
+            // At depth=N, coordinates are in range 0..(2^(max_depth-N))
+            // To scale to full resolution (0..(2^max_depth)), multiply by 2^N
+            let scale_factor = 1 << depth;
 
             // Scale position from depth N to max_depth, then normalize to [0,1]
             let x = (pos.x * scale_factor) as f32 * voxel_size;
