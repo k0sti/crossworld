@@ -29,22 +29,22 @@ impl CubeGround {
     }
 
     /// Convert world coordinates to voxel grid coordinates
-    /// World coords: x=0-7, y=-8-7, z=0-7
+    /// World coords: x=0-15, y=-8-7, z=0-15
     /// Voxel coords: x=0-15, y=0-15, z=0-15 (for depth=4)
     fn world_to_voxel(&self, x: i32, y: i32, z: i32) -> IVec3 {
         IVec3::new(
-            x * 2,      // world 0-7 -> voxel 0-14
+            x,          // world 0-15 -> voxel 0-15
             y + 8,      // world -8-7 -> voxel 0-15
-            z * 2,      // world 0-7 -> voxel 0-14
+            z,          // world 0-15 -> voxel 0-15
         )
     }
 
     /// Set a voxel at world coordinates (x, y, z)
-    /// World coords: x=0-7, y=-8-7, z=0-7
+    /// World coords: x=0-15, y=-8-7, z=0-15
     /// color_index: 0 = empty, 1+ = colored voxel
     pub fn set_voxel(&mut self, x: i32, y: i32, z: i32, color_index: i32) {
         // Clamp to valid world range
-        if !(0..8).contains(&x) || !(-8..8).contains(&y) || !(0..8).contains(&z) {
+        if !(0..16).contains(&x) || !(-8..8).contains(&y) || !(0..16).contains(&z) {
             return;
         }
 
@@ -64,22 +64,23 @@ impl CubeGround {
 
     pub fn generate_mesh(&self) -> GeometryData {
         // Generate mesh from octree using the cube mesher with custom color mapper
+        // Use depth-aware version for efficient visitor-based traversal
         let color_mapper = DawnbringerColorMapper::new();
-        let mesh_data = crossworld_cube::generate_mesh_with_mapper(&self.octree, &color_mapper);
+        let mesh_data = crossworld_cube::generate_mesh_with_mapper_depth(&self.octree, &color_mapper, self.depth);
 
         // Scale and offset vertices to match world coordinates
         // The octree generates a 16x16x16 voxel grid within a 1.0 unit cube
         // We need:
-        // - x: 0-8 world units (scale by 0.5)
+        // - x: 0-16 world units (scale by 1.0)
         // - y: -8 to 8 world units (scale by 1.0, offset by -8)
-        // - z: 0-8 world units (scale by 0.5)
+        // - z: 0-16 world units (scale by 1.0)
         let scaled_vertices: Vec<f32> = mesh_data
             .vertices
             .chunks(3)
             .flat_map(|chunk| {
-                let x = chunk[0] * 0.5 * 16.0; // 0.5 * 16 = 8 units
-                let y = chunk[1] * 1.0 * 16.0 - 8.0; // 16 units, offset by -8
-                let z = chunk[2] * 0.5 * 16.0; // 0.5 * 16 = 8 units
+                let x = chunk[0] * 16.0; // 1.0 * 16 = 16 units
+                let y = chunk[1] * 16.0 - 8.0; // 16 units, offset by -8
+                let z = chunk[2] * 16.0; // 1.0 * 16 = 16 units
                 vec![x, y, z]
             })
             .collect();
