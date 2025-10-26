@@ -57,6 +57,9 @@ function App() {
   const initialStatePublished = useRef(false)
   const voiceAutoConnected = useRef(false)
 
+  // Speech/Voice enabled state
+  const [speechEnabled, setSpeechEnabled] = useState(false)
+
   const geometryControllerRef = useRef<any>(null)
   const sceneManagerRef = useRef<any>(null)
 
@@ -574,6 +577,8 @@ function App() {
           currentUserPubkey={pubkey}
           geometryControllerRef={geometryControllerRef}
           sceneManagerRef={sceneManagerRef}
+          speechEnabled={speechEnabled}
+          onSpeechEnabledChange={setSpeechEnabled}
         />
         <TopBar
           pubkey={pubkey}
@@ -609,6 +614,7 @@ function App() {
             voiceError={voice.error}
             onToggleVoice={handleToggleVoice}
             onToggleMic={handleToggleMic}
+            speechEnabled={speechEnabled}
           />
         )}
 

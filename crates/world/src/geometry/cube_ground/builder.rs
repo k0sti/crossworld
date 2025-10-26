@@ -32,7 +32,7 @@ fn build_octree_recursive(
 
         // Convert to centered coordinates
         // For depth 7: grid is [0, 128), center is 64, so [-64, 64)
-        let half_grid = (1 << max_depth) / 2; // 2^max_depth / 2
+        let half_grid = (1 << max_depth); // 2^max_depth / 2
         let world_y = voxel_y - half_grid;
 
         let value = get_voxel_value(voxel_x, world_y, voxel_z, noise, fbm);
@@ -66,41 +66,58 @@ fn build_octree_recursive(
 
 /// Get voxel value at given coordinates
 fn get_voxel_value(x: i32, y: i32, z: i32, noise: &Perlin, fbm: &Fbm<Perlin>) -> i32 {
-    // y >= 0: surface checkerboard pattern (only at y=0)
-
+    // y > 0: Above ground - no voxels
+    // y = 0: Surface level with 50% coverage
+    // y < 0: Underground with increasing coverage
     if y >= 0 {
-        // Above ground: empty
         return 0;
     }
-    // if y == -1 0 {
-    //     let is_light = (x + z) % 2 == 0;
-    //     return if is_light { 1 } else { 2 };
-    // }
+    
 
-    // y < 0: underground terrain with noise and waves
-    let scale = 0.1;
+    // y < 0: Underground terrain with noise
+    // Use larger scale for more variation
+    let scale = 0.1; // Increased from 0.1 for higher frequency noise
     let wx = x as f64 * scale;
     let wy = y as f64 * scale;
     let wz = z as f64 * scale;
 
-    // Combine multiple noise functions
+    // Combine multiple noise functions for natural terrain
     let base_noise = noise.get([wx, wy, wz]);
     let fbm_noise = fbm.get([wx * 0.5, wy * 0.5, wz * 0.5]);
 
+    // Additional detail layer
+    let detail_noise = noise.get([wx * 2.0, wy * 2.0, wz * 2.0]) * 0.15;
+
     // Wave function for variation
-    let wave = ((wx * 2.0).sin() + (wz * 2.0).cos()) * 0.2;
+    let wave = ((wx * 1.5).sin() + (wz * 1.5).cos()) * 0.00001;
 
-    // Density increases with depth
-    let depth_factor = (-y as f64) * 0.1;
+    // Calculate base density
+    let base_density = base_noise + fbm_noise * 0.3 + wave + detail_noise;
 
-    // Combine all factors
-    let density = base_noise + fbm_noise * 0.5 + wave + depth_factor;
+    // Depth-based threshold adjustment
+    // At y=0: threshold = 0.0 (50% coverage, noise is centered around 0)
+    // At y=-16: threshold = -1.0 (100% coverage, almost everything is solid)
+    // Linear interpolation between y=0 and y=-16
+    let depth = -y as f64;
+    let threshold = if depth <= 16.0 {
+        -depth / 16.0 // Interpolate from 0 to -1
+    } else {
+        -1.0 // Beyond -16, keep at 100% coverage
+    };
 
-    // Threshold to determine if voxel is solid
-    // Higher density = more likely to be solid
-    if density > 0.3 {
-        // Vary color based on depth and noise
-        let color_value = ((density * 10.0) as i32 % 8) + 3;
+    // Check if voxel should be solid
+    if base_density > threshold {
+        // Use smooth color gradient based on position and noise
+        // Combine horizontal position with noise for continuous color variation
+        let color_noise = noise.get([wx * 0.3, wy * 0.3, wz * 0.3]);
+
+        // Create color value that varies smoothly (3-10 range, 8 colors)
+        // Mix position-based and noise-based components
+        let position_component = ((x as f64 * 0.2 + z as f64 * 0.2).sin() * 0.5 + 0.5) * 3.0;
+        let noise_component = (color_noise * 0.5 + 0.5) * 4.0;
+        let depth_component = (depth / 8.0).min(1.0); // Subtle depth variation
+
+        let color_value = (position_component + noise_component + depth_component) as i32 + 3;
         color_value.clamp(3, 10)
     } else {
         0 // Empty/air

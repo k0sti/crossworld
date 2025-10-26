@@ -58,6 +58,7 @@ interface LeftSidebarPanelProps {
   voiceError: string | null
   onToggleVoice: () => void
   onToggleMic: () => void
+  speechEnabled: boolean
 }
 
 export function LeftSidebarPanel({
@@ -76,6 +77,7 @@ export function LeftSidebarPanel({
   voiceError,
   onToggleVoice,
   onToggleMic,
+  speechEnabled,
 }: LeftSidebarPanelProps) {
   const handleOpenPanel = useCallback((type: ConfigPanelType) => {
     // If clicking the same panel, close it; otherwise open the new panel
@@ -116,13 +118,13 @@ export function LeftSidebarPanel({
       // 4. Client list
       actions.push(onToggleClientList)
 
-      // 5. Voice (if enabled)
-      if (ENABLE_VOICE_CHAT) {
+      // 5. Voice (if enabled and speech enabled)
+      if (ENABLE_VOICE_CHAT && speechEnabled) {
         actions.push(onToggleVoice)
       }
 
-      // 6. Mic (if voice connected)
-      if (ENABLE_VOICE_CHAT && voiceConnected) {
+      // 6. Mic (if voice connected and speech enabled)
+      if (ENABLE_VOICE_CHAT && speechEnabled && voiceConnected) {
         actions.push(onToggleMic)
       }
 
@@ -152,6 +154,7 @@ export function LeftSidebarPanel({
     onToggleVoice,
     onToggleMic,
     handleOpenPanel,
+    speechEnabled,
   ])
 
   return (
@@ -196,7 +199,7 @@ export function LeftSidebarPanel({
           isActive={isClientListOpen}
         />
 
-        {ENABLE_VOICE_CHAT && (
+        {ENABLE_VOICE_CHAT && speechEnabled && (
           <>
             <Divider borderColor="rgba(255, 255, 255, 0.1)" my={1} />
 
