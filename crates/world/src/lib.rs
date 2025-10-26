@@ -60,7 +60,7 @@ impl GeometryEngine {
 
 impl Default for GeometryEngine {
     fn default() -> Self {
-        Self::new(5, 1) // Default: depth 5, scale 1
+        Self::new(4, 1) // Default: depth 4 (macro=3, micro=1), scale 1
     }
 }
 

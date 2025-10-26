@@ -4,7 +4,9 @@ import {
   DEFAULT_CURSOR_DEPTH,
   MAX_VOXELS_PER_SIDE,
   WORLD_TO_OCTREE_SCALE,
-  HALF_WORLD
+  HALF_WORLD,
+  DEFAULT_DEPTH,
+  DEFAULT_MICRO_DEPTH
 } from '../constants/geometry';
 
 /**
@@ -32,7 +34,7 @@ export interface CubeCoord {
 }
 
 // Re-export constants for backward compatibility
-export { WORLD_DEPTH as MAX_DEPTH, DEFAULT_CURSOR_DEPTH, WORLD_SIZE };
+export { WORLD_DEPTH as MAX_DEPTH, DEFAULT_CURSOR_DEPTH, WORLD_SIZE, DEFAULT_DEPTH, DEFAULT_MICRO_DEPTH };
 
 /**
  * Convert world coordinates to octree cube coordinates.

@@ -1,4 +1,5 @@
 import { GeometryGenerator } from '../geometry/geometry-lib';
+import { DEFAULT_DEPTH, DEFAULT_MICRO_DEPTH } from '../constants/geometry';
 
 export interface GeometryMessage {
   type: 'init' | 'update' | 'setVoxelAtDepth' | 'setVoxel' | 'removeVoxelAtDepth' | 'removeVoxel';
@@ -29,7 +30,7 @@ class GeometryWorkerManager {
   private updateInterval = 33; // ~30 FPS for geometry updates
   private lastUpdate = 0;
 
-  async initialize(worldDepth: number = 5, scaleDepth: number = 1) {
+  async initialize(worldDepth: number = DEFAULT_DEPTH, scaleDepth: number = DEFAULT_MICRO_DEPTH) {
     this.generator = new GeometryGenerator(worldDepth, scaleDepth);
     await this.generator.initialize();
     self.postMessage({ type: 'ready' });
