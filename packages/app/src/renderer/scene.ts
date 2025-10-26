@@ -293,9 +293,9 @@ export class SceneManager {
     }
   }
 
-  private onVoxelEdit?: (x: number, y: number, z: number, colorIndex: number) => void;
+  private onVoxelEdit?: (x: number, y: number, z: number, size: number, colorIndex: number) => void;
 
-  setOnVoxelEdit(callback: (x: number, y: number, z: number, colorIndex: number) => void): void {
+  setOnVoxelEdit(callback: (x: number, y: number, z: number, size: number, colorIndex: number) => void): void {
     this.onVoxelEdit = callback;
   }
 
@@ -315,13 +315,13 @@ export class SceneManager {
     // Place voxel with selected color (palette 0-31 maps to voxel values 32-63)
     const colorValue = this.selectedColorIndex + 32;
 
-    // Call onVoxelEdit (depth support coming in phase 2)
-    this.onVoxelEdit?.(x, y, z, colorValue);
+    // Call onVoxelEdit with size for variable depth support
+    this.onVoxelEdit?.(x, y, z, size, colorValue);
   }
 
   private eraseVoxelWithSize(x: number, y: number, z: number, size: number): void {
-    // Call onVoxelEdit (depth support coming in phase 2)
-    this.onVoxelEdit?.(x, y, z, 0);
+    // Call onVoxelEdit with size for variable depth support
+    this.onVoxelEdit?.(x, y, z, size, 0);
   }
 
   private setupKeyboardListener(canvas: HTMLCanvasElement): void {

@@ -61,9 +61,21 @@ export class GeometryController {
     }
   }
 
+  setVoxelCube(x: number, y: number, z: number, size: number, colorIndex: number) {
+    if (this.worker) {
+      this.worker.postMessage({ type: 'setVoxelCube', x, y, z, size, colorIndex });
+    }
+  }
+
   removeVoxel(x: number, y: number, z: number) {
     if (this.worker) {
       this.worker.postMessage({ type: 'removeVoxel', x, y, z });
+    }
+  }
+
+  removeVoxelCube(x: number, y: number, z: number, size: number) {
+    if (this.worker) {
+      this.worker.postMessage({ type: 'removeVoxelCube', x, y, z, size });
     }
   }
 
