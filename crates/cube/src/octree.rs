@@ -557,49 +557,6 @@ impl Cube<i32> {
 
         Cube::Cubes(Box::new(new_children))
     }
-
-    /// Traverse and collect all leaf voxels with positions
-    pub fn collect_voxels(
-        &self,
-        position: (f32, f32, f32),
-        size: f32,
-        voxels: &mut Vec<(f32, f32, f32, f32, i32)>,
-    ) {
-        match self {
-            Cube::Solid(value) => {
-                if *value > 0 {
-                    voxels.push((position.0, position.1, position.2, size, *value));
-                }
-            }
-            Cube::Cubes(children) => {
-                let half_size = size / 2.0;
-                for (idx, child) in children.iter().enumerate() {
-                    let offset = octant_offset(idx);
-                    let child_pos = (
-                        position.0 + offset.0 * size,
-                        position.1 + offset.1 * size,
-                        position.2 + offset.2 * size,
-                    );
-                    child.collect_voxels(child_pos, half_size, voxels);
-                }
-            }
-            Cube::Planes { .. } => {
-                // TODO: Implement plane subdivision voxel collection
-            }
-            Cube::Slices { .. } => {
-                // TODO: Implement slice subdivision voxel collection
-            }
-        }
-    }
-}
-
-/// Get the offset for octant index within parent cube
-/// Returns (x_offset, y_offset, z_offset) where each is 0 or 0.5
-fn octant_offset(index: usize) -> (f32, f32, f32) {
-    let x = if index & 0b100 != 0 { 0.5 } else { 0.0 };
-    let y = if index & 0b010 != 0 { 0.5 } else { 0.0 };
-    let z = if index & 0b001 != 0 { 0.5 } else { 0.0 };
-    (x, y, z)
 }
 
 /// Convert octant char (a-h) to index (0-7)
@@ -649,12 +606,6 @@ impl Octree {
         }
     }
 
-    pub fn collect_voxels(&self) -> Vec<(f32, f32, f32, f32, i32)> {
-        let mut voxels = Vec::new();
-        self.root.collect_voxels((0.0, 0.0, 0.0), 1.0, &mut voxels);
-        voxels
-    }
-
     /// Set a voxel at the given position and depth
     ///
     /// # Arguments
@@ -685,18 +636,20 @@ mod tests {
     }
 
     #[test]
-    fn test_octant_offset() {
-        assert_eq!(octant_offset(0), (0.0, 0.0, 0.0));
-        assert_eq!(octant_offset(7), (0.5, 0.5, 0.5));
-        assert_eq!(octant_offset(4), (0.5, 0.0, 0.0));
-    }
-
-    #[test]
     fn test_simple_cube() {
         let tree = Octree::new(Cube::Solid(42));
-        let voxels = tree.collect_voxels();
-        assert_eq!(voxels.len(), 1);
-        assert_eq!(voxels[0], (0.0, 0.0, 0.0, 1.0, 42));
+
+        // Use visitor pattern to count voxels
+        let mut count = 0;
+        tree.root.visit_leaves(0, IVec3::ZERO, &mut |cube, _depth, _pos| {
+            if let Cube::Solid(value) = cube {
+                if *value > 0 {
+                    count += 1;
+                }
+            }
+        });
+
+        assert_eq!(count, 1);
     }
 
     #[test]
