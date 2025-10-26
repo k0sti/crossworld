@@ -170,17 +170,20 @@ pub fn generate_mesh_with_mapper_depth(octree: &Octree, mapper: &dyn ColorMapper
             }
 
             // Calculate size and position in normalized [0,1] space
-            let grid_size = 1 << max_depth; // 2^max_depth
-            let voxel_size = 1.0 / grid_size as f32;
+            let grid_size = 1 << max_depth; // 2^max_depth (16 for depth 4)
+            let voxel_size = 1.0 / grid_size as f32; // 1/16 for depth 4
 
-            // Position is normalized to [0,1] based on grid coordinates
-            let x = pos.x as f32 * voxel_size;
-            let y = pos.y as f32 * voxel_size;
-            let z = pos.z as f32 * voxel_size;
+            // Position at depth N is in range 0..2^N
+            // Scale up to max_depth coordinates: scale = 2^(max_depth - depth)
+            let scale_factor = 1 << (max_depth - depth);
 
-            // Size depends on remaining depth
-            let depth_factor = 1 << depth; // 2^depth
-            let size = voxel_size * depth_factor as f32;
+            // Scale position from depth N to max_depth, then normalize to [0,1]
+            let x = (pos.x * scale_factor) as f32 * voxel_size;
+            let y = (pos.y * scale_factor) as f32 * voxel_size;
+            let z = (pos.z * scale_factor) as f32 * voxel_size;
+
+            // Size is scale_factor voxels wide (in world space)
+            let size = voxel_size * scale_factor as f32;
 
             let color = mapper.map(*value);
             add_cube(&mut mesh, x, y, z, size, color);
