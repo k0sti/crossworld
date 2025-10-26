@@ -15,6 +15,10 @@ export class CameraController {
   private moveUp = false;
   private moveDown = false;
 
+  // Force-based movement
+  private moveForce: THREE.Vector3 = new THREE.Vector3(0, 0, 0);
+  private forceMultiplier: number = 10000.0; // Constant multiplier for converting force to velocity
+
   // Camera rotation
   private yaw = 0; // Left/right rotation
   private pitch = 0; // Up/down rotation
@@ -22,6 +26,12 @@ export class CameraController {
   // Movement speed
   private moveSpeed = 5.0; // units per second
   private lookSpeed = 0.002; // radians per pixel
+
+  // Smooth camera movement
+  private targetPosition: THREE.Vector3 | null = null;
+  private velocity: THREE.Vector3 = new THREE.Vector3(0, 0, 0);
+  private smoothingFactor = 0.15; // Lower = smoother (0-1)
+  private velocityDamping = 0.92; // Damping when no target
 
   // Saved camera state
   private savedPosition: THREE.Vector3 | null = null;
@@ -226,42 +236,98 @@ export class CameraController {
     this.camera.lookAt(target);
   }
 
+  /**
+   * Set target position for smooth camera movement
+   * Camera will smoothly move to this position while maintaining orientation
+   */
+  setTargetPosition(position: THREE.Vector3): void {
+    this.targetPosition = position.clone();
+  }
+
+  /**
+   * Clear target position (camera stops smoothly)
+   */
+  clearTargetPosition(): void {
+    this.targetPosition = null;
+  }
+
   update(deltaTime: number): void {
     if (!this.enabled) return;
 
-    const moveDistance = this.moveSpeed * deltaTime;
+    // Smooth movement towards target position (if set)
+    if (this.targetPosition) {
+      const toTarget = new THREE.Vector3().subVectors(this.targetPosition, this.camera.position);
+      const distance = toTarget.length();
 
-    // Calculate movement direction based on camera's actual orientation
-    // This ensures movement follows camera direction even when camera is rotated externally
-    const direction = new THREE.Vector3();
-    this.camera.getWorldDirection(direction);
+      if (distance < 0.01) {
+        // Reached target, snap to it
+        this.camera.position.copy(this.targetPosition);
+        this.velocity.set(0, 0, 0);
+        this.targetPosition = null;
+      } else {
+        // Calculate desired velocity towards target
+        const desiredVelocity = toTarget.normalize().multiplyScalar(this.moveSpeed);
 
-    // Forward direction (projected onto XZ plane)
-    const forward = new THREE.Vector3(direction.x, 0, direction.z).normalize();
+        // Smoothly interpolate velocity
+        this.velocity.lerp(desiredVelocity, this.smoothingFactor);
 
-    // Right direction (perpendicular to forward on XZ plane)
-    const right = new THREE.Vector3(-forward.z, 0, forward.x).normalize();
+        // Update position
+        this.camera.position.addScaledVector(this.velocity, deltaTime);
+      }
+    } else {
+      // Calculate movement direction based on camera's actual orientation
+      const direction = new THREE.Vector3();
+      this.camera.getWorldDirection(direction);
 
-    const up = new THREE.Vector3(0, 1, 0);
+      // Forward direction (projected onto XZ plane)
+      const forward = new THREE.Vector3(direction.x, 0, direction.z).normalize();
 
-    // Apply movement
-    if (this.moveForward) {
-      this.camera.position.addScaledVector(forward, moveDistance);
-    }
-    if (this.moveBackward) {
-      this.camera.position.addScaledVector(forward, -moveDistance);
-    }
-    if (this.moveLeft) {
-      this.camera.position.addScaledVector(right, -moveDistance);
-    }
-    if (this.moveRight) {
-      this.camera.position.addScaledVector(right, moveDistance);
-    }
-    if (this.moveUp) {
-      this.camera.position.addScaledVector(up, moveDistance);
-    }
-    if (this.moveDown) {
-      this.camera.position.addScaledVector(up, -moveDistance);
+      // Right direction (perpendicular to forward on XZ plane)
+      const right = new THREE.Vector3(-forward.z, 0, forward.x).normalize();
+
+      const up = new THREE.Vector3(0, 1, 0);
+
+      // Calculate move force from keyboard input
+      this.moveForce.set(0, 0, 0);
+
+      if (this.moveForward) {
+        this.moveForce.add(forward);
+      }
+      if (this.moveBackward) {
+        this.moveForce.sub(forward);
+      }
+      if (this.moveLeft) {
+        this.moveForce.sub(right);
+      }
+      if (this.moveRight) {
+        this.moveForce.add(right);
+      }
+      if (this.moveUp) {
+        this.moveForce.add(up);
+      }
+      if (this.moveDown) {
+        this.moveForce.sub(up);
+      }
+
+      // Add force to velocity with constant multiplier
+      this.velocity.addScaledVector(this.moveForce, this.forceMultiplier * deltaTime);
+
+      // Apply damping to velocity
+      this.velocity.multiplyScalar(this.velocityDamping);
+
+      // Clamp velocity to max speed
+      const currentSpeed = this.velocity.length();
+      if (currentSpeed > this.moveSpeed) {
+        this.velocity.normalize().multiplyScalar(this.moveSpeed);
+      }
+
+      // Update position
+      this.camera.position.addScaledVector(this.velocity, deltaTime);
+
+      // Zero out very small velocities
+      if (this.velocity.length() < 0.01) {
+        this.velocity.set(0, 0, 0);
+      }
     }
   }
 

@@ -12,7 +12,6 @@ import {
   cubeToWorld,
   type CubeCoord,
   isWithinWorldBounds,
-  clampToWorldBounds,
   snapToGrid,
   getVoxelSize as getVoxelSizeFromCubeCoord
 } from '../types/cube-coord';
@@ -87,6 +86,9 @@ export class SceneManager {
 
   // Current movement style for position updates
   private currentMoveStyle: string = 'walk';
+
+  // Snap to grid in walking mode (disabled by default for precise movement)
+  private snapToGridInWalkMode: boolean = false;
 
   // Sun system and post-processing
   private sunSystem: SunSystem | null = null;
@@ -168,8 +170,8 @@ export class SceneManager {
         return;
       }
 
-      // Need avatar and geometry mesh to handle clicks
-      if (!this.currentAvatar || !this.geometryMesh) return;
+      // Need avatar to handle clicks in walk mode
+      if (!this.currentAvatar) return;
 
       // Calculate mouse position in normalized device coordinates (-1 to +1)
       const rect = canvas.getBoundingClientRect();
@@ -179,36 +181,51 @@ export class SceneManager {
       // Update raycaster
       this.raycaster.setFromCamera(this.mouse, this.camera);
 
-      // Check intersection with ground plane
-      const intersects = this.raycaster.intersectObject(this.geometryMesh);
+      // Raycast to ground plane at y=0 (same as edit mode)
+      const intersectPoint = new THREE.Vector3();
+      const didIntersect = this.raycaster.ray.intersectPlane(this.groundPlane, intersectPoint);
 
-      if (intersects.length > 0) {
-        const point = intersects[0].point;
-        // Clamp to ground bounds (centered at origin)
-        const [clampedX, clampedZ] = clampToWorldBounds(point.x, point.z);
+      if (didIntersect) {
+        // Use exact raycast coordinates or snap to grid based on flag
+        let targetX: number;
+        let targetZ: number;
 
-        // Check modifiers: CTRL for teleport, SHIFT for run
-        const useTeleport = event.ctrlKey;
-        const useRun = event.shiftKey && !useTeleport;
-
-        // Move avatar
-        if (useTeleport) {
-          this.currentAvatar.teleportTo(clampedX, clampedZ, this.teleportAnimationType);
-          this.currentMoveStyle = `teleport:${this.teleportAnimationType}`;
-          // Publish TARGET position with move style
-          this.publishPlayerPositionAt(clampedX, clampedZ, this.currentMoveStyle);
-        } else if (useRun) {
-          this.currentAvatar.setRunSpeed(true);
-          this.currentAvatar.setTargetPosition(clampedX, clampedZ);
-          this.currentMoveStyle = 'run';
-          // Publish TARGET position with move style
-          this.publishPlayerPositionAt(clampedX, clampedZ, this.currentMoveStyle);
+        if (this.snapToGridInWalkMode) {
+          // Snap to grid centered on the intersection point (same as edit mode)
+          const size = 1;
+          targetX = snapToGrid(intersectPoint.x, size);
+          targetZ = snapToGrid(intersectPoint.z, size);
         } else {
-          this.currentAvatar.setRunSpeed(false);
-          this.currentAvatar.setTargetPosition(clampedX, clampedZ);
-          this.currentMoveStyle = 'walk';
-          // Publish TARGET position with move style
-          this.publishPlayerPositionAt(clampedX, clampedZ, this.currentMoveStyle);
+          // Use exact raycast coordinates for precise movement
+          targetX = intersectPoint.x;
+          targetZ = intersectPoint.z;
+        }
+
+        // Check if within valid world bounds
+        if (isWithinWorldBounds(targetX, targetZ, 1)) {
+          // Check modifiers: CTRL for teleport, SHIFT for run
+          const useTeleport = event.ctrlKey;
+          const useRun = event.shiftKey && !useTeleport;
+
+          // Move avatar
+          if (useTeleport) {
+            this.currentAvatar.teleportTo(targetX, targetZ, this.teleportAnimationType);
+            this.currentMoveStyle = `teleport:${this.teleportAnimationType}`;
+            // Publish TARGET position with move style
+            this.publishPlayerPositionAt(targetX, targetZ, this.currentMoveStyle);
+          } else if (useRun) {
+            this.currentAvatar.setRunSpeed(true);
+            this.currentAvatar.setTargetPosition(targetX, targetZ);
+            this.currentMoveStyle = 'run';
+            // Publish TARGET position with move style
+            this.publishPlayerPositionAt(targetX, targetZ, this.currentMoveStyle);
+          } else {
+            this.currentAvatar.setRunSpeed(false);
+            this.currentAvatar.setTargetPosition(targetX, targetZ);
+            this.currentMoveStyle = 'walk';
+            // Publish TARGET position with move style
+            this.publishPlayerPositionAt(targetX, targetZ, this.currentMoveStyle);
+          }
         }
       }
     });
