@@ -72,21 +72,13 @@ export function WorldCanvas({
     }
 
     // Set voxel edit callback for world cube editing
-    sceneManager.setOnVoxelEdit((x, y, z, size, colorIndex) => {
-      if (size <= 1) {
-        // Single voxel operations
-        if (colorIndex === 0) {
-          geometryController.removeVoxel(x, y, z);
-        } else {
-          geometryController.setVoxel(x, y, z, colorIndex);
-        }
+    sceneManager.setOnVoxelEdit((x, y, z, depth, colorIndex) => {
+      if (colorIndex === 0) {
+        // Remove voxel (always use max depth for single voxel removal)
+        geometryController.removeVoxel(x, y, z);
       } else {
-        // Multi-voxel cube operations
-        if (colorIndex === 0) {
-          geometryController.removeVoxelCube(x, y, z, size);
-        } else {
-          geometryController.setVoxelCube(x, y, z, size, colorIndex);
-        }
+        // Set voxel at specified depth
+        geometryController.setVoxelAtDepth(x, y, z, depth, colorIndex);
       }
     });
 

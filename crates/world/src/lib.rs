@@ -51,28 +51,23 @@ impl GeometryEngine {
         }
     }
 
-    /// Set voxel in cube ground
+    /// Set voxel in cube ground at specified depth
+    /// depth: octree depth (4=single voxel, 3=2x2x2, 2=4x4x4, etc.)
+    #[wasm_bindgen(js_name = setVoxelAtDepth)]
+    pub fn set_voxel_at_depth(&self, x: i32, y: i32, z: i32, depth: u32, color_index: i32) {
+        self.engine.borrow_mut().set_voxel_at_depth(x, y, z, depth, color_index);
+    }
+
+    /// Set single voxel in cube ground
     #[wasm_bindgen(js_name = setVoxel)]
     pub fn set_voxel(&self, x: i32, y: i32, z: i32, color_index: i32) {
         self.engine.borrow_mut().set_voxel(x, y, z, color_index);
-    }
-
-    /// Set a cube of voxels in cube ground
-    #[wasm_bindgen(js_name = setVoxelCube)]
-    pub fn set_voxel_cube(&self, x: i32, y: i32, z: i32, size: i32, color_index: i32) {
-        self.engine.borrow_mut().set_voxel_cube(x, y, z, size, color_index);
     }
 
     /// Remove voxel from cube ground
     #[wasm_bindgen(js_name = removeVoxel)]
     pub fn remove_voxel(&self, x: i32, y: i32, z: i32) {
         self.engine.borrow_mut().remove_voxel(x, y, z);
-    }
-
-    /// Remove a cube of voxels from cube ground
-    #[wasm_bindgen(js_name = removeVoxelCube)]
-    pub fn remove_voxel_cube(&self, x: i32, y: i32, z: i32, size: i32) {
-        self.engine.borrow_mut().remove_voxel_cube(x, y, z, size);
     }
 }
 

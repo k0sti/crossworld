@@ -1,12 +1,12 @@
 import { GeometryGenerator } from '../geometry/geometry-lib';
 
 export interface GeometryMessage {
-  type: 'init' | 'update' | 'setGroundRenderMode' | 'setVoxel' | 'setVoxelCube' | 'removeVoxel' | 'removeVoxelCube';
+  type: 'init' | 'update' | 'setGroundRenderMode' | 'setVoxelAtDepth' | 'setVoxel' | 'removeVoxel';
   useCube?: boolean;
   x?: number;
   y?: number;
   z?: number;
-  size?: number;
+  depth?: number;
   colorIndex?: number;
 }
 
@@ -97,27 +97,21 @@ class GeometryWorkerManager {
     }
   }
 
+  setVoxelAtDepth(x: number, y: number, z: number, depth: number, colorIndex: number) {
+    if (this.generator) {
+      this.generator.setVoxelAtDepth(x, y, z, depth, colorIndex);
+    }
+  }
+
   setVoxel(x: number, y: number, z: number, colorIndex: number) {
     if (this.generator) {
       this.generator.setVoxel(x, y, z, colorIndex);
     }
   }
 
-  setVoxelCube(x: number, y: number, z: number, size: number, colorIndex: number) {
-    if (this.generator) {
-      this.generator.setVoxelCube(x, y, z, size, colorIndex);
-    }
-  }
-
   removeVoxel(x: number, y: number, z: number) {
     if (this.generator) {
       this.generator.removeVoxel(x, y, z);
-    }
-  }
-
-  removeVoxelCube(x: number, y: number, z: number, size: number) {
-    if (this.generator) {
-      this.generator.removeVoxelCube(x, y, z, size);
     }
   }
 }
@@ -143,27 +137,21 @@ self.addEventListener('message', async (event) => {
       }
       break;
 
+    case 'setVoxelAtDepth':
+      if (message.x !== undefined && message.y !== undefined && message.z !== undefined && message.depth !== undefined && message.colorIndex !== undefined) {
+        manager.setVoxelAtDepth(message.x, message.y, message.z, message.depth, message.colorIndex);
+      }
+      break;
+
     case 'setVoxel':
       if (message.x !== undefined && message.y !== undefined && message.z !== undefined && message.colorIndex !== undefined) {
         manager.setVoxel(message.x, message.y, message.z, message.colorIndex);
       }
       break;
 
-    case 'setVoxelCube':
-      if (message.x !== undefined && message.y !== undefined && message.z !== undefined && message.size !== undefined && message.colorIndex !== undefined) {
-        manager.setVoxelCube(message.x, message.y, message.z, message.size, message.colorIndex);
-      }
-      break;
-
     case 'removeVoxel':
       if (message.x !== undefined && message.y !== undefined && message.z !== undefined) {
         manager.removeVoxel(message.x, message.y, message.z);
-      }
-      break;
-
-    case 'removeVoxelCube':
-      if (message.x !== undefined && message.y !== undefined && message.z !== undefined && message.size !== undefined) {
-        manager.removeVoxelCube(message.x, message.y, message.z, message.size);
       }
       break;
   }

@@ -39,59 +39,43 @@ impl CubeGround {
         )
     }
 
-    /// Set a voxel at world coordinates (x, y, z)
+    /// Set a voxel at world coordinates (x, y, z) at specified depth
     /// World coords: x=0-15, y=-8-7, z=0-15
+    /// depth: octree depth level (4=single voxel, 3=2x2x2, 2=4x4x4, etc.)
     /// color_index: 0 = empty, 1+ = colored voxel
-    pub fn set_voxel(&mut self, x: i32, y: i32, z: i32, color_index: i32) {
+    pub fn set_voxel_at_depth(&mut self, x: i32, y: i32, z: i32, depth: u32, color_index: i32) {
+        // Clamp depth to valid range
+        let depth = depth.min(self.depth);
+
+        // Calculate voxel size at this depth
+        let voxel_size = 1 << (self.depth - depth);
+
+        // Align coordinates to voxel grid at this depth
+        let aligned_x = (x / voxel_size) * voxel_size;
+        let aligned_y = ((y + 8) / voxel_size) * voxel_size - 8; // Account for y offset
+        let aligned_z = (z / voxel_size) * voxel_size;
+
         // Clamp to valid world range
-        if !(0..16).contains(&x) || !(-8..8).contains(&y) || !(0..16).contains(&z) {
+        if !(0..16).contains(&aligned_x) || !(-8..8).contains(&aligned_y) || !(0..16).contains(&aligned_z) {
             return;
         }
 
-        let voxel_pos = self.world_to_voxel(x, y, z);
+        let voxel_pos = self.world_to_voxel(aligned_x, aligned_y, aligned_z);
 
-        // Use the new functional update interface - O(log n) instead of O(n)
+        // Use the octree's depth parameter for efficient updates
         self.octree.root = self.octree.root
-            .updated(Cube::Solid(color_index), self.depth, voxel_pos)
+            .updated(Cube::Solid(color_index), depth, voxel_pos)
             .simplified();
     }
 
-    /// Set a cube of voxels at world coordinates
-    /// size: number of voxels in each dimension (1, 2, 4, 8, 16)
-    /// The cube is placed with (x,y,z) as the corner with minimum coordinates
-    pub fn set_voxel_cube(&mut self, x: i32, y: i32, z: i32, size: i32, color_index: i32) {
-        // For size=1, just set a single voxel
-        if size <= 1 {
-            self.set_voxel(x, y, z, color_index);
-            return;
-        }
-
-        // For larger sizes, fill a cube of voxels
-        for dx in 0..size {
-            for dy in 0..size {
-                for dz in 0..size {
-                    let vx = x + dx;
-                    let vy = y + dy;
-                    let vz = z + dz;
-
-                    // Check bounds
-                    if (0..16).contains(&vx) && (-8..8).contains(&vy) && (0..16).contains(&vz) {
-                        self.set_voxel(vx, vy, vz, color_index);
-                    }
-                }
-            }
-        }
+    /// Set a single voxel at world coordinates (convenience method)
+    pub fn set_voxel(&mut self, x: i32, y: i32, z: i32, color_index: i32) {
+        self.set_voxel_at_depth(x, y, z, self.depth, color_index);
     }
 
     /// Remove a voxel at world coordinates
     pub fn remove_voxel(&mut self, x: i32, y: i32, z: i32) {
-        // Removing is just setting to 0 (empty)
         self.set_voxel(x, y, z, 0);
-    }
-
-    /// Remove a cube of voxels at world coordinates
-    pub fn remove_voxel_cube(&mut self, x: i32, y: i32, z: i32, size: i32) {
-        self.set_voxel_cube(x, y, z, size, 0);
     }
 
     pub fn generate_mesh(&self) -> GeometryData {
