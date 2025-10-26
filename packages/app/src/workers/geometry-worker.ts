@@ -1,7 +1,7 @@
 import { GeometryGenerator } from '../geometry/geometry-lib';
 
 export interface GeometryMessage {
-  type: 'init' | 'update' | 'setGroundRenderMode' | 'setVoxelAtDepth' | 'setVoxel' | 'removeVoxel';
+  type: 'init' | 'update' | 'setGroundRenderMode' | 'setVoxelAtDepth' | 'setVoxel' | 'removeVoxelAtDepth' | 'removeVoxel';
   useCube?: boolean;
   x?: number;
   y?: number;
@@ -109,6 +109,12 @@ class GeometryWorkerManager {
     }
   }
 
+  removeVoxelAtDepth(x: number, y: number, z: number, depth: number) {
+    if (this.generator) {
+      this.generator.removeVoxelAtDepth(x, y, z, depth);
+    }
+  }
+
   removeVoxel(x: number, y: number, z: number) {
     if (this.generator) {
       this.generator.removeVoxel(x, y, z);
@@ -146,6 +152,12 @@ self.addEventListener('message', async (event) => {
     case 'setVoxel':
       if (message.x !== undefined && message.y !== undefined && message.z !== undefined && message.colorIndex !== undefined) {
         manager.setVoxel(message.x, message.y, message.z, message.colorIndex);
+      }
+      break;
+
+    case 'removeVoxelAtDepth':
+      if (message.x !== undefined && message.y !== undefined && message.z !== undefined && message.depth !== undefined) {
+        manager.removeVoxelAtDepth(message.x, message.y, message.z, message.depth);
       }
       break;
 

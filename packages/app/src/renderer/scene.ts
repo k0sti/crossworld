@@ -42,9 +42,10 @@ export class SceneManager {
   // Depth voxel select mode: 1 = near side (y=0), 2 = far side (y=-1)
   private depthSelectMode: 1 | 2 = 1;
 
-  // Cursor depth (controls voxel size: size = 2^(4-depth))
-  // depth=4: size=1, depth=5: size=0.5, depth=3: size=2
-  private cursorDepth: number = 4;
+  // Cursor depth (controls voxel size at depth 7 octree)
+  // depth=7: size=0.125 (1/8), depth=6: size=0.25 (1/4), depth=5: size=0.5 (1/2)
+  // depth=4: size=1, depth=3: size=2, depth=2: size=4, depth=1: size=8
+  private cursorDepth: number = 7;
 
   // Remote avatars for other users
   private remoteAvatars: Map<string, IAvatar> = new Map();
@@ -350,7 +351,7 @@ export class SceneManager {
       // Cursor depth control with Arrow Up/Down
       if (event.code === 'ArrowUp') {
         event.preventDefault();
-        this.cursorDepth = Math.min(10, this.cursorDepth + 1); // Max depth 10
+        this.cursorDepth = Math.min(7, this.cursorDepth + 1); // Max depth 7
         this.updateCursorSize();
         console.log(`[Cursor Depth] Increased to ${this.cursorDepth} (size=${this.getCursorSize()})`);
       }
@@ -473,9 +474,11 @@ export class SceneManager {
   }
 
   private getCursorSize(): number {
-    // Calculate voxel size from depth: size = 2^(4-depth)
-    // depth=4: size=1, depth=5: size=0.5, depth=3: size=2
-    return Math.pow(2, 4 - this.cursorDepth);
+    // Calculate voxel size from depth: size = 2^(7-depth) * (16/128)
+    // depth=7: size=0.125, depth=4: size=1, depth=0: size=16
+    // World is 16 units, depth 7 has 128 voxels, so 16/128 = 0.125 per voxel
+    const voxels_at_depth = Math.pow(2, this.cursorDepth); // 2^depth voxels per side
+    return 16 / voxels_at_depth; // world size / voxels = size per voxel
   }
 
   private updateCursorSize(): void {

@@ -29,30 +29,37 @@ impl CubeGround {
     }
 
     /// Set a voxel at world coordinates (x, y, z) at specified depth
-    /// World coords: x=0-15, y=-8-7, z=0-15
-    /// depth: octree depth level (4=single voxel, 3=2x2x2, 2=4x4x4, etc.)
+    /// World coords: x=0-15, y=-8 to 7, z=0-15 (always 16 units regardless of depth)
+    /// depth: octree depth level (7=finest, 4=coarse, etc.)
     /// color_index: 0 = empty, 1+ = colored voxel
     pub fn set_voxel_at_depth(&mut self, x: i32, y: i32, z: i32, depth: u32, color_index: i32) {
         // Clamp depth to valid range
         let depth = depth.clamp(0, self.depth);
 
-        // Convert world coordinates to depth-4 voxel coordinates
+        // Convert world coordinates (0-16 range) to max-depth voxel coordinates
+        // World space is always 16 units, octree is 2^depth voxels
+        let grid_size = 1 << self.depth; // 2^self.depth (e.g., 128 for depth 7)
         let voxel_x = x;
         let voxel_y = y + 8;
         let voxel_z = z;
 
-        // Check bounds at depth 4 scale
+        // Check bounds in world space
         if !(0..16).contains(&voxel_x) || !(0..16).contains(&voxel_y) || !(0..16).contains(&voxel_z) {
             return;
         }
 
-        // Scale coordinates from depth 4 to target depth
-        // At depth N, coordinate range is 0..(2^N)
-        // depth 4: 0-15, depth 3: 0-7, depth 2: 0-3, depth 1: 0-1, depth 0: 0
-        let scale = 1 << (self.depth - depth);  // 2^(4-depth)
-        let pos_x = voxel_x / scale;
-        let pos_y = voxel_y / scale;
-        let pos_z = voxel_z / scale;
+        // Scale world coordinates to max-depth voxel coordinates
+        // World 0-16 maps to voxel 0-(2^depth)
+        let scale_to_max = grid_size / 16;
+        let max_depth_x = voxel_x * scale_to_max;
+        let max_depth_y = voxel_y * scale_to_max;
+        let max_depth_z = voxel_z * scale_to_max;
+
+        // Scale from max-depth coordinates to target depth coordinates
+        let scale = 1 << (self.depth - depth);  // 2^(depth_max - depth_target)
+        let pos_x = max_depth_x / scale;
+        let pos_y = max_depth_y / scale;
+        let pos_z = max_depth_z / scale;
 
         let pos = IVec3::new(pos_x, pos_y, pos_z);
 
@@ -67,7 +74,12 @@ impl CubeGround {
         self.set_voxel_at_depth(x, y, z, self.depth, color_index);
     }
 
-    /// Remove a voxel at world coordinates
+    /// Remove a voxel at world coordinates at specified depth
+    pub fn remove_voxel_at_depth(&mut self, x: i32, y: i32, z: i32, depth: u32) {
+        self.set_voxel_at_depth(x, y, z, depth, 0);
+    }
+
+    /// Remove a voxel at world coordinates (convenience method)
     pub fn remove_voxel(&mut self, x: i32, y: i32, z: i32) {
         self.set_voxel(x, y, z, 0);
     }
@@ -79,18 +91,18 @@ impl CubeGround {
         let mesh_data = crossworld_cube::generate_mesh_with_mapper_depth(&self.octree, &color_mapper, self.depth);
 
         // Scale and offset vertices to match world coordinates
-        // The octree generates a 16x16x16 voxel grid within a 1.0 unit cube
-        // We need:
-        // - x: 0-16 world units (scale by 1.0)
-        // - y: -8 to 8 world units (scale by 1.0, offset by -8)
-        // - z: 0-16 world units (scale by 1.0)
+        // The octree generates normalized [0,1] coordinates
+        // World space is always 16 units regardless of octree depth
+        // - x: 0-16 world units
+        // - y: -8 to 8 world units (16 units total, offset by -8)
+        // - z: 0-16 world units
         let scaled_vertices: Vec<f32> = mesh_data
             .vertices
             .chunks(3)
             .flat_map(|chunk| {
-                let x = chunk[0] * 16.0; // 1.0 * 16 = 16 units
-                let y = chunk[1] * 16.0 - 8.0; // 16 units, offset by -8
-                let z = chunk[2] * 16.0; // 1.0 * 16 = 16 units
+                let x = chunk[0] * 16.0; // [0,1] -> [0,16]
+                let y = chunk[1] * 16.0 - 8.0; // [0,1] -> [-8,8]
+                let z = chunk[2] * 16.0; // [0,1] -> [0,16]
                 vec![x, y, z]
             })
             .collect();
