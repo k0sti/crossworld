@@ -1,5 +1,5 @@
 import { GeometryResult } from '../workers/geometry-worker';
-import { DEFAULT_DEPTH, DEFAULT_MICRO_DEPTH } from '../constants/geometry';
+import { getMicroDepth, getTotalDepth } from '../config/depth-config';
 
 export class GeometryController {
   private worker: Worker | null = null;
@@ -9,7 +9,7 @@ export class GeometryController {
   private worldDepth: number;
   private scaleDepth: number;
 
-  constructor(worldDepth: number = DEFAULT_DEPTH, scaleDepth: number = DEFAULT_MICRO_DEPTH) {
+  constructor(worldDepth: number = getTotalDepth(), scaleDepth: number = getMicroDepth()) {
     this.worldDepth = worldDepth;
     this.scaleDepth = scaleDepth;
   }

@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Box, Text, VStack, HStack, Input, Button } from '@chakra-ui/react';
 import { CubeCoord, printCubeCoord } from '../types/cube-coord';
-import { DEFAULT_MACRO_DEPTH, DEFAULT_MICRO_DEPTH } from '../constants/geometry';
+import { getMacroDepth, getMicroDepth, onDepthChange } from '../config/depth-config';
 
 export interface DebugInfo {
   cursorWorld?: { x: number; y: number; z: number };
@@ -20,8 +20,17 @@ interface WorldPanelProps {
 }
 
 export function WorldPanel({ info, onApplyDepthSettings }: WorldPanelProps) {
-  const [macroDepth, setMacroDepth] = useState(String(DEFAULT_MACRO_DEPTH)); // 3
-  const [microDepth, setMicroDepth] = useState(String(DEFAULT_MICRO_DEPTH)); // 0
+  const [macroDepth, setMacroDepth] = useState(String(getMacroDepth()));
+  const [microDepth, setMicroDepth] = useState(String(getMicroDepth()));
+
+  // Subscribe to depth changes from config
+  useEffect(() => {
+    const unsubscribe = onDepthChange((newMacroDepth, newMicroDepth) => {
+      setMacroDepth(String(newMacroDepth));
+      setMicroDepth(String(newMicroDepth));
+    });
+    return unsubscribe;
+  }, []);
 
   const formatNum = (n: number | undefined) => n?.toFixed(3) ?? 'N/A';
   const formatVec = (v: { x: number; y: number; z: number } | undefined) =>

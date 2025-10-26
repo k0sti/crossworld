@@ -6,6 +6,7 @@ import init, { AvatarEngine } from '@workspace/wasm';
 import type { AvatarStateService, AvatarConfig } from '../services/avatar-state';
 import type { TeleportAnimationType } from '../renderer/teleport-animation';
 import { DebugPanel, type DebugInfo } from './WorldPanel';
+import { setMacroDepth } from '../config/depth-config';
 
 interface WorldCanvasProps {
   isLoggedIn: boolean;
@@ -46,9 +47,16 @@ export function WorldCanvas({
       return;
     }
 
-    console.log(`Reinitializing geometry with worldDepth=${worldDepth}, scaleDepth=${scaleDepth}`);
+    // Calculate macro depth from total depth and micro depth
+    const macroDepth = worldDepth - scaleDepth;
+
+    console.log(`Reinitializing with macroDepth=${macroDepth}, microDepth=${scaleDepth}, totalDepth=${worldDepth}`);
 
     try {
+      // Update shared depth config (this will notify all listeners)
+      setMacroDepth(macroDepth);
+
+      // Reinitialize geometry with new depths
       await geometryController.reinitialize(worldDepth, scaleDepth, (geometry) => {
         sceneManager.updateGeometry(
           geometry.vertices,

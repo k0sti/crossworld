@@ -9,13 +9,15 @@ import type { TeleportAnimationType } from './teleport-animation';
 import { CameraController } from './camera-controller';
 import {
   worldToCube,
+  cubeToWorld,
   type CubeCoord,
-  WORLD_SIZE,
   isWithinWorldBounds,
   clampToWorldBounds,
-  snapToGrid
+  snapToGrid,
+  getVoxelSize as getVoxelSizeFromCubeCoord
 } from '../types/cube-coord';
-import { DEFAULT_MACRO_DEPTH, DEFAULT_DEPTH, DEFAULT_MICRO_DEPTH, getVoxelSize } from '../constants/geometry';
+import { getWorldSize } from '../constants/geometry';
+import { getMacroDepth, getMicroDepth, getTotalDepth } from '../config/depth-config';
 import { CheckerPlane } from './checker-plane';
 
 /**
@@ -65,9 +67,9 @@ export class SceneManager {
   private depthSelectMode: 1 | 2 = 1;
 
   // Cursor depth - single source of truth for current cursor depth
-  // depth can be 0 to DEFAULT_DEPTH (macro+micro, smaller depth = larger voxel size)
-  // initialized to DEFAULT_MACRO_DEPTH (3)
-  private cursorDepth: number = DEFAULT_MACRO_DEPTH;
+  // depth can be 0 to totalDepth (macro+micro, smaller depth = larger voxel size)
+  // initialized to macroDepth (3)
+  private cursorDepth: number = getMacroDepth();
 
   // Current cursor coordinate (null when not in edit mode or cursor not visible)
   private currentCursorCoord: CubeCoord | null = null;
@@ -135,8 +137,9 @@ export class SceneManager {
   }
 
   private setupCheckerPlane(): void {
-    // Create checker plane (WORLD_SIZE×WORLD_SIZE centered at origin)
-    this.checkerPlane = new CheckerPlane(WORLD_SIZE, WORLD_SIZE, 0.02);
+    // Create checker plane (worldSize×worldSize centered at origin)
+    const worldSize = getWorldSize(getTotalDepth(), getMicroDepth());
+    this.checkerPlane = new CheckerPlane(worldSize, worldSize, 0.02);
     this.scene.add(this.checkerPlane.getMesh());
   }
 
@@ -384,7 +387,7 @@ export class SceneManager {
       // Cursor depth control with Arrow Up/Down
       if (event.code === 'ArrowUp') {
         event.preventDefault();
-        this.cursorDepth = Math.min(DEFAULT_DEPTH, this.cursorDepth + 1);
+        this.cursorDepth = Math.min(getTotalDepth(), this.cursorDepth + 1);
         this.updateCursorSize();
         console.log(`[Cursor Depth] Increased to ${this.cursorDepth} (size=${this.getCursorSize()})`);
       }
@@ -454,8 +457,9 @@ export class SceneManager {
   }
 
   private setupEditModeHelpers(): void {
-    // Create grid helper (WORLD_SIZE×WORLD_SIZE grid centered at origin)
-    this.gridHelper = new THREE.GridHelper(WORLD_SIZE, WORLD_SIZE, 0xffffff, 0xffffff);
+    // Create grid helper (worldSize×worldSize grid centered at origin)
+    const worldSize = getWorldSize(getTotalDepth(), getMicroDepth());
+    this.gridHelper = new THREE.GridHelper(worldSize, worldSize, 0xffffff, 0xffffff);
     this.gridHelper.position.set(0, 0.01, 0); // Centered at origin, slightly above ground
     this.gridHelper.material = new THREE.LineBasicMaterial({
       color: 0xffffff,
@@ -514,8 +518,9 @@ export class SceneManager {
     this.scene.add(unitCubeWireframe);
 
     // Create world bounds wireframe box
-    // World is WORLD_SIZE×WORLD_SIZE×WORLD_SIZE centered at origin
-    const worldBoxGeometry = new THREE.BoxGeometry(WORLD_SIZE, WORLD_SIZE, WORLD_SIZE);
+    // World is worldSize×worldSize×worldSize centered at origin
+    const worldSize = getWorldSize(getTotalDepth(), getMicroDepth());
+    const worldBoxGeometry = new THREE.BoxGeometry(worldSize, worldSize, worldSize);
     const worldBoxEdges = new THREE.EdgesGeometry(worldBoxGeometry);
     const worldBoxLineMaterial = new THREE.LineBasicMaterial({
       color: 0xffffff,
@@ -551,7 +556,7 @@ export class SceneManager {
   }
 
   private getCursorSize(): number {
-    return getVoxelSize(this.cursorDepth, DEFAULT_DEPTH, DEFAULT_MICRO_DEPTH);
+    return getVoxelSizeFromCubeCoord(this.cursorDepth);
   }
 
   private updateCursorSize(): void {
@@ -1347,16 +1352,13 @@ export class SceneManager {
     const cursorSize = this.getCursorSize();
     const avatarPos = this.currentAvatar?.getPosition();
 
+    const worldSize = getWorldSize(getTotalDepth(), getMicroDepth());
+
     return {
       cursorWorld: this.currentCursorCoord
         ? (() => {
-            const scale = WORLD_SIZE / (1 << DEFAULT_DEPTH);
-            const halfWorld = WORLD_SIZE / 2;
-            return {
-              x: this.currentCursorCoord.x * scale - halfWorld,
-              y: this.currentCursorCoord.y * scale - halfWorld,
-              z: this.currentCursorCoord.z * scale - halfWorld
-            };
+            const [x, y, z] = cubeToWorld(this.currentCursorCoord);
+            return { x, y, z };
           })()
         : undefined,
       cursorOctree: this.currentCursorCoord,
@@ -1370,7 +1372,7 @@ export class SceneManager {
         y: this.camera.position.y,
         z: this.camera.position.z
       },
-      worldSize: WORLD_SIZE,
+      worldSize: worldSize,
       isEditMode: this.isEditMode
     };
   }
