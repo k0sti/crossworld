@@ -1,4 +1,5 @@
 mod mesh;
+mod mesh_builder;
 mod octree;
 mod parser;
 mod render;
@@ -7,10 +8,8 @@ mod render;
 #[cfg(feature = "wasm")]
 mod wasm;
 
-pub use mesh::{
-    generate_mesh, generate_mesh_with_mapper, generate_mesh_with_mapper_depth, ColorMapper, HsvColorMapper, MeshData,
-    PaletteColorMapper,
-};
+pub use mesh::{ColorMapper, HsvColorMapper, PaletteColorMapper};
+pub use mesh_builder::{generate_mesh_hierarchical, DefaultMeshBuilder, MeshBuilder};
 pub use octree::{octant_char_to_index, octant_index_to_char, Axis, Cube, IVec3Ext, Octree, Quad};
 pub use parser::{parse_csm, CsmError};
 pub use render::{

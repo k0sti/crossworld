@@ -1,5 +1,6 @@
 use crate::mesh::ColorMapper;
 use crate::octree::{Cube, Octree};
+use glam::IVec3;
 
 /// Type alias for voxel data: (position, size, color)
 type VoxelData = ((f32, f32, f32), f32, [u8; 3]);
@@ -197,13 +198,9 @@ pub fn render_orthographic_3d(
     voxel_size_log2: usize,
     mapper: &dyn ColorMapper,
 ) -> RenderedImage {
-    use crate::mesh::generate_mesh_with_mapper;
-
-    // Generate mesh from octree
-    let mesh = generate_mesh_with_mapper(octree, mapper);
-
-    // Get voxels from mesh (extract cube positions and colors)
-    let voxels = extract_voxels_from_mesh(&mesh);
+    // Extract voxels directly from octree (no need to generate full mesh)
+    // Use max depth of 16 to ensure we traverse entire octree structure
+    let voxels = extract_voxels_from_octree(octree, mapper, 16);
 
     if voxels.is_empty() {
         return RenderedImage::new(1 << voxel_size_log2, 1 << voxel_size_log2);
@@ -287,50 +284,45 @@ fn render_cube_2d(cube: &Cube<i32>, params: RenderParams2D) {
 
 /// Extract voxel information from mesh data
 /// Returns vec of (position, size, color_rgb_u8)
-fn extract_voxels_from_mesh(mesh: &crate::mesh::MeshData) -> Vec<VoxelData> {
+/// Extract voxel data directly from octree
+fn extract_voxels_from_octree(
+    octree: &Octree,
+    mapper: &dyn ColorMapper,
+    max_depth: u32,
+) -> Vec<VoxelData> {
     let mut voxels = Vec::new();
 
-    // The mesh contains cubes with 8 vertices each
-    // We need to extract the position, size, and color of each cube
-    // Vertices are stored as [x, y, z, x, y, z, ...]
-    // Colors are stored as [r, g, b, r, g, b, ...] (per vertex)
+    // Use visitor pattern to traverse octree and extract voxel data
+    octree.root.visit_leaves(max_depth, IVec3::ZERO, &mut |cube, depth, pos| {
+        if let Cube::Solid(value) = cube {
+            if *value == 0 {
+                return; // Skip empty voxels
+            }
 
-    let vertex_count = mesh.vertices.len() / 3;
-    if vertex_count == 0 {
-        return voxels;
-    }
+            // Calculate size and position in normalized [0,1] space
+            let grid_size = 1 << max_depth; // 2^max_depth
+            let voxel_size = 1.0 / grid_size as f32;
 
-    // Each cube has 8 vertices
-    let cube_count = vertex_count / 8;
+            // Scale factor based on remaining depth
+            let scale_factor = 1 << depth;
 
-    for i in 0..cube_count {
-        let base_idx = i * 8 * 3; // 8 vertices, 3 coords each
+            // Calculate world position
+            let x = (pos.x * scale_factor) as f32 * voxel_size;
+            let y = (pos.y * scale_factor) as f32 * voxel_size;
+            let z = (pos.z * scale_factor) as f32 * voxel_size;
+            let size = voxel_size * scale_factor as f32;
 
-        // Get first vertex position (left-bottom-back corner)
-        let x = mesh.vertices[base_idx];
-        let y = mesh.vertices[base_idx + 1];
-        let z = mesh.vertices[base_idx + 2];
+            // Get color and convert to u8
+            let rgb = mapper.map(*value);
+            let color = [
+                (rgb[0] * 255.0) as u8,
+                (rgb[1] * 255.0) as u8,
+                (rgb[2] * 255.0) as u8,
+            ];
 
-        // Get opposite corner (right-top-front) - vertex 6
-        let x2 = mesh.vertices[base_idx + 6 * 3];
-
-        // Calculate size (assumes cube)
-        let size = (x2 - x).abs();
-
-        // Get color from first vertex
-        let color_idx = i * 8 * 3;
-        let color = if color_idx + 2 < mesh.colors.len() {
-            [
-                (mesh.colors[color_idx] * 255.0) as u8,
-                (mesh.colors[color_idx + 1] * 255.0) as u8,
-                (mesh.colors[color_idx + 2] * 255.0) as u8,
-            ]
-        } else {
-            [0, 0, 0]
-        };
-
-        voxels.push(((x, y, z), size, color));
-    }
+            voxels.push(((x, y, z), size, color));
+        }
+    });
 
     voxels
 }
@@ -1242,145 +1234,6 @@ mod tests {
     }
 
     /// Verify that mesh normals are correct
-    fn verify_mesh_normals(mesh: &crate::mesh::MeshData) {
-        // Each cube has 8 vertices and 12 triangles (2 per face × 6 faces)
-        // Each triangle has 3 vertices, so 36 indices per cube
-        // Normals should be 3 components per vertex used in triangles
-
-        let vertex_count = mesh.vertices.len() / 3;
-        let index_count = mesh.indices.len();
-        let normal_count = mesh.normals.len() / 3;
-
-        // We should have normals for every vertex referenced in indices
-        assert_eq!(
-            normal_count, index_count,
-            "Normal count ({}) should match index count ({})",
-            normal_count, index_count
-        );
-
-        // Verify normals are unit length and point in valid directions
-        for i in 0..normal_count {
-            let nx = mesh.normals[i * 3];
-            let ny = mesh.normals[i * 3 + 1];
-            let nz = mesh.normals[i * 3 + 2];
-
-            // Calculate length
-            let length = (nx * nx + ny * ny + nz * nz).sqrt();
-
-            // Should be unit length (allow small epsilon for floating point)
-            assert!(
-                (length - 1.0).abs() < 0.01,
-                "Normal {} should be unit length, got length {}",
-                i,
-                length
-            );
-
-            // Should be axis-aligned for cube faces (one component is ±1, others are 0)
-            let is_axis_aligned =
-                (nx.abs() - 1.0).abs() < 0.01 && ny.abs() < 0.01 && nz.abs() < 0.01
-                    || nx.abs() < 0.01 && (ny.abs() - 1.0).abs() < 0.01 && nz.abs() < 0.01
-                    || nx.abs() < 0.01 && ny.abs() < 0.01 && (nz.abs() - 1.0).abs() < 0.01;
-
-            assert!(
-                is_axis_aligned,
-                "Normal {} should be axis-aligned, got ({}, {}, {})",
-                i, nx, ny, nz
-            );
-        }
-
-        // Verify that each face has consistent normals
-        // For each cube face (6 faces per cube, 6 triangles per face)
-        let triangles_count = index_count / 3;
-
-        for tri_idx in 0..triangles_count {
-            let idx0 = mesh.indices[tri_idx * 3] as usize;
-            let idx1 = mesh.indices[tri_idx * 3 + 1] as usize;
-            let idx2 = mesh.indices[tri_idx * 3 + 2] as usize;
-
-            // Get vertices
-            let v0 = [
-                mesh.vertices[idx0 * 3],
-                mesh.vertices[idx0 * 3 + 1],
-                mesh.vertices[idx0 * 3 + 2],
-            ];
-            let v1 = [
-                mesh.vertices[idx1 * 3],
-                mesh.vertices[idx1 * 3 + 1],
-                mesh.vertices[idx1 * 3 + 2],
-            ];
-            let v2 = [
-                mesh.vertices[idx2 * 3],
-                mesh.vertices[idx2 * 3 + 1],
-                mesh.vertices[idx2 * 3 + 2],
-            ];
-
-            // Get normals for this triangle's vertices
-            let n0 = [
-                mesh.normals[tri_idx * 9],
-                mesh.normals[tri_idx * 9 + 1],
-                mesh.normals[tri_idx * 9 + 2],
-            ];
-            let n1 = [
-                mesh.normals[tri_idx * 9 + 3],
-                mesh.normals[tri_idx * 9 + 4],
-                mesh.normals[tri_idx * 9 + 5],
-            ];
-            let n2 = [
-                mesh.normals[tri_idx * 9 + 6],
-                mesh.normals[tri_idx * 9 + 7],
-                mesh.normals[tri_idx * 9 + 8],
-            ];
-
-            // All three normals in a triangle should be the same (flat shading for cubes)
-            assert_eq!(
-                n0, n1,
-                "Triangle {} normals inconsistent: vertex 0 vs 1",
-                tri_idx
-            );
-            assert_eq!(
-                n1, n2,
-                "Triangle {} normals inconsistent: vertex 1 vs 2",
-                tri_idx
-            );
-
-            // Calculate face normal from triangle vertices using cross product
-            let edge1 = [v1[0] - v0[0], v1[1] - v0[1], v1[2] - v0[2]];
-            let edge2 = [v2[0] - v0[0], v2[1] - v0[1], v2[2] - v0[2]];
-
-            let cross = [
-                edge1[1] * edge2[2] - edge1[2] * edge2[1],
-                edge1[2] * edge2[0] - edge1[0] * edge2[2],
-                edge1[0] * edge2[1] - edge1[1] * edge2[0],
-            ];
-
-            let cross_length =
-                (cross[0] * cross[0] + cross[1] * cross[1] + cross[2] * cross[2]).sqrt();
-
-            if cross_length > 0.001 {
-                let cross_normalized = [
-                    cross[0] / cross_length,
-                    cross[1] / cross_length,
-                    cross[2] / cross_length,
-                ];
-
-                // The stored normal should match the computed normal (pointing outward)
-                // Allow for both directions since we're just checking consistency
-                let dot = n0[0] * cross_normalized[0]
-                    + n0[1] * cross_normalized[1]
-                    + n0[2] * cross_normalized[2];
-
-                assert!(dot.abs() > 0.99,
-                    "Triangle {} normal ({:?}) should align with computed normal ({:?}), dot product: {}",
-                    tri_idx, n0, cross_normalized, dot);
-            }
-        }
-
-        println!(
-            "✓ Mesh normals verified: {} cubes, {} triangles, all normals correct",
-            vertex_count / 8,
-            triangles_count
-        );
-    }
 
     #[cfg(feature = "image")]
     #[test]
@@ -1409,10 +1262,6 @@ mod tests {
 
         let tree = parse_csm(csm).unwrap();
         let mapper = HsvColorMapper::new();
-
-        // First, verify the mesh normals are correct
-        let mesh = crate::mesh::generate_mesh_with_mapper(&tree, &mapper);
-        verify_mesh_normals(&mesh);
 
         // Render from all 6 directions with voxel_size_log2=4 (16x16 pixels per voxel)
         // This should produce images that are at least 4x4 and show detail

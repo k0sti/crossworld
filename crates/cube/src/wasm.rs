@@ -5,7 +5,8 @@ use std::rc::Rc;
 use wasm_bindgen::prelude::*;
 
 use crate::{
-    generate_mesh, generate_mesh_with_mapper, parse_csm, Cube, Octree, PaletteColorMapper,
+    generate_mesh_hierarchical, parse_csm, ColorMapper, Cube, DefaultMeshBuilder,
+    HsvColorMapper, Octree, PaletteColorMapper,
 };
 
 #[derive(Serialize, Deserialize)]
@@ -48,12 +49,15 @@ pub fn init() {
 pub fn parse_csm_to_mesh(csm_code: &str) -> JsValue {
     match parse_csm(csm_code) {
         Ok(octree) => {
-            let mesh = generate_mesh(&octree);
+            let mut builder = DefaultMeshBuilder::new();
+            let mapper = HsvColorMapper::new();
+            generate_mesh_hierarchical(&octree, &mut builder, |v| mapper.map(v), 16);
+
             let result = MeshResult {
-                vertices: mesh.vertices,
-                indices: mesh.indices,
-                normals: mesh.normals,
-                colors: mesh.colors,
+                vertices: builder.vertices,
+                indices: builder.indices,
+                normals: builder.normals,
+                colors: builder.colors,
             };
             serde_wasm_bindgen::to_value(&result).unwrap_or_else(|e| {
                 let error = ParseError {
@@ -207,24 +211,26 @@ pub fn get_model_mesh(model_id: &str) -> JsValue {
             let octree = Octree::new(model_data.cube.clone());
 
             // Use palette if available, otherwise HSV
-            let mut mesh = if let Some(ref palette) = model_data.palette {
+            let mut builder = DefaultMeshBuilder::new();
+            if let Some(ref palette) = model_data.palette {
                 let mapper = PaletteColorMapper::new(palette.clone());
-                generate_mesh_with_mapper(&octree, &mapper)
+                generate_mesh_hierarchical(&octree, &mut builder, |v| mapper.map(v), model_data.max_depth as u32);
             } else {
-                generate_mesh(&octree)
+                let mapper = HsvColorMapper::new();
+                generate_mesh_hierarchical(&octree, &mut builder, |v| mapper.map(v), model_data.max_depth as u32);
             };
 
             // Scale mesh from [0,1] space to [0, 2^max_depth] world space
             let scale = (1 << model_data.max_depth) as f32;
-            for i in 0..mesh.vertices.len() {
-                mesh.vertices[i] *= scale;
+            for i in 0..builder.vertices.len() {
+                builder.vertices[i] *= scale;
             }
 
             let result = MeshResult {
-                vertices: mesh.vertices,
-                indices: mesh.indices,
-                normals: mesh.normals,
-                colors: mesh.colors,
+                vertices: builder.vertices,
+                indices: builder.indices,
+                normals: builder.normals,
+                colors: builder.colors,
             };
             serde_wasm_bindgen::to_value(&result).unwrap_or_else(|e| {
                 let error = ParseError {
