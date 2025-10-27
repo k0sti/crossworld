@@ -179,6 +179,7 @@ export function WorldCanvas({
         cancelAnimationFrame(animationFrameRef.current);
       }
       window.removeEventListener('resize', handleResize);
+      sceneManager.dispose();
       geometryController.destroy();
       if (unsubscribe) {
         unsubscribe();
