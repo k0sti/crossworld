@@ -20,6 +20,8 @@ import { getMacroDepth, getMicroDepth, getTotalDepth } from '../config/depth-con
 import { CheckerPlane } from './checker-plane';
 import { SunSystem } from './sun-system';
 import { PostProcessing } from './post-processing';
+import { profileCache } from '../services/profile-cache';
+import { WORLD_RELAYS } from '../config';
 
 /**
  * SceneManager - Manages the 3D scene with centered coordinate system
@@ -97,6 +99,13 @@ export class SceneManager {
 
   // World grid helpers
   private worldGridHelpers: THREE.Object3D[] = [];
+
+  // WASD movement state for avatar (when camera movement is not active)
+  private avatarMoveForward = false;
+  private avatarMoveBackward = false;
+  private avatarMoveLeft = false;
+  private avatarMoveRight = false;
+  private avatarMoveSpeed = 5.0; // units per second
 
   // Event listener references for cleanup
   private boundKeyDown?: (event: KeyboardEvent) => void;
@@ -185,9 +194,17 @@ export class SceneManager {
       if (!this.currentAvatar) return;
 
       // Calculate mouse position in normalized device coordinates (-1 to +1)
-      const rect = canvas.getBoundingClientRect();
-      this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-      this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      // In mouse rotate mode (mode 2), use center crosshair position instead of mouse pointer
+      if (this.mouseMode === 2) {
+        // Center of screen
+        this.mouse.x = 0;
+        this.mouse.y = 0;
+      } else {
+        // Use actual mouse click position
+        const rect = canvas.getBoundingClientRect();
+        this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      }
 
       // Update raycaster
       this.raycaster.setFromCamera(this.mouse, this.camera);
@@ -407,6 +424,24 @@ export class SceneManager {
 
   private setupKeyboardListener(canvas: HTMLCanvasElement): void {
     this.boundKeyDown = (event: KeyboardEvent) => {
+      // WASD movement for avatar (only when camera movement is not active)
+      if (this.mouseMode === 1 && !this.isEditMode) {
+        switch (event.key.toLowerCase()) {
+          case 'w':
+            this.avatarMoveForward = true;
+            return;
+          case 's':
+            this.avatarMoveBackward = true;
+            return;
+          case 'a':
+            this.avatarMoveLeft = true;
+            return;
+          case 'd':
+            this.avatarMoveRight = true;
+            return;
+        }
+      }
+
       // Toggle mouse mode with Shift key (works in both walk and edit modes)
       // Only toggle once per key press, not on repeated keydown events
       if (event.key === 'Shift') {
@@ -423,6 +458,8 @@ export class SceneManager {
           if (this.crosshair) {
             this.crosshair.style.display = 'block';
           }
+          // Reset avatar movement state when entering camera mode
+          this.resetAvatarMovementState();
           console.log('[Mouse Mode] Switched to mode 2 (first-person camera rotation)');
         } else if (this.mouseMode === 2) {
           // Exit camera rotation mode
@@ -443,6 +480,8 @@ export class SceneManager {
       // Toggle edit mode with 'e' key (works in both walk and edit modes)
       if (event.key === 'e' || event.key === 'E') {
         this.setEditMode(!this.isEditMode);
+        // Reset avatar movement state when toggling edit mode
+        this.resetAvatarMovementState();
         console.log(`[Edit Mode] Toggled to ${this.isEditMode ? 'ON' : 'OFF'}`);
         return;
       }
@@ -478,6 +517,22 @@ export class SceneManager {
       if (event.key === 'Shift') {
         this.shiftKeyPressed = false;
       }
+
+      // Reset WASD movement state
+      switch (event.key.toLowerCase()) {
+        case 'w':
+          this.avatarMoveForward = false;
+          break;
+        case 's':
+          this.avatarMoveBackward = false;
+          break;
+        case 'a':
+          this.avatarMoveLeft = false;
+          break;
+        case 'd':
+          this.avatarMoveRight = false;
+          break;
+      }
     };
 
     this.boundPointerLockChange = () => {
@@ -498,6 +553,13 @@ export class SceneManager {
     window.addEventListener('keydown', this.boundKeyDown);
     window.addEventListener('keyup', this.boundKeyUp);
     document.addEventListener('pointerlockchange', this.boundPointerLockChange);
+  }
+
+  private resetAvatarMovementState(): void {
+    this.avatarMoveForward = false;
+    this.avatarMoveBackward = false;
+    this.avatarMoveLeft = false;
+    this.avatarMoveRight = false;
   }
 
   // Removed: setupLights() - now using SunSystem for dynamic lighting
@@ -870,6 +932,61 @@ export class SceneManager {
       }
     }
 
+    // WASD keyboard movement for avatar (only when camera movement is not active)
+    if (this.currentAvatar && this.mouseMode === 1 && !this.isEditMode) {
+      const isMoving = this.avatarMoveForward || this.avatarMoveBackward || this.avatarMoveLeft || this.avatarMoveRight;
+
+      if (isMoving) {
+        // Get camera's forward direction (projected on XZ plane)
+        const cameraDirection = new THREE.Vector3();
+        this.camera.getWorldDirection(cameraDirection);
+        const forward = new THREE.Vector3(cameraDirection.x, 0, cameraDirection.z).normalize();
+
+        // Get right direction (perpendicular to forward)
+        const right = new THREE.Vector3(-forward.z, 0, forward.x).normalize();
+
+        // Calculate movement direction based on WASD input
+        const moveDirection = new THREE.Vector3(0, 0, 0);
+
+        if (this.avatarMoveForward) {
+          moveDirection.add(forward);
+        }
+        if (this.avatarMoveBackward) {
+          moveDirection.sub(forward);
+        }
+        if (this.avatarMoveRight) {
+          moveDirection.add(right);
+        }
+        if (this.avatarMoveLeft) {
+          moveDirection.sub(right);
+        }
+
+        // Normalize and scale by speed
+        if (moveDirection.length() > 0) {
+          moveDirection.normalize();
+          const distance = this.avatarMoveSpeed * deltaTime_s;
+
+          // Get current avatar position
+          const currentPos = this.currentAvatar.getPosition();
+
+          // Calculate new position
+          const newX = currentPos.x + moveDirection.x * distance;
+          const newZ = currentPos.z + moveDirection.z * distance;
+
+          // Check if within world bounds
+          if (isWithinWorldBounds(newX, newZ, 0)) {
+            // Move avatar to new position
+            this.currentAvatar.setRunSpeed(false);
+            this.currentAvatar.setTargetPosition(newX, newZ);
+            this.currentMoveStyle = 'walk';
+
+            // Publish position update
+            this.publishPlayerPositionAt(newX, newZ, this.currentMoveStyle);
+          }
+        }
+      }
+    }
+
     // Update all remote avatars
     for (const avatar of this.remoteAvatars.values()) {
       avatar.update(deltaTime_s);
@@ -915,6 +1032,11 @@ export class SceneManager {
     // Create new GLB avatar
     this.currentAvatar = new Avatar(transform, { modelUrl, scale }, this.scene);
     this.scene.add(this.currentAvatar.getObject3D());
+
+    // Fetch and apply profile picture for current user
+    if (this.currentUserPubkey) {
+      this.fetchAndApplyProfilePicture(this.currentUserPubkey, this.currentAvatar);
+    }
   }
 
   removeAvatar(): void {
@@ -982,6 +1104,11 @@ export class SceneManager {
     this.scene.add(voxelAvatar.getObject3D());
     this.currentAvatar = voxelAvatar;
 
+    // Fetch and apply profile picture for current user
+    if (this.currentUserPubkey) {
+      this.fetchAndApplyProfilePicture(this.currentUserPubkey, this.currentAvatar);
+    }
+
     console.log(`Created voxel avatar for ${userNpub}`);
   }
 
@@ -1014,6 +1141,14 @@ export class SceneManager {
       // Add to scene
       this.scene.add(voxelAvatar.getObject3D());
       this.currentAvatar = voxelAvatar;
+
+      // Fetch and apply profile picture for current user
+      console.log(`[Scene] After avatar creation, currentUserPubkey: ${this.currentUserPubkey}`);
+      if (this.currentUserPubkey) {
+        this.fetchAndApplyProfilePicture(this.currentUserPubkey, this.currentAvatar);
+      } else {
+        console.log(`[Scene] No currentUserPubkey set, skipping profile fetch`);
+      }
 
       console.log(`Created voxel avatar from .vox file: ${voxUrl}`);
     } catch (error) {
@@ -1052,6 +1187,11 @@ export class SceneManager {
     // Add to scene
     this.scene.add(voxelAvatar.getObject3D());
     this.currentAvatar = voxelAvatar;
+
+    // Fetch and apply profile picture for current user
+    if (this.currentUserPubkey) {
+      this.fetchAndApplyProfilePicture(this.currentUserPubkey, this.currentAvatar);
+    }
 
     console.log('Created CSM avatar');
   }
@@ -1109,7 +1249,14 @@ export class SceneManager {
    * Set the current user's pubkey (to exclude from remote avatars)
    */
   setCurrentUserPubkey(pubkey: string | null): void {
+    console.log(`[Scene] setCurrentUserPubkey called: ${pubkey}`);
     this.currentUserPubkey = pubkey;
+
+    // If we have an avatar already and now have a pubkey, fetch profile retroactively
+    if (pubkey && this.currentAvatar) {
+      console.log(`[Scene] Avatar exists, fetching profile retroactively`);
+      this.fetchAndApplyProfilePicture(pubkey, this.currentAvatar);
+    }
   }
 
   /**
@@ -1271,6 +1418,10 @@ export class SceneManager {
       this.scene.add(voxelAvatar.getObject3D());
       this.remoteAvatars.set(pubkey, voxelAvatar);
       this.remoteAvatarConfigs.set(pubkey, { avatarType, avatarId, avatarData });
+
+      // Fetch and apply profile picture
+      this.fetchAndApplyProfilePicture(pubkey, voxelAvatar, npub);
+
       console.log(`Created remote voxel avatar for ${npub}`);
     } else if (avatarType === 'csm') {
       // Create CSM avatar
@@ -1292,6 +1443,10 @@ export class SceneManager {
               this.scene.add(voxelAvatar.getObject3D());
               this.remoteAvatars.set(pubkey, voxelAvatar);
               this.remoteAvatarConfigs.set(pubkey, { avatarType, avatarId, avatarData });
+
+              // Fetch and apply profile picture
+              this.fetchAndApplyProfilePicture(pubkey, voxelAvatar, npub);
+
               return;
             }
 
@@ -1313,6 +1468,10 @@ export class SceneManager {
             this.scene.add(voxelAvatar.getObject3D());
             this.remoteAvatars.set(pubkey, voxelAvatar);
             this.remoteAvatarConfigs.set(pubkey, { avatarType, avatarId, avatarData });
+
+            // Fetch and apply profile picture
+            this.fetchAndApplyProfilePicture(pubkey, voxelAvatar, npub);
+
             console.log(`Created remote CSM avatar for ${npub}`);
           }).catch(error => {
             console.error(`Failed to load CSM avatar for remote user ${npub}:`, error);
@@ -1350,6 +1509,10 @@ export class SceneManager {
       this.scene.add(glbAvatar.getObject3D());
       this.remoteAvatars.set(pubkey, glbAvatar);
       this.remoteAvatarConfigs.set(pubkey, { avatarType, avatarId, avatarData });
+
+      // Fetch and apply profile picture
+      this.fetchAndApplyProfilePicture(pubkey, glbAvatar, npub);
+
       console.log(`Created remote GLB avatar for ${npub}`);
     }
   }
@@ -1378,6 +1541,36 @@ export class SceneManager {
     } else {
       // Unknown move style - default to teleport with fade
       avatar.teleportTo(position.x, position.z, 'fade');
+    }
+  }
+
+  /**
+   * Fetch and apply profile picture and display name to an avatar
+   */
+  private async fetchAndApplyProfilePicture(pubkey: string, avatar: IAvatar, npub?: string): Promise<void> {
+    console.log(`[Scene] fetchAndApplyProfilePicture called for pubkey: ${pubkey}, npub: ${npub}`);
+    try {
+      const profile = await profileCache.getProfile(pubkey, WORLD_RELAYS);
+      console.log(`[Scene] Profile fetched:`, profile);
+
+      // Set display name for initials fallback
+      const displayName = profile?.display_name || profile?.name || npub?.slice(0, 12) || '';
+      console.log(`[Scene] Setting display name: ${displayName}`);
+      avatar.setDisplayName(displayName);
+
+      // Set profile picture if available
+      if (profile?.picture) {
+        console.log(`[Scene] Setting profile picture: ${profile.picture}`);
+        await avatar.setProfilePicture(profile.picture);
+      } else {
+        console.log(`[Scene] No profile picture available`);
+      }
+    } catch (error) {
+      console.warn(`[Scene] Failed to fetch profile picture for ${pubkey}:`, error);
+      // Still set display name for initials even if profile fetch fails
+      if (npub) {
+        avatar.setDisplayName(npub.slice(0, 12));
+      }
     }
   }
 
