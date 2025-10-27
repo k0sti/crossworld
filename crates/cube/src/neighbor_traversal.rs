@@ -98,7 +98,7 @@ impl NeighborGrid {
         let ny = y + dy;
         let nz = z + dz;
 
-        if nx >= 0 && nx < 4 && ny >= 0 && ny < 4 && nz >= 0 && nz < 4 {
+        if (0..4).contains(&nx) && (0..4).contains(&ny) && (0..4).contains(&nz) {
             Some(&self.voxels[Self::xyz_to_index(nx, ny, nz)])
         } else {
             None
@@ -236,6 +236,7 @@ pub fn traverse_with_neighbors(
 }
 
 /// Internal recursive traversal function
+#[allow(clippy::only_used_in_recursion)]
 fn traverse_recursive(
     grid: &NeighborGrid,
     grid_idx: usize,
@@ -257,7 +258,6 @@ fn traverse_recursive(
     match &**voxel {
         Cube::Solid(_) => {
             // Solid voxel - no need to descend further
-            return;
         }
         Cube::Cubes(children) => {
             // Branch: create new 4x4x4 grid for next level
@@ -278,7 +278,6 @@ fn traverse_recursive(
         }
         _ => {
             // Planes/Slices: treat as solid for now
-            return;
         }
     }
 }
@@ -296,7 +295,7 @@ fn create_child_grid(
         let (x, y, z) = NeighborGrid::index_to_xyz(i);
 
         // Check if this is a center voxel (will be filled by children)
-        if x >= 1 && x <= 2 && y >= 1 && y <= 2 && z >= 1 && z <= 2 {
+        if (1..=2).contains(&x) && (1..=2).contains(&y) && (1..=2).contains(&z) {
             // Map grid position back to octant index
             let octant_pos = IVec3::new(x - 1, y - 1, z - 1);
             let octant_idx = octant_pos.to_octant_index();
