@@ -192,6 +192,7 @@ pub fn generate_face_mesh<B, F>(
 }
 
 /// Check if neighbor is solid and add face if needed
+#[allow(clippy::too_many_arguments)]
 fn check_and_add_face<B, F>(
     face: Face,
     neighbor: Option<&std::rc::Rc<Cube<i32>>>,

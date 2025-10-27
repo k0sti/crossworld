@@ -175,6 +175,7 @@ pub fn generate_mesh_hierarchical<B, F>(
 /// * `current_depth` - Current depth in the tree (0 = root)
 /// * `pos` - Position in grid coordinates
 /// * `remaining_depth` - Remaining depth to traverse
+#[allow(clippy::only_used_in_recursion)]
 fn traverse_cube<B, F>(
     cube: &Cube<i32>,
     builder: &mut B,

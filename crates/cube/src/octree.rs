@@ -240,7 +240,7 @@ impl<T: Clone> Cube<T> {
     fn get_or_expand_children(&self) -> [Rc<Cube<T>>; 8] {
         match self {
             Cube::Cubes(children) => {
-                let vec: Vec<_> = children.iter().cloned().collect();
+                let vec: Vec<_> = children.to_vec();
                 [
                     vec[0].clone(),
                     vec[1].clone(),
@@ -342,12 +342,12 @@ impl Cube<i32> {
                 // At least one is branching - recurse on all children
                 Cube::tabulate(|i| {
                     let self_child = match self {
-                        Cube::Cubes(children) => (&*children[i]).clone(),
+                        Cube::Cubes(children) => (*children[i]).clone(),
                         Cube::Solid(v) => Cube::Solid(*v),
                         _ => Cube::Solid(0),
                     };
                     let other_child = match other {
-                        Cube::Cubes(children) => (&*children[i]).clone(),
+                        Cube::Cubes(children) => (*children[i]).clone(),
                         Cube::Solid(v) => Cube::Solid(*v),
                         _ => Cube::Solid(0),
                     };
@@ -402,7 +402,7 @@ impl Cube<i32> {
             let child_idx = child.to_octant_index();
 
             match &octants[parent_idx] {
-                Cube::Cubes(children) => (&*children[child_idx]).clone(),
+                Cube::Cubes(children) => (*children[child_idx]).clone(),
                 Cube::Solid(v) => Cube::Solid(*v),
                 _ => Cube::Solid(0),
             }
@@ -537,7 +537,7 @@ impl Cube<i32> {
         let children: [Rc<Cube<i32>>; 8] = match self {
             Cube::Cubes(existing_children) => {
                 // Clone existing children
-                existing_children.iter().cloned().collect::<Vec<_>>().try_into().unwrap()
+                existing_children.to_vec().try_into().unwrap()
             }
             Cube::Solid(v) => {
                 // Expand solid into 8 children with the same value

@@ -32,7 +32,7 @@ fn build_octree_recursive(
 
         // Convert to centered coordinates
         // For depth 7: grid is [0, 128), center is 64, so [-64, 64)
-        let half_grid = (1 << max_depth); // 2^max_depth / 2
+        let half_grid = 1 << max_depth; // 2^max_depth / 2
         let world_y = voxel_y - half_grid;
 
         let value = get_voxel_value(voxel_x, world_y, voxel_z, noise, fbm);
