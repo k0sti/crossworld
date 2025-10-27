@@ -45,6 +45,14 @@ export abstract class BaseAvatar implements IAvatar {
   protected teleportAnimation: TeleportAnimation | null = null;
   protected scene: THREE.Scene | null = null;
 
+  // Smooth movement properties
+  protected velocity: THREE.Vector2 = new THREE.Vector2(0, 0);
+  protected currentDirection: number = 0; // Current facing angle in radians
+  protected targetDirection: number = 0; // Target facing angle in radians
+  protected turnSpeed: number = 5.0; // Radians per second
+  protected velocityAcceleration: number = 10.0; // Acceleration constant
+  protected velocityDamping: number = 0.95; // Damping factor (0.5 = half previous velocity)
+
   protected get moveSpeed(): number {
     return this.baseMoveSpeed * (this.isRunning ? 2.0 : 1.0);
   }
@@ -53,6 +61,8 @@ export abstract class BaseAvatar implements IAvatar {
     this.transform = initialTransform ? Transform.fromTransform(initialTransform) : new Transform(4, 0, 4);
     this.targetTransform = this.transform.clone();
     this.scene = scene || null;
+    this.currentDirection = this.transform.getAngle();
+    this.targetDirection = this.currentDirection;
 
     this.group = new THREE.Group();
     this.transform.applyToObject3D(this.group);
@@ -98,17 +108,7 @@ export abstract class BaseAvatar implements IAvatar {
       this.onStartMoving();
     }
 
-    // Calculate direction and rotate to face it
-    const dx = x - this.transform.getX();
-    const dz = z - this.transform.getZ();
-    const distance = Math.sqrt(dx * dx + dz * dz);
-
-    if (distance > 0.01) {
-      const angle = Math.atan2(dx, dz) + this.getRotationOffset();
-      this.transform.setAngle(angle);
-      this.targetTransform.setAngle(angle);
-      this.group.quaternion.copy(this.transform.getRotation());
-    }
+    // Target direction will be calculated continuously in update()
   }
 
   setScene(scene: THREE.Scene): void {
@@ -127,6 +127,7 @@ export abstract class BaseAvatar implements IAvatar {
 
     // Stop any current movement
     this.isMoving = false;
+    this.velocity.set(0, 0);
     this.onStopMoving();
 
     // Calculate target rotation
@@ -140,6 +141,8 @@ export abstract class BaseAvatar implements IAvatar {
     // Immediately set new position and orientation (no animation)
     this.transform.setXZ(x, z);
     this.transform.setAngle(targetAngle);
+    this.currentDirection = targetAngle;
+    this.targetDirection = targetAngle;
     this.targetTransform.setXZ(x, z);
     this.targetTransform.setAngle(targetAngle);
     this.group.position.set(this.transform.getX(), this.transform.getY(), this.transform.getZ());
@@ -161,6 +164,7 @@ export abstract class BaseAvatar implements IAvatar {
 
     // Stop any current movement
     this.isMoving = false;
+    this.velocity.set(0, 0);
     this.onStopMoving();
 
     // Calculate target rotation
@@ -178,10 +182,24 @@ export abstract class BaseAvatar implements IAvatar {
     // Immediately set new position and orientation
     this.transform.setXZ(x, z);
     this.transform.setAngle(targetAngle);
+    this.currentDirection = targetAngle;
+    this.targetDirection = targetAngle;
     this.targetTransform.setXZ(x, z);
     this.targetTransform.setAngle(targetAngle);
     this.group.position.set(this.transform.getX(), this.transform.getY(), this.transform.getZ());
     this.group.quaternion.copy(this.transform.getRotation());
+  }
+
+  /**
+   * Calculate shortest angular difference between two angles
+   * Returns value in range [-π, π]
+   */
+  private angleDifference(target: number, current: number): number {
+    let diff = target - current;
+    // Normalize to [-π, π]
+    while (diff > Math.PI) diff -= 2 * Math.PI;
+    while (diff < -Math.PI) diff += 2 * Math.PI;
+    return diff;
   }
 
   update(deltaTime_s: number): void {
@@ -191,28 +209,69 @@ export abstract class BaseAvatar implements IAvatar {
       return;
     }
 
-    if (!this.isMoving) return;
 
     const distance = this.transform.distanceTo2D(this.targetTransform);
 
-    if (distance < 0.1) {
+    if (!this.isMoving) {
+      return;
+    } else if (distance < 0.01) {
       // Reached target
       this.transform.setXZ(this.targetTransform.getX(), this.targetTransform.getZ());
       this.group.position.set(this.transform.getX(), this.transform.getY(), this.transform.getZ());
+      this.velocity.set(0, 0);
       this.isMoving = false;
       this.onStopMoving();
       return;
     }
 
-    // Move towards target
-    const moveDistance = this.moveSpeed * deltaTime_s;
+    // Calculate target direction continuously based on current position
     const dx = this.targetTransform.getX() - this.transform.getX();
     const dz = this.targetTransform.getZ() - this.transform.getZ();
-    const direction = new THREE.Vector2(dx, dz).normalize();
+    this.targetDirection = Math.atan2(dx, dz) + this.getRotationOffset();
 
-    const actualMove = Math.min(moveDistance, distance);
-    const newX = this.transform.getX() + direction.x * actualMove;
-    const newZ = this.transform.getZ() + direction.y * actualMove;
+    // Smooth rotation towards target direction
+    const angleDiff = this.angleDifference(this.targetDirection, this.currentDirection);
+    const turnAmount = this.turnSpeed * deltaTime_s;
+
+    if (Math.abs(angleDiff) < turnAmount) {
+      // Close enough, snap to target
+      this.currentDirection = this.targetDirection;
+    } else {
+      // Turn towards target (shortest path)
+      this.currentDirection += Math.sign(angleDiff) * turnAmount;
+    }
+
+    // Normalize current direction to [-π, π]
+    while (this.currentDirection > Math.PI) this.currentDirection -= 2 * Math.PI;
+    while (this.currentDirection < -Math.PI) this.currentDirection += 2 * Math.PI;
+
+    // Update transform rotation
+    this.transform.setAngle(this.currentDirection);
+    this.group.quaternion.copy(this.transform.getRotation());
+
+    // Calculate direction to target (reusing dx, dz from above)
+    const targetOffset = new THREE.Vector2(dx, dz);
+    const targetDir = targetOffset.normalize();
+
+    // Current direction vector (without rotation offset for velocity calculation)
+    const currentDirNoOffset = this.currentDirection - this.getRotationOffset();
+    const currentDir = new THREE.Vector2(Math.sin(currentDirNoOffset), Math.cos(currentDirNoOffset));
+
+    // Calculate dot product (alignment with target)
+    const alignment = Math.max(0, 0.5+targetDir.dot(currentDir));
+
+    // Update velocity: velocity = damping * lastVelocity + alignment * acceleration * currentDir
+    this.velocity.multiplyScalar(this.velocityDamping);
+    
+    // brake when close
+    // if (targetOffset.length()<1) this.velocity.multiplyScalar(0.8);
+
+    const accelerationForce = alignment * this.velocityAcceleration * deltaTime_s;
+    this.velocity.add(currentDir.clone().multiplyScalar(accelerationForce));
+
+    // Update position
+    const newX = this.transform.getX() + this.velocity.x * deltaTime_s;
+    const newZ = this.transform.getZ() + this.velocity.y * deltaTime_s;
 
     this.transform.setXZ(newX, newZ);
     this.group.position.set(this.transform.getX(), this.transform.getY(), this.transform.getZ());

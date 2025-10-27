@@ -5,6 +5,7 @@ export class CameraController {
   private canvas: HTMLCanvasElement;
   private enabled: boolean = false;
   private onExitCallback: (() => void) | null = null;
+  private usePointerLock: boolean = true;
 
   // Movement state
   private moveForward = false;
@@ -14,6 +15,10 @@ export class CameraController {
   private moveUp = false;
   private moveDown = false;
 
+  // Force-based movement
+  private moveForce: THREE.Vector3 = new THREE.Vector3(0, 0, 0);
+  private forceMultiplier: number = 10000.0; // Constant multiplier for converting force to velocity
+
   // Camera rotation
   private yaw = 0; // Left/right rotation
   private pitch = 0; // Up/down rotation
@@ -21,6 +26,12 @@ export class CameraController {
   // Movement speed
   private moveSpeed = 5.0; // units per second
   private lookSpeed = 0.002; // radians per pixel
+
+  // Smooth camera movement
+  private targetPosition: THREE.Vector3 | null = null;
+  private velocity: THREE.Vector3 = new THREE.Vector3(0, 0, 0);
+  private smoothingFactor = 0.15; // Lower = smoother (0-1)
+  private velocityDamping = 0.92; // Damping when no target
 
   // Saved camera state
   private savedPosition: THREE.Vector3 | null = null;
@@ -45,6 +56,10 @@ export class CameraController {
 
   setOnExitCallback(callback: () => void): void {
     this.onExitCallback = callback;
+  }
+
+  setUsePointerLock(usePointerLock: boolean): void {
+    this.usePointerLock = usePointerLock;
   }
 
   enable(): void {
@@ -75,14 +90,19 @@ export class CameraController {
       this.pitch = Math.asin(-direction.y);
     }
 
-    // Request pointer lock
-    this.canvas.requestPointerLock();
+    // Request pointer lock only if enabled
+    if (this.usePointerLock) {
+      this.canvas.requestPointerLock();
+    }
 
     // Add event listeners
     document.addEventListener('keydown', this.boundKeyDown);
     document.addEventListener('keyup', this.boundKeyUp);
     document.addEventListener('mousemove', this.boundMouseMove);
-    document.addEventListener('pointerlockchange', this.boundPointerLockChange);
+
+    if (this.usePointerLock) {
+      document.addEventListener('pointerlockchange', this.boundPointerLockChange);
+    }
   }
 
   disable(): void {
@@ -93,7 +113,7 @@ export class CameraController {
     this.saveCameraState();
 
     // Release pointer lock
-    if (document.pointerLockElement === this.canvas) {
+    if (this.usePointerLock && document.pointerLockElement === this.canvas) {
       document.exitPointerLock();
     }
 
@@ -109,7 +129,10 @@ export class CameraController {
     document.removeEventListener('keydown', this.boundKeyDown);
     document.removeEventListener('keyup', this.boundKeyUp);
     document.removeEventListener('mousemove', this.boundMouseMove);
-    document.removeEventListener('pointerlockchange', this.boundPointerLockChange);
+
+    if (this.usePointerLock) {
+      document.removeEventListener('pointerlockchange', this.boundPointerLockChange);
+    }
 
     // Reset movement state
     this.resetMovementState();
@@ -126,15 +149,15 @@ export class CameraController {
         this.moveBackward = true;
         break;
       case 'a':
-        this.moveRight = true; // Swapped: A now moves right
+        this.moveLeft = true;
         break;
       case 'd':
-        this.moveLeft = true; // Swapped: D now moves left
+        this.moveRight = true;
         break;
       case 'v':
-        this.moveDown = true;
+          this.moveDown = true;
         break;
-      case 'f':
+      case 'c':
         this.moveUp = true;
         break;
       case 'escape':
@@ -154,22 +177,30 @@ export class CameraController {
         this.moveBackward = false;
         break;
       case 'a':
-        this.moveRight = false; // Swapped: A now moves right
+        this.moveLeft = false;
         break;
       case 'd':
-        this.moveLeft = false; // Swapped: D now moves left
+        this.moveRight = false;
         break;
       case 'v':
         this.moveDown = false;
         break;
-      case 'f':
+      case 'c':
         this.moveUp = false;
         break;
     }
   }
 
   private onMouseMove(event: MouseEvent): void {
-    if (!this.enabled || document.pointerLockElement !== this.canvas) return;
+    if (!this.enabled) return;
+
+    // In pointer lock mode, require pointer lock
+    if (this.usePointerLock && document.pointerLockElement !== this.canvas) return;
+
+    // In non-pointer-lock mode, don't rotate camera (mouselook handled by scene manager)
+    if (!this.usePointerLock) {
+      return;
+    }
 
     // Update camera rotation based on mouse movement
     this.yaw -= event.movementX * this.lookSpeed;
@@ -205,44 +236,98 @@ export class CameraController {
     this.camera.lookAt(target);
   }
 
+  /**
+   * Set target position for smooth camera movement
+   * Camera will smoothly move to this position while maintaining orientation
+   */
+  setTargetPosition(position: THREE.Vector3): void {
+    this.targetPosition = position.clone();
+  }
+
+  /**
+   * Clear target position (camera stops smoothly)
+   */
+  clearTargetPosition(): void {
+    this.targetPosition = null;
+  }
+
   update(deltaTime: number): void {
     if (!this.enabled) return;
 
-    const moveDistance = this.moveSpeed * deltaTime;
+    // Smooth movement towards target position (if set)
+    if (this.targetPosition) {
+      const toTarget = new THREE.Vector3().subVectors(this.targetPosition, this.camera.position);
+      const distance = toTarget.length();
 
-    // Calculate movement direction based on camera orientation
-    const forward = new THREE.Vector3(
-      Math.sin(this.yaw),
-      0,
-      Math.cos(this.yaw)
-    ).normalize();
+      if (distance < 0.01) {
+        // Reached target, snap to it
+        this.camera.position.copy(this.targetPosition);
+        this.velocity.set(0, 0, 0);
+        this.targetPosition = null;
+      } else {
+        // Calculate desired velocity towards target
+        const desiredVelocity = toTarget.normalize().multiplyScalar(this.moveSpeed);
 
-    const right = new THREE.Vector3(
-      Math.sin(this.yaw + Math.PI / 2),
-      0,
-      Math.cos(this.yaw + Math.PI / 2)
-    ).normalize();
+        // Smoothly interpolate velocity
+        this.velocity.lerp(desiredVelocity, this.smoothingFactor);
 
-    const up = new THREE.Vector3(0, 1, 0);
+        // Update position
+        this.camera.position.addScaledVector(this.velocity, deltaTime);
+      }
+    } else {
+      // Calculate movement direction based on camera's actual orientation
+      const direction = new THREE.Vector3();
+      this.camera.getWorldDirection(direction);
 
-    // Apply movement
-    if (this.moveForward) {
-      this.camera.position.addScaledVector(forward, moveDistance);
-    }
-    if (this.moveBackward) {
-      this.camera.position.addScaledVector(forward, -moveDistance);
-    }
-    if (this.moveLeft) {
-      this.camera.position.addScaledVector(right, -moveDistance);
-    }
-    if (this.moveRight) {
-      this.camera.position.addScaledVector(right, moveDistance);
-    }
-    if (this.moveUp) {
-      this.camera.position.addScaledVector(up, moveDistance);
-    }
-    if (this.moveDown) {
-      this.camera.position.addScaledVector(up, -moveDistance);
+      // Forward direction (projected onto XZ plane)
+      const forward = new THREE.Vector3(direction.x, 0, direction.z).normalize();
+
+      // Right direction (perpendicular to forward on XZ plane)
+      const right = new THREE.Vector3(-forward.z, 0, forward.x).normalize();
+
+      const up = new THREE.Vector3(0, 1, 0);
+
+      // Calculate move force from keyboard input
+      this.moveForce.set(0, 0, 0);
+
+      if (this.moveForward) {
+        this.moveForce.add(forward);
+      }
+      if (this.moveBackward) {
+        this.moveForce.sub(forward);
+      }
+      if (this.moveLeft) {
+        this.moveForce.sub(right);
+      }
+      if (this.moveRight) {
+        this.moveForce.add(right);
+      }
+      if (this.moveUp) {
+        this.moveForce.add(up);
+      }
+      if (this.moveDown) {
+        this.moveForce.sub(up);
+      }
+
+      // Add force to velocity with constant multiplier
+      this.velocity.addScaledVector(this.moveForce, this.forceMultiplier * deltaTime);
+
+      // Apply damping to velocity
+      this.velocity.multiplyScalar(this.velocityDamping);
+
+      // Clamp velocity to max speed
+      const currentSpeed = this.velocity.length();
+      if (currentSpeed > this.moveSpeed) {
+        this.velocity.normalize().multiplyScalar(this.moveSpeed);
+      }
+
+      // Update position
+      this.camera.position.addScaledVector(this.velocity, deltaTime);
+
+      // Zero out very small velocities
+      if (this.velocity.length() < 0.01) {
+        this.velocity.set(0, 0, 0);
+      }
     }
   }
 

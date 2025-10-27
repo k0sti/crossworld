@@ -20,10 +20,10 @@ pub struct GeometryEngine {
 #[wasm_bindgen]
 impl GeometryEngine {
     #[wasm_bindgen(constructor)]
-    pub fn new() -> Self {
-        web_sys::console::log_1(&"GeometryEngine initialized".into());
+    pub fn new(world_depth: u32, scale_depth: u32) -> Self {
+        web_sys::console::log_1(&format!("GeometryEngine initialized with world_depth={}, scale_depth={}", world_depth, scale_depth).into());
         Self {
-            engine: RefCell::new(GeometryEngineInternal::new()),
+            engine: RefCell::new(GeometryEngineInternal::new(world_depth, scale_depth)),
         }
     }
 
@@ -32,29 +32,47 @@ impl GeometryEngine {
         self.engine.borrow().generate_frame()
     }
 
-    #[wasm_bindgen(js_name = setGroundRenderMode)]
-    pub fn set_ground_render_mode(&self, use_cube: bool) {
-        let mode = if use_cube {
-            geometry::GroundRenderMode::Cube
-        } else {
-            geometry::GroundRenderMode::Flat
-        };
-        self.engine.borrow_mut().set_render_mode(mode);
-        web_sys::console::log_1(&format!("Ground render mode set to: {:?}", mode).into());
+    /// Set voxel in cube ground at specified depth
+    /// depth: octree depth (7=finest detail, 4=coarse, etc.)
+    #[wasm_bindgen(js_name = setVoxelAtDepth)]
+    pub fn set_voxel_at_depth(&self, x: i32, y: i32, z: i32, depth: u32, color_index: i32) {
+        self.engine.borrow_mut().set_voxel_at_depth(x, y, z, depth, color_index);
     }
 
-    #[wasm_bindgen(js_name = getGroundRenderMode)]
-    pub fn get_ground_render_mode(&self) -> bool {
-        match self.engine.borrow().get_render_mode() {
-            geometry::GroundRenderMode::Cube => true,
-            geometry::GroundRenderMode::Flat => false,
-        }
+    /// Set single voxel in cube ground
+    #[wasm_bindgen(js_name = setVoxel)]
+    pub fn set_voxel(&self, x: i32, y: i32, z: i32, color_index: i32) {
+        self.engine.borrow_mut().set_voxel(x, y, z, color_index);
+    }
+
+    /// Remove voxel from cube ground at specified depth
+    #[wasm_bindgen(js_name = removeVoxelAtDepth)]
+    pub fn remove_voxel_at_depth(&self, x: i32, y: i32, z: i32, depth: u32) {
+        self.engine.borrow_mut().remove_voxel_at_depth(x, y, z, depth);
+    }
+
+    /// Remove voxel from cube ground
+    #[wasm_bindgen(js_name = removeVoxel)]
+    pub fn remove_voxel(&self, x: i32, y: i32, z: i32) {
+        self.engine.borrow_mut().remove_voxel(x, y, z);
+    }
+
+    /// Set face mesh mode (neighbor-aware culling)
+    #[wasm_bindgen(js_name = setFaceMeshMode)]
+    pub fn set_face_mesh_mode(&self, enabled: bool) {
+        self.engine.borrow_mut().set_face_mesh_mode(enabled);
+    }
+
+    /// Set ground render mode (cube vs plane)
+    #[wasm_bindgen(js_name = setGroundRenderMode)]
+    pub fn set_ground_render_mode(&self, use_cube: bool) {
+        self.engine.borrow_mut().set_ground_render_mode(use_cube);
     }
 }
 
 impl Default for GeometryEngine {
     fn default() -> Self {
-        Self::new()
+        Self::new(3, 0) // Default: depth 3 (macro=3, micro=0), scale 0
     }
 }
 
@@ -182,6 +200,24 @@ impl AvatarEngine {
     #[wasm_bindgen]
     pub fn cache_size(&self) -> usize {
         self.manager.cache_size()
+    }
+
+    /// Set voxel in the base avatar model
+    #[wasm_bindgen]
+    pub fn set_voxel(&mut self, x: u8, y: u8, z: u8, color_index: u8) {
+        self.manager.set_voxel(x, y, z, color_index);
+    }
+
+    /// Remove voxel from the base avatar model
+    #[wasm_bindgen]
+    pub fn remove_voxel(&mut self, x: u8, y: u8, z: u8) {
+        self.manager.remove_voxel(x, y, z);
+    }
+
+    /// Regenerate mesh for a user (after modifications)
+    #[wasm_bindgen]
+    pub fn regenerate_mesh(&mut self, user_npub: String) -> GeometryData {
+        self.generate_avatar(user_npub)
     }
 }
 
