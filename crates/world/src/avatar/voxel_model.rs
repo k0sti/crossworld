@@ -93,6 +93,29 @@ impl VoxelModel {
             .find(|v| v.x == x && v.y == y && v.z == z)
     }
 
+    /// Set voxel at position (replaces if exists)
+    pub fn set_voxel(&mut self, x: u8, y: u8, z: u8, color_index: u8) {
+        if x >= self.size_x || y >= self.size_y || z >= self.size_z {
+            return;
+        }
+
+        // Remove existing voxel at position if any
+        self.voxels.retain(|v| !(v.x == x && v.y == y && v.z == z));
+
+        // Add new voxel
+        self.voxels.push(Voxel {
+            x,
+            y,
+            z,
+            color_index,
+        });
+    }
+
+    /// Remove voxel at position
+    pub fn remove_voxel(&mut self, x: u8, y: u8, z: u8) {
+        self.voxels.retain(|v| !(v.x == x && v.y == y && v.z == z));
+    }
+
     /// Create a simple humanoid voxel model for testing
     ///
     /// Model specifications:

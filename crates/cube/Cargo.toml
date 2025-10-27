@@ -41,5 +41,8 @@ nom = "7.1"
 # Image loading (optional)
 image = { version = "0.25", optional = true }
 
+# Math library
+glam = { version = "0.29", features = ["serde"] }
+
 [dev-dependencies]
 wasm-bindgen-test = "0.3"

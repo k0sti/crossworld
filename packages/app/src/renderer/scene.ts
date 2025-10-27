@@ -7,24 +7,73 @@ import type { AvatarState } from '../services/avatar-state';
 import { Transform } from './transform';
 import type { TeleportAnimationType } from './teleport-animation';
 import { CameraController } from './camera-controller';
+import {
+  worldToCube,
+  cubeToWorld,
+  type CubeCoord,
+  isWithinWorldBounds,
+  snapToGrid,
+  getVoxelSize as getVoxelSizeFromCubeCoord
+} from '../types/cube-coord';
+import { getWorldSize } from '../constants/geometry';
+import { getMacroDepth, getMicroDepth, getTotalDepth } from '../config/depth-config';
+import { CheckerPlane } from './checker-plane';
+import { SunSystem } from './sun-system';
+import { PostProcessing } from './post-processing';
 
+/**
+ * SceneManager - Manages the 3D scene with centered coordinate system
+ *
+ * Coordinate System:
+ * - World space: All coordinates in range [-HALF_WORLD, HALF_WORLD] for X, Y, Z axes (WORLD_SIZE units)
+ * - Origin (0, 0, 0): Center of the world cube at ground level
+ * - CheckerPlane: Centered at origin with pivot at (0, 0, 0)
+ * - Cube world mesh: Centered at origin with pivot at (0, 0, 0)
+ * - Voxel cursor: Snaps to grid centered on raycast intersection point
+ * - At max depth (SUBDIVISION_DEPTH), 1 voxel = 1 world unit
+ *
+ * Voxel placement uses corner coordinates (not center), which are then
+ * converted to octree coordinates via CubeCoord system.
+ */
 export class SceneManager {
   private scene: THREE.Scene;
   private camera: THREE.PerspectiveCamera;
   private renderer: THREE.WebGLRenderer;
   private geometryMesh: THREE.Mesh | null = null;
+  private checkerPlane: CheckerPlane | null = null;
+  private groundPlane: THREE.Plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0); // Plane at y=0
   private currentAvatar: IAvatar | null = null;
   private avatarEngine: AvatarEngine | null = null;
   private raycaster: THREE.Raycaster;
   private mouse: THREE.Vector2;
   private lastTime: number = 0;
   private isEditMode: boolean = false;
-  private isCameraMode: boolean = false;
-  private gridHelper: THREE.GridHelper | null = null;
   private previewCube: THREE.LineSegments | null = null;
   private currentGridPosition: THREE.Vector3 = new THREE.Vector3();
   private onPositionUpdate?: (x: number, y: number, z: number, quaternion: [number, number, number, number], moveStyle?: string) => void;
   private cameraController: CameraController | null = null;
+  private selectedColorIndex: number = 0;
+
+  // Continuous paint state
+  private isLeftMousePressed: boolean = false;
+  private isRightMousePressed: boolean = false;
+  private lastPaintedVoxel: { x: number; y: number; z: number } | null = null;
+
+  // Mouse mode: 1 = free pointer (paint/erase), 2 = grabbed pointer (camera rotation)
+  private mouseMode: 1 | 2 = 1;
+  private crosshair: HTMLElement | null = null;
+  private shiftKeyPressed: boolean = false;
+
+  // Depth voxel select mode: 1 = near side (y=0), 2 = far side (y=-1)
+  private depthSelectMode: 1 | 2 = 1;
+
+  // Cursor depth - single source of truth for current cursor depth
+  // depth can be 0 to totalDepth (macro+micro, smaller depth = larger voxel size)
+  // initialized to macroDepth (3)
+  private cursorDepth: number = getMacroDepth();
+
+  // Current cursor coordinate (null when not in edit mode or cursor not visible)
+  private currentCursorCoord: CubeCoord | null = null;
 
   // Remote avatars for other users
   private remoteAvatars: Map<string, IAvatar> = new Map();
@@ -38,6 +87,22 @@ export class SceneManager {
 
   // Current movement style for position updates
   private currentMoveStyle: string = 'walk';
+
+  // Snap to grid in walking mode (disabled by default for precise movement)
+  private snapToGridInWalkMode: boolean = false;
+
+  // Sun system and post-processing
+  private sunSystem: SunSystem | null = null;
+  private postProcessing: PostProcessing | null = null;
+
+  // World grid helpers
+  private worldGridHelpers: THREE.Object3D[] = [];
+
+  // Event listener references for cleanup
+  private boundHandleResize?: () => void;
+  private boundKeyDown?: (event: KeyboardEvent) => void;
+  private boundKeyUp?: (event: KeyboardEvent) => void;
+  private boundPointerLockChange?: () => void;
 
   constructor() {
     this.scene = new THREE.Scene();
@@ -62,32 +127,63 @@ export class SceneManager {
     this.renderer.setPixelRatio(window.devicePixelRatio);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.0;
 
-    // Set fixed camera position for isometric-like view
-    this.camera.position.set(8, 6, 8);
-    this.camera.lookAt(4, 0, 4); // Look at center of 8x8 grid
+    // Set fixed camera position for isometric-like view (centered at origin)
+    // For 128-unit world (depth 7), position camera to see the whole world
+    this.camera.position.set(100, 80, 100);
+    this.camera.lookAt(0, 0, 0); // Look at origin (center of ground plane)
 
+    // Dynamic sky color will be managed by sun system
     this.scene.background = new THREE.Color(0x87ceeb); // Sky blue
-    this.scene.fog = new THREE.Fog(0x87ceeb, 10, 50);
+    this.scene.fog = new THREE.Fog(0x87ceeb, 100, 300);
 
-    this.setupLights();
+    // Initialize sun system (replaces old static lights)
+    this.sunSystem = new SunSystem(this.scene);
+    this.sunSystem.setTimeOfDay(0.35); // Start slightly after sunrise
+    this.sunSystem.setSunSpeed(0.01); // Slower movement for nice visuals
+    this.sunSystem.setAutoMove(false); // Start with sun in fixed position
+
+    // Initialize post-processing for bloom and sparkle effects
+    this.postProcessing = new PostProcessing(this.renderer, this.scene, this.camera);
+
     this.setupMouseListener(canvas);
     this.setupMouseMoveListener(canvas);
+    this.setupKeyboardListener(canvas);
     this.setupEditModeHelpers();
+    this.setupOriginHelpers();
+    this.setupCrosshair();
+    this.setupCheckerPlane();
 
-    // Initialize camera controller
+    // Initialize camera controller for both walk and edit modes
     this.cameraController = new CameraController(this.camera, canvas);
+    this.cameraController.setUsePointerLock(false); // Don't use pointer lock by default
+    this.cameraController.enable();
 
     this.lastTime = performance.now();
   }
 
-  private setupMouseListener(canvas: HTMLCanvasElement): void {
-    canvas.addEventListener('click', (event) => {
-      // Don't move avatar in edit mode or camera mode
-      if (this.isEditMode || this.isCameraMode) return;
+  private setupCheckerPlane(): void {
+    // Create checker plane (2^macroDepth × 2^macroDepth centered at origin)
+    const checkerSize = 1 << getMacroDepth();
+    this.checkerPlane = new CheckerPlane(checkerSize, checkerSize, 0.02);
+    const checkerMesh = this.checkerPlane.getMesh();
+    this.scene.add(checkerMesh);
+    this.worldGridHelpers.push(checkerMesh);
+  }
 
-      // Need avatar and geometry mesh to handle clicks
-      if (!this.currentAvatar || !this.geometryMesh) return;
+  private setupMouseListener(canvas: HTMLCanvasElement): void {
+    // Left click handler
+    canvas.addEventListener('click', (event) => {
+      // Handle edit mode - place voxel
+      if (this.isEditMode) {
+        this.handleEditModeClick(event, canvas, true);
+        return;
+      }
+
+      // Need avatar to handle clicks in walk mode
+      if (!this.currentAvatar) return;
 
       // Calculate mouse position in normalized device coordinates (-1 to +1)
       const rect = canvas.getBoundingClientRect();
@@ -97,119 +193,605 @@ export class SceneManager {
       // Update raycaster
       this.raycaster.setFromCamera(this.mouse, this.camera);
 
-      // Check intersection with ground plane
-      const intersects = this.raycaster.intersectObject(this.geometryMesh);
+      // Raycast to ground plane at y=0 (same as edit mode)
+      const intersectPoint = new THREE.Vector3();
+      const didIntersect = this.raycaster.ray.intersectPlane(this.groundPlane, intersectPoint);
 
-      if (intersects.length > 0) {
-        const point = intersects[0].point;
-        // Clamp to ground bounds (0-8 range)
-        const clampedX = Math.max(0.5, Math.min(7.5, point.x));
-        const clampedZ = Math.max(0.5, Math.min(7.5, point.z));
+      if (didIntersect) {
+        // Use exact raycast coordinates or snap to grid based on flag
+        let targetX: number;
+        let targetZ: number;
 
-        // Check modifiers: CTRL for teleport, SHIFT for run
-        const useTeleport = event.ctrlKey;
-        const useRun = event.shiftKey && !useTeleport;
-
-        // Move avatar
-        if (useTeleport) {
-          this.currentAvatar.teleportTo(clampedX, clampedZ, this.teleportAnimationType);
-          this.currentMoveStyle = `teleport:${this.teleportAnimationType}`;
-          // Publish TARGET position with move style
-          this.publishPlayerPositionAt(clampedX, clampedZ, this.currentMoveStyle);
-        } else if (useRun) {
-          this.currentAvatar.setRunSpeed(true);
-          this.currentAvatar.setTargetPosition(clampedX, clampedZ);
-          this.currentMoveStyle = 'run';
-          // Publish TARGET position with move style
-          this.publishPlayerPositionAt(clampedX, clampedZ, this.currentMoveStyle);
+        if (this.snapToGridInWalkMode) {
+          // Snap to grid centered on the intersection point (same as edit mode)
+          const size = 1;
+          targetX = snapToGrid(intersectPoint.x, size);
+          targetZ = snapToGrid(intersectPoint.z, size);
         } else {
-          this.currentAvatar.setRunSpeed(false);
-          this.currentAvatar.setTargetPosition(clampedX, clampedZ);
-          this.currentMoveStyle = 'walk';
-          // Publish TARGET position with move style
-          this.publishPlayerPositionAt(clampedX, clampedZ, this.currentMoveStyle);
+          // Use exact raycast coordinates for precise movement
+          targetX = intersectPoint.x;
+          targetZ = intersectPoint.z;
         }
+
+        // Check if within valid world bounds (size=0 for point position, not voxel)
+        if (isWithinWorldBounds(targetX, targetZ, 0)) {
+          // Check modifiers: CTRL for teleport, SHIFT for run
+          const useTeleport = event.ctrlKey;
+          const useRun = event.shiftKey && !useTeleport;
+
+          // Move avatar
+          if (useTeleport) {
+            this.currentAvatar.teleportTo(targetX, targetZ, this.teleportAnimationType);
+            this.currentMoveStyle = `teleport:${this.teleportAnimationType}`;
+            // Publish TARGET position with move style
+            this.publishPlayerPositionAt(targetX, targetZ, this.currentMoveStyle);
+          } else if (useRun) {
+            this.currentAvatar.setRunSpeed(true);
+            this.currentAvatar.setTargetPosition(targetX, targetZ);
+            this.currentMoveStyle = 'run';
+            // Publish TARGET position with move style
+            this.publishPlayerPositionAt(targetX, targetZ, this.currentMoveStyle);
+          } else {
+            this.currentAvatar.setRunSpeed(false);
+            this.currentAvatar.setTargetPosition(targetX, targetZ);
+            this.currentMoveStyle = 'walk';
+            // Publish TARGET position with move style
+            this.publishPlayerPositionAt(targetX, targetZ, this.currentMoveStyle);
+          }
+        }
+      }
+    });
+
+    // Mouse down handler - track continuous paint
+    canvas.addEventListener('mousedown', (event) => {
+      if (this.isEditMode) {
+        if (event.button === 0) {
+          // Left mouse button
+          this.isLeftMousePressed = true;
+          this.lastPaintedVoxel = null;
+        } else if (event.button === 2) {
+          // Right mouse button
+          this.isRightMousePressed = true;
+          this.lastPaintedVoxel = null;
+        }
+      }
+    });
+
+    // Mouse up handler - end continuous paint
+    canvas.addEventListener('mouseup', (event) => {
+      if (event.button === 0) {
+        this.isLeftMousePressed = false;
+        this.lastPaintedVoxel = null;
+      } else if (event.button === 2) {
+        this.isRightMousePressed = false;
+        this.lastPaintedVoxel = null;
+      }
+    });
+
+    // Mouse leave handler - end continuous paint when mouse leaves canvas
+    canvas.addEventListener('mouseleave', () => {
+      this.isLeftMousePressed = false;
+      this.isRightMousePressed = false;
+      this.lastPaintedVoxel = null;
+    });
+
+    // Right click handler - prevent context menu in edit mode (used for camera look)
+    canvas.addEventListener('contextmenu', (event) => {
+      if (this.isEditMode) {
+        event.preventDefault();
       }
     });
   }
 
-  private setupLights(): void {
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-    this.scene.add(ambientLight);
+  private handleEditModeClick(event: MouseEvent, canvas: HTMLCanvasElement, isLeftClick: boolean): void {
+    console.log('[Edit Click]', { isLeftClick, mouseMode: this.mouseMode, cursorDepth: this.cursorDepth });
 
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    directionalLight.position.set(10, 15, 10);
-    directionalLight.castShadow = true;
-    directionalLight.shadow.camera.near = 0.1;
-    directionalLight.shadow.camera.far = 50;
-    directionalLight.shadow.camera.left = -10;
-    directionalLight.shadow.camera.right = 10;
-    directionalLight.shadow.camera.top = 10;
-    directionalLight.shadow.camera.bottom = -10;
-    this.scene.add(directionalLight);
+    // Calculate mouse position
+    // In mode 2 (shift rotate), raycast from center of screen
+    // In mode 1 (free pointer), raycast from mouse position
+    if (this.mouseMode === 2) {
+      // Center of screen
+      this.mouse.x = 0;
+      this.mouse.y = 0;
+    } else {
+      // Mouse position
+      const rect = canvas.getBoundingClientRect();
+      this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    }
 
-    const hemisphereLight = new THREE.HemisphereLight(0x87ceeb, 0x080820, 0.5);
-    this.scene.add(hemisphereLight);
+    // Update raycaster
+    this.raycaster.setFromCamera(this.mouse, this.camera);
+
+    // Raycast to ground plane at y=0
+    const intersectPoint = new THREE.Vector3();
+    const didIntersect = this.raycaster.ray.intersectPlane(this.groundPlane, intersectPoint);
+
+    console.log('[Raycast]', { didIntersect, intersectPoint: didIntersect ? intersectPoint : null });
+
+    if (didIntersect) {
+      const size = this.getCursorSize();
+      const halfSize = size / 2;
+
+      // Snap to grid centered on the intersection point
+      const voxelCenterX = snapToGrid(intersectPoint.x, size);
+      const voxelCenterZ = snapToGrid(intersectPoint.z, size);
+
+      // Calculate corner position (world space)
+      const voxelX = voxelCenterX - halfSize;
+      const voxelZ = voxelCenterZ - halfSize;
+      const voxelY = this.depthSelectMode === 1 ? 0 : -size;
+
+      console.log('[Voxel Pos]', { voxelX, voxelY, voxelZ, voxelCenterX, voxelCenterZ, size, depthSelectMode: this.depthSelectMode });
+
+      // Check if within valid world cube range (centered at origin)
+      if (isWithinWorldBounds(voxelX, voxelZ, size)) {
+        console.log('[Voxel Action]', isLeftClick ? 'paint' : 'erase');
+        if (isLeftClick) {
+          // Left click: use current color/erase mode
+          this.paintVoxelWithSize(voxelX, voxelY, voxelZ, size);
+        } else {
+          // Right click always removes voxel
+          this.eraseVoxelWithSize(voxelX, voxelY, voxelZ, size);
+        }
+      } else {
+        console.log('[Out of Bounds]', { voxelX, voxelZ, size });
+      }
+    }
   }
 
-  private setupEditModeHelpers(): void {
-    // Create grid helper (8x8 grid to match ground)
-    this.gridHelper = new THREE.GridHelper(8, 8, 0xffffff, 0xffffff);
-    this.gridHelper.position.set(4, 0.01, 4); // Slightly above ground
-    this.gridHelper.material = new THREE.LineBasicMaterial({
-      color: 0xffffff,
-      opacity: 0.3,
-      transparent: true
-    });
-    this.gridHelper.visible = false;
-    this.scene.add(this.gridHelper);
+  private onVoxelEdit?: (coord: CubeCoord, colorIndex: number) => void;
 
+  setOnVoxelEdit(callback: (coord: CubeCoord, colorIndex: number) => void): void {
+    this.onVoxelEdit = callback;
+  }
+
+  setSelectedColorIndex(colorIndex: number): void {
+    this.selectedColorIndex = colorIndex;
+  }
+
+  /**
+   * Get the current cursor coordinate (null if cursor not visible)
+   */
+  getCurrentCursorCoord(): CubeCoord | null {
+    return this.currentCursorCoord;
+  }
+
+  /**
+   * Get the current cursor depth
+   */
+  getCursorDepth(): number {
+    return this.cursorDepth;
+  }
+
+  /**
+   * Paint a voxel at the given world space corner position
+   * @param x World space X coordinate (corner of voxel, not center)
+   * @param y World space Y coordinate (corner of voxel, not center)
+   * @param z World space Z coordinate (corner of voxel, not center)
+   * @param size Size of voxel in world units
+   */
+  private paintVoxelWithSize(x: number, y: number, z: number, size: number): void {
+    console.log('[Paint Voxel]', { x, y, z, size, selectedColor: this.selectedColorIndex });
+
+    // Check if clear/eraser mode is selected (index -1)
+    const isClearMode = this.selectedColorIndex === -1;
+
+    if (isClearMode) {
+      this.eraseVoxelWithSize(x, y, z, size);
+      return;
+    }
+
+    // Place voxel with selected color (palette 0-31 maps to voxel values 32-63)
+    const colorValue = this.selectedColorIndex + 32;
+
+    // Convert world coordinates (corner) to cube coordinates (octree space)
+    const coord = worldToCube(x, y, z, this.cursorDepth);
+
+    console.log('[Paint -> CubeCoord]', { coord, colorValue, hasCallback: !!this.onVoxelEdit });
+
+    // Call onVoxelEdit with CubeCoord
+    this.onVoxelEdit?.(coord, colorValue);
+  }
+
+  private eraseVoxelWithSize(x: number, y: number, z: number, size: number): void {
+    console.log('[Erase Voxel]', { x, y, z, size });
+
+    // Convert world coordinates to cube coordinates
+    const coord = worldToCube(x, y, z, this.cursorDepth);
+
+    console.log('[Erase -> CubeCoord]', { coord, hasCallback: !!this.onVoxelEdit });
+
+    // Call onVoxelEdit with CubeCoord
+    this.onVoxelEdit?.(coord, 0);
+  }
+
+  private setupKeyboardListener(canvas: HTMLCanvasElement): void {
+    this.boundKeyDown = (event: KeyboardEvent) => {
+      // Toggle mouse mode with Shift key (works in both walk and edit modes)
+      // Only toggle once per key press, not on repeated keydown events
+      if (event.key === 'Shift') {
+        if (this.shiftKeyPressed) {
+          // Already handled this key press, ignore repeated keydown events
+          return;
+        }
+        this.shiftKeyPressed = true;
+
+        if (this.mouseMode === 1) {
+          // Enter camera rotation mode
+          this.mouseMode = 2;
+          canvas.requestPointerLock();
+          if (this.crosshair) {
+            this.crosshair.style.display = 'block';
+          }
+          console.log('[Mouse Mode] Switched to mode 2 (first-person camera rotation)');
+        } else if (this.mouseMode === 2) {
+          // Exit camera rotation mode
+          this.mouseMode = 1;
+          document.exitPointerLock();
+          if (this.crosshair) {
+            this.crosshair.style.display = 'none';
+          }
+          // Reset paint state (only relevant in edit mode, but safe to always reset)
+          this.isLeftMousePressed = false;
+          this.isRightMousePressed = false;
+          this.lastPaintedVoxel = null;
+          console.log('[Mouse Mode] Switched to mode 1 (paint/erase)');
+        }
+        return;
+      }
+
+      // Toggle edit mode with 'e' key (works in both walk and edit modes)
+      if (event.key === 'e' || event.key === 'E') {
+        this.setEditMode(!this.isEditMode);
+        console.log(`[Edit Mode] Toggled to ${this.isEditMode ? 'ON' : 'OFF'}`);
+        return;
+      }
+
+      // Edit mode specific controls
+      if (!this.isEditMode) return;
+
+      // Toggle depth select mode with Spacebar
+      if (event.code === 'Space') {
+        event.preventDefault();
+        this.depthSelectMode = this.depthSelectMode === 1 ? 2 : 1;
+        console.log(`[Depth Select] Switched to mode ${this.depthSelectMode} (y=${this.depthSelectMode === 1 ? 0 : -1})`);
+      }
+
+      // Cursor depth control with Arrow Up/Down
+      if (event.code === 'ArrowUp') {
+        event.preventDefault();
+        this.cursorDepth = Math.min(getTotalDepth(), this.cursorDepth + 1);
+        this.updateCursorSize();
+        console.log(`[Cursor Depth] Increased to ${this.cursorDepth} (size=${this.getCursorSize()})`);
+      }
+
+      if (event.code === 'ArrowDown') {
+        event.preventDefault();
+        this.cursorDepth = Math.max(0, this.cursorDepth - 1);
+        this.updateCursorSize();
+        console.log(`[Cursor Depth] Decreased to ${this.cursorDepth} (size=${this.getCursorSize()})`);
+      }
+    };
+
+    this.boundKeyUp = (event: KeyboardEvent) => {
+      // Reset shift key flag when released
+      if (event.key === 'Shift') {
+        this.shiftKeyPressed = false;
+      }
+    };
+
+    this.boundPointerLockChange = () => {
+      if (!document.pointerLockElement && this.mouseMode === 2) {
+        // Pointer lock was exited externally (e.g., Escape key), sync mode back to 1
+        this.mouseMode = 1;
+        if (this.crosshair) {
+          this.crosshair.style.display = 'none';
+        }
+        this.isLeftMousePressed = false;
+        this.isRightMousePressed = false;
+        this.lastPaintedVoxel = null;
+        console.log('[Mouse Mode] Pointer lock exited (Escape), switched to mode 1');
+      }
+    };
+
+    // Register event listeners
+    window.addEventListener('keydown', this.boundKeyDown);
+    window.addEventListener('keyup', this.boundKeyUp);
+    document.addEventListener('pointerlockchange', this.boundPointerLockChange);
+  }
+
+  // Removed: setupLights() - now using SunSystem for dynamic lighting
+
+  private setupEditModeHelpers(): void {
     // Create preview cube (1x1x1 cube wireframe)
     const cubeGeometry = new THREE.BoxGeometry(1, 1, 1);
     const edges = new THREE.EdgesGeometry(cubeGeometry);
     const lineMaterial = new THREE.LineBasicMaterial({
       color: 0x00ff00,
       linewidth: 2,
-      opacity: 0.7,
-      transparent: true
+      opacity: 0.8,
+      transparent: true,
+      depthTest: false, // Always render on top
+      depthWrite: false
     });
     this.previewCube = new THREE.LineSegments(edges, lineMaterial);
     this.previewCube.visible = false;
+    this.previewCube.renderOrder = 999; // Render last
     this.scene.add(this.previewCube);
+  }
+
+  private setupOriginHelpers(): void {
+    // Create axis helper at origin
+    // Axis extends 50% beyond unit cube (1.5 units)
+    const axisHelper = new THREE.AxesHelper(1.5);
+    axisHelper.position.set(0, 0, 0);
+    // Make axis always visible (no depth testing)
+    if (Array.isArray(axisHelper.material)) {
+      axisHelper.material.forEach(mat => {
+        mat.depthTest = false;
+        mat.depthWrite = false;
+      });
+    } else {
+      axisHelper.material.depthTest = false;
+      axisHelper.material.depthWrite = false;
+    }
+    axisHelper.renderOrder = 999;
+    this.scene.add(axisHelper);
+    this.worldGridHelpers.push(axisHelper);
+
+    // Create transparent wireframe for unit cube at origin
+    const unitCubeGeometry = new THREE.BoxGeometry(1, 1, 1);
+    const unitCubeEdges = new THREE.EdgesGeometry(unitCubeGeometry);
+    const unitCubeLineMaterial = new THREE.LineBasicMaterial({
+      color: 0xffffff,
+      opacity: 0.2,
+      transparent: true
+    });
+    const unitCubeWireframe = new THREE.LineSegments(unitCubeEdges, unitCubeLineMaterial);
+    // Position cube so its corner is at origin (center at 0.5, 0.5, 0.5)
+    unitCubeWireframe.position.set(0.5, 0.5, 0.5);
+    this.scene.add(unitCubeWireframe);
+    this.worldGridHelpers.push(unitCubeWireframe);
+
+    // Create world bounds wireframe box
+    // World is worldSize×worldSize×worldSize centered at origin
+    const worldSize = getWorldSize(getTotalDepth(), getMicroDepth());
+    const worldBoxGeometry = new THREE.BoxGeometry(worldSize, worldSize, worldSize);
+    const worldBoxEdges = new THREE.EdgesGeometry(worldBoxGeometry);
+    const worldBoxLineMaterial = new THREE.LineBasicMaterial({
+      color: 0xffffff,
+      opacity: 0.5,
+      transparent: true
+    });
+    const worldBoxWireframe = new THREE.LineSegments(worldBoxEdges, worldBoxLineMaterial);
+    worldBoxWireframe.position.set(0, 0, 0); // Centered at origin
+    this.scene.add(worldBoxWireframe);
+    this.worldGridHelpers.push(worldBoxWireframe);
+  }
+
+  private setupCrosshair(): void {
+    // Create crosshair element for first-person mode
+    this.crosshair = document.createElement('div');
+    this.crosshair.style.position = 'fixed';
+    this.crosshair.style.top = '50%';
+    this.crosshair.style.left = '50%';
+    this.crosshair.style.transform = 'translate(-50%, -50%)';
+    this.crosshair.style.width = '20px';
+    this.crosshair.style.height = '20px';
+    this.crosshair.style.pointerEvents = 'none';
+    this.crosshair.style.zIndex = '1000';
+    this.crosshair.style.display = 'none';
+
+    // Create crosshair lines
+    this.crosshair.innerHTML = `
+      <div style="position: absolute; top: 50%; left: 0; width: 100%; height: 2px; background: rgba(255, 255, 255, 0.8); transform: translateY(-50%);"></div>
+      <div style="position: absolute; left: 50%; top: 0; height: 100%; width: 2px; background: rgba(255, 255, 255, 0.8); transform: translateX(-50%);"></div>
+      <div style="position: absolute; top: 50%; left: 50%; width: 4px; height: 4px; background: rgba(255, 255, 255, 0.9); border-radius: 50%; transform: translate(-50%, -50%);"></div>
+    `;
+
+    document.body.appendChild(this.crosshair);
+  }
+
+  private getCursorSize(): number {
+    return getVoxelSizeFromCubeCoord(this.cursorDepth);
+  }
+
+  private updateCursorSize(): void {
+    if (!this.previewCube) return;
+
+    const size = this.getCursorSize();
+    const scale = size;
+    this.previewCube.scale.set(scale, scale, scale);
+
+    // Recalculate cursor coordinate with new depth if cursor is visible
+    if (this.currentCursorCoord && this.previewCube.visible) {
+      const halfSize = size / 2;
+      const voxelCenterX = this.currentGridPosition.x;
+      const voxelCenterZ = this.currentGridPosition.z;
+
+      // Recalculate corner position with new size
+      const voxelX = voxelCenterX - halfSize;
+      const voxelZ = voxelCenterZ - halfSize;
+      const voxelY = this.depthSelectMode === 1 ? 0 : -size;
+
+      // Update cursor coordinate with new depth
+      this.currentCursorCoord = worldToCube(voxelX, voxelY, voxelZ, this.cursorDepth);
+
+      // Update preview cube position
+      this.currentGridPosition.set(voxelCenterX, voxelY + halfSize, voxelCenterZ);
+      this.previewCube.position.copy(this.currentGridPosition);
+    }
+  }
+
+  private updateVoxelCursorAtCenter(): void {
+    if (!this.previewCube) return;
+
+    // Raycast from center of screen
+    this.mouse.x = 0;
+    this.mouse.y = 0;
+    this.raycaster.setFromCamera(this.mouse, this.camera);
+
+    // Raycast to ground plane at y=0
+    const intersectPoint = new THREE.Vector3();
+    const didIntersect = this.raycaster.ray.intersectPlane(this.groundPlane, intersectPoint);
+
+    if (didIntersect) {
+      const size = this.getCursorSize();
+      const halfSize = size / 2;
+
+      // Snap to grid centered on the intersection point
+      const voxelCenterX = snapToGrid(intersectPoint.x, size);
+      const voxelCenterZ = snapToGrid(intersectPoint.z, size);
+
+      // Calculate corner position (world space)
+      const voxelX = voxelCenterX - halfSize;
+      const voxelZ = voxelCenterZ - halfSize;
+      const voxelY = this.depthSelectMode === 1 ? 0 : -size;
+
+      // Check if within ground bounds (centered at origin)
+      if (isWithinWorldBounds(voxelX, voxelZ, size)) {
+        // Store current cursor coordinate (using corner position)
+        this.currentCursorCoord = worldToCube(voxelX, voxelY, voxelZ, this.cursorDepth);
+
+        // Position preview cube at center of voxel (world space)
+        this.currentGridPosition.set(voxelCenterX, voxelY + halfSize, voxelCenterZ);
+        this.previewCube.position.copy(this.currentGridPosition);
+        this.previewCube.visible = true;
+
+        // Continuous paint in shift mode: if mouse button is pressed, paint/erase voxel at new position
+        if (this.isLeftMousePressed || this.isRightMousePressed) {
+          // Check if this is a new voxel position (different from last painted)
+          const isNewPosition = !this.lastPaintedVoxel ||
+            this.lastPaintedVoxel.x !== voxelX ||
+            this.lastPaintedVoxel.y !== voxelY ||
+            this.lastPaintedVoxel.z !== voxelZ;
+
+          if (isNewPosition) {
+            if (this.isLeftMousePressed) {
+              // Left mouse: draw with selected color
+              this.paintVoxelWithSize(voxelX, voxelY, voxelZ, size);
+            } else if (this.isRightMousePressed) {
+              // Right mouse: erase
+              this.eraseVoxelWithSize(voxelX, voxelY, voxelZ, size);
+            }
+            this.lastPaintedVoxel = { x: voxelX, y: voxelY, z: voxelZ };
+          }
+        }
+      } else {
+        // Outside bounds - hide cursor
+        this.previewCube.visible = false;
+        this.currentCursorCoord = null;
+      }
+    } else {
+      this.previewCube.visible = false;
+      this.currentCursorCoord = null;
+    }
   }
 
   private setupMouseMoveListener(canvas: HTMLCanvasElement): void {
     canvas.addEventListener('mousemove', (event) => {
-      if (!this.isEditMode || !this.geometryMesh || !this.previewCube) return;
+      // Mode 2: First-person camera rotation with grabbed pointer (works in both modes)
+      if (this.mouseMode === 2) {
+        const sensitivity = 0.002;
+        const deltaX = event.movementX * sensitivity;
+        const deltaY = event.movementY * sensitivity;
+
+        // Get current camera euler angles
+        const euler = new THREE.Euler().setFromQuaternion(this.camera.quaternion, 'YXZ');
+
+        // Update yaw (left/right rotation around Y axis)
+        // Moving mouse right rotates camera right
+        euler.y -= deltaX;
+
+        // Update pitch (up/down rotation around X axis)
+        // Moving mouse down looks down
+        euler.x -= deltaY;
+
+        // Clamp pitch to prevent camera flipping
+        const maxPitch = Math.PI / 2 - 0.1;
+        euler.x = Math.max(-maxPitch, Math.min(maxPitch, euler.x));
+
+        // Apply rotation back to camera
+        this.camera.quaternion.setFromEuler(euler);
+
+        // Don't return - continue to update voxel cursor below (if in edit mode)
+      }
+
+      // Edit mode only: update voxel cursor
+      if (!this.isEditMode || !this.previewCube) return;
 
       // Calculate mouse position in normalized device coordinates
+      // In mode 2 (shift rotate), raycast from center of screen
+      // In mode 1 (free pointer), raycast from mouse position
       const rect = canvas.getBoundingClientRect();
-      this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-      this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      if (this.mouseMode === 2) {
+        // Center of screen
+        this.mouse.x = 0;
+        this.mouse.y = 0;
+      } else {
+        // Mouse position
+        this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      }
 
       // Update raycaster
       this.raycaster.setFromCamera(this.mouse, this.camera);
 
-      // Check intersection with ground plane
-      const intersects = this.raycaster.intersectObject(this.geometryMesh);
+      // Raycast to ground plane at y=0
+      const intersectPoint = new THREE.Vector3();
+      const didIntersect = this.raycaster.ray.intersectPlane(this.groundPlane, intersectPoint);
 
-      if (intersects.length > 0) {
-        const point = intersects[0].point;
+      if (didIntersect) {
+        const size = this.getCursorSize();
+        const halfSize = size / 2;
 
-        // Snap to grid (1 unit grid)
-        const snappedX = Math.floor(point.x) + 0.5;
-        const snappedZ = Math.floor(point.z) + 0.5;
+        // Snap to grid centered on the intersection point
+        const voxelCenterX = snapToGrid(intersectPoint.x, size);
+        const voxelCenterZ = snapToGrid(intersectPoint.z, size);
 
-        // Clamp to ground bounds (0-8 range)
-        const clampedX = Math.max(0.5, Math.min(7.5, snappedX));
-        const clampedZ = Math.max(0.5, Math.min(7.5, snappedZ));
+        // Calculate corner position (world space)
+        const voxelX = voxelCenterX - halfSize;
+        const voxelZ = voxelCenterZ - halfSize;
+        const voxelY = this.depthSelectMode === 1 ? 0 : -size;
 
-        // Position preview cube at ground level
-        this.currentGridPosition.set(clampedX, 0.5, clampedZ);
-        this.previewCube.position.copy(this.currentGridPosition);
-        this.previewCube.visible = true;
+        // Check if within ground bounds (centered at origin)
+        if (isWithinWorldBounds(voxelX, voxelZ, size)) {
+          // Store current cursor coordinate (using corner position)
+          this.currentCursorCoord = worldToCube(voxelX, voxelY, voxelZ, this.cursorDepth);
+
+          // Position preview cube at center of voxel (world space)
+          this.currentGridPosition.set(voxelCenterX, voxelY + halfSize, voxelCenterZ);
+          this.previewCube.position.copy(this.currentGridPosition);
+          this.previewCube.visible = true;
+
+          // Continuous paint: if mouse button is pressed, paint/erase voxel at new position
+          if (this.isLeftMousePressed || this.isRightMousePressed) {
+            // Check if this is a new voxel position (different from last painted)
+            const isNewPosition = !this.lastPaintedVoxel ||
+              this.lastPaintedVoxel.x !== voxelX ||
+              this.lastPaintedVoxel.y !== voxelY ||
+              this.lastPaintedVoxel.z !== voxelZ;
+
+            if (isNewPosition) {
+              if (this.isLeftMousePressed) {
+                // Left mouse: draw with selected color
+                this.paintVoxelWithSize(voxelX, voxelY, voxelZ, size);
+              } else if (this.isRightMousePressed) {
+                // Right mouse: erase
+                this.eraseVoxelWithSize(voxelX, voxelY, voxelZ, size);
+              }
+              this.lastPaintedVoxel = { x: voxelX, y: voxelY, z: voxelZ };
+            }
+          }
+        } else {
+          // Outside bounds - hide cursor
+          this.previewCube.visible = false;
+          this.currentCursorCoord = null;
+        }
       } else {
         this.previewCube.visible = false;
+        this.currentCursorCoord = null;
       }
     });
   }
@@ -237,15 +819,17 @@ export class SceneManager {
     const material = new THREE.MeshPhongMaterial({
       vertexColors: colors && colors.length > 0,
       color: colors && colors.length > 0 ? 0xffffff : 0x44aa44,
-      specular: 0x111111,
-      shininess: 30,
+      specular: 0x333333,
+      shininess: 15,
       wireframe: false,
-      side: THREE.DoubleSide
+      side: THREE.FrontSide,
+      flatShading: false
     });
 
     this.geometryMesh = new THREE.Mesh(geometry, material);
     this.geometryMesh.castShadow = true;
     this.geometryMesh.receiveShadow = true;
+    this.geometryMesh.renderOrder = 0; // Render world cube first
     this.scene.add(this.geometryMesh);
   }
 
@@ -254,13 +838,23 @@ export class SceneManager {
     const deltaTime_s = (currentTime - this.lastTime) / 1000;
     this.lastTime = currentTime;
 
-    // Update camera controller if in camera mode
-    if (this.isCameraMode && this.cameraController) {
+    // Update camera controller (always active for keyboard movement)
+    if (this.cameraController) {
       this.cameraController.update(deltaTime_s);
     }
 
-    // Update current avatar (not in camera mode)
-    if (this.currentAvatar && !this.isCameraMode) {
+    // Update sun system for moving sun
+    if (this.sunSystem) {
+      this.sunSystem.update(deltaTime_s);
+    }
+
+    // Update voxel cursor in shift rotate mode (center screen raycast)
+    if (this.isEditMode && this.mouseMode === 2 && this.previewCube) {
+      this.updateVoxelCursorAtCenter();
+    }
+
+    // Update current avatar
+    if (this.currentAvatar) {
       const wasTeleporting = this.currentAvatar.isTeleporting();
       this.currentAvatar.update(deltaTime_s);
       const isTeleporting = this.currentAvatar.isTeleporting();
@@ -282,7 +876,12 @@ export class SceneManager {
       avatar.update(deltaTime_s);
     }
 
-    this.renderer.render(this.scene, this.camera);
+    // Render with post-processing (includes bloom for sparkle effects)
+    if (this.postProcessing) {
+      this.postProcessing.render(deltaTime_s);
+    } else {
+      this.renderer.render(this.scene, this.camera);
+    }
   }
 
   handleResize(): void {
@@ -292,6 +891,11 @@ export class SceneManager {
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(width, height);
+
+    // Update post-processing size
+    if (this.postProcessing) {
+      this.postProcessing.setSize(width, height);
+    }
   }
 
   getCamera(): THREE.PerspectiveCamera {
@@ -320,9 +924,9 @@ export class SceneManager {
       this.currentAvatar.dispose();
       this.currentAvatar = null;
 
-      // Reset camera to default position
+      // Reset camera to default position (centered at origin)
       this.camera.position.set(8, 6, 8);
-      this.camera.lookAt(4, 0, 4);
+      this.camera.lookAt(0, 0, 0);
     }
   }
 
@@ -459,28 +1063,38 @@ export class SceneManager {
   setEditMode(isEditMode: boolean): void {
     this.isEditMode = isEditMode;
 
-    if (this.gridHelper) {
-      this.gridHelper.visible = isEditMode;
-    }
-
     if (this.previewCube && !isEditMode) {
       this.previewCube.visible = false;
     }
+
+    // Reset mouse mode and depth select when exiting edit mode
+    if (!isEditMode) {
+      if (this.mouseMode === 2) {
+        this.mouseMode = 1;
+        document.exitPointerLock();
+        // Hide crosshair
+        if (this.crosshair) {
+          this.crosshair.style.display = 'none';
+        }
+      }
+      this.isLeftMousePressed = false;
+      this.isRightMousePressed = false;
+      this.lastPaintedVoxel = null;
+      this.depthSelectMode = 1;
+      this.currentCursorCoord = null; // Clear cursor coordinate
+    }
+
+    // Camera controller stays enabled in both walk and edit modes
+    // No need to toggle it based on edit mode
   }
 
   /**
    * Set camera mode to enable/disable free camera movement
+   * Note: Camera controller is now always enabled, this is kept for compatibility
    */
-  setCameraMode(isCameraMode: boolean): void {
-    this.isCameraMode = isCameraMode;
-
-    if (!this.cameraController) return;
-
-    if (isCameraMode) {
-      this.cameraController.enable();
-    } else {
-      this.cameraController.disable();
-    }
+  setCameraMode(_isCameraMode: boolean): void {
+    // Camera controller stays enabled all the time now
+    // This method is kept for compatibility but does nothing
   }
 
   /**
@@ -780,5 +1394,104 @@ export class SceneManager {
    */
   getTeleportAnimationType(): TeleportAnimationType {
     return this.teleportAnimationType;
+  }
+
+  /**
+   * Get debug info for display
+   */
+  getDebugInfo() {
+    const cursorSize = this.getCursorSize();
+    const avatarPos = this.currentAvatar?.getPosition();
+
+    const worldSize = getWorldSize(getTotalDepth(), getMicroDepth());
+
+    return {
+      cursorWorld: this.currentCursorCoord
+        ? (() => {
+            const [x, y, z] = cubeToWorld(this.currentCursorCoord);
+            return { x, y, z };
+          })()
+        : undefined,
+      cursorOctree: this.currentCursorCoord,
+      cursorDepth: this.cursorDepth,
+      cursorSize: cursorSize,
+      avatarPos: avatarPos
+        ? { x: avatarPos.x, y: avatarPos.y, z: avatarPos.z }
+        : undefined,
+      cameraPos: {
+        x: this.camera.position.x,
+        y: this.camera.position.y,
+        z: this.camera.position.z
+      },
+      worldSize: worldSize,
+      isEditMode: this.isEditMode,
+      timeOfDay: this.sunSystem?.getTimeOfDay()
+    };
+  }
+
+  /**
+   * Get the sun system for external control
+   */
+  getSunSystem(): SunSystem | null {
+    return this.sunSystem;
+  }
+
+  /**
+   * Set time of day (0 to 1, where 0.5 is noon)
+   */
+  setTimeOfDay(time: number): void {
+    this.sunSystem?.setTimeOfDay(time);
+  }
+
+  /**
+   * Set sun movement speed
+   */
+  setSunSpeed(speed: number): void {
+    this.sunSystem?.setSunSpeed(speed);
+  }
+
+  /**
+   * Toggle automatic sun movement
+   */
+  setSunAutoMove(auto: boolean): void {
+    this.sunSystem?.setAutoMove(auto);
+  }
+
+  /**
+   * Set world grid visibility (origin axis, unit cube, world bounds, checkerboard)
+   */
+  setWorldGridVisible(visible: boolean): void {
+    for (const helper of this.worldGridHelpers) {
+      helper.visible = visible;
+    }
+  }
+
+  /**
+   * Cleanup all event listeners and DOM elements
+   */
+  dispose(): void {
+    // Remove event listeners
+    if (this.boundKeyDown) {
+      window.removeEventListener('keydown', this.boundKeyDown);
+    }
+    if (this.boundKeyUp) {
+      window.removeEventListener('keyup', this.boundKeyUp);
+    }
+    if (this.boundPointerLockChange) {
+      document.removeEventListener('pointerlockchange', this.boundPointerLockChange);
+    }
+
+    // Remove crosshair element
+    if (this.crosshair && this.crosshair.parentNode) {
+      this.crosshair.parentNode.removeChild(this.crosshair);
+      this.crosshair = null;
+    }
+
+    // Exit pointer lock if active
+    if (document.pointerLockElement) {
+      document.exitPointerLock();
+    }
+
+    console.log('[SceneManager] Disposed');
   }
 }

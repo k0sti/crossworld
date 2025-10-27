@@ -12,6 +12,7 @@ import { SelectAvatar, type AvatarSelection } from './components/SelectAvatar'
 import { ChatPanel } from './components/ChatPanel'
 import { ClientListPanel } from './components/ClientListPanel'
 import { RestoreStateModal } from './components/RestoreStateModal'
+import { ColorPalette } from './components/ColorPalette'
 import { AvatarStateService, type AvatarConfig, type AvatarState } from './services/avatar-state'
 import { useVoice } from './hooks/useVoice'
 import { npubEncode } from 'nostr-tools/nip19'
@@ -20,9 +21,6 @@ import { VOICE_CONFIG } from './config'
 import { LoginSettingsService } from '@crossworld/common'
 import { ExtensionAccount, SimpleAccount } from 'applesauce-accounts/accounts'
 import { ExtensionSigner } from 'applesauce-signers'
-
-const ENABLE_CAMERA_CONTROL = false
-const ENABLE_CUBE_GROUND = false
 
 function App() {
   const navigate = useNavigate()
@@ -59,8 +57,9 @@ function App() {
   const initialStatePublished = useRef(false)
   const voiceAutoConnected = useRef(false)
 
-  // Ground render mode
-  const [useCubeGround, setUseCubeGround] = useState(false)
+  // Speech/Voice enabled state
+  const [speechEnabled, setSpeechEnabled] = useState(false)
+
   const geometryControllerRef = useRef<any>(null)
   const sceneManagerRef = useRef<any>(null)
 
@@ -552,6 +551,20 @@ function App() {
     }
   }
 
+  const handleColorSelect = (_color: string, index: number) => {
+    if (sceneManagerRef.current) {
+      sceneManagerRef.current.setSelectedColorIndex(index)
+    }
+  }
+
+  // Initialize ground render mode when geometry controller is ready
+  useEffect(() => {
+    if (geometryControllerRef.current) {
+      // Always use combined ground mode (cube + flat)
+      geometryControllerRef.current.setGroundRenderMode(true)
+    }
+  }, [])
+
   return (
       <>
         <WorldCanvas
@@ -564,6 +577,8 @@ function App() {
           currentUserPubkey={pubkey}
           geometryControllerRef={geometryControllerRef}
           sceneManagerRef={sceneManagerRef}
+          speechEnabled={speechEnabled}
+          onSpeechEnabledChange={setSpeechEnabled}
         />
         <TopBar
           pubkey={pubkey}
@@ -588,10 +603,6 @@ function App() {
             activePanelType={activePanelType}
             isEditMode={isEditMode}
             onToggleEditMode={setIsEditMode}
-            isCameraMode={isCameraMode}
-            onToggleCameraMode={() => setIsCameraMode(!isCameraMode)}
-            enableCameraControl={ENABLE_CAMERA_CONTROL}
-            enableCubeGround={ENABLE_CUBE_GROUND}
             isChatOpen={isChatOpen}
             onToggleChat={() => setIsChatOpen(!isChatOpen)}
             isClientListOpen={isClientListOpen}
@@ -603,14 +614,7 @@ function App() {
             voiceError={voice.error}
             onToggleVoice={handleToggleVoice}
             onToggleMic={handleToggleMic}
-            useCubeGround={useCubeGround}
-            onToggleGroundRenderMode={() => {
-              const newMode = !useCubeGround
-              setUseCubeGround(newMode)
-              if (geometryControllerRef.current) {
-                geometryControllerRef.current.setGroundRenderMode(newMode)
-              }
-            }}
+            speechEnabled={speechEnabled}
           />
         )}
 
@@ -677,6 +681,10 @@ function App() {
             teleportAnimationType,
           }}
         />
+
+        {/* Color Palette (edit mode) */}
+        <ColorPalette isVisible={isEditMode} onColorSelect={handleColorSelect} />
+
       </>
   )
 }

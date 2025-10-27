@@ -1,7 +1,16 @@
 import { GeometryGenerator } from '../geometry/geometry-lib';
+import { getMicroDepth, getTotalDepth } from '../config/depth-config';
 
 export interface GeometryMessage {
-  type: 'init' | 'update' | 'setGroundRenderMode';
+  type: 'init' | 'update' | 'setVoxelAtDepth' | 'setVoxel' | 'removeVoxelAtDepth' | 'removeVoxel' | 'setFaceMeshMode' | 'setGroundRenderMode';
+  x?: number;
+  y?: number;
+  z?: number;
+  depth?: number;
+  colorIndex?: number;
+  worldDepth?: number;
+  scaleDepth?: number;
+  enabled?: boolean;
   useCube?: boolean;
 }
 
@@ -23,8 +32,8 @@ class GeometryWorkerManager {
   private updateInterval = 33; // ~30 FPS for geometry updates
   private lastUpdate = 0;
 
-  async initialize() {
-    this.generator = new GeometryGenerator();
+  async initialize(worldDepth: number = getTotalDepth(), scaleDepth: number = getMicroDepth()) {
+    this.generator = new GeometryGenerator(worldDepth, scaleDepth);
     await this.generator.initialize();
     self.postMessage({ type: 'ready' });
     this.startUpdateLoop();
@@ -86,7 +95,43 @@ class GeometryWorkerManager {
     this.isRunning = false;
   }
 
+  setVoxelAtDepth(x: number, y: number, z: number, depth: number, colorIndex: number) {
+    console.log('[GeometryWorker] setVoxelAtDepth', { x, y, z, depth, colorIndex, hasGenerator: !!this.generator });
+    if (this.generator) {
+      this.generator.setVoxelAtDepth(x, y, z, depth, colorIndex);
+    }
+  }
+
+  setVoxel(x: number, y: number, z: number, colorIndex: number) {
+    console.log('[GeometryWorker] setVoxel', { x, y, z, colorIndex, hasGenerator: !!this.generator });
+    if (this.generator) {
+      this.generator.setVoxel(x, y, z, colorIndex);
+    }
+  }
+
+  removeVoxelAtDepth(x: number, y: number, z: number, depth: number) {
+    console.log('[GeometryWorker] removeVoxelAtDepth', { x, y, z, depth, hasGenerator: !!this.generator });
+    if (this.generator) {
+      this.generator.removeVoxelAtDepth(x, y, z, depth);
+    }
+  }
+
+  removeVoxel(x: number, y: number, z: number) {
+    console.log('[GeometryWorker] removeVoxel', { x, y, z, hasGenerator: !!this.generator });
+    if (this.generator) {
+      this.generator.removeVoxel(x, y, z);
+    }
+  }
+
+  setFaceMeshMode(enabled: boolean) {
+    console.log('[GeometryWorker] setFaceMeshMode', { enabled, hasGenerator: !!this.generator });
+    if (this.generator) {
+      this.generator.setFaceMeshMode(enabled);
+    }
+  }
+
   setGroundRenderMode(useCube: boolean) {
+    console.log('[GeometryWorker] setGroundRenderMode', { useCube, hasGenerator: !!this.generator });
     if (this.generator) {
       this.generator.setGroundRenderMode(useCube);
     }
@@ -101,11 +146,41 @@ self.addEventListener('message', async (event) => {
 
   switch (message.type) {
     case 'init':
-      await manager.initialize();
+      await manager.initialize(message.worldDepth, message.scaleDepth);
       break;
 
     case 'update':
       // For now, we don't need to handle updates
+      break;
+
+    case 'setVoxelAtDepth':
+      if (message.x !== undefined && message.y !== undefined && message.z !== undefined && message.depth !== undefined && message.colorIndex !== undefined) {
+        manager.setVoxelAtDepth(message.x, message.y, message.z, message.depth, message.colorIndex);
+      }
+      break;
+
+    case 'setVoxel':
+      if (message.x !== undefined && message.y !== undefined && message.z !== undefined && message.colorIndex !== undefined) {
+        manager.setVoxel(message.x, message.y, message.z, message.colorIndex);
+      }
+      break;
+
+    case 'removeVoxelAtDepth':
+      if (message.x !== undefined && message.y !== undefined && message.z !== undefined && message.depth !== undefined) {
+        manager.removeVoxelAtDepth(message.x, message.y, message.z, message.depth);
+      }
+      break;
+
+    case 'removeVoxel':
+      if (message.x !== undefined && message.y !== undefined && message.z !== undefined) {
+        manager.removeVoxel(message.x, message.y, message.z);
+      }
+      break;
+
+    case 'setFaceMeshMode':
+      if (message.enabled !== undefined) {
+        manager.setFaceMeshMode(message.enabled);
+      }
       break;
 
     case 'setGroundRenderMode':

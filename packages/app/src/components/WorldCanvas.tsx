@@ -1,10 +1,12 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Box } from '@chakra-ui/react';
 import { SceneManager } from '../renderer/scene';
 import { GeometryController } from '../geometry/geometry-controller';
 import init, { AvatarEngine } from '@workspace/wasm';
 import type { AvatarStateService, AvatarConfig } from '../services/avatar-state';
 import type { TeleportAnimationType } from '../renderer/teleport-animation';
+import { DebugPanel, type DebugInfo } from './WorldPanel';
+import { setMacroDepth } from '../config/depth-config';
 
 interface WorldCanvasProps {
   isLoggedIn: boolean;
@@ -16,6 +18,8 @@ interface WorldCanvasProps {
   currentUserPubkey?: string | null;
   geometryControllerRef?: React.MutableRefObject<any>;
   sceneManagerRef?: React.MutableRefObject<any>;
+  speechEnabled?: boolean;
+  onSpeechEnabledChange?: (enabled: boolean) => void;
 }
 
 export function WorldCanvas({
@@ -28,12 +32,61 @@ export function WorldCanvas({
   currentUserPubkey,
   geometryControllerRef,
   sceneManagerRef,
+  speechEnabled: externalSpeechEnabled,
+  onSpeechEnabledChange: externalOnSpeechEnabledChange,
 }: WorldCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const localSceneManagerRef = useRef<SceneManager | null>(null);
   const localGeometryControllerRef = useRef<GeometryController | null>(null);
   const avatarEngineRef = useRef<AvatarEngine | null>(null);
   const animationFrameRef = useRef<number | null>(null);
+  const [debugInfo, setDebugInfo] = useState<DebugInfo>({});
+
+  // Scene configuration state
+  const [timeOfDay, setTimeOfDay] = useState(0.35); // Start slightly after sunrise
+  const [sunAutoMove, setSunAutoMove] = useState(false); // Start with sun fixed
+  const [sunSpeed, setSunSpeed] = useState(0.01);
+  const [internalSpeechEnabled, setInternalSpeechEnabled] = useState(false); // Disabled by default
+  const [worldGridVisible, setWorldGridVisible] = useState(true); // Show helpers by default
+  const [faceMeshEnabled, setFaceMeshEnabled] = useState(false); // Disabled by default
+  const [triangleCount, setTriangleCount] = useState<number | undefined>(undefined);
+
+  // Use external speechEnabled if provided, otherwise use internal state
+  const speechEnabled = externalSpeechEnabled ?? internalSpeechEnabled;
+  const setSpeechEnabled = externalOnSpeechEnabledChange ?? setInternalSpeechEnabled;
+
+  const handleApplyDepthSettings = async (worldDepth: number, scaleDepth: number) => {
+    const geometryController = localGeometryControllerRef.current;
+    const sceneManager = localSceneManagerRef.current;
+
+    if (!geometryController || !sceneManager) {
+      console.error('Cannot apply depth settings: geometry controller or scene manager not initialized');
+      return;
+    }
+
+    // Calculate macro depth from total depth and micro depth
+    const macroDepth = worldDepth - scaleDepth;
+
+    console.log(`Reinitializing with macroDepth=${macroDepth}, microDepth=${scaleDepth}, totalDepth=${worldDepth}`);
+
+    try {
+      // Update shared depth config (this will notify all listeners)
+      setMacroDepth(macroDepth);
+
+      // Reinitialize geometry with new depths
+      await geometryController.reinitialize(worldDepth, scaleDepth, (geometry) => {
+        sceneManager.updateGeometry(
+          geometry.vertices,
+          geometry.indices,
+          geometry.normals,
+          geometry.colors
+        );
+      });
+      console.log('Geometry reinitialized successfully');
+    } catch (error) {
+      console.error('Failed to reinitialize geometry:', error);
+    }
+  };
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -71,6 +124,18 @@ export function WorldCanvas({
       });
     }
 
+    // Set voxel edit callback for world cube editing
+    sceneManager.setOnVoxelEdit((coord, colorIndex) => {
+      console.log('[WorldCanvas Voxel Edit]', { coord, colorIndex });
+      if (colorIndex === 0) {
+        // Remove voxel at specified depth
+        geometryController.removeVoxelAtDepth(coord.x, coord.y, coord.z, coord.depth);
+      } else {
+        // Set voxel at specified depth
+        geometryController.setVoxelAtDepth(coord.x, coord.y, coord.z, coord.depth, colorIndex);
+      }
+    });
+
     // Initialize WASM and avatar engine
     init().then(() => {
       const avatarEngine = new AvatarEngine();
@@ -89,6 +154,8 @@ export function WorldCanvas({
         geometry.normals,
         geometry.colors
       );
+      // Update triangle count
+      setTriangleCount(geometry.stats.triangles);
     }).catch((error) => {
       console.error('Failed to initialize geometry controller:', error);
     });
@@ -96,6 +163,10 @@ export function WorldCanvas({
     // Animation loop
     const animate = () => {
       sceneManager.render();
+
+      // Update debug info every frame
+      setDebugInfo(sceneManager.getDebugInfo());
+
       animationFrameRef.current = requestAnimationFrame(animate);
     };
     animate();
@@ -112,6 +183,7 @@ export function WorldCanvas({
         cancelAnimationFrame(animationFrameRef.current);
       }
       window.removeEventListener('resize', handleResize);
+      sceneManager.dispose();
       geometryController.destroy();
       if (unsubscribe) {
         unsubscribe();
@@ -150,6 +222,44 @@ export function WorldCanvas({
 
     sceneManager.setTeleportAnimationType(teleportAnimationType);
   }, [teleportAnimationType]);
+
+  // Handle sun system changes
+  useEffect(() => {
+    const sceneManager = localSceneManagerRef.current;
+    if (!sceneManager) return;
+
+    sceneManager.setTimeOfDay(timeOfDay);
+  }, [timeOfDay]);
+
+  useEffect(() => {
+    const sceneManager = localSceneManagerRef.current;
+    if (!sceneManager) return;
+
+    sceneManager.setSunAutoMove(sunAutoMove);
+  }, [sunAutoMove]);
+
+  useEffect(() => {
+    const sceneManager = localSceneManagerRef.current;
+    if (!sceneManager) return;
+
+    sceneManager.setSunSpeed(sunSpeed);
+  }, [sunSpeed]);
+
+  // Handle world grid visibility
+  useEffect(() => {
+    const sceneManager = localSceneManagerRef.current;
+    if (!sceneManager) return;
+
+    sceneManager.setWorldGridVisible(worldGridVisible);
+  }, [worldGridVisible]);
+
+  // Handle face mesh mode
+  useEffect(() => {
+    const geometryController = localGeometryControllerRef.current;
+    if (!geometryController) return;
+
+    geometryController.setFaceMeshMode(faceMeshEnabled);
+  }, [faceMeshEnabled]);
 
   // Handle avatar loading based on new unified avatar config
   useEffect(() => {
@@ -308,6 +418,23 @@ export function WorldCanvas({
       zIndex={0}
     >
       <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: '100%' }} />
+      <DebugPanel
+        info={debugInfo}
+        onApplyDepthSettings={handleApplyDepthSettings}
+        timeOfDay={timeOfDay}
+        onTimeOfDayChange={setTimeOfDay}
+        sunAutoMove={sunAutoMove}
+        onSunAutoMoveChange={setSunAutoMove}
+        sunSpeed={sunSpeed}
+        onSunSpeedChange={setSunSpeed}
+        speechEnabled={speechEnabled}
+        onSpeechEnabledChange={setSpeechEnabled}
+        worldGridVisible={worldGridVisible}
+        onWorldGridVisibleChange={setWorldGridVisible}
+        faceMeshEnabled={faceMeshEnabled}
+        onFaceMeshEnabledChange={setFaceMeshEnabled}
+        triangleCount={triangleCount}
+      />
     </Box>
   );
 }
