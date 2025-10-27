@@ -48,8 +48,6 @@ interface LeftSidebarPanelProps {
   onToggleEditMode: (isEditMode: boolean) => void
   isChatOpen: boolean
   onToggleChat: () => void
-  isClientListOpen: boolean
-  onToggleClientList: () => void
   // Voice props
   voiceConnected: boolean
   voiceConnecting: boolean
@@ -68,8 +66,6 @@ export function LeftSidebarPanel({
   onToggleEditMode,
   isChatOpen,
   onToggleChat,
-  isClientListOpen,
-  onToggleClientList,
   voiceConnected,
   voiceConnecting,
   micEnabled,
@@ -115,15 +111,12 @@ export function LeftSidebarPanel({
       // 3. Chat
       actions.push(onToggleChat)
 
-      // 4. Client list
-      actions.push(onToggleClientList)
-
-      // 5. Voice (if enabled and speech enabled)
+      // 4. Voice (if enabled and speech enabled)
       if (ENABLE_VOICE_CHAT && speechEnabled) {
         actions.push(onToggleVoice)
       }
 
-      // 6. Mic (if voice connected and speech enabled)
+      // 5. Mic (if voice connected and speech enabled)
       if (ENABLE_VOICE_CHAT && speechEnabled && voiceConnected) {
         actions.push(onToggleMic)
       }
@@ -146,11 +139,9 @@ export function LeftSidebarPanel({
     isEditMode,
     activePanelType,
     isChatOpen,
-    isClientListOpen,
     voiceConnected,
     onToggleEditMode,
     onToggleChat,
-    onToggleClientList,
     onToggleVoice,
     onToggleMic,
     handleOpenPanel,
@@ -192,11 +183,6 @@ export function LeftSidebarPanel({
           icon="💬"
           onClick={onToggleChat}
           isActive={isChatOpen}
-        />
-        <SidebarIcon
-          icon="👥"
-          onClick={onToggleClientList}
-          isActive={isClientListOpen}
         />
 
         {ENABLE_VOICE_CHAT && speechEnabled && (

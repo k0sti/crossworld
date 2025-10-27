@@ -129,5 +129,10 @@ export class VoxelAvatar extends BaseAvatar {
         this.mesh.material.dispose();
       }
     }
+
+    // Dispose profile icon
+    if (this.profileIcon) {
+      this.profileIcon.dispose();
+    }
   }
 }

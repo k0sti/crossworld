@@ -1,9 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { useToast, IconButton } from '@chakra-ui/react'
-import { useNavigate } from 'react-router-dom'
+import { useToast } from '@chakra-ui/react'
 import { useAccountManager } from 'applesauce-react/hooks'
 import { TopBar, ConfigPanelType, ProfilePanel } from '@crossworld/common'
-import { FiEdit3 } from 'react-icons/fi'
 import { WorldCanvas } from './components/WorldCanvas'
 import { LeftSidebarPanel } from './components/LeftSidebarPanel'
 import { NetworkConfigPanel } from './components/NetworkConfigPanel'
@@ -23,7 +21,6 @@ import { ExtensionAccount, SimpleAccount } from 'applesauce-accounts/accounts'
 import { ExtensionSigner } from 'applesauce-signers'
 
 function App() {
-  const navigate = useNavigate()
   const [pubkey, setPubkey] = useState<string | null>(null)
   const [isEditMode, setIsEditMode] = useState(false)
   const [isCameraMode, setIsCameraMode] = useState(false)
@@ -586,16 +583,6 @@ function App() {
           onOpenPanel={setActivePanelType}
           onOpenProfile={() => setActivePanelType('profile')}
           activePanelType={activePanelType}
-          centerContent={
-            <IconButton
-              aria-label="Open editor"
-              icon={<FiEdit3 />}
-              onClick={() => navigate('/editor')}
-              variant="ghost"
-              size="sm"
-              title="Voxel Editor"
-            />
-          }
         />
         {pubkey && (
           <LeftSidebarPanel
@@ -605,8 +592,6 @@ function App() {
             onToggleEditMode={setIsEditMode}
             isChatOpen={isChatOpen}
             onToggleChat={() => setIsChatOpen(!isChatOpen)}
-            isClientListOpen={isClientListOpen}
-            onToggleClientList={() => setIsClientListOpen(!isClientListOpen)}
             voiceConnected={voice.isConnected}
             voiceConnecting={voice.status === 'connecting'}
             micEnabled={voice.micEnabled}
@@ -659,6 +644,7 @@ function App() {
           isOpen={isClientListOpen}
           statusService={avatarStateService}
           onOpenProfile={handleViewProfile}
+          isEditMode={isEditMode}
         />
 
         {/* Loading State Modal */}

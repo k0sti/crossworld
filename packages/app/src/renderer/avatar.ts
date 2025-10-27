@@ -187,5 +187,10 @@ export class Avatar extends BaseAvatar {
         }
       });
     }
+
+    // Dispose profile icon
+    if (this.profileIcon) {
+      this.profileIcon.dispose();
+    }
   }
 }
