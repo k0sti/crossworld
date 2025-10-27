@@ -1,4 +1,3 @@
-
 /// Trait for mapping voxel indices to RGB colors
 pub trait ColorMapper {
     fn map(&self, index: i32) -> [f32; 3];
@@ -117,7 +116,6 @@ impl ColorMapper for PaletteColorMapper {
         self.colors[idx]
     }
 }
-
 
 /// Convert HSV to RGB
 fn hsv_to_rgb(h: f32, s: f32, v: f32) -> [f32; 3] {
