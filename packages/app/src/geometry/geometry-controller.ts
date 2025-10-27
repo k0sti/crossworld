@@ -61,6 +61,12 @@ export class GeometryController {
     }
   }
 
+  setFaceMeshMode(enabled: boolean) {
+    if (this.worker) {
+      this.worker.postMessage({ type: 'setFaceMeshMode', enabled });
+    }
+  }
+
   setVoxelAtDepth(x: number, y: number, z: number, depth: number, colorIndex: number) {
     console.log('[GeometryController] setVoxelAtDepth', { x, y, z, depth, colorIndex, hasWorker: !!this.worker });
     if (this.worker) {

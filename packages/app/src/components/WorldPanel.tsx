@@ -31,6 +31,10 @@ interface WorldPanelProps {
   // World Grid toggle
   worldGridVisible: boolean;
   onWorldGridVisibleChange: (visible: boolean) => void;
+  // Face mesh toggle
+  faceMeshEnabled: boolean;
+  onFaceMeshEnabledChange: (enabled: boolean) => void;
+  triangleCount?: number;
 }
 
 export function WorldPanel({
@@ -46,6 +50,9 @@ export function WorldPanel({
   onSpeechEnabledChange,
   worldGridVisible,
   onWorldGridVisibleChange,
+  faceMeshEnabled,
+  onFaceMeshEnabledChange,
+  triangleCount,
 }: WorldPanelProps) {
   const [macroDepth, setMacroDepth] = useState(getMacroDepth());
   const [microDepth, setMicroDepth] = useState(getMicroDepth());
@@ -269,6 +276,23 @@ export function WorldPanel({
           />
         </HStack>
 
+        {/* Face Mesh toggle with triangle count */}
+        <HStack spacing={2} justify="space-between" pointerEvents="auto">
+          <HStack spacing={1}>
+            <Text color="orange.300">Face Mesh</Text>
+            {triangleCount !== undefined && (
+              <Badge colorScheme="orange" fontSize="xs">
+                {triangleCount.toLocaleString()} tris
+              </Badge>
+            )}
+          </HStack>
+          <Switch
+            isChecked={faceMeshEnabled}
+            onChange={(e) => onFaceMeshEnabledChange(e.target.checked)}
+            size="sm"
+            colorScheme="orange"
+          />
+        </HStack>
       </VStack>
     </Box>
   );

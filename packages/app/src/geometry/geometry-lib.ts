@@ -84,6 +84,28 @@ export class GeometryGenerator {
     this.engine.removeVoxel(x, y, z);
     console.log('[GeometryLib] removeVoxel completed');
   }
+
+  setFaceMeshMode(enabled: boolean): void {
+    console.log('[GeometryLib] setFaceMeshMode', { enabled, hasEngine: !!this.engine });
+    if (!this.engine) {
+      console.error('GeometryEngine not initialized');
+      return;
+    }
+    // @ts-ignore - WASM binding exists but TypeScript can't see it
+    this.engine.setFaceMeshMode(enabled);
+    console.log('[GeometryLib] setFaceMeshMode completed');
+  }
+
+  setGroundRenderMode(useCube: boolean): void {
+    console.log('[GeometryLib] setGroundRenderMode', { useCube, hasEngine: !!this.engine });
+    if (!this.engine) {
+      console.error('GeometryEngine not initialized');
+      return;
+    }
+    // @ts-ignore - WASM binding exists but TypeScript can't see it
+    this.engine.setGroundRenderMode(useCube);
+    console.log('[GeometryLib] setGroundRenderMode completed');
+  }
 }
 
 export { GeometryEngine, GeometryData };

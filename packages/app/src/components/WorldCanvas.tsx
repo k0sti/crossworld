@@ -48,6 +48,8 @@ export function WorldCanvas({
   const [sunSpeed, setSunSpeed] = useState(0.01);
   const [internalSpeechEnabled, setInternalSpeechEnabled] = useState(false); // Disabled by default
   const [worldGridVisible, setWorldGridVisible] = useState(true); // Show helpers by default
+  const [faceMeshEnabled, setFaceMeshEnabled] = useState(false); // Disabled by default
+  const [triangleCount, setTriangleCount] = useState<number | undefined>(undefined);
 
   // Use external speechEnabled if provided, otherwise use internal state
   const speechEnabled = externalSpeechEnabled ?? internalSpeechEnabled;
@@ -152,6 +154,8 @@ export function WorldCanvas({
         geometry.normals,
         geometry.colors
       );
+      // Update triangle count
+      setTriangleCount(geometry.stats.triangles);
     }).catch((error) => {
       console.error('Failed to initialize geometry controller:', error);
     });
@@ -248,6 +252,14 @@ export function WorldCanvas({
 
     sceneManager.setWorldGridVisible(worldGridVisible);
   }, [worldGridVisible]);
+
+  // Handle face mesh mode
+  useEffect(() => {
+    const geometryController = localGeometryControllerRef.current;
+    if (!geometryController) return;
+
+    geometryController.setFaceMeshMode(faceMeshEnabled);
+  }, [faceMeshEnabled]);
 
   // Handle avatar loading based on new unified avatar config
   useEffect(() => {
@@ -419,6 +431,9 @@ export function WorldCanvas({
         onSpeechEnabledChange={setSpeechEnabled}
         worldGridVisible={worldGridVisible}
         onWorldGridVisibleChange={setWorldGridVisible}
+        faceMeshEnabled={faceMeshEnabled}
+        onFaceMeshEnabledChange={setFaceMeshEnabled}
+        triangleCount={triangleCount}
       />
     </Box>
   );
