@@ -6,5 +6,5 @@ interface Window {
 }
 
 declare module '@workspace/wasm' {
-  export * from '../../../packages/wasm/crossworld_world';
+  export * from 'crossworld-world';
 }

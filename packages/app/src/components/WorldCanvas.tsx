@@ -6,7 +6,7 @@ import init, { AvatarEngine } from '@workspace/wasm';
 import type { AvatarStateService, AvatarConfig } from '../services/avatar-state';
 import type { TeleportAnimationType } from '../renderer/teleport-animation';
 import { DebugPanel, type DebugInfo } from './WorldPanel';
-import { setMacroDepth } from '../config/depth-config';
+import { setMacroDepth, setMicroDepth } from '../config/depth-config';
 
 interface WorldCanvasProps {
   isLoggedIn: boolean;
@@ -48,7 +48,8 @@ export function WorldCanvas({
   const [sunSpeed, setSunSpeed] = useState(0.01);
   const [internalSpeechEnabled, setInternalSpeechEnabled] = useState(false); // Disabled by default
   const [worldGridVisible, setWorldGridVisible] = useState(true); // Show helpers by default
-  const [faceMeshEnabled, setFaceMeshEnabled] = useState(false); // Disabled by default
+  const [faceMeshEnabled, setFaceMeshEnabled] = useState(true); // Enabled by default
+  const [wireframeEnabled, setWireframeEnabled] = useState(false); // Disabled by default
   const [triangleCount, setTriangleCount] = useState<number | undefined>(undefined);
 
   // Use external speechEnabled if provided, otherwise use internal state
@@ -66,25 +67,31 @@ export function WorldCanvas({
 
     // Calculate macro depth from total depth and micro depth
     const macroDepth = worldDepth - scaleDepth;
+    const microDepth = scaleDepth;
 
-    console.log(`Reinitializing with macroDepth=${macroDepth}, microDepth=${scaleDepth}, totalDepth=${worldDepth}`);
+    console.log(`Applying depth settings: macroDepth=${macroDepth}, microDepth=${microDepth}, totalDepth=${worldDepth}`);
 
     try {
-      // Update shared depth config (this will notify all listeners)
-      setMacroDepth(macroDepth);
+      // Only reinitialize if MACRO depth changed (world size change)
+      // Micro depth changes don't need reinit since Rust ignores it and world scale stays constant
+      const currentMacro = geometryController['macroDepth']; // Access private field for comparison
 
-      // Reinitialize geometry with new depths
-      await geometryController.reinitialize(worldDepth, scaleDepth, (geometry) => {
-        sceneManager.updateGeometry(
-          geometry.vertices,
-          geometry.indices,
-          geometry.normals,
-          geometry.colors
-        );
-      });
-      console.log('Geometry reinitialized successfully');
+      if (currentMacro !== macroDepth) {
+        console.log(`Macro depth changed from ${currentMacro} to ${macroDepth}, reinitializing...`);
+        await geometryController.reinitialize(macroDepth, microDepth, (geometry) => {
+          sceneManager.updateGeometry(
+            geometry.vertices,
+            geometry.indices,
+            geometry.normals,
+            geometry.colors
+          );
+        });
+        console.log('Geometry reinitialized successfully');
+      } else {
+        console.log('Macro depth unchanged, skipping reinitialize (micro depth only affects coordinate precision)');
+      }
     } catch (error) {
-      console.error('Failed to reinitialize geometry:', error);
+      console.error('Failed to apply depth settings:', error);
     }
   };
 
@@ -156,6 +163,9 @@ export function WorldCanvas({
       );
       // Update triangle count
       setTriangleCount(geometry.stats.triangles);
+    }).then(() => {
+      // Set initial face mesh mode (enabled by default)
+      geometryController.setFaceMeshMode(true);
     }).catch((error) => {
       console.error('Failed to initialize geometry controller:', error);
     });
@@ -260,6 +270,14 @@ export function WorldCanvas({
 
     geometryController.setFaceMeshMode(faceMeshEnabled);
   }, [faceMeshEnabled]);
+
+  // Handle wireframe mode
+  useEffect(() => {
+    const sceneManager = localSceneManagerRef.current;
+    if (!sceneManager) return;
+
+    sceneManager.setWireframe(wireframeEnabled);
+  }, [wireframeEnabled]);
 
   // Handle avatar loading based on new unified avatar config
   useEffect(() => {
@@ -443,6 +461,8 @@ export function WorldCanvas({
         onWorldGridVisibleChange={setWorldGridVisible}
         faceMeshEnabled={faceMeshEnabled}
         onFaceMeshEnabledChange={setFaceMeshEnabled}
+        wireframeEnabled={wireframeEnabled}
+        onWireframeEnabledChange={setWireframeEnabled}
         triangleCount={triangleCount}
       />
     </Box>
