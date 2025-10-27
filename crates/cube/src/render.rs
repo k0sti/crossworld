@@ -293,36 +293,38 @@ fn extract_voxels_from_octree(
     let mut voxels = Vec::new();
 
     // Use visitor pattern to traverse octree and extract voxel data
-    octree.root.visit_leaves(max_depth, IVec3::ZERO, &mut |cube, depth, pos| {
-        if let Cube::Solid(value) = cube {
-            if *value == 0 {
-                return; // Skip empty voxels
+    octree
+        .root
+        .visit_leaves(max_depth, IVec3::ZERO, &mut |cube, depth, pos| {
+            if let Cube::Solid(value) = cube {
+                if *value == 0 {
+                    return; // Skip empty voxels
+                }
+
+                // Calculate size and position in normalized [0,1] space
+                let grid_size = 1 << max_depth; // 2^max_depth
+                let voxel_size = 1.0 / grid_size as f32;
+
+                // Scale factor based on remaining depth
+                let scale_factor = 1 << depth;
+
+                // Calculate world position
+                let x = (pos.x * scale_factor) as f32 * voxel_size;
+                let y = (pos.y * scale_factor) as f32 * voxel_size;
+                let z = (pos.z * scale_factor) as f32 * voxel_size;
+                let size = voxel_size * scale_factor as f32;
+
+                // Get color and convert to u8
+                let rgb = mapper.map(*value);
+                let color = [
+                    (rgb[0] * 255.0) as u8,
+                    (rgb[1] * 255.0) as u8,
+                    (rgb[2] * 255.0) as u8,
+                ];
+
+                voxels.push(((x, y, z), size, color));
             }
-
-            // Calculate size and position in normalized [0,1] space
-            let grid_size = 1 << max_depth; // 2^max_depth
-            let voxel_size = 1.0 / grid_size as f32;
-
-            // Scale factor based on remaining depth
-            let scale_factor = 1 << depth;
-
-            // Calculate world position
-            let x = (pos.x * scale_factor) as f32 * voxel_size;
-            let y = (pos.y * scale_factor) as f32 * voxel_size;
-            let z = (pos.z * scale_factor) as f32 * voxel_size;
-            let size = voxel_size * scale_factor as f32;
-
-            // Get color and convert to u8
-            let rgb = mapper.map(*value);
-            let color = [
-                (rgb[0] * 255.0) as u8,
-                (rgb[1] * 255.0) as u8,
-                (rgb[2] * 255.0) as u8,
-            ];
-
-            voxels.push(((x, y, z), size, color));
-        }
-    });
+        });
 
     voxels
 }

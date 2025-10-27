@@ -99,7 +99,6 @@ export class SceneManager {
   private worldGridHelpers: THREE.Object3D[] = [];
 
   // Event listener references for cleanup
-  private boundHandleResize?: () => void;
   private boundKeyDown?: (event: KeyboardEvent) => void;
   private boundKeyUp?: (event: KeyboardEvent) => void;
   private boundPointerLockChange?: () => void;

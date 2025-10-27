@@ -5,8 +5,8 @@ use std::rc::Rc;
 use wasm_bindgen::prelude::*;
 
 use crate::{
-    generate_mesh_hierarchical, parse_csm, ColorMapper, Cube, DefaultMeshBuilder,
-    HsvColorMapper, Octree, PaletteColorMapper,
+    generate_mesh_hierarchical, parse_csm, ColorMapper, Cube, DefaultMeshBuilder, HsvColorMapper,
+    Octree, PaletteColorMapper,
 };
 
 #[derive(Serialize, Deserialize)]
@@ -214,10 +214,20 @@ pub fn get_model_mesh(model_id: &str) -> JsValue {
             let mut builder = DefaultMeshBuilder::new();
             if let Some(ref palette) = model_data.palette {
                 let mapper = PaletteColorMapper::new(palette.clone());
-                generate_mesh_hierarchical(&octree, &mut builder, |v| mapper.map(v), model_data.max_depth as u32);
+                generate_mesh_hierarchical(
+                    &octree,
+                    &mut builder,
+                    |v| mapper.map(v),
+                    model_data.max_depth as u32,
+                );
             } else {
                 let mapper = HsvColorMapper::new();
-                generate_mesh_hierarchical(&octree, &mut builder, |v| mapper.map(v), model_data.max_depth as u32);
+                generate_mesh_hierarchical(
+                    &octree,
+                    &mut builder,
+                    |v| mapper.map(v),
+                    model_data.max_depth as u32,
+                );
             };
 
             // Scale mesh from [0,1] space to [0, 2^max_depth] world space
