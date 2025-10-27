@@ -155,9 +155,9 @@ export class CameraController {
         this.moveRight = true;
         break;
       case 'v':
-        this.moveDown = true;
+          this.moveDown = true;
         break;
-      case 'f':
+      case 'c':
         this.moveUp = true;
         break;
       case 'escape':
@@ -185,7 +185,7 @@ export class CameraController {
       case 'v':
         this.moveDown = false;
         break;
-      case 'f':
+      case 'c':
         this.moveUp = false;
         break;
     }

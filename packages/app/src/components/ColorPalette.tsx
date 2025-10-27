@@ -57,31 +57,55 @@ export function ColorPalette({ isVisible, onColorSelect }: ColorPaletteProps) {
           </Text>
         </Box>
 
-        {/* Color Grid */}
+        {/* Color Grid - 0-15 in left column, 16-31 in right column */}
         <Grid
           templateColumns="repeat(2, 1fr)"
           gap={1}
         >
-          {DAWNBRINGER_32.map((color, index) => (
-            <Box
-              key={index}
-              as="button"
-              w="24px"
-              h="24px"
-              bg={color}
-              borderRadius="sm"
-              border={selectedIndex === index ? '2px solid white' : '1px solid rgba(255, 255, 255, 0.3)'}
-              cursor="pointer"
-              onClick={() => handleColorClick(index)}
-              _hover={{
-                transform: 'scale(1.1)',
-                borderColor: 'white',
-                zIndex: 1,
-              }}
-              transition="all 0.1s"
-              title={`${index}: ${color}`}
-            />
-          ))}
+          {Array.from({ length: 16 }, (_, i) => {
+            const leftIndex = i;
+            const rightIndex = i + 16;
+            return (
+              <>
+                <Box
+                  key={leftIndex}
+                  as="button"
+                  w="24px"
+                  h="24px"
+                  bg={DAWNBRINGER_32[leftIndex]}
+                  borderRadius="sm"
+                  border={selectedIndex === leftIndex ? '2px solid white' : '1px solid rgba(255, 255, 255, 0.3)'}
+                  cursor="pointer"
+                  onClick={() => handleColorClick(leftIndex)}
+                  _hover={{
+                    transform: 'scale(1.1)',
+                    borderColor: 'white',
+                    zIndex: 1,
+                  }}
+                  transition="all 0.1s"
+                  title={`${leftIndex}: ${DAWNBRINGER_32[leftIndex]}`}
+                />
+                <Box
+                  key={rightIndex}
+                  as="button"
+                  w="24px"
+                  h="24px"
+                  bg={DAWNBRINGER_32[rightIndex]}
+                  borderRadius="sm"
+                  border={selectedIndex === rightIndex ? '2px solid white' : '1px solid rgba(255, 255, 255, 0.3)'}
+                  cursor="pointer"
+                  onClick={() => handleColorClick(rightIndex)}
+                  _hover={{
+                    transform: 'scale(1.1)',
+                    borderColor: 'white',
+                    zIndex: 1,
+                  }}
+                  transition="all 0.1s"
+                  title={`${rightIndex}: ${DAWNBRINGER_32[rightIndex]}`}
+                />
+              </>
+            );
+          })}
         </Grid>
       </VStack>
     </Box>

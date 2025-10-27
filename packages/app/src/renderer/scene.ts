@@ -62,6 +62,7 @@ export class SceneManager {
   // Mouse mode: 1 = free pointer (paint/erase), 2 = grabbed pointer (camera rotation)
   private mouseMode: 1 | 2 = 1;
   private crosshair: HTMLElement | null = null;
+  private shiftKeyPressed: boolean = false;
 
   // Depth voxel select mode: 1 = near side (y=0), 2 = far side (y=-1)
   private depthSelectMode: 1 | 2 = 1;
@@ -96,6 +97,12 @@ export class SceneManager {
 
   // World grid helpers
   private worldGridHelpers: THREE.Object3D[] = [];
+
+  // Event listener references for cleanup
+  private boundHandleResize?: () => void;
+  private boundKeyDown?: (event: KeyboardEvent) => void;
+  private boundKeyUp?: (event: KeyboardEvent) => void;
+  private boundPointerLockChange?: () => void;
 
   constructor() {
     this.scene = new THREE.Scene();
@@ -206,8 +213,8 @@ export class SceneManager {
           targetZ = intersectPoint.z;
         }
 
-        // Check if within valid world bounds
-        if (isWithinWorldBounds(targetX, targetZ, 1)) {
+        // Check if within valid world bounds (size=0 for point position, not voxel)
+        if (isWithinWorldBounds(targetX, targetZ, 0)) {
           // Check modifiers: CTRL for teleport, SHIFT for run
           const useTeleport = event.ctrlKey;
           const useRun = event.shiftKey && !useTeleport;
@@ -400,20 +407,49 @@ export class SceneManager {
   }
 
   private setupKeyboardListener(canvas: HTMLCanvasElement): void {
-    window.addEventListener('keydown', (event) => {
-      if (!this.isEditMode) return;
-
-      // Toggle mouse mode with Shift key
-      if (event.key === 'Shift' && this.mouseMode === 1) {
-        this.mouseMode = 2;
-        // Request pointer lock for grabbed mode
-        canvas.requestPointerLock();
-        // Show crosshair
-        if (this.crosshair) {
-          this.crosshair.style.display = 'block';
+    this.boundKeyDown = (event: KeyboardEvent) => {
+      // Toggle mouse mode with Shift key (works in both walk and edit modes)
+      // Only toggle once per key press, not on repeated keydown events
+      if (event.key === 'Shift') {
+        if (this.shiftKeyPressed) {
+          // Already handled this key press, ignore repeated keydown events
+          return;
         }
-        console.log('[Mouse Mode] Switched to mode 2 (first-person camera rotation)');
+        this.shiftKeyPressed = true;
+
+        if (this.mouseMode === 1) {
+          // Enter camera rotation mode
+          this.mouseMode = 2;
+          canvas.requestPointerLock();
+          if (this.crosshair) {
+            this.crosshair.style.display = 'block';
+          }
+          console.log('[Mouse Mode] Switched to mode 2 (first-person camera rotation)');
+        } else if (this.mouseMode === 2) {
+          // Exit camera rotation mode
+          this.mouseMode = 1;
+          document.exitPointerLock();
+          if (this.crosshair) {
+            this.crosshair.style.display = 'none';
+          }
+          // Reset paint state (only relevant in edit mode, but safe to always reset)
+          this.isLeftMousePressed = false;
+          this.isRightMousePressed = false;
+          this.lastPaintedVoxel = null;
+          console.log('[Mouse Mode] Switched to mode 1 (paint/erase)');
+        }
+        return;
       }
+
+      // Toggle edit mode with 'e' key (works in both walk and edit modes)
+      if (event.key === 'e' || event.key === 'E') {
+        this.setEditMode(!this.isEditMode);
+        console.log(`[Edit Mode] Toggled to ${this.isEditMode ? 'ON' : 'OFF'}`);
+        return;
+      }
+
+      // Edit mode specific controls
+      if (!this.isEditMode) return;
 
       // Toggle depth select mode with Spacebar
       if (event.code === 'Space') {
@@ -436,43 +472,33 @@ export class SceneManager {
         this.updateCursorSize();
         console.log(`[Cursor Depth] Decreased to ${this.cursorDepth} (size=${this.getCursorSize()})`);
       }
-    });
+    };
 
-    window.addEventListener('keyup', (event) => {
-      if (!this.isEditMode) return;
-
-      // Exit grabbed mode when Shift is released
-      if (event.key === 'Shift' && this.mouseMode === 2) {
-        this.mouseMode = 1;
-        // Exit pointer lock
-        document.exitPointerLock();
-        // Hide crosshair
-        if (this.crosshair) {
-          this.crosshair.style.display = 'none';
-        }
-        // Reset paint state
-        this.isLeftMousePressed = false;
-        this.isRightMousePressed = false;
-        this.lastPaintedVoxel = null;
-        console.log('[Mouse Mode] Switched to mode 1 (paint/erase)');
+    this.boundKeyUp = (event: KeyboardEvent) => {
+      // Reset shift key flag when released
+      if (event.key === 'Shift') {
+        this.shiftKeyPressed = false;
       }
-    });
+    };
 
-    // Handle pointer lock change
-    document.addEventListener('pointerlockchange', () => {
+    this.boundPointerLockChange = () => {
       if (!document.pointerLockElement && this.mouseMode === 2) {
-        // Pointer lock was exited, reset to mode 1
+        // Pointer lock was exited externally (e.g., Escape key), sync mode back to 1
         this.mouseMode = 1;
-        // Hide crosshair
         if (this.crosshair) {
           this.crosshair.style.display = 'none';
         }
         this.isLeftMousePressed = false;
         this.isRightMousePressed = false;
         this.lastPaintedVoxel = null;
-        console.log('[Mouse Mode] Pointer lock exited, switched to mode 1');
+        console.log('[Mouse Mode] Pointer lock exited (Escape), switched to mode 1');
       }
-    });
+    };
+
+    // Register event listeners
+    window.addEventListener('keydown', this.boundKeyDown);
+    window.addEventListener('keyup', this.boundKeyUp);
+    document.addEventListener('pointerlockchange', this.boundPointerLockChange);
   }
 
   // Removed: setupLights() - now using SunSystem for dynamic lighting
@@ -665,9 +691,7 @@ export class SceneManager {
 
   private setupMouseMoveListener(canvas: HTMLCanvasElement): void {
     canvas.addEventListener('mousemove', (event) => {
-      if (!this.isEditMode || !this.previewCube) return;
-
-      // Mode 2: First-person camera rotation with grabbed pointer
+      // Mode 2: First-person camera rotation with grabbed pointer (works in both modes)
       if (this.mouseMode === 2) {
         const sensitivity = 0.002;
         const deltaX = event.movementX * sensitivity;
@@ -691,8 +715,11 @@ export class SceneManager {
         // Apply rotation back to camera
         this.camera.quaternion.setFromEuler(euler);
 
-        // Don't return - continue to update voxel cursor below
+        // Don't return - continue to update voxel cursor below (if in edit mode)
       }
+
+      // Edit mode only: update voxel cursor
+      if (!this.isEditMode || !this.previewCube) return;
 
       // Calculate mouse position in normalized device coordinates
       // In mode 2 (shift rotate), raycast from center of screen
@@ -1437,5 +1464,34 @@ export class SceneManager {
     for (const helper of this.worldGridHelpers) {
       helper.visible = visible;
     }
+  }
+
+  /**
+   * Cleanup all event listeners and DOM elements
+   */
+  dispose(): void {
+    // Remove event listeners
+    if (this.boundKeyDown) {
+      window.removeEventListener('keydown', this.boundKeyDown);
+    }
+    if (this.boundKeyUp) {
+      window.removeEventListener('keyup', this.boundKeyUp);
+    }
+    if (this.boundPointerLockChange) {
+      document.removeEventListener('pointerlockchange', this.boundPointerLockChange);
+    }
+
+    // Remove crosshair element
+    if (this.crosshair && this.crosshair.parentNode) {
+      this.crosshair.parentNode.removeChild(this.crosshair);
+      this.crosshair = null;
+    }
+
+    // Exit pointer lock if active
+    if (document.pointerLockElement) {
+      document.exitPointerLock();
+    }
+
+    console.log('[SceneManager] Disposed');
   }
 }
