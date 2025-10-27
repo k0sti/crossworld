@@ -302,16 +302,20 @@ export function WorldCanvas({
             sceneManager.createVoxelAvatarFromVoxFile(voxUrl, npubForColors, 1.0, currentTransform)
               .then(() => {
                 console.log('[WorldCanvas] Successfully loaded voxel avatar from disk');
+                // Refresh profile in case pubkey was set before avatar loaded
+                sceneManager.refreshCurrentAvatarProfile();
               })
               .catch(error => {
                 console.error('[WorldCanvas] Failed to load voxel avatar from disk:', error);
                 // Fallback to generated
                 console.log('[WorldCanvas] Falling back to generated model');
                 sceneManager.createVoxelAvatar('npub1default', 1.0, currentTransform);
+                sceneManager.refreshCurrentAvatarProfile();
               });
           } else {
             console.warn('[WorldCanvas] Unknown voxel model ID:', avatarConfig.avatarId);
             sceneManager.createVoxelAvatar('npub1default', 1.0, currentTransform);
+            sceneManager.refreshCurrentAvatarProfile();
           }
         } else if (avatarConfig.avatarUrl) {
           // Load from custom URL
@@ -319,19 +323,23 @@ export function WorldCanvas({
           sceneManager.createVoxelAvatarFromVoxFile(avatarConfig.avatarUrl, npubForColors, 1.0, currentTransform)
             .then(() => {
               console.log('[WorldCanvas] Successfully loaded voxel avatar from URL');
+              sceneManager.refreshCurrentAvatarProfile();
             })
             .catch(error => {
               console.error('[WorldCanvas] Failed to load voxel avatar from URL:', error);
               sceneManager.createVoxelAvatar('npub1default', 1.0, currentTransform);
+              sceneManager.refreshCurrentAvatarProfile();
             });
         } else if (avatarConfig.avatarData) {
           // TODO: Generate from avatarData (procedural generation)
           console.log('[WorldCanvas] Avatar generation from avatarData not yet implemented');
           sceneManager.createVoxelAvatar('npub1default', 1.0, currentTransform);
+          sceneManager.refreshCurrentAvatarProfile();
         } else {
           // Fallback to simple generated model
           console.log('[WorldCanvas] Using simple generated voxel avatar');
           sceneManager.createVoxelAvatar('npub1default', 1.0, currentTransform);
+          sceneManager.refreshCurrentAvatarProfile();
         }
       } else if (avatarConfig.avatarType === 'glb') {
         // Remove existing avatar if exists
@@ -359,6 +367,7 @@ export function WorldCanvas({
             const checkResponse = await fetch(glbUrl, { method: 'HEAD' });
             if (checkResponse.ok) {
               sceneManager.createAvatar(glbUrl, 1.0, currentTransform);
+              sceneManager.refreshCurrentAvatarProfile();
             } else {
               console.warn('GLB model not found:', glbUrl);
               // Don't create avatar if model doesn't exist
@@ -387,6 +396,7 @@ export function WorldCanvas({
 
             // Create CSM avatar from mesh data
             sceneManager.createCsmAvatar(result, npubForColors, 1.0, currentTransform);
+            sceneManager.refreshCurrentAvatarProfile();
             console.log('[WorldCanvas] Successfully loaded CSM avatar');
           } catch (error) {
             console.error('[WorldCanvas] Failed to load CSM avatar:', error);

@@ -21,7 +21,7 @@ import { CheckerPlane } from './checker-plane';
 import { SunSystem } from './sun-system';
 import { PostProcessing } from './post-processing';
 import { profileCache } from '../services/profile-cache';
-import { WORLD_RELAYS } from '../config';
+import { DEFAULT_RELAYS } from '../config';
 
 /**
  * SceneManager - Manages the 3D scene with centered coordinate system
@@ -1260,6 +1260,17 @@ export class SceneManager {
   }
 
   /**
+   * Refresh profile picture for current avatar (call after avatar is loaded)
+   */
+  refreshCurrentAvatarProfile(): void {
+    console.log(`[Scene] refreshCurrentAvatarProfile called, pubkey: ${this.currentUserPubkey}, hasAvatar: ${!!this.currentAvatar}`);
+    if (this.currentUserPubkey && this.currentAvatar) {
+      console.log(`[Scene] Refreshing profile for current avatar`);
+      this.fetchAndApplyProfilePicture(this.currentUserPubkey, this.currentAvatar);
+    }
+  }
+
+  /**
    * Publish current player position
    */
   private publishPlayerPosition(): void {
@@ -1550,7 +1561,7 @@ export class SceneManager {
   private async fetchAndApplyProfilePicture(pubkey: string, avatar: IAvatar, npub?: string): Promise<void> {
     console.log(`[Scene] fetchAndApplyProfilePicture called for pubkey: ${pubkey}, npub: ${npub}`);
     try {
-      const profile = await profileCache.getProfile(pubkey, WORLD_RELAYS);
+      const profile = await profileCache.getProfile(pubkey, DEFAULT_RELAYS);
       console.log(`[Scene] Profile fetched:`, profile);
 
       // Set display name for initials fallback
