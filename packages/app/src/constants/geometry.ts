@@ -2,75 +2,87 @@
  * Geometry and coordinate system helper functions
  *
  * Architecture:
- * - Macro depth: Octree subdivision depth (3 = 8^3 voxels in octree space)
- * - Micro depth: Rendering scale depth (0 = each octree unit is 2^0 = 1 world unit)
- * - Total depth: macro + micro = 3
- * - World size: 2^totalDepth * 2^microDepth = 8 * 1 = 8 units
- * - At macro depth (3), smallest voxel = 1 world unit (matches unit cube)
+ * - Macro depth: Determines world size (e.g., 3 → 8×8×8 world units)
+ * - Micro depth: Sub-unit voxel subdivisions (e.g., 2 → 4×4×4 subdivisions per unit)
+ * - Total depth: macro + micro (e.g., 3 + 2 = 5)
+ * - World size: 2^macro units (independent of micro depth)
+ * - Octree size: 2^(macro+micro) voxels per side
+ * - Each world unit contains 2^micro octree voxels per dimension
+ *
+ * Example: macro=3, micro=2, total=5
+ * - World: 8×8×8 units (2^3)
+ * - Octree: 32×32×32 voxels (2^5)
+ * - Each world unit = 4×4×4 octree voxels (2^2)
  *
  * Note: Actual depth values are managed by depth-config.ts
  */
 
 /**
  * Calculate maximum voxels per side at finest detail level in octree space
- * @param depth Total depth (macro + micro)
+ * @param totalDepth Total depth (macro + micro)
  */
-export function getMaxVoxelsPerSide(depth: number): number {
-  return 1 << depth;
+export function getMaxVoxelsPerSide(totalDepth: number): number {
+  return 1 << totalDepth;
 }
 
 /**
- * Calculate world size in units after scaling
- * @param depth Total depth (macro + micro)
- * @param microDepth Rendering scale depth
+ * Calculate world size in units (only depends on macro depth)
+ * @param macroDepth Macro depth
  */
-export function getWorldSize(depth: number, microDepth: number): number {
-  return (1 << depth) * (1 << microDepth);
+export function getWorldSize(macroDepth: number): number {
+  return 1 << macroDepth;
 }
 
 /**
  * Calculate half world size (used for centering coordinates)
- * @param depth Total depth (macro + micro)
- * @param microDepth Rendering scale depth
+ * @param macroDepth Macro depth
  */
-export function getHalfWorld(depth: number, microDepth: number): number {
-  return getWorldSize(depth, microDepth) / 2;
+export function getHalfWorld(macroDepth: number): number {
+  return getWorldSize(macroDepth) / 2;
 }
 
 /**
  * Calculate scale factor from world to octree coordinates
- * @param microDepth Rendering scale depth
+ * @param microDepth Micro depth (subdivisions per world unit)
  */
 export function getWorldToOctreeScale(microDepth: number): number {
-  return 1 / (1 << microDepth);
+  return 1 << microDepth; // Each world unit = 2^micro octree voxels
 }
 
 /**
- * Calculate default cursor depth for edit mode
- * @param depth Total depth (macro + micro)
- * @param microDepth Rendering scale depth
+ * Calculate default cursor depth for edit mode (macro depth = unit voxels)
+ * @param macroDepth Macro depth
  */
-export function getDefaultCursorDepth(depth: number, microDepth: number): number {
-  return depth - microDepth;
+export function getDefaultCursorDepth(macroDepth: number): number {
+  return macroDepth; // Default to macro depth (unit voxels)
 }
 
 /**
  * Calculate voxel size in world units for a given depth level
- * @param targetDepth Target octree depth
- * @param maxDepth Maximum depth (macro + micro)
- * @param microDepth Rendering scale depth
+ * @param targetDepth Target octree depth level
+ * @param macroDepth Macro depth
+ * @param microDepth Micro depth
  */
-export function getVoxelSize(targetDepth: number, maxDepth: number, microDepth: number): number {
-  return 1 << (maxDepth - targetDepth + microDepth);
+export function getVoxelSize(targetDepth: number, macroDepth: number, microDepth: number): number {
+  // At depth 0: voxel size = 2^macro world units (entire world)
+  // At macro depth: voxel size = 1 world unit
+  // At macro+micro depth: voxel size = 1/(2^micro) world units
+  const totalDepth = macroDepth + microDepth;
+  if (targetDepth <= macroDepth) {
+    // Coarse levels: voxel size >= 1 world unit
+    return 1 << (macroDepth - targetDepth);
+  } else {
+    // Fine levels: voxel size < 1 world unit
+    return 1.0 / (1 << (targetDepth - macroDepth));
+  }
 }
 
 /**
  * Get the valid world coordinate range
- * @param depth Total depth (macro + micro)
- * @param microDepth Rendering scale depth
+ * @param macroDepth Macro depth
  */
-export function getWorldBounds(depth: number, microDepth: number): { min: number; max: number } {
-  const halfWorld = getHalfWorld(depth, microDepth);
+export function getWorldBounds(macroDepth: number): { min: number; max: number } {
+  const halfWorld = getHalfWorld(macroDepth);
   return {
     min: -halfWorld,
     max: halfWorld
@@ -79,11 +91,11 @@ export function getWorldBounds(depth: number, microDepth: number): { min: number
 
 /**
  * Get the valid octree coordinate range at max depth
- * @param depth Total depth (macro + micro)
+ * @param totalDepth Total depth (macro + micro)
  */
-export function getOctreeBounds(depth: number): { min: number; max: number } {
+export function getOctreeBounds(totalDepth: number): { min: number; max: number } {
   return {
     min: 0,
-    max: getMaxVoxelsPerSide(depth) - 1
+    max: getMaxVoxelsPerSide(totalDepth) - 1
   };
 }

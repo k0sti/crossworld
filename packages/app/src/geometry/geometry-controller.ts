@@ -1,17 +1,17 @@
 import { GeometryResult } from '../workers/geometry-worker';
-import { getMicroDepth, getTotalDepth } from '../config/depth-config';
+import { getMacroDepth, getMicroDepth } from '../config/depth-config';
 
 export class GeometryController {
   private worker: Worker | null = null;
   private latestGeometry: GeometryResult | null = null;
   private stats = { vertices: 0, triangles: 0 };
   private onGeometryUpdate?: (geometry: GeometryResult) => void;
-  private worldDepth: number;
-  private scaleDepth: number;
+  private macroDepth: number;
+  private microDepth: number;
 
-  constructor(worldDepth: number = getTotalDepth(), scaleDepth: number = getMicroDepth()) {
-    this.worldDepth = worldDepth;
-    this.scaleDepth = scaleDepth;
+  constructor(macroDepth: number = getMacroDepth(), microDepth: number = getMicroDepth()) {
+    this.macroDepth = macroDepth;
+    this.microDepth = microDepth;
   }
 
   async initialize(onGeometryUpdate: (geometry: GeometryResult) => void): Promise<void> {
@@ -32,7 +32,7 @@ export class GeometryController {
         }
       });
 
-      this.worker.postMessage({ type: 'init', worldDepth: this.worldDepth, scaleDepth: this.scaleDepth });
+      this.worker.postMessage({ type: 'init', macroDepth: this.macroDepth, microDepth: this.microDepth });
     });
   }
 
@@ -95,13 +95,13 @@ export class GeometryController {
     }
   }
 
-  async reinitialize(worldDepth: number, scaleDepth: number, onGeometryUpdate: (geometry: GeometryResult) => void): Promise<void> {
+  async reinitialize(macroDepth: number, microDepth: number, onGeometryUpdate: (geometry: GeometryResult) => void): Promise<void> {
     // Terminate existing worker
     this.destroy();
 
     // Update depths
-    this.worldDepth = worldDepth;
-    this.scaleDepth = scaleDepth;
+    this.macroDepth = macroDepth;
+    this.microDepth = microDepth;
 
     // Reinitialize with new depths
     await this.initialize(onGeometryUpdate);

@@ -1,5 +1,5 @@
 import { GeometryGenerator } from '../geometry/geometry-lib';
-import { getMicroDepth, getTotalDepth } from '../config/depth-config';
+import { getMacroDepth } from '../config/depth-config';
 
 export interface GeometryMessage {
   type: 'init' | 'update' | 'setVoxelAtDepth' | 'setVoxel' | 'removeVoxelAtDepth' | 'removeVoxel' | 'setFaceMeshMode' | 'setGroundRenderMode';
@@ -8,8 +8,8 @@ export interface GeometryMessage {
   z?: number;
   depth?: number;
   colorIndex?: number;
-  worldDepth?: number;
-  scaleDepth?: number;
+  macroDepth?: number;
+  microDepth?: number;
   enabled?: boolean;
   useCube?: boolean;
 }
@@ -32,8 +32,8 @@ class GeometryWorkerManager {
   private updateInterval = 33; // ~30 FPS for geometry updates
   private lastUpdate = 0;
 
-  async initialize(worldDepth: number = getTotalDepth(), scaleDepth: number = getMicroDepth()) {
-    this.generator = new GeometryGenerator(worldDepth, scaleDepth);
+  async initialize(macroDepth: number = getMacroDepth(), microDepth: number = 0) {
+    this.generator = new GeometryGenerator(macroDepth, microDepth);
     await this.generator.initialize();
     self.postMessage({ type: 'ready' });
     this.startUpdateLoop();
@@ -146,7 +146,7 @@ self.addEventListener('message', async (event) => {
 
   switch (message.type) {
     case 'init':
-      await manager.initialize(message.worldDepth, message.scaleDepth);
+      await manager.initialize(message.macroDepth, message.microDepth);
       break;
 
     case 'update':

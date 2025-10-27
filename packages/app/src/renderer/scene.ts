@@ -42,6 +42,7 @@ export class SceneManager {
   private camera: THREE.PerspectiveCamera;
   private renderer: THREE.WebGLRenderer;
   private geometryMesh: THREE.Mesh | null = null;
+  private wireframeMesh: THREE.LineSegments | null = null;
   private checkerPlane: CheckerPlane | null = null;
   private groundPlane: THREE.Plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0); // Plane at y=0
   private currentAvatar: IAvatar | null = null;
@@ -65,6 +66,9 @@ export class SceneManager {
   private mouseMode: 1 | 2 = 1;
   private crosshair: HTMLElement | null = null;
   private shiftKeyPressed: boolean = false;
+
+  // Wireframe mode
+  private wireframeMode: boolean = false;
 
   // Depth voxel select mode: 1 = near side (y=0), 2 = far side (y=-1)
   private depthSelectMode: 1 | 2 = 1;
@@ -617,7 +621,7 @@ export class SceneManager {
 
     // Create world bounds wireframe box
     // World is worldSize×worldSize×worldSize centered at origin
-    const worldSize = getWorldSize(getTotalDepth(), getMicroDepth());
+    const worldSize = getWorldSize(getMacroDepth());
     const worldBoxGeometry = new THREE.BoxGeometry(worldSize, worldSize, worldSize);
     const worldBoxEdges = new THREE.EdgesGeometry(worldBoxGeometry);
     const worldBoxLineMaterial = new THREE.LineBasicMaterial({
@@ -858,11 +862,21 @@ export class SceneManager {
   }
 
   updateGeometry(vertices: Float32Array, indices: Uint32Array, normals: Float32Array, colors?: Float32Array): void {
+    // Clean up old geometry mesh
     if (this.geometryMesh) {
       this.scene.remove(this.geometryMesh);
       this.geometryMesh.geometry.dispose();
       if (this.geometryMesh.material instanceof THREE.Material) {
         this.geometryMesh.material.dispose();
+      }
+    }
+
+    // Clean up old wireframe mesh
+    if (this.wireframeMesh) {
+      this.scene.remove(this.wireframeMesh);
+      this.wireframeMesh.geometry.dispose();
+      if (this.wireframeMesh.material instanceof THREE.Material) {
+        this.wireframeMesh.material.dispose();
       }
     }
 
@@ -877,6 +891,7 @@ export class SceneManager {
 
     geometry.setIndex(new THREE.BufferAttribute(indices, 1));
 
+    // Create solid mesh (always visible)
     const material = new THREE.MeshPhongMaterial({
       vertexColors: colors && colors.length > 0,
       color: colors && colors.length > 0 ? 0xffffff : 0x44aa44,
@@ -892,6 +907,20 @@ export class SceneManager {
     this.geometryMesh.receiveShadow = true;
     this.geometryMesh.renderOrder = 0; // Render world cube first
     this.scene.add(this.geometryMesh);
+
+    // Create wireframe overlay mesh
+    const wireframeGeometry = new THREE.WireframeGeometry(geometry);
+    const wireframeMaterial = new THREE.LineBasicMaterial({
+      color: 0x000000,
+      linewidth: 1,
+      depthTest: true,
+      depthWrite: false
+    });
+
+    this.wireframeMesh = new THREE.LineSegments(wireframeGeometry, wireframeMaterial);
+    this.wireframeMesh.renderOrder = 1; // Render wireframe on top
+    this.wireframeMesh.visible = this.wireframeMode;
+    this.scene.add(this.wireframeMesh);
   }
 
   render(): void {
@@ -1606,7 +1635,7 @@ export class SceneManager {
     const cursorSize = this.getCursorSize();
     const avatarPos = this.currentAvatar?.getPosition();
 
-    const worldSize = getWorldSize(getTotalDepth(), getMicroDepth());
+    const worldSize = getWorldSize(getMacroDepth());
 
     return {
       cursorWorld: this.currentCursorCoord
@@ -1666,6 +1695,16 @@ export class SceneManager {
   setWorldGridVisible(visible: boolean): void {
     for (const helper of this.worldGridHelpers) {
       helper.visible = visible;
+    }
+  }
+
+  /**
+   * Set wireframe mode for the ground geometry mesh
+   */
+  setWireframe(enabled: boolean): void {
+    this.wireframeMode = enabled;
+    if (this.wireframeMesh) {
+      this.wireframeMesh.visible = enabled;
     }
   }
 

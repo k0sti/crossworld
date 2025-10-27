@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Box, Text, VStack, HStack, Slider, SliderTrack, SliderFilledTrack, SliderThumb, Switch, Badge, Popover, PopoverTrigger, PopoverContent, PopoverBody, Button } from '@chakra-ui/react';
 import { CubeCoord } from '../types/cube-coord';
-import { getMacroDepth, getMicroDepth, onDepthChange, setMacroDepth as setGlobalMacroDepth } from '../config/depth-config';
+import { getMacroDepth, getMicroDepth, onDepthChange, setMacroDepth as setGlobalMacroDepth, setMicroDepth as setGlobalMicroDepth } from '../config/depth-config';
 
 export interface DebugInfo {
   cursorWorld?: { x: number; y: number; z: number };
@@ -34,6 +34,9 @@ interface WorldPanelProps {
   // Face mesh toggle
   faceMeshEnabled: boolean;
   onFaceMeshEnabledChange: (enabled: boolean) => void;
+  // Wireframe toggle
+  wireframeEnabled: boolean;
+  onWireframeEnabledChange: (enabled: boolean) => void;
   triangleCount?: number;
 }
 
@@ -52,6 +55,8 @@ export function WorldPanel({
   onWorldGridVisibleChange,
   faceMeshEnabled,
   onFaceMeshEnabledChange,
+  wireframeEnabled,
+  onWireframeEnabledChange,
   triangleCount,
 }: WorldPanelProps) {
   const [macroDepth, setMacroDepth] = useState(getMacroDepth());
@@ -77,6 +82,7 @@ export function WorldPanel({
 
   const handleMicroChange = (newMicro: number) => {
     setMicroDepth(newMicro);
+    setGlobalMicroDepth(newMicro);
     if (onApplyDepthSettings) {
       const totalDepth = macroDepth + newMicro;
       onApplyDepthSettings(totalDepth, newMicro);
@@ -93,7 +99,7 @@ export function WorldPanel({
 
   const currentMacro = macroDepth;
   const currentMicro = microDepth;
-  const worldSize = 1 << currentMacro; // 2^macro
+  const worldSize = 1 << currentMacro; // 2^macro (world size independent of micro)
 
   const formatNum = (n: number | undefined) => n?.toFixed(3) ?? 'N/A';
   const formatInt = (n: number | undefined) => n !== undefined ? Math.round(n).toString() : 'N/A';
@@ -124,69 +130,83 @@ export function WorldPanel({
 
           {/* Macro depth selector */}
           <Popover placement="top">
-            <PopoverTrigger>
-              <Badge
-                colorScheme="cyan"
-                fontSize="xs"
-                cursor="pointer"
-                _hover={{ opacity: 0.8 }}
-              >
-                macro {currentMacro}
-              </Badge>
-            </PopoverTrigger>
-            <PopoverContent bg="gray.800" borderColor="cyan.500" width="auto" pointerEvents="auto">
-              <PopoverBody p={1}>
-                <VStack spacing={1}>
-                  {[8, 7, 6, 5, 4, 3, 2, 1].map((depth) => (
-                    <Button
-                      key={depth}
-                      size="xs"
-                      variant={currentMacro === depth ? 'solid' : 'ghost'}
-                      colorScheme="cyan"
-                      onClick={() => handleMacroChange(depth)}
-                      width="100%"
-                    >
-                      {depth}
-                    </Button>
-                  ))}
-                </VStack>
-              </PopoverBody>
-            </PopoverContent>
+            {({ onClose }) => (
+              <>
+                <PopoverTrigger>
+                  <Badge
+                    colorScheme="cyan"
+                    fontSize="xs"
+                    cursor="pointer"
+                    _hover={{ opacity: 0.8 }}
+                  >
+                    macro {currentMacro}
+                  </Badge>
+                </PopoverTrigger>
+                <PopoverContent bg="gray.800" borderColor="cyan.500" width="auto" pointerEvents="auto">
+                  <PopoverBody p={1}>
+                    <VStack spacing={1}>
+                      {[8, 7, 6, 5, 4, 3, 2, 1].map((depth) => (
+                        <Button
+                          key={depth}
+                          size="xs"
+                          variant={currentMacro === depth ? 'solid' : 'ghost'}
+                          colorScheme="cyan"
+                          onClick={() => {
+                            handleMacroChange(depth);
+                            onClose();
+                          }}
+                          width="100%"
+                        >
+                          {depth}
+                        </Button>
+                      ))}
+                    </VStack>
+                  </PopoverBody>
+                </PopoverContent>
+              </>
+            )}
           </Popover>
 
           {/* Micro depth selector */}
           <Popover placement="top">
-            <PopoverTrigger>
-              <Badge
-                colorScheme="cyan"
-                fontSize="xs"
-                cursor="pointer"
-                _hover={{ opacity: 0.8 }}
-              >
-                micro {currentMicro}
-              </Badge>
-            </PopoverTrigger>
-            <PopoverContent bg="gray.800" borderColor="cyan.500" width="auto" pointerEvents="auto">
-              <PopoverBody p={1}>
-                <VStack spacing={1}>
-                  {[3, 2, 1, 0].map((depth) => (
-                    <Button
-                      key={depth}
-                      size="xs"
-                      variant={currentMicro === depth ? 'solid' : 'ghost'}
-                      colorScheme="cyan"
-                      onClick={() => handleMicroChange(depth)}
-                      width="100%"
-                    >
-                      {depth}
-                    </Button>
-                  ))}
-                </VStack>
-              </PopoverBody>
-            </PopoverContent>
+            {({ onClose }) => (
+              <>
+                <PopoverTrigger>
+                  <Badge
+                    colorScheme="cyan"
+                    fontSize="xs"
+                    cursor="pointer"
+                    _hover={{ opacity: 0.8 }}
+                  >
+                    micro {currentMicro}
+                  </Badge>
+                </PopoverTrigger>
+                <PopoverContent bg="gray.800" borderColor="cyan.500" width="auto" pointerEvents="auto">
+                  <PopoverBody p={1}>
+                    <VStack spacing={1}>
+                      {[3, 2, 1, 0].map((depth) => (
+                        <Button
+                          key={depth}
+                          size="xs"
+                          variant={currentMicro === depth ? 'solid' : 'ghost'}
+                          colorScheme="cyan"
+                          onClick={() => {
+                            handleMicroChange(depth);
+                            onClose();
+                          }}
+                          width="100%"
+                        >
+                          {depth}
+                        </Button>
+                      ))}
+                    </VStack>
+                  </PopoverBody>
+                </PopoverContent>
+              </>
+            )}
           </Popover>
 
-          <Badge colorScheme="blue" fontSize="xs">size {worldSize}×{worldSize}</Badge>
+          <Badge colorScheme="blue" fontSize="xs">size {worldSize}</Badge>
         </HStack>
 
         {/* Time of day */}
@@ -291,6 +311,17 @@ export function WorldPanel({
             onChange={(e) => onFaceMeshEnabledChange(e.target.checked)}
             size="sm"
             colorScheme="orange"
+          />
+        </HStack>
+
+        {/* Wireframe toggle */}
+        <HStack spacing={2} justify="space-between" pointerEvents="auto">
+          <Text color="pink.300">Wireframe</Text>
+          <Switch
+            isChecked={wireframeEnabled}
+            onChange={(e) => onWireframeEnabledChange(e.target.checked)}
+            size="sm"
+            colorScheme="pink"
           />
         </HStack>
       </VStack>
