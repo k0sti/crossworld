@@ -8,6 +8,7 @@ pub struct CubeGround {
     octree: Octree,
     depth: u32,
     scale_depth: u32,
+    face_mesh_mode: bool,
 }
 
 impl CubeGround {
@@ -38,6 +39,7 @@ impl CubeGround {
             octree: Octree::new(root),
             depth,
             scale_depth,
+            face_mesh_mode: false,
         }
     }
 
@@ -101,17 +103,39 @@ impl CubeGround {
         self.set_voxel(x, y, z, 0);
     }
 
+    /// Set face mesh mode (neighbor-aware culling)
+    pub fn set_face_mesh_mode(&mut self, enabled: bool) {
+        tracing::info!("[CubeGround] Setting face mesh mode: {}", enabled);
+        self.face_mesh_mode = enabled;
+    }
+
+    /// Set ground render mode (currently unused, placeholder for future)
+    pub fn set_ground_render_mode(&mut self, _use_cube: bool) {
+        tracing::info!("[CubeGround] Ground render mode not yet implemented");
+    }
+
     pub fn generate_mesh(&self) -> GeometryData {
-        // Generate mesh from octree using new hierarchical mesh builder
+        // Generate mesh from octree using appropriate mesh builder
         let color_mapper = DawnbringerColorMapper::new();
         let mut builder = DefaultMeshBuilder::new();
 
-        crossworld_cube::generate_mesh_hierarchical(
-            &self.octree,
-            &mut builder,
-            |index| color_mapper.map(index),
-            self.depth,
-        );
+        if self.face_mesh_mode {
+            // Use face-based mesh generation with neighbor culling
+            crossworld_cube::generate_face_mesh(
+                &self.octree.root,
+                &mut builder,
+                |index| color_mapper.map(index),
+                self.depth,
+            );
+        } else {
+            // Use hierarchical mesh generation (all faces)
+            crossworld_cube::generate_mesh_hierarchical(
+                &self.octree,
+                &mut builder,
+                |index| color_mapper.map(index),
+                self.depth,
+            );
+        }
 
         // Scale and offset vertices to match world coordinates
         // The octree generates normalized [0,1] coordinates

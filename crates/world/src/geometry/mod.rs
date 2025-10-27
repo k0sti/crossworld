@@ -45,4 +45,14 @@ impl GeometryEngine {
     pub fn remove_voxel(&mut self, x: i32, y: i32, z: i32) {
         self.cube_ground.remove_voxel(x, y, z);
     }
+
+    /// Set face mesh mode (neighbor-aware culling)
+    pub fn set_face_mesh_mode(&mut self, enabled: bool) {
+        self.cube_ground.set_face_mesh_mode(enabled);
+    }
+
+    /// Set ground render mode (cube vs plane)
+    pub fn set_ground_render_mode(&mut self, use_cube: bool) {
+        self.cube_ground.set_ground_render_mode(use_cube);
+    }
 }

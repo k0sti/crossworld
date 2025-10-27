@@ -56,6 +56,18 @@ impl GeometryEngine {
     pub fn remove_voxel(&self, x: i32, y: i32, z: i32) {
         self.engine.borrow_mut().remove_voxel(x, y, z);
     }
+
+    /// Set face mesh mode (neighbor-aware culling)
+    #[wasm_bindgen(js_name = setFaceMeshMode)]
+    pub fn set_face_mesh_mode(&self, enabled: bool) {
+        self.engine.borrow_mut().set_face_mesh_mode(enabled);
+    }
+
+    /// Set ground render mode (cube vs plane)
+    #[wasm_bindgen(js_name = setGroundRenderMode)]
+    pub fn set_ground_render_mode(&self, use_cube: bool) {
+        self.engine.borrow_mut().set_ground_render_mode(use_cube);
+    }
 }
 
 impl Default for GeometryEngine {

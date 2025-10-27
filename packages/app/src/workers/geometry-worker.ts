@@ -2,7 +2,7 @@ import { GeometryGenerator } from '../geometry/geometry-lib';
 import { getMicroDepth, getTotalDepth } from '../config/depth-config';
 
 export interface GeometryMessage {
-  type: 'init' | 'update' | 'setVoxelAtDepth' | 'setVoxel' | 'removeVoxelAtDepth' | 'removeVoxel';
+  type: 'init' | 'update' | 'setVoxelAtDepth' | 'setVoxel' | 'removeVoxelAtDepth' | 'removeVoxel' | 'setFaceMeshMode' | 'setGroundRenderMode';
   x?: number;
   y?: number;
   z?: number;
@@ -10,6 +10,8 @@ export interface GeometryMessage {
   colorIndex?: number;
   worldDepth?: number;
   scaleDepth?: number;
+  enabled?: boolean;
+  useCube?: boolean;
 }
 
 export interface GeometryResult {
@@ -120,6 +122,20 @@ class GeometryWorkerManager {
       this.generator.removeVoxel(x, y, z);
     }
   }
+
+  setFaceMeshMode(enabled: boolean) {
+    console.log('[GeometryWorker] setFaceMeshMode', { enabled, hasGenerator: !!this.generator });
+    if (this.generator) {
+      this.generator.setFaceMeshMode(enabled);
+    }
+  }
+
+  setGroundRenderMode(useCube: boolean) {
+    console.log('[GeometryWorker] setGroundRenderMode', { useCube, hasGenerator: !!this.generator });
+    if (this.generator) {
+      this.generator.setGroundRenderMode(useCube);
+    }
+  }
 }
 
 // Worker message handler
@@ -158,6 +174,18 @@ self.addEventListener('message', async (event) => {
     case 'removeVoxel':
       if (message.x !== undefined && message.y !== undefined && message.z !== undefined) {
         manager.removeVoxel(message.x, message.y, message.z);
+      }
+      break;
+
+    case 'setFaceMeshMode':
+      if (message.enabled !== undefined) {
+        manager.setFaceMeshMode(message.enabled);
+      }
+      break;
+
+    case 'setGroundRenderMode':
+      if (message.useCube !== undefined) {
+        manager.setGroundRenderMode(message.useCube);
       }
       break;
   }
