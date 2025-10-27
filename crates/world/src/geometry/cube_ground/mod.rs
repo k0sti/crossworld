@@ -1,7 +1,7 @@
 mod builder;
 
 use crate::GeometryData;
-use crossworld_cube::{glam::IVec3, ColorMapper, Cube, DefaultMeshBuilder, Octree};
+use crossworld_cube::{ColorMapper, Cube, DefaultMeshBuilder, Octree, glam::IVec3};
 use noise::{Fbm, Perlin};
 
 pub struct CubeGround {
@@ -51,7 +51,12 @@ impl CubeGround {
     pub fn set_voxel_at_depth(&mut self, x: i32, y: i32, z: i32, depth: u32, color_index: i32) {
         tracing::info!(
             "[Rust set_voxel_at_depth] input: x={}, y={}, z={}, depth={}, color={}, max_depth={}",
-            x, y, z, depth, color_index, self.depth
+            x,
+            y,
+            z,
+            depth,
+            color_index,
+            self.depth
         );
 
         // Clamp depth to valid range
@@ -64,13 +69,16 @@ impl CubeGround {
         if x < 0 || x >= grid_size || y < 0 || y >= grid_size || z < 0 || z >= grid_size {
             tracing::warn!(
                 "[Rust set_voxel_at_depth] out of bounds: ({}, {}, {}) not in [0, {})",
-                x, y, z, grid_size
+                x,
+                y,
+                z,
+                grid_size
             );
             return;
         }
 
         // Scale from max-depth coordinates to target depth coordinates
-        let scale = 1 << (self.depth - depth);  // 2^(depth_max - depth_target)
+        let scale = 1 << (self.depth - depth); // 2^(depth_max - depth_target)
         let pos_x = x / scale;
         let pos_y = y / scale;
         let pos_z = z / scale;
@@ -79,11 +87,17 @@ impl CubeGround {
 
         tracing::info!(
             "[Rust set_voxel_at_depth] scaled position: ({}, {}, {}) at depth={}, scale={}",
-            pos_x, pos_y, pos_z, depth, scale
+            pos_x,
+            pos_y,
+            pos_z,
+            depth,
+            scale
         );
 
         // Update single octree node at the target depth
-        self.octree.root = self.octree.root
+        self.octree.root = self
+            .octree
+            .root
             .updated(Cube::Solid(color_index), depth, pos)
             .simplified();
     }

@@ -21,7 +21,13 @@ pub struct GeometryEngine {
 impl GeometryEngine {
     #[wasm_bindgen(constructor)]
     pub fn new(world_depth: u32, scale_depth: u32) -> Self {
-        web_sys::console::log_1(&format!("GeometryEngine initialized with world_depth={}, scale_depth={}", world_depth, scale_depth).into());
+        web_sys::console::log_1(
+            &format!(
+                "GeometryEngine initialized with world_depth={}, scale_depth={}",
+                world_depth, scale_depth
+            )
+            .into(),
+        );
         Self {
             engine: RefCell::new(GeometryEngineInternal::new(world_depth, scale_depth)),
         }
@@ -36,7 +42,9 @@ impl GeometryEngine {
     /// depth: octree depth (7=finest detail, 4=coarse, etc.)
     #[wasm_bindgen(js_name = setVoxelAtDepth)]
     pub fn set_voxel_at_depth(&self, x: i32, y: i32, z: i32, depth: u32, color_index: i32) {
-        self.engine.borrow_mut().set_voxel_at_depth(x, y, z, depth, color_index);
+        self.engine
+            .borrow_mut()
+            .set_voxel_at_depth(x, y, z, depth, color_index);
     }
 
     /// Set single voxel in cube ground
@@ -48,7 +56,9 @@ impl GeometryEngine {
     /// Remove voxel from cube ground at specified depth
     #[wasm_bindgen(js_name = removeVoxelAtDepth)]
     pub fn remove_voxel_at_depth(&self, x: i32, y: i32, z: i32, depth: u32) {
-        self.engine.borrow_mut().remove_voxel_at_depth(x, y, z, depth);
+        self.engine
+            .borrow_mut()
+            .remove_voxel_at_depth(x, y, z, depth);
     }
 
     /// Remove voxel from cube ground

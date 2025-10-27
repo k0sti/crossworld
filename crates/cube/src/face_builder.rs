@@ -1,5 +1,5 @@
-use crate::neighbor_traversal::traverse_octree_with_neighbors;
 use crate::mesh_builder::MeshBuilder;
+use crate::neighbor_traversal::traverse_octree_with_neighbors;
 use crate::octree::Cube;
 
 /// Face direction for cube faces
@@ -79,12 +79,8 @@ impl Face {
 /// * `builder` - MeshBuilder to receive the faces
 /// * `color_fn` - Function to map voxel values to colors
 /// * `max_depth` - Maximum depth of the octree
-pub fn generate_face_mesh<B, F>(
-    root: &Cube<i32>,
-    builder: &mut B,
-    color_fn: F,
-    max_depth: u32,
-) where
+pub fn generate_face_mesh<B, F>(root: &Cube<i32>, builder: &mut B, color_fn: F, max_depth: u32)
+where
     B: MeshBuilder,
     F: Fn(i32) -> [f32; 3] + Copy,
 {
@@ -289,7 +285,10 @@ mod tests {
 
         // Empty voxels at the border will see ground (33) below them and generate upward faces
         // This is expected behavior for terrain rendering
-        assert!(builder.indices.len() > 0, "Empty voxels touching ground borders should generate faces");
+        assert!(
+            builder.indices.len() > 0,
+            "Empty voxels touching ground borders should generate faces"
+        );
     }
 
     #[test]
@@ -311,7 +310,10 @@ mod tests {
 
         // Empty neighbors of the solid voxel should render faces towards it
         // Expect at least some faces
-        assert!(builder.indices.len() > 0, "Should generate faces for visible solid");
+        assert!(
+            builder.indices.len() > 0,
+            "Should generate faces for visible solid"
+        );
     }
 
     #[test]
@@ -332,6 +334,10 @@ mod tests {
         generate_face_mesh(&root, &mut builder, simple_color_mapper, 1);
 
         // No empty voxels means no faces are rendered (we only render from empty voxels)
-        assert_eq!(builder.indices.len(), 0, "All solid octree should have no faces");
+        assert_eq!(
+            builder.indices.len(),
+            0,
+            "All solid octree should have no faces"
+        );
     }
 }

@@ -1,4 +1,4 @@
-use crossworld_cube::{glam::IVec3, Cube, IVec3Ext};
+use crossworld_cube::{Cube, IVec3Ext, glam::IVec3};
 use noise::{Fbm, NoiseFn, Perlin};
 use std::rc::Rc;
 
@@ -72,7 +72,6 @@ fn get_voxel_value(x: i32, y: i32, z: i32, noise: &Perlin, fbm: &Fbm<Perlin>) ->
     if y >= 0 {
         return 0;
     }
-    
 
     // y < 0: Underground terrain with noise
     // Use larger scale for more variation
@@ -123,4 +122,3 @@ fn get_voxel_value(x: i32, y: i32, z: i32, noise: &Perlin, fbm: &Fbm<Perlin>) ->
         0 // Empty/air
     }
 }
-

@@ -1,5 +1,5 @@
-use std::rc::Rc;
 use glam::IVec3;
+use std::rc::Rc;
 
 /// Extension trait for IVec3 to add octree-specific functionality
 pub trait IVec3Ext {
@@ -293,9 +293,9 @@ impl<T: Clone + PartialEq> Cube<T> {
             Cube::Cubes(children) => {
                 // Check if all children are Solid with the same value
                 if let Cube::Solid(first_val) = &*children[0] {
-                    let all_same = children[1..].iter().all(|c| {
-                        matches!(&**c, Cube::Solid(v) if v == first_val)
-                    });
+                    let all_same = children[1..]
+                        .iter()
+                        .all(|c| matches!(&**c, Cube::Solid(v) if v == first_val));
                     if all_same {
                         return Cube::Solid(first_val.clone());
                     }
@@ -551,9 +551,13 @@ impl Cube<i32> {
 
         // Update the target child
         let mut new_children = children;
-        new_children[octant_idx] = Rc::new(
-            new_children[octant_idx].set_voxel(child_x, child_y, child_z, depth - 1, value)
-        );
+        new_children[octant_idx] = Rc::new(new_children[octant_idx].set_voxel(
+            child_x,
+            child_y,
+            child_z,
+            depth - 1,
+            value,
+        ));
 
         Cube::Cubes(Box::new(new_children))
     }
@@ -641,13 +645,14 @@ mod tests {
 
         // Use visitor pattern to count voxels
         let mut count = 0;
-        tree.root.visit_leaves(0, IVec3::ZERO, &mut |cube, _depth, _pos| {
-            if let Cube::Solid(value) = cube {
-                if *value > 0 {
-                    count += 1;
+        tree.root
+            .visit_leaves(0, IVec3::ZERO, &mut |cube, _depth, _pos| {
+                if let Cube::Solid(value) = cube {
+                    if *value > 0 {
+                        count += 1;
+                    }
                 }
-            }
-        });
+            });
 
         assert_eq!(count, 1);
     }
