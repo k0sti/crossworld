@@ -28,7 +28,8 @@ impl GeometryEngine {
     /// Set a voxel in the cube ground at specified depth
     /// depth: octree depth (7=finest detail, 4=coarse, etc.)
     pub fn set_voxel_at_depth(&mut self, x: i32, y: i32, z: i32, depth: u32, color_index: i32) {
-        self.cube_ground.set_voxel_at_depth(x, y, z, depth, color_index);
+        self.cube_ground
+            .set_voxel_at_depth(x, y, z, depth, color_index);
     }
 
     /// Set a single voxel in the cube ground

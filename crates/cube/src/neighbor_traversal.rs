@@ -216,19 +216,12 @@ pub type TraversalVisitor<'a> = &'a mut dyn FnMut(NeighborView, CubeCoord);
 ///     }
 /// }, 3);
 /// ```
-pub fn traverse_with_neighbors(
-    grid: &NeighborGrid,
-    visitor: TraversalVisitor,
-    max_depth: u32,
-) {
+pub fn traverse_with_neighbors(grid: &NeighborGrid, visitor: TraversalVisitor, max_depth: u32) {
     // Traverse the center 2x2x2 octants
     for octant_idx in 0..8 {
         let octant_pos = IVec3::from_octant_index(octant_idx);
-        let grid_idx = NeighborGrid::xyz_to_index(
-            octant_pos.x + 1,
-            octant_pos.y + 1,
-            octant_pos.z + 1,
-        );
+        let grid_idx =
+            NeighborGrid::xyz_to_index(octant_pos.x + 1, octant_pos.y + 1, octant_pos.z + 1);
 
         let coord = CubeCoord::new(octant_pos, max_depth);
         traverse_recursive(grid, grid_idx, coord, visitor, max_depth);
@@ -327,9 +320,27 @@ fn create_child_grid(
         if let Some(neighbor) = parent_grid.get_neighbor(parent_idx, dx, dy, dz) {
             // Get the appropriate child from the neighbor
             // The child on the facing side
-            let child_x = if dx < 0 { 1 } else if dx > 0 { 0 } else { (x - 1).clamp(0, 1) };
-            let child_y = if dy < 0 { 1 } else if dy > 0 { 0 } else { (y - 1).clamp(0, 1) };
-            let child_z = if dz < 0 { 1 } else if dz > 0 { 0 } else { (z - 1).clamp(0, 1) };
+            let child_x = if dx < 0 {
+                1
+            } else if dx > 0 {
+                0
+            } else {
+                (x - 1).clamp(0, 1)
+            };
+            let child_y = if dy < 0 {
+                1
+            } else if dy > 0 {
+                0
+            } else {
+                (y - 1).clamp(0, 1)
+            };
+            let child_z = if dz < 0 {
+                1
+            } else if dz > 0 {
+                0
+            } else {
+                (z - 1).clamp(0, 1)
+            };
 
             let child_octant = IVec3::new(child_x, child_y, child_z).to_octant_index();
 
@@ -356,11 +367,7 @@ fn create_child_grid(
 /// * `root` - Root octree cube
 /// * `depth` - Depth to traverse
 /// * `visitor` - Function called for each voxel with its neighbors
-pub fn traverse_octree_with_neighbors<F>(
-    root: &Cube<i32>,
-    depth: u32,
-    mut visitor: F,
-)
+pub fn traverse_octree_with_neighbors<F>(root: &Cube<i32>, depth: u32, mut visitor: F)
 where
     F: FnMut(NeighborView, CubeCoord),
 {
