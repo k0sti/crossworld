@@ -1,3 +1,4 @@
+import * as logger from '../utils/logger';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { Transform } from './transform';
@@ -50,7 +51,7 @@ export class Avatar extends BaseAvatar {
     const loader = new GLTFLoader();
     const modelUrl = this.config.modelUrl || `${import.meta.env.BASE_URL}models/avatar.glb`;
 
-    console.log('Loading avatar model from:', modelUrl);
+    logger.log('renderer', 'Loading avatar model from:', modelUrl);
 
     // Try to load model, fallback to simple geometry if not found
     loader.load(
@@ -85,23 +86,23 @@ export class Avatar extends BaseAvatar {
           this.animations = gltf.animations;
           this.mixer = new THREE.AnimationMixer(this.model);
 
-          console.log(`Avatar loaded with ${this.animations.length} animations:`,
+          logger.log('renderer', `Avatar loaded with ${this.animations.length} animations:`,
             this.animations.map(a => a.name));
 
           // Try to find and play idle animation by default
           this.playAnimation('Idle', true);
         }
 
-        console.log('Avatar model loaded successfully');
-        console.log('Model size:', size);
-        console.log('Bounding box:', box.min, box.max);
+        logger.log('renderer', 'Avatar model loaded successfully');
+        logger.log('renderer', 'Model size:', size);
+        logger.log('renderer', 'Bounding box:', box.min, box.max);
       },
       (progress) => {
         const percent = (progress.loaded / progress.total * 100).toFixed(0);
-        console.log(`Loading avatar: ${percent}%`);
+        logger.log('renderer', `Loading avatar: ${percent}%`);
       },
       (error) => {
-        console.warn('Failed to load avatar model, using fallback geometry:', error);
+        logger.warn('renderer', 'Failed to load avatar model, using fallback geometry:', error);
         this.createFallbackModel();
       }
     );
@@ -146,9 +147,9 @@ export class Avatar extends BaseAvatar {
       this.currentAction.setLoop(loop ? THREE.LoopRepeat : THREE.LoopOnce, loop ? Infinity : 1);
       this.currentAction.fadeIn(0.2);
       this.currentAction.play();
-      console.log(`Playing animation: ${clip.name}`);
+      logger.log('renderer', `Playing animation: ${clip.name}`);
     } else {
-      console.warn(`Animation "${name}" not found. Available:`, this.animations.map(a => a.name));
+      logger.warn('renderer', `Animation "${name}" not found. Available:`, this.animations.map(a => a.name));
     }
   }
 
@@ -186,6 +187,11 @@ export class Avatar extends BaseAvatar {
           }
         }
       });
+    }
+
+    // Dispose profile icon
+    if (this.profileIcon) {
+      this.profileIcon.dispose();
     }
   }
 }

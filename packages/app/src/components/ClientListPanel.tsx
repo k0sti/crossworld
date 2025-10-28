@@ -1,6 +1,7 @@
-import { Box, VStack, HStack, Text, Avatar, Tooltip, Badge, Wrap } from '@chakra-ui/react'
+import * as logger from '../utils/logger';
+import { Box, HStack, Avatar, Popover, PopoverTrigger, PopoverContent, PopoverBody, VStack, Text, IconButton, Badge, Wrap, useToast } from '@chakra-ui/react'
 import { useState, useEffect, useCallback } from 'react'
-import { FiMapPin, FiMessageSquare, FiCompass, FiEdit3, FiMic, FiHeadphones } from 'react-icons/fi'
+import { FiMapPin, FiMessageSquare, FiCompass, FiEdit3, FiMic, FiHeadphones, FiCopy, FiExternalLink } from 'react-icons/fi'
 import { type AvatarStateService, type AvatarState } from '../services/avatar-state'
 import { profileCache } from '../services/profile-cache'
 import { DEFAULT_RELAYS } from '../config'
@@ -9,6 +10,7 @@ interface ClientListPanelProps {
   isOpen: boolean
   statusService: AvatarStateService
   onOpenProfile?: (pubkey: string) => void
+  isEditMode?: boolean
 }
 
 interface RelayConfig {
@@ -18,9 +20,10 @@ interface RelayConfig {
   status: 'connected' | 'connecting' | 'error' | 'disconnected'
 }
 
-export function ClientListPanel({ isOpen, statusService, onOpenProfile }: ClientListPanelProps) {
+export function ClientListPanel({ isEditMode = false, statusService }: ClientListPanelProps) {
   const [clients, setClients] = useState<Map<string, AvatarState>>(new Map())
   const [enabledRelays, setEnabledRelays] = useState<string[]>([])
+  const toast = useToast()
 
   // Load enabled relays from localStorage
   useEffect(() => {
@@ -35,7 +38,7 @@ export function ClientListPanel({ isOpen, statusService, onOpenProfile }: Client
           setEnabledRelays(DEFAULT_RELAYS)
         }
       } catch (error) {
-        console.error('Failed to load relay config:', error)
+        logger.error('ui', 'Failed to load relay config:', error)
         setEnabledRelays(DEFAULT_RELAYS)
       }
     }
@@ -80,12 +83,10 @@ export function ClientListPanel({ isOpen, statusService, onOpenProfile }: Client
     setClients(statusService.getUserStates())
 
     return unsubscribe
-    // Note: fetchProfile and profilesVersion intentionally excluded to prevent re-fetch loop
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusService, enabledRelays])
 
   const clientList = Array.from(clients.values()).sort((a, b) => {
-    // Sort alphabetically by npub
     return a.npub.localeCompare(b.npub)
   })
 
@@ -99,232 +100,148 @@ export function ClientListPanel({ isOpen, statusService, onOpenProfile }: Client
     return profile?.picture
   }
 
-  const formatPosition = (pos?: { x: number; y: number; z: number }): string => {
-    if (!pos) return ''
-    return `(${Math.round(pos.x)}, ${Math.round(pos.y)}, ${Math.round(pos.z)})`
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text)
+    toast({
+      title: `${label} copied`,
+      status: 'success',
+      duration: 2000,
+      isClosable: true,
+    })
   }
 
-  const getTimeSince = (timestamp: number): string => {
-    const now = Math.floor(Date.now() / 1000)
-    const diff = now - timestamp
-
-    if (diff < 60) return 'just now'
-    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
-    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
-    return `${Math.floor(diff / 86400)}d ago`
+  const openNpubLink = (npub: string) => {
+    window.open(`https://njump.me/${npub}`, '_blank')
   }
 
-  if (!isOpen) return null
+  const getActivityBadges = (client: AvatarState) => {
+    const badges: Array<{ label: string; icon: React.ReactNode; color: string }> = []
+
+    if (client.voiceConnected) {
+      badges.push({ label: 'listening', icon: <FiHeadphones size={10} />, color: 'purple.500' })
+    }
+    if (client.micEnabled) {
+      badges.push({ label: 'speaking', icon: <FiMic size={10} />, color: 'red.500' })
+    }
+    if (client.activities.includes('chatting')) {
+      badges.push({ label: 'chatting', icon: <FiMessageSquare size={10} />, color: 'blue.500' })
+    }
+    if (client.activities.includes('exploring')) {
+      badges.push({ label: 'exploring', icon: <FiCompass size={10} />, color: 'green.500' })
+    }
+    if (client.activities.includes('editing')) {
+      badges.push({ label: 'editing', icon: <FiEdit3 size={10} />, color: 'orange.500' })
+    }
+    if (client.position) {
+      const pos = `(${Math.round(client.position.x)}, ${Math.round(client.position.y)}, ${Math.round(client.position.z)})`
+      badges.push({ label: pos, icon: <FiMapPin size={10} />, color: 'gray.600' })
+    }
+
+    return badges
+  }
+
+  // Hide in edit mode
+  if (isEditMode) return null
 
   return (
     <Box
       position="fixed"
       right="20px"
       top="80px"
-      width="360px"
-      maxHeight="calc(100vh - 100px)"
-      bg="rgba(0, 0, 0, 0.85)"
-      backdropFilter="blur(10px)"
-      borderRadius="12px"
-      border="1px solid rgba(255, 255, 255, 0.1)"
-      boxShadow="0 8px 32px rgba(0, 0, 0, 0.4)"
-      color="white"
+      width="auto"
+      bg="transparent"
       zIndex={1000}
-      overflow="hidden"
-      display="flex"
-      flexDirection="column"
     >
-      {/* Header */}
-      <HStack
-        p={4}
-        borderBottom="1px solid rgba(255, 255, 255, 0.1)"
-        justify="space-between"
-      >
-        <HStack spacing={2}>
-          <Text fontSize="lg" fontWeight="bold">
-            Clients
-          </Text>
-          <Badge colorScheme="green" fontSize="sm">
-            {clientList.length}
-          </Badge>
-        </HStack>
-      </HStack>
-
-      {/* Client List */}
-      <VStack
-        spacing={0}
-        align="stretch"
-        overflowY="auto"
-        flex={1}
-        css={{
-          '&::-webkit-scrollbar': {
-            width: '8px',
-          },
-          '&::-webkit-scrollbar-track': {
-            background: 'rgba(255, 255, 255, 0.05)',
-          },
-          '&::-webkit-scrollbar-thumb': {
-            background: 'rgba(255, 255, 255, 0.2)',
-            borderRadius: '4px',
-          },
-          '&::-webkit-scrollbar-thumb:hover': {
-            background: 'rgba(255, 255, 255, 0.3)',
-          },
-        }}
-      >
-        {clientList.length === 0 ? (
-          <Box p={8} textAlign="center" color="whiteAlpha.600">
-            <Text>No clients online</Text>
-          </Box>
-        ) : (
-          clientList.map((client) => (
-            <Tooltip
-              key={client.pubkey}
-              label={
-                <VStack align="start" spacing={1}>
-                  <Text fontWeight="bold">{client.npub}</Text>
-                  <Text fontSize="xs">{client.clientName} {client.clientVersion}</Text>
-                  <Text fontSize="xs">Last seen: {getTimeSince(client.lastUpdateTimestamp)}</Text>
-                </VStack>
-              }
-              placement="left"
-              hasArrow
-            >
-              <Box
-                p={3}
-                borderBottom="1px solid rgba(255, 255, 255, 0.05)"
-                _hover={{
-                  bg: 'rgba(255, 255, 255, 0.05)',
-                  cursor: 'pointer',
-                }}
-                transition="background 0.2s"
-                position="relative"
-                onClick={() => onOpenProfile?.(client.pubkey)}
-              >
-                <HStack spacing={3} align="start">
-                  {/* Avatar */}
-                  <Avatar
-                    size="sm"
-                    name={getDisplayName(client)}
-                    src={getProfilePicture(client)}
-                  />
-
-                  {/* Client Info */}
-                  <VStack align="start" spacing={1} flex={1} minW={0}>
-                    <Text
-                      fontSize="sm"
-                      fontWeight="medium"
-                      noOfLines={1}
-                      w="full"
-                    >
-                      {getDisplayName(client)}
-                    </Text>
-
-                    {/* Activity Badges */}
-                    <Wrap spacing={1}>
-                      {client.position && (
-                        <Badge
-                          fontSize="2xs"
-                          px={1.5}
-                          py={0.5}
-                          borderRadius="md"
-                          bg="gray.600"
-                          color="white"
-                          display="flex"
-                          alignItems="center"
-                          gap={1}
-                        >
-                          <FiMapPin size={10} />
-                          {formatPosition(client.position)}
-                        </Badge>
-                      )}
-                      {client.voiceConnected && (
-                        <Badge
-                          fontSize="2xs"
-                          px={1.5}
-                          py={0.5}
-                          borderRadius="md"
-                          bg="purple.500"
-                          color="white"
-                          display="flex"
-                          alignItems="center"
-                          gap={1}
-                        >
-                          <FiHeadphones size={10} />
-                          listening
-                        </Badge>
-                      )}
-                      {client.micEnabled && (
-                        <Badge
-                          fontSize="2xs"
-                          px={1.5}
-                          py={0.5}
-                          borderRadius="md"
-                          bg="red.500"
-                          color="white"
-                          display="flex"
-                          alignItems="center"
-                          gap={1}
-                        >
-                          <FiMic size={10} />
-                          speaking
-                        </Badge>
-                      )}
-                      {client.activities.includes('chatting') && (
-                        <Badge
-                          fontSize="2xs"
-                          px={1.5}
-                          py={0.5}
-                          borderRadius="md"
-                          bg="blue.500"
-                          color="white"
-                          display="flex"
-                          alignItems="center"
-                          gap={1}
-                        >
-                          <FiMessageSquare size={10} />
-                          chatting
-                        </Badge>
-                      )}
-                      {client.activities.includes('exploring') && (
-                        <Badge
-                          fontSize="2xs"
-                          px={1.5}
-                          py={0.5}
-                          borderRadius="md"
-                          bg="green.500"
-                          color="white"
-                          display="flex"
-                          alignItems="center"
-                          gap={1}
-                        >
-                          <FiCompass size={10} />
-                          exploring
-                        </Badge>
-                      )}
-                      {client.activities.includes('editing') && (
-                        <Badge
-                          fontSize="2xs"
-                          px={1.5}
-                          py={0.5}
-                          borderRadius="md"
-                          bg="orange.500"
-                          color="white"
-                          display="flex"
-                          alignItems="center"
-                          gap={1}
-                        >
-                          <FiEdit3 size={10} />
-                          editing
-                        </Badge>
-                      )}
-                    </Wrap>
-                  </VStack>
-                </HStack>
+      {/* Client Icons - Vertical Stack */}
+      <VStack spacing={2} align="end">
+        {clientList.map((client) => (
+          <Popover key={client.pubkey} placement="left" trigger="hover">
+            <PopoverTrigger>
+              <Box>
+                <Avatar
+                  size="sm"
+                  name={getDisplayName(client)}
+                  src={getProfilePicture(client)}
+                  cursor="pointer"
+                  bg="rgba(0, 0, 0, 0.3)"
+                  border="2px solid rgba(255, 255, 255, 0.2)"
+                  _hover={{
+                    border: '2px solid rgba(255, 255, 255, 0.5)',
+                    transform: 'scale(1.1)',
+                  }}
+                  transition="all 0.2s"
+                />
               </Box>
-            </Tooltip>
-          ))
-        )}
+            </PopoverTrigger>
+            <PopoverContent
+              bg="rgba(0, 0, 0, 0.95)"
+              backdropFilter="blur(10px)"
+              border="1px solid rgba(255, 255, 255, 0.1)"
+              boxShadow="0 8px 32px rgba(0, 0, 0, 0.4)"
+              color="white"
+              width="300px"
+            >
+              <PopoverBody p={4}>
+                <VStack align="start" spacing={3}>
+                  {/* Name */}
+                  <Text fontSize="md" fontWeight="bold">
+                    {getDisplayName(client)}
+                  </Text>
+
+                  {/* Short pubkey with copy and link buttons */}
+                  <HStack spacing={2} w="full">
+                    <Text
+                      fontSize="xs"
+                      fontFamily="mono"
+                      color="whiteAlpha.700"
+                      flex={1}
+                      noOfLines={1}
+                    >
+                      {client.npub.slice(0, 16)}...
+                    </Text>
+                    <IconButton
+                      aria-label="Copy npub"
+                      icon={<FiCopy />}
+                      size="xs"
+                      variant="ghost"
+                      colorScheme="whiteAlpha"
+                      onClick={() => copyToClipboard(client.npub, 'Npub')}
+                    />
+                    <IconButton
+                      aria-label="Open profile"
+                      icon={<FiExternalLink />}
+                      size="xs"
+                      variant="ghost"
+                      colorScheme="whiteAlpha"
+                      onClick={() => openNpubLink(client.npub)}
+                    />
+                  </HStack>
+
+                  {/* Activity badges */}
+                  <Wrap spacing={1} w="full">
+                    {getActivityBadges(client).map((badge, idx) => (
+                      <Badge
+                        key={idx}
+                        fontSize="2xs"
+                        px={1.5}
+                        py={0.5}
+                        borderRadius="md"
+                        bg={badge.color}
+                        color="white"
+                        display="flex"
+                        alignItems="center"
+                        gap={1}
+                      >
+                        {badge.icon}
+                        {badge.label}
+                      </Badge>
+                    ))}
+                  </Wrap>
+                </VStack>
+              </PopoverBody>
+            </PopoverContent>
+          </Popover>
+        ))}
       </VStack>
     </Box>
   )

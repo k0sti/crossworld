@@ -1,15 +1,16 @@
+import * as logger from '../utils/logger';
 import { GeometryGenerator } from '../geometry/geometry-lib';
-import { getMicroDepth, getTotalDepth } from '../config/depth-config';
+import { getMacroDepth } from '../config/depth-config';
 
 export interface GeometryMessage {
-  type: 'init' | 'update' | 'setVoxelAtDepth' | 'setVoxel' | 'removeVoxelAtDepth' | 'removeVoxel' | 'setFaceMeshMode' | 'setGroundRenderMode';
+  type: 'init' | 'update' | 'setVoxelAtDepth' | 'setVoxel' | 'removeVoxelAtDepth' | 'removeVoxel' | 'setFaceMeshMode' | 'setGroundRenderMode' | 'forceUpdate' | 'exportCSM';
   x?: number;
   y?: number;
   z?: number;
   depth?: number;
   colorIndex?: number;
-  worldDepth?: number;
-  scaleDepth?: number;
+  macroDepth?: number;
+  microDepth?: number;
   enabled?: boolean;
   useCube?: boolean;
 }
@@ -31,9 +32,11 @@ class GeometryWorkerManager {
   private isRunning = false;
   private updateInterval = 33; // ~30 FPS for geometry updates
   private lastUpdate = 0;
+  private saveTimeout: ReturnType<typeof setTimeout> | null = null;
+  private saveDebounceMs = 2000; // Save 2 seconds after last modification
 
-  async initialize(worldDepth: number = getTotalDepth(), scaleDepth: number = getMicroDepth()) {
-    this.generator = new GeometryGenerator(worldDepth, scaleDepth);
+  async initialize(macroDepth: number = getMacroDepth(), microDepth: number = 0) {
+    this.generator = new GeometryGenerator(macroDepth, microDepth);
     await this.generator.initialize();
     self.postMessage({ type: 'ready' });
     this.startUpdateLoop();
@@ -96,44 +99,106 @@ class GeometryWorkerManager {
   }
 
   setVoxelAtDepth(x: number, y: number, z: number, depth: number, colorIndex: number) {
-    console.log('[GeometryWorker] setVoxelAtDepth', { x, y, z, depth, colorIndex, hasGenerator: !!this.generator });
+    logger.log('worker', '[GeometryWorker] setVoxelAtDepth', { x, y, z, depth, colorIndex, hasGenerator: !!this.generator });
     if (this.generator) {
       this.generator.setVoxelAtDepth(x, y, z, depth, colorIndex);
+      this.scheduleAutoSave();
     }
   }
 
   setVoxel(x: number, y: number, z: number, colorIndex: number) {
-    console.log('[GeometryWorker] setVoxel', { x, y, z, colorIndex, hasGenerator: !!this.generator });
+    logger.log('worker', '[GeometryWorker] setVoxel', { x, y, z, colorIndex, hasGenerator: !!this.generator });
     if (this.generator) {
       this.generator.setVoxel(x, y, z, colorIndex);
+      this.scheduleAutoSave();
     }
   }
 
   removeVoxelAtDepth(x: number, y: number, z: number, depth: number) {
-    console.log('[GeometryWorker] removeVoxelAtDepth', { x, y, z, depth, hasGenerator: !!this.generator });
+    logger.log('worker', '[GeometryWorker] removeVoxelAtDepth', { x, y, z, depth, hasGenerator: !!this.generator });
     if (this.generator) {
       this.generator.removeVoxelAtDepth(x, y, z, depth);
+      this.scheduleAutoSave();
     }
   }
 
   removeVoxel(x: number, y: number, z: number) {
-    console.log('[GeometryWorker] removeVoxel', { x, y, z, hasGenerator: !!this.generator });
+    logger.log('worker', '[GeometryWorker] removeVoxel', { x, y, z, hasGenerator: !!this.generator });
     if (this.generator) {
       this.generator.removeVoxel(x, y, z);
+      this.scheduleAutoSave();
+    }
+  }
+
+  private scheduleAutoSave() {
+    // Clear existing timeout
+    if (this.saveTimeout) {
+      clearTimeout(this.saveTimeout);
+    }
+
+    // Schedule new save
+    this.saveTimeout = setTimeout(() => {
+      this.saveWorld();
+      this.saveTimeout = null;
+    }, this.saveDebounceMs);
+  }
+
+  private saveWorld() {
+    if (!this.generator) return;
+
+    const csmText = this.generator.exportToCSM();
+    if (csmText) {
+      logger.log('worker', '[GeometryWorker] Exporting world to CSM...');
+      logger.log('worker', '[GeometryWorker] CSM Preview:', csmText.substring(0, 200));
+
+      // Send CSM data to main thread for download
+      self.postMessage({ type: 'save-csm', csmText });
     }
   }
 
   setFaceMeshMode(enabled: boolean) {
-    console.log('[GeometryWorker] setFaceMeshMode', { enabled, hasGenerator: !!this.generator });
     if (this.generator) {
       this.generator.setFaceMeshMode(enabled);
     }
   }
 
   setGroundRenderMode(useCube: boolean) {
-    console.log('[GeometryWorker] setGroundRenderMode', { useCube, hasGenerator: !!this.generator });
     if (this.generator) {
       this.generator.setGroundRenderMode(useCube);
+    }
+  }
+
+  forceUpdate() {
+    this.generateGeometry();
+  }
+
+  exportCSM() {
+    if (!this.generator) {
+      self.postMessage({
+        type: 'csm-export',
+        error: 'Generator not initialized'
+      });
+      return;
+    }
+
+    try {
+      const csmText = this.generator.exportToCSM();
+      if (csmText) {
+        self.postMessage({
+          type: 'csm-export',
+          csmText
+        });
+      } else {
+        self.postMessage({
+          type: 'csm-export',
+          error: 'Failed to export CSM - no data returned'
+        });
+      }
+    } catch (error) {
+      self.postMessage({
+        type: 'csm-export',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
     }
   }
 }
@@ -146,7 +211,7 @@ self.addEventListener('message', async (event) => {
 
   switch (message.type) {
     case 'init':
-      await manager.initialize(message.worldDepth, message.scaleDepth);
+      await manager.initialize(message.macroDepth, message.microDepth);
       break;
 
     case 'update':
@@ -187,6 +252,14 @@ self.addEventListener('message', async (event) => {
       if (message.useCube !== undefined) {
         manager.setGroundRenderMode(message.useCube);
       }
+      break;
+
+    case 'forceUpdate':
+      manager.forceUpdate();
+      break;
+
+    case 'exportCSM':
+      manager.exportCSM();
       break;
   }
 });

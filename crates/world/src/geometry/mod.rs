@@ -7,17 +7,17 @@ pub struct GeometryEngine {
 }
 
 impl GeometryEngine {
-    /// Create new GeometryEngine with specified depth and scale
+    /// Create new GeometryEngine with specified depths
     ///
     /// # Arguments
-    /// * `world_depth` - Total depth (macro + micro, e.g., 3 = 8^3 voxels)
-    /// * `scale_depth` - Micro depth / rendering scale (e.g., 0 = each octree unit is 2^0 = 1 world unit)
+    /// * `macro_depth` - World size depth (e.g., 3 = 8×8×8 world units)
+    /// * `micro_depth` - Subdivision depth (0-3), used for mesh generation
     ///
-    /// Default values: world_depth=3 (macro=3, micro=0), scale_depth=0
-    /// This gives: 8x8x8 octree voxels, 8x8x8 world units
-    pub fn new(world_depth: u32, scale_depth: u32) -> Self {
+    /// World size is determined by macro depth (2^macro_depth).
+    /// Total depth (macro + micro) is used for mesh generation to get correct voxel sizes.
+    pub fn new(macro_depth: u32, micro_depth: u32) -> Self {
         Self {
-            cube_ground: cube_ground::CubeGround::new(world_depth, scale_depth),
+            cube_ground: cube_ground::CubeGround::new(macro_depth, micro_depth),
         }
     }
 
@@ -55,5 +55,10 @@ impl GeometryEngine {
     /// Set ground render mode (cube vs plane)
     pub fn set_ground_render_mode(&mut self, use_cube: bool) {
         self.cube_ground.set_ground_render_mode(use_cube);
+    }
+
+    /// Export the current world state to CSM format
+    pub fn export_to_csm(&self) -> String {
+        self.cube_ground.export_to_csm()
     }
 }

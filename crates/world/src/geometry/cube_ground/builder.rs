@@ -7,7 +7,8 @@ pub fn build_ground_octree(noise: &Perlin, fbm: &Fbm<Perlin>, depth: u32) -> Cub
     // Start recursive build at (0,0,0) with specified depth
     // e.g. Depth 7 -> 6 -> 5 -> ... -> 1 -> 0 (leaf voxels)
     // Pass depth to know the grid size for centering
-    build_octree_recursive(0, 0, 0, depth, depth, noise, fbm)
+    // Simplify after building to optimize octree structure
+    build_octree_recursive(0, 0, 0, depth, depth, noise, fbm).simplified()
 }
 
 /// Recursively build octree from given position and depth
@@ -61,7 +62,8 @@ fn build_octree_recursive(
         ))
     });
 
-    Cube::cubes(children)
+    // Simplify after creating each node to collapse uniform regions
+    Cube::cubes(children).simplified()
 }
 
 /// Get voxel value at given coordinates

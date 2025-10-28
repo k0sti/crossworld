@@ -1,5 +1,5 @@
-import { Box, Flex, IconButton, HStack } from '@chakra-ui/react'
-import { FiGlobe, FiInfo } from 'react-icons/fi'
+import { Box, Flex, IconButton, Text, HStack } from '@chakra-ui/react'
+import { FiMenu } from 'react-icons/fi'
 import { ProfileButton } from './ProfileButton'
 import { ConfigPanelType } from '../types/config'
 import { ReactNode } from 'react'
@@ -11,9 +11,20 @@ interface TopBarProps {
   onOpenProfile: () => void
   activePanelType: ConfigPanelType
   centerContent?: ReactNode
+  isEditMode?: boolean
+  onToggleEditMode?: () => void
 }
 
-export function TopBar({ pubkey, onLogin, onOpenPanel, onOpenProfile, activePanelType, centerContent }: TopBarProps) {
+export function TopBar({ pubkey, onLogin, onOpenPanel, onOpenProfile, activePanelType, centerContent, isEditMode, onToggleEditMode }: TopBarProps) {
+  const handleMenuClick = () => {
+    // Toggle config panel
+    if (activePanelType === 'config') {
+      onOpenPanel(null)
+    } else {
+      onOpenPanel('config')
+    }
+  }
+
   return (
     <Box
       as="header"
@@ -38,18 +49,38 @@ export function TopBar({ pubkey, onLogin, onOpenPanel, onOpenProfile, activePane
         )}
 
         <HStack spacing={2}>
+          {/* Edit Mode Toggle */}
+          {pubkey && isEditMode !== undefined && onToggleEditMode && (
+            <Box
+              as="button"
+              onClick={onToggleEditMode}
+              w="40px"
+              h="40px"
+              bg={isEditMode ? "rgba(255, 165, 0, 0.2)" : "rgba(80, 80, 80, 0.1)"}
+              border="1px solid rgba(255, 255, 255, 0.1)"
+              _hover={{
+                bg: isEditMode ? 'rgba(255, 165, 0, 0.3)' : 'rgba(120, 120, 120, 0.2)',
+                borderColor: 'rgba(255, 255, 255, 0.2)'
+              }}
+              _active={{
+                bg: 'rgba(60, 60, 60, 0.3)',
+              }}
+              transition="all 0.1s"
+              cursor="pointer"
+              display="flex"
+              alignItems="center"
+              justifyContent="center"
+              borderRadius="md"
+            >
+              <Text fontSize="lg">{isEditMode ? '🏗️' : '🚶'}</Text>
+            </Box>
+          )}
+
           <IconButton
-            aria-label="Network settings"
-            icon={<FiGlobe />}
-            onClick={() => onOpenPanel(activePanelType === 'network' ? null : 'network')}
-            variant={activePanelType === 'network' ? 'solid' : 'ghost'}
-            size="sm"
-          />
-          <IconButton
-            aria-label="About"
-            icon={<FiInfo />}
-            onClick={() => onOpenPanel(activePanelType === 'info' ? null : 'info')}
-            variant={activePanelType === 'info' ? 'solid' : 'ghost'}
+            aria-label="Menu"
+            icon={<FiMenu />}
+            onClick={handleMenuClick}
+            variant="ghost"
             size="sm"
           />
         </HStack>

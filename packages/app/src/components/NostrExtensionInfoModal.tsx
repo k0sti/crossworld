@@ -1,3 +1,4 @@
+import * as logger from '../utils/logger';
 import { useState, useEffect } from 'react'
 import {
   VStack,
@@ -41,7 +42,7 @@ export function NostrExtensionInfoModal({ isOpen, onClose, onGuestLogin, onExten
         setSavedGuest(guestData)
       }
     } catch (error) {
-      console.error('Failed to load guest account:', error)
+      logger.error('ui', 'Failed to load guest account:', error)
     }
   }, [])
 
@@ -94,7 +95,7 @@ export function NostrExtensionInfoModal({ isOpen, onClose, onGuestLogin, onExten
       onLogin(account.pubkey)
       onClose()
     } catch (error) {
-      console.error('Quick login error:', error)
+      logger.error('ui', 'Quick login error:', error)
       toast({
         title: 'Login failed',
         description: error instanceof Error ? error.message : 'Failed to restore guest account',

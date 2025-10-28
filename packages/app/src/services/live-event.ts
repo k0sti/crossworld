@@ -1,3 +1,4 @@
+import * as logger from '../utils/logger';
 import { SimplePool, type Event } from 'nostr-tools'
 import { LIVE_CHAT_D_TAG, APP_PUBKEY, DEFAULT_RELAYS } from '../config'
 
@@ -24,7 +25,7 @@ export async function fetchLiveEvent(): Promise<LiveEventData | null> {
     })
 
     if (!event) {
-      console.warn(`Live event not found for d-tag: ${LIVE_CHAT_D_TAG}`)
+      logger.warn('network', `Live event not found for d-tag: ${LIVE_CHAT_D_TAG}`)
       return null
     }
 
@@ -57,7 +58,7 @@ export function subscribeLiveEvent(
         }
       },
       oneose() {
-        console.log('Live event subscription established')
+        logger.log('network', 'Live event subscription established')
       },
     }
   )
