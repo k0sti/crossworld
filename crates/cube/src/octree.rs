@@ -288,19 +288,28 @@ impl<T: Clone> Cube<T> {
 
 impl<T: Clone + PartialEq> Cube<T> {
     /// Simplify cube by collapsing uniform children into a single leaf
+    /// This is recursive - first simplifies all children, then checks if parent can be simplified
     pub fn simplified(self) -> Self {
-        match &self {
+        match self {
             Cube::Cubes(children) => {
-                // Check if all children are Solid with the same value
-                if let Cube::Solid(first_val) = &*children[0] {
-                    let all_same = children[1..]
+                // First, recursively simplify all children
+                let simplified_children: [Rc<Cube<T>>; 8] = std::array::from_fn(|i| {
+                    let child = (*children[i]).clone();
+                    Rc::new(child.simplified())
+                });
+
+                // Now check if all simplified children are Solid with the same value
+                if let Cube::Solid(first_val) = &*simplified_children[0] {
+                    let all_same = simplified_children[1..]
                         .iter()
                         .all(|c| matches!(&**c, Cube::Solid(v) if v == first_val));
                     if all_same {
                         return Cube::Solid(first_val.clone());
                     }
                 }
-                self
+
+                // Return with simplified children
+                Cube::Cubes(Box::new(simplified_children))
             }
             _ => self,
         }

@@ -11,6 +11,7 @@ import { ChatPanel } from './components/ChatPanel'
 import { ClientListPanel } from './components/ClientListPanel'
 import { RestoreStateModal } from './components/RestoreStateModal'
 import { ColorPalette } from './components/ColorPalette'
+import { ScriptPanel } from './components/ScriptPanel'
 import { AvatarStateService, type AvatarConfig, type AvatarState } from './services/avatar-state'
 import { useVoice } from './hooks/useVoice'
 import { npubEncode } from 'nostr-tools/nip19'
@@ -59,6 +60,10 @@ function App() {
 
   const geometryControllerRef = useRef<any>(null)
   const sceneManagerRef = useRef<any>(null)
+
+  // World CSM state
+  const [worldCSM, setWorldCSM] = useState<string>('')
+  const [isScriptPanelOpen, setIsScriptPanelOpen] = useState(false)
 
   // MoQ streaming URL state
   const [streamingUrl, setStreamingUrl] = useState<string | null>(VOICE_CONFIG.DEBUG_RELAY_URL)
@@ -391,6 +396,31 @@ function App() {
     }
   }, [pubkey, isEditMode, isExploring, avatarStateService, voice.isConnected, voice.micEnabled, isChatOpen])
 
+  // Reset script panel state when exiting edit mode
+  useEffect(() => {
+    if (!isEditMode) {
+      setIsScriptPanelOpen(false)
+    }
+  }, [isEditMode])
+
+  // Toggle script panel with 'l' key in edit mode
+  useEffect(() => {
+    if (!isEditMode) return
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if user is typing in an input/textarea
+      const target = e.target as HTMLElement
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return
+
+      if (e.key === 'l' || e.key === 'L') {
+        setIsScriptPanelOpen(prev => !prev)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isEditMode])
+
   // Set up camera mode exit callback (triggered when pointer lock is released)
   useEffect(() => {
     if (sceneManagerRef.current) {
@@ -576,6 +606,7 @@ function App() {
           sceneManagerRef={sceneManagerRef}
           speechEnabled={speechEnabled}
           onSpeechEnabledChange={setSpeechEnabled}
+          onWorldCSMUpdate={setWorldCSM}
         />
         <TopBar
           pubkey={pubkey}
@@ -670,6 +701,9 @@ function App() {
 
         {/* Color Palette (edit mode) */}
         <ColorPalette isVisible={isEditMode} onColorSelect={handleColorSelect} />
+
+        {/* Script Panel (edit mode) */}
+        {isEditMode && isScriptPanelOpen && <ScriptPanel csmText={worldCSM} />}
 
       </>
   )

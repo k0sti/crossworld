@@ -1,7 +1,7 @@
 mod builder;
 
 use crate::GeometryData;
-use crossworld_cube::{ColorMapper, Cube, DefaultMeshBuilder, Octree, glam::IVec3};
+use crossworld_cube::{serialize_csm, ColorMapper, Cube, DefaultMeshBuilder, Octree, glam::IVec3};
 use noise::{Fbm, Perlin};
 
 pub struct CubeGround {
@@ -92,6 +92,11 @@ impl CubeGround {
     /// Set ground render mode (currently unused, placeholder for future)
     pub fn set_ground_render_mode(&mut self, _use_cube: bool) {
         tracing::info!("[CubeGround] Ground render mode not yet implemented");
+    }
+
+    /// Export the octree to CSM format
+    pub fn export_to_csm(&self) -> String {
+        serialize_csm(&self.octree)
     }
 
     pub fn generate_mesh(&self) -> GeometryData {

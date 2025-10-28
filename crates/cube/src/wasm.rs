@@ -5,8 +5,8 @@ use std::rc::Rc;
 use wasm_bindgen::prelude::*;
 
 use crate::{
-    generate_mesh_hierarchical, parse_csm, ColorMapper, Cube, DefaultMeshBuilder, HsvColorMapper,
-    Octree, PaletteColorMapper,
+    generate_mesh_hierarchical, parse_csm, serialize_csm, ColorMapper, Cube, DefaultMeshBuilder,
+    HsvColorMapper, Octree, PaletteColorMapper,
 };
 
 #[derive(Serialize, Deserialize)]
@@ -284,6 +284,51 @@ fn build_octree_path(x: usize, y: usize, z: usize, depth: usize, max_depth: usiz
     }
 
     path
+}
+
+/// Serialize a model to CSM format
+#[wasm_bindgen]
+pub fn serialize_model_to_csm(model_id: &str) -> JsValue {
+    MODEL_STORAGE.with(|storage| {
+        let models = storage.borrow();
+        if let Some(model_data) = models.get(model_id) {
+            let octree = Octree::new(model_data.cube.clone());
+            let csm_text = serialize_csm(&octree);
+            JsValue::from_str(&csm_text)
+        } else {
+            let error = ParseError {
+                error: format!("Model not found: {}", model_id),
+            };
+            serde_wasm_bindgen::to_value(&error).unwrap()
+        }
+    })
+}
+
+/// Load a model from CSM text
+#[wasm_bindgen]
+pub fn load_model_from_csm(model_id: &str, csm_text: &str, max_depth: usize) -> JsValue {
+    match parse_csm(csm_text) {
+        Ok(octree) => {
+            MODEL_STORAGE.with(|storage| {
+                let mut models = storage.borrow_mut();
+                models.insert(
+                    model_id.to_string(),
+                    ModelData {
+                        cube: octree.root,
+                        max_depth,
+                        palette: None,
+                    },
+                );
+                JsValue::NULL
+            })
+        }
+        Err(e) => {
+            let error = ParseError {
+                error: format!("Parse error: {}", e),
+            };
+            serde_wasm_bindgen::to_value(&error).unwrap()
+        }
+    }
 }
 
 // Helper: Set voxel value at octree path

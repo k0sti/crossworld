@@ -6,6 +6,7 @@ export class GeometryController {
   private latestGeometry: GeometryResult | null = null;
   private stats = { vertices: 0, triangles: 0 };
   private onGeometryUpdate?: (geometry: GeometryResult) => void;
+  private onCSMUpdate?: (csmText: string) => void;
   private macroDepth: number;
   private microDepth: number;
 
@@ -14,8 +15,12 @@ export class GeometryController {
     this.microDepth = microDepth;
   }
 
-  async initialize(onGeometryUpdate: (geometry: GeometryResult) => void): Promise<void> {
+  async initialize(
+    onGeometryUpdate: (geometry: GeometryResult) => void,
+    onCSMUpdate?: (csmText: string) => void
+  ): Promise<void> {
     this.onGeometryUpdate = onGeometryUpdate;
+    this.onCSMUpdate = onCSMUpdate;
 
     return new Promise((resolve) => {
       this.worker = new Worker(
@@ -29,6 +34,8 @@ export class GeometryController {
           resolve();
         } else if (event.data.type === 'geometry') {
           this.handleGeometryUpdate(event.data.data);
+        } else if (event.data.type === 'save-csm') {
+          this.handleSaveCSM(event.data.csmText);
         }
       });
 
@@ -42,6 +49,14 @@ export class GeometryController {
 
     if (this.onGeometryUpdate) {
       this.onGeometryUpdate(geometry);
+    }
+  }
+
+  private handleSaveCSM(csmText: string) {
+    console.log('[GeometryController] CSM update received');
+
+    if (this.onCSMUpdate) {
+      this.onCSMUpdate(csmText);
     }
   }
 

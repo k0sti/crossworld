@@ -31,6 +31,8 @@ class GeometryWorkerManager {
   private isRunning = false;
   private updateInterval = 33; // ~30 FPS for geometry updates
   private lastUpdate = 0;
+  private saveTimeout: ReturnType<typeof setTimeout> | null = null;
+  private saveDebounceMs = 2000; // Save 2 seconds after last modification
 
   async initialize(macroDepth: number = getMacroDepth(), microDepth: number = 0) {
     this.generator = new GeometryGenerator(macroDepth, microDepth);
@@ -99,6 +101,7 @@ class GeometryWorkerManager {
     console.log('[GeometryWorker] setVoxelAtDepth', { x, y, z, depth, colorIndex, hasGenerator: !!this.generator });
     if (this.generator) {
       this.generator.setVoxelAtDepth(x, y, z, depth, colorIndex);
+      this.scheduleAutoSave();
     }
   }
 
@@ -106,6 +109,7 @@ class GeometryWorkerManager {
     console.log('[GeometryWorker] setVoxel', { x, y, z, colorIndex, hasGenerator: !!this.generator });
     if (this.generator) {
       this.generator.setVoxel(x, y, z, colorIndex);
+      this.scheduleAutoSave();
     }
   }
 
@@ -113,6 +117,7 @@ class GeometryWorkerManager {
     console.log('[GeometryWorker] removeVoxelAtDepth', { x, y, z, depth, hasGenerator: !!this.generator });
     if (this.generator) {
       this.generator.removeVoxelAtDepth(x, y, z, depth);
+      this.scheduleAutoSave();
     }
   }
 
@@ -120,6 +125,33 @@ class GeometryWorkerManager {
     console.log('[GeometryWorker] removeVoxel', { x, y, z, hasGenerator: !!this.generator });
     if (this.generator) {
       this.generator.removeVoxel(x, y, z);
+      this.scheduleAutoSave();
+    }
+  }
+
+  private scheduleAutoSave() {
+    // Clear existing timeout
+    if (this.saveTimeout) {
+      clearTimeout(this.saveTimeout);
+    }
+
+    // Schedule new save
+    this.saveTimeout = setTimeout(() => {
+      this.saveWorld();
+      this.saveTimeout = null;
+    }, this.saveDebounceMs);
+  }
+
+  private saveWorld() {
+    if (!this.generator) return;
+
+    const csmText = this.generator.exportToCSM();
+    if (csmText) {
+      console.log('[GeometryWorker] Exporting world to CSM...');
+      console.log('[GeometryWorker] CSM Preview:', csmText.substring(0, 200));
+
+      // Send CSM data to main thread for download
+      self.postMessage({ type: 'save-csm', csmText });
     }
   }
 
