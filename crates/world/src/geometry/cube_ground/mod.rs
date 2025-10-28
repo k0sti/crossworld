@@ -1,12 +1,12 @@
 mod builder;
 
 use crate::GeometryData;
-use crossworld_cube::{serialize_csm, ColorMapper, Cube, DefaultMeshBuilder, Octree, glam::IVec3};
+use crossworld_cube::{ColorMapper, Cube, DefaultMeshBuilder, Octree, glam::IVec3, serialize_csm};
 use noise::{Fbm, Perlin};
 
 pub struct CubeGround {
     octree: Octree,
-    macro_depth: u32,  // World size = 2^macro_depth, terrain generation depth
+    macro_depth: u32, // World size = 2^macro_depth, terrain generation depth
     face_mesh_mode: bool,
 }
 

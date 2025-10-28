@@ -61,13 +61,12 @@ export function getDefaultCursorDepth(macroDepth: number): number {
  * Calculate voxel size in world units for a given depth level
  * @param targetDepth Target octree depth level
  * @param macroDepth Macro depth
- * @param microDepth Micro depth
+ * @param _microDepth Micro depth (unused, reserved for future use)
  */
-export function getVoxelSize(targetDepth: number, macroDepth: number, microDepth: number): number {
+export function getVoxelSize(targetDepth: number, macroDepth: number, _microDepth: number): number {
   // At depth 0: voxel size = 2^macro world units (entire world)
   // At macro depth: voxel size = 1 world unit
   // At macro+micro depth: voxel size = 1/(2^micro) world units
-  const totalDepth = macroDepth + microDepth;
   if (targetDepth <= macroDepth) {
     // Coarse levels: voxel size >= 1 world unit
     return 1 << (macroDepth - targetDepth);

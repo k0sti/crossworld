@@ -1,11 +1,8 @@
 import {
-  getMaxVoxelsPerSide,
-  getWorldSize,
   getHalfWorld,
-  getWorldToOctreeScale,
   getVoxelSize as getVoxelSizeFromGeometry
 } from '../constants/geometry';
-import { getMacroDepth, getMicroDepth, getTotalDepth } from '../config/depth-config';
+import { getMacroDepth, getMicroDepth } from '../config/depth-config';
 
 /**
  * Represents a cube coordinate in octree space at a specific depth level.

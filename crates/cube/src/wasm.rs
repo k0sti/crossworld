@@ -308,20 +308,18 @@ pub fn serialize_model_to_csm(model_id: &str) -> JsValue {
 #[wasm_bindgen]
 pub fn load_model_from_csm(model_id: &str, csm_text: &str, max_depth: usize) -> JsValue {
     match parse_csm(csm_text) {
-        Ok(octree) => {
-            MODEL_STORAGE.with(|storage| {
-                let mut models = storage.borrow_mut();
-                models.insert(
-                    model_id.to_string(),
-                    ModelData {
-                        cube: octree.root,
-                        max_depth,
-                        palette: None,
-                    },
-                );
-                JsValue::NULL
-            })
-        }
+        Ok(octree) => MODEL_STORAGE.with(|storage| {
+            let mut models = storage.borrow_mut();
+            models.insert(
+                model_id.to_string(),
+                ModelData {
+                    cube: octree.root,
+                    max_depth,
+                    palette: None,
+                },
+            );
+            JsValue::NULL
+        }),
         Err(e) => {
             let error = ParseError {
                 error: format!("Parse error: {}", e),

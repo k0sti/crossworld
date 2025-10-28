@@ -16,7 +16,7 @@ import {
   getVoxelSize as getVoxelSizeFromCubeCoord
 } from '../types/cube-coord';
 import { getWorldSize } from '../constants/geometry';
-import { getMacroDepth, getMicroDepth, getTotalDepth } from '../config/depth-config';
+import { getMacroDepth, getTotalDepth } from '../config/depth-config';
 import { CheckerPlane } from './checker-plane';
 import { SunSystem } from './sun-system';
 import { PostProcessing } from './post-processing';
