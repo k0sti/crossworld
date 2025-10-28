@@ -15,8 +15,8 @@ pub use face_builder::generate_face_mesh;
 pub use mesh::{ColorMapper, HsvColorMapper, PaletteColorMapper};
 pub use mesh_builder::{generate_mesh_hierarchical, DefaultMeshBuilder, MeshBuilder};
 pub use neighbor_traversal::{
-    traverse_octree_with_neighbors, traverse_with_neighbors, CubeCoord, NeighborGrid, NeighborView,
-    TraversalVisitor,
+    traverse_with_neighbors, CubeCoord, NeighborGrid, NeighborView, TraversalVisitor,
+    OFFSET_LEFT, OFFSET_RIGHT, OFFSET_DOWN, OFFSET_UP, OFFSET_BACK, OFFSET_FRONT,
 };
 pub use octree::{octant_char_to_index, octant_index_to_char, Axis, Cube, IVec3Ext, Octree, Quad};
 pub use parser::{parse_csm, CsmError};

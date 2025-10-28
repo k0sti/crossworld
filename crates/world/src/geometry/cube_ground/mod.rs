@@ -7,6 +7,7 @@ use noise::{Fbm, Perlin};
 pub struct CubeGround {
     octree: Octree,
     macro_depth: u32,  // World size = 2^macro_depth, terrain generation depth
+    render_depth: u32,  // Maximum traversal depth for mesh generation
     face_mesh_mode: bool,
 }
 
@@ -15,23 +16,29 @@ impl CubeGround {
     ///
     /// # Arguments
     /// * `macro_depth` - World size depth (e.g., 3 = 8×8×8 world units)
+    /// * `micro_depth` - Additional subdivision levels for user edits (0-3)
     ///
-    /// Architecture (macro_depth=3):
+    /// Architecture (macro_depth=3, micro_depth=3):
     /// - World size: 8×8×8 units (2^3)
     /// - Terrain generated at macro depth
+    /// - User voxels can be placed up to macro+micro depth (depth 6)
     /// - Octree dynamically subdivides for finer edits
-    pub fn new(macro_depth: u32, _micro_depth: u32) -> Self {
+    pub fn new(macro_depth: u32, micro_depth: u32) -> Self {
         let noise = Perlin::new(12345);
         let fbm = Fbm::new(12345);
 
         // Build octree with terrain at macro depth
-        // micro_depth is only used by TypeScript for coordinate scaling
         // The octree automatically subdivides when voxels are placed at deeper levels
         let root = builder::build_ground_octree(&noise, &fbm, macro_depth);
+
+        // Render depth must be deep enough to capture all possible voxel placements
+        // macro_depth for terrain + micro_depth for user edits
+        let render_depth = macro_depth + micro_depth;
 
         Self {
             octree: Octree::new(root),
             macro_depth,
+            render_depth,
             face_mesh_mode: true,
         }
     }
@@ -104,17 +111,16 @@ impl CubeGround {
         let color_mapper = DawnbringerColorMapper::new();
         let mut builder = DefaultMeshBuilder::new();
 
-        // ALWAYS use macro_depth for mesh generation
-        // This ensures the world scale stays constant
-        // Subdivided voxels will be rendered as smaller faces automatically
-        // by the octree structure itself
+        // Use render_depth for traversal to find all voxels (terrain + subdivisions)
+        // The mesh generator will automatically calculate correct voxel sizes
+        // for each depth level, ensuring subdivided voxels render at correct positions
         if self.face_mesh_mode {
             // Use face-based mesh generation with neighbor culling
             crossworld_cube::generate_face_mesh(
                 &self.octree.root,
                 &mut builder,
                 |index| color_mapper.map(index),
-                self.macro_depth,
+                self.render_depth,
             );
         } else {
             // Use hierarchical mesh generation (all faces)
@@ -122,13 +128,15 @@ impl CubeGround {
                 &self.octree,
                 &mut builder,
                 |index| color_mapper.map(index),
-                self.macro_depth,
+                self.render_depth,
             );
         }
 
         // Scale and offset vertices to match world coordinates
-        // The mesh generator outputs vertices in [0,1] normalized to macro_depth
-        // This keeps world scale constant regardless of micro_depth
+        // The mesh generator outputs vertices in [0,1] space where:
+        // - Terrain voxels (at macro_depth) are correctly normalized
+        // - Subdivided voxels (at macro+micro_depth) are correctly normalized
+        // We scale by world_size (2^macro_depth) to convert to world units
         let world_size = (1 << self.macro_depth) as f32;
         let half_world = world_size / 2.0;
 

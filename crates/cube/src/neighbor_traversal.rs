@@ -2,6 +2,17 @@ use crate::{Cube, IVec3Ext};
 use glam::IVec3;
 use std::rc::Rc;
 
+/// Index multiplier for converting 3D position to linear index: x + y*4 + z*16
+const INDEX_MUL: IVec3 = IVec3::new(1, 4, 16);
+
+/// Neighbor direction offsets
+pub const OFFSET_LEFT: i32 = -1;
+pub const OFFSET_RIGHT: i32 = 1;
+pub const OFFSET_DOWN: i32 = -4;
+pub const OFFSET_UP: i32 = 4;
+pub const OFFSET_BACK: i32 = -16;
+pub const OFFSET_FRONT: i32 = 16;
+
 /// 4x4x4 neighbor grid for octree traversal with boundary conditions
 ///
 /// Layout:
@@ -89,6 +100,22 @@ impl NeighborGrid {
         (x, y, z)
     }
 
+    /// Convert linear index to 3D position vector
+    #[inline]
+    pub fn index_to_pos(index: usize) -> IVec3 {
+        let z = (index / 16) as i32;
+        let rem = index % 16;
+        let y = (rem / 4) as i32;
+        let x = (rem % 4) as i32;
+        IVec3::new(x, y, z)
+    }
+
+    /// Convert 3D position to linear index using dot product
+    #[inline]
+    pub fn pos_to_index(pos: IVec3) -> usize {
+        pos.dot(INDEX_MUL) as usize
+    }
+
     /// Get neighbor at offset from current index
     /// Returns None if out of bounds
     #[inline]
@@ -109,6 +136,7 @@ impl NeighborGrid {
 /// View into a neighbor grid centered on a specific voxel
 ///
 /// Provides convenient access to neighboring voxels with directional names
+#[derive(Copy, Clone)]
 pub struct NeighborView<'a> {
     grid: &'a NeighborGrid,
     center_index: usize,
@@ -126,41 +154,50 @@ impl<'a> NeighborView<'a> {
     }
 
     /// Get neighbor by offset
+    /// Use constants: OFFSET_LEFT, OFFSET_RIGHT, OFFSET_DOWN, OFFSET_UP, OFFSET_BACK, OFFSET_FRONT
     #[inline]
-    pub fn get(&self, dx: i32, dy: i32, dz: i32) -> Option<&Rc<Cube<i32>>> {
-        self.grid.get_neighbor(self.center_index, dx, dy, dz)
+    pub fn get(&self, offset: i32) -> Option<&Rc<Cube<i32>>> {
+        let neighbor_idx = self.center_index as i32 + offset;
+        if (0..64).contains(&neighbor_idx) {
+            Some(&self.grid.voxels[neighbor_idx as usize])
+        } else {
+            None
+        }
     }
 
-    // Named accessors for direct neighbors
+    /// Create a child grid one level deeper
+    ///
+    /// Uses IVec3 and dot product for compact index calculations.
+    ///
+    /// Formula for position p in 0..4:
+    /// - parent_offset = (p + 1) / 2 - 1  (gives -1, 0, 0, 1)
+    /// - child_pos = (p + 1) % 2          (gives 1, 0, 1, 0)
+    pub fn create_child_grid(&self) -> NeighborGrid {
+        let voxels: [Rc<Cube<i32>>; 64] = std::array::from_fn(|i| {
+            let pos = NeighborGrid::index_to_pos(i);
 
-    #[inline]
-    pub fn left(&self) -> Option<&Rc<Cube<i32>>> {
-        self.get(-1, 0, 0)
-    }
+            // Calculate parent offset and child position using formula
+            let parent_offset = (pos + 1) / 2 - 1;
+            let child_pos = (pos + 1) % 2;
 
-    #[inline]
-    pub fn right(&self) -> Option<&Rc<Cube<i32>>> {
-        self.get(1, 0, 0)
-    }
+            // Calculate parent index using dot product
+            let parent_idx = self.center_index as i32 + parent_offset.dot(INDEX_MUL);
 
-    #[inline]
-    pub fn down(&self) -> Option<&Rc<Cube<i32>>> {
-        self.get(0, -1, 0)
-    }
+            assert!((0..64).contains(&parent_idx));
+            let parent = &self.grid.voxels[parent_idx as usize];
 
-    #[inline]
-    pub fn up(&self) -> Option<&Rc<Cube<i32>>> {
-        self.get(0, 1, 0)
-    }
+            // Calculate child octant index using dot product with (4, 2, 1)
+            let child_octant = child_pos.dot(IVec3::new(4, 2, 1)) as usize;
 
-    #[inline]
-    pub fn back(&self) -> Option<&Rc<Cube<i32>>> {
-        self.get(0, 0, -1)
-    }
+            // Extract child or replicate if solid
+            match &**parent {
+                Cube::Cubes(children) => children[child_octant].clone(),
+                Cube::Solid(v) => Rc::new(Cube::Solid(*v)),
+                _ => Rc::new(Cube::Solid(0)),
+            }
+        });
 
-    #[inline]
-    pub fn front(&self) -> Option<&Rc<Cube<i32>>> {
-        self.get(0, 0, 1)
+        NeighborGrid { voxels }
     }
 }
 
@@ -190,10 +227,17 @@ impl CubeCoord {
 
 /// Visitor function type for octree traversal
 ///
+/// Called only for leaf nodes (Solid, Planes, Slices, or at depth==0).
+///
 /// Arguments:
 /// - `view`: View of the current voxel and its neighbors
 /// - `coord`: Current position and depth in the octree
-pub type TraversalVisitor<'a> = &'a mut dyn FnMut(NeighborView, CubeCoord);
+/// - `subleaf`: True if this leaf can be subdivided (depth > 0), false if at maximum depth
+///
+/// Returns:
+/// - `true`: Subdivide this leaf and traverse its children (only applies if subleaf==true)
+/// - `false`: Do not subdivide
+pub type TraversalVisitor<'a> = &'a mut dyn FnMut(NeighborView, CubeCoord, bool) -> bool;
 
 /// Recursively traverse octree with neighbor context
 ///
@@ -207,172 +251,74 @@ pub type TraversalVisitor<'a> = &'a mut dyn FnMut(NeighborView, CubeCoord);
 ///
 /// # Example
 /// ```
+/// use crossworld_cube::{Cube, NeighborGrid, traverse_with_neighbors, OFFSET_LEFT};
+///
 /// let root = Cube::Solid(33);
 /// let grid = NeighborGrid::new(&root, 33, 0);
 ///
-/// traverse_with_neighbors(&grid, &mut |view, coord| {
-///     if let Some(left) = view.left() {
+/// traverse_with_neighbors(&grid, &mut |view, coord, subleaf| {
+///     if let Some(left) = view.get(OFFSET_LEFT) {
 ///         // Process with left neighbor
 ///     }
+///     subleaf  // Subdivide if this is a subleaf, otherwise false
 /// }, 3);
 /// ```
 pub fn traverse_with_neighbors(grid: &NeighborGrid, visitor: TraversalVisitor, max_depth: u32) {
     // Traverse the center 2x2x2 octants
+    // Center offset in grid: (1,1,1) = 1 + 1*4 + 1*16 = 21
+    const CENTER_OFFSET: usize = 21;
+
     for octant_idx in 0..8 {
         let octant_pos = IVec3::from_octant_index(octant_idx);
-        let grid_idx =
-            NeighborGrid::xyz_to_index(octant_pos.x + 1, octant_pos.y + 1, octant_pos.z + 1);
-
+        let grid_idx = CENTER_OFFSET + octant_pos.dot(INDEX_MUL) as usize;
+        let view = NeighborView::new(grid, grid_idx);
         let coord = CubeCoord::new(octant_pos, max_depth);
-        traverse_recursive(grid, grid_idx, coord, visitor, max_depth);
+        traverse_recursive(view, coord, visitor, false);
     }
 }
 
 /// Internal recursive traversal function
-#[allow(clippy::only_used_in_recursion)]
-fn traverse_recursive(
-    grid: &NeighborGrid,
-    grid_idx: usize,
-    coord: CubeCoord,
-    visitor: TraversalVisitor,
-    max_depth: u32,
-) {
-    let voxel = &grid.voxels[grid_idx];
+fn traverse_recursive(view: NeighborView, coord: CubeCoord, visitor: TraversalVisitor, subleaf: bool) {
+    let voxel = view.center();
 
-    // Create view and visit this voxel
-    let view = NeighborView::new(grid, grid_idx);
-    visitor(view, coord);
-
-    // Base case: reached target depth or voxel is solid
+    // At maximum depth, this is a final leaf - cannot subdivide further
     if coord.depth == 0 {
+        visitor(view, coord, subleaf);
         return;
     }
 
     match &**voxel {
-        Cube::Solid(_) => {
-            // Solid voxel - no need to descend further
-        }
-        Cube::Cubes(children) => {
-            // Branch: create new 4x4x4 grid for next level
-            let child_grid = create_child_grid(grid, grid_idx, children);
+        Cube::Solid(_) | Cube::Planes { .. } | Cube::Slices { .. } => {
+            // Leaf node at depth > 0 - can be subdivided
+            let should_subdivide = visitor(view, coord, subleaf); // subleaf = true
 
-            // Recursively traverse each child octant
+            if should_subdivide {
+                // Subdivide leaf and traverse children
+                // create_child_grid will replicate the solid value into 8 children
+                let child_grid = view.create_child_grid();
+                const CENTER_OFFSET: usize = 21;
+                for octant_idx in 0..8 {
+                    let octant_pos = IVec3::from_octant_index(octant_idx);
+                    let child_grid_idx = CENTER_OFFSET + octant_pos.dot(INDEX_MUL) as usize;
+                    let child_view = NeighborView::new(&child_grid, child_grid_idx);
+                    let child_coord = coord.child(octant_idx);
+                    traverse_recursive(child_view, child_coord, visitor, true);
+                }
+            }
+        }
+        Cube::Cubes(_children) => {
+            // Branch node - traverse children without calling visitor
+            let child_grid = view.create_child_grid();
+            const CENTER_OFFSET: usize = 21;
             for octant_idx in 0..8 {
                 let octant_pos = IVec3::from_octant_index(octant_idx);
-                let child_grid_idx = NeighborGrid::xyz_to_index(
-                    octant_pos.x + 1,
-                    octant_pos.y + 1,
-                    octant_pos.z + 1,
-                );
-
+                let child_grid_idx = CENTER_OFFSET + octant_pos.dot(INDEX_MUL) as usize;
+                let child_view = NeighborView::new(&child_grid, child_grid_idx);
                 let child_coord = coord.child(octant_idx);
-                traverse_recursive(&child_grid, child_grid_idx, child_coord, visitor, max_depth);
+                traverse_recursive(child_view, child_coord, visitor, false);
             }
-        }
-        _ => {
-            // Planes/Slices: treat as solid for now
         }
     }
-}
-
-/// Create child grid for next recursion level
-///
-/// Takes the 8 children of the current voxel and places them in the center 2x2x2.
-/// Fills the border with neighbors from the parent grid.
-fn create_child_grid(
-    parent_grid: &NeighborGrid,
-    parent_idx: usize,
-    children: &[Rc<Cube<i32>>; 8],
-) -> NeighborGrid {
-    let voxels: [Rc<Cube<i32>>; 64] = std::array::from_fn(|i| {
-        let (x, y, z) = NeighborGrid::index_to_xyz(i);
-
-        // Check if this is a center voxel (will be filled by children)
-        if (1..=2).contains(&x) && (1..=2).contains(&y) && (1..=2).contains(&z) {
-            // Map grid position back to octant index
-            let octant_pos = IVec3::new(x - 1, y - 1, z - 1);
-            let octant_idx = octant_pos.to_octant_index();
-            return children[octant_idx].clone();
-        }
-
-        // Border voxel: sample from parent grid's neighbors
-
-        // Map child border position to parent neighbor direction
-        // x: [0,3] -> [-1, 0, 0, 1] relative to parent
-        // Each child border face maps to a parent neighbor's child face
-        let dx = match x {
-            0 => -1,
-            3 => 1,
-            _ => 0,
-        };
-        let dy = match y {
-            0 => -1,
-            3 => 1,
-            _ => 0,
-        };
-        let dz = match z {
-            0 => -1,
-            3 => 1,
-            _ => 0,
-        };
-
-        // Get the neighbor voxel from parent grid
-        if let Some(neighbor) = parent_grid.get_neighbor(parent_idx, dx, dy, dz) {
-            // Get the appropriate child from the neighbor
-            // The child on the facing side
-            let child_x = if dx < 0 {
-                1
-            } else if dx > 0 {
-                0
-            } else {
-                (x - 1).clamp(0, 1)
-            };
-            let child_y = if dy < 0 {
-                1
-            } else if dy > 0 {
-                0
-            } else {
-                (y - 1).clamp(0, 1)
-            };
-            let child_z = if dz < 0 {
-                1
-            } else if dz > 0 {
-                0
-            } else {
-                (z - 1).clamp(0, 1)
-            };
-
-            let child_octant = IVec3::new(child_x, child_y, child_z).to_octant_index();
-
-            match &**neighbor {
-                Cube::Cubes(neighbor_children) => neighbor_children[child_octant].clone(),
-                Cube::Solid(v) => Rc::new(Cube::Solid(*v)),
-                _ => Rc::new(Cube::Solid(0)),
-            }
-        } else {
-            // No neighbor (boundary): use default
-            Rc::new(Cube::Solid(0))
-        }
-    });
-
-    NeighborGrid { voxels }
-}
-
-/// Initialize and traverse octree with generative function
-///
-/// This is a convenience function that creates the initial grid from a root cube
-/// and traverses it with neighbor context.
-///
-/// # Arguments
-/// * `root` - Root octree cube
-/// * `depth` - Depth to traverse
-/// * `visitor` - Function called for each voxel with its neighbors
-pub fn traverse_octree_with_neighbors<F>(root: &Cube<i32>, depth: u32, mut visitor: F)
-where
-    F: FnMut(NeighborView, CubeCoord),
-{
-    let grid = NeighborGrid::new(root, 33, 0);
-    traverse_with_neighbors(&grid, &mut visitor, depth);
 }
 
 #[cfg(test)]
@@ -447,12 +393,12 @@ mod tests {
         assert_eq!(view.center().id(), 0); // Octant 0
 
         // Right neighbor should be octant 4 (x+1)
-        assert_eq!(view.right().unwrap().id(), 4);
+        assert_eq!(view.get(OFFSET_RIGHT).unwrap().id(), 4);
 
         // Up neighbor should be octant 2 (y+1)
-        assert_eq!(view.up().unwrap().id(), 2);
+        assert_eq!(view.get(OFFSET_UP).unwrap().id(), 2);
 
         // Front neighbor should be octant 1 (z+1)
-        assert_eq!(view.front().unwrap().id(), 1);
+        assert_eq!(view.get(OFFSET_FRONT).unwrap().id(), 1);
     }
 }
