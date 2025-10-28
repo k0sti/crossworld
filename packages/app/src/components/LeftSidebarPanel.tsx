@@ -57,6 +57,9 @@ interface LeftSidebarPanelProps {
   onToggleVoice: () => void
   onToggleMic: () => void
   speechEnabled: boolean
+  // World storage
+  onPublishWorld?: () => void
+  isLoggedIn?: boolean
 }
 
 export function LeftSidebarPanel({
@@ -74,6 +77,8 @@ export function LeftSidebarPanel({
   onToggleVoice,
   onToggleMic,
   speechEnabled,
+  onPublishWorld,
+  isLoggedIn,
 }: LeftSidebarPanelProps) {
   const handleOpenPanel = useCallback((type: ConfigPanelType) => {
     // If clicking the same panel, close it; otherwise open the new panel
@@ -201,6 +206,18 @@ export function LeftSidebarPanel({
             />
 
             <Divider borderColor="rgba(255, 255, 255, 0.1)" my={1} />
+          </>
+        )}
+
+        {/* Publish World button (only visible in edit mode and logged in) */}
+        {ENABLE_EDIT_MODE && isEditMode && isLoggedIn && onPublishWorld && (
+          <>
+            <Divider borderColor="rgba(255, 255, 255, 0.1)" my={1} />
+            <SidebarIcon
+              icon="💾"
+              onClick={onPublishWorld}
+              isActive={false}
+            />
           </>
         )}
 

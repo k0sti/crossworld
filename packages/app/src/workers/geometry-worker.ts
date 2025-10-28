@@ -2,7 +2,7 @@ import { GeometryGenerator } from '../geometry/geometry-lib';
 import { getMacroDepth } from '../config/depth-config';
 
 export interface GeometryMessage {
-  type: 'init' | 'update' | 'setVoxelAtDepth' | 'setVoxel' | 'removeVoxelAtDepth' | 'removeVoxel' | 'setFaceMeshMode' | 'setGroundRenderMode';
+  type: 'init' | 'update' | 'setVoxelAtDepth' | 'setVoxel' | 'removeVoxelAtDepth' | 'removeVoxel' | 'setFaceMeshMode' | 'setGroundRenderMode' | 'forceUpdate' | 'exportCSM';
   x?: number;
   y?: number;
   z?: number;
@@ -156,16 +156,48 @@ class GeometryWorkerManager {
   }
 
   setFaceMeshMode(enabled: boolean) {
-    console.log('[GeometryWorker] setFaceMeshMode', { enabled, hasGenerator: !!this.generator });
     if (this.generator) {
       this.generator.setFaceMeshMode(enabled);
     }
   }
 
   setGroundRenderMode(useCube: boolean) {
-    console.log('[GeometryWorker] setGroundRenderMode', { useCube, hasGenerator: !!this.generator });
     if (this.generator) {
       this.generator.setGroundRenderMode(useCube);
+    }
+  }
+
+  forceUpdate() {
+    this.generateGeometry();
+  }
+
+  exportCSM() {
+    if (!this.generator) {
+      self.postMessage({
+        type: 'csm-export',
+        error: 'Generator not initialized'
+      });
+      return;
+    }
+
+    try {
+      const csmText = this.generator.exportToCSM();
+      if (csmText) {
+        self.postMessage({
+          type: 'csm-export',
+          csmText
+        });
+      } else {
+        self.postMessage({
+          type: 'csm-export',
+          error: 'Failed to export CSM - no data returned'
+        });
+      }
+    } catch (error) {
+      self.postMessage({
+        type: 'csm-export',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
     }
   }
 }
@@ -219,6 +251,14 @@ self.addEventListener('message', async (event) => {
       if (message.useCube !== undefined) {
         manager.setGroundRenderMode(message.useCube);
       }
+      break;
+
+    case 'forceUpdate':
+      manager.forceUpdate();
+      break;
+
+    case 'exportCSM':
+      manager.exportCSM();
       break;
   }
 });

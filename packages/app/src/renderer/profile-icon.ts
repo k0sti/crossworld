@@ -105,29 +105,21 @@ export class ProfileIcon {
    */
   async loadPicture(pictureUrl: string): Promise<void> {
     if (this.currentPictureUrl === pictureUrl) {
-      console.log('[ProfileIcon] Picture already loaded:', pictureUrl);
       return; // Already loaded
     }
-
-    console.log('[ProfileIcon] Loading profile picture:', pictureUrl);
 
     try {
       // Wait for texture to fully load
       const texture = await this.textureLoader.loadAsync(pictureUrl);
-      console.log('[ProfileIcon] Texture loaded successfully');
-      console.log('[ProfileIcon] Image type:', texture.image?.constructor.name);
-      console.log('[ProfileIcon] Image dimensions:', texture.image?.width, 'x', texture.image?.height);
 
       // Verify image is loaded
       if (!texture.image || texture.image.width === 0 || texture.image.height === 0) {
-        console.error('[ProfileIcon] Image not properly loaded');
         this.currentPictureUrl = null;
         return;
       }
 
       // Create circular mask
       const maskedTexture = this.createCircularMaskedTexture(texture);
-      console.log('[ProfileIcon] Circular mask created');
 
       // Dispose old texture before replacing
       const oldMap = this.sprite.material.map;
@@ -141,7 +133,6 @@ export class ProfileIcon {
 
       // Mark as successfully loaded
       this.currentPictureUrl = pictureUrl;
-      console.log('[ProfileIcon] Profile picture applied successfully to sprite');
     } catch (error) {
       console.error('[ProfileIcon] Failed to load profile picture:', error);
       // Reset on error to keep default texture

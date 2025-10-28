@@ -10,6 +10,7 @@ import { SelectAvatar, type AvatarSelection } from './components/SelectAvatar'
 import { ChatPanel } from './components/ChatPanel'
 import { ClientListPanel } from './components/ClientListPanel'
 import { RestoreStateModal } from './components/RestoreStateModal'
+import { PublishWorldModal } from './components/PublishWorldModal'
 import { ColorPalette } from './components/ColorPalette'
 import { ScriptPanel } from './components/ScriptPanel'
 import { AvatarStateService, type AvatarConfig, type AvatarState } from './services/avatar-state'
@@ -20,6 +21,9 @@ import { VOICE_CONFIG } from './config'
 import { LoginSettingsService } from '@crossworld/common'
 import { ExtensionAccount, SimpleAccount } from 'applesauce-accounts/accounts'
 import { ExtensionSigner } from 'applesauce-signers'
+import { fetchCurrentWorld, validateWorldConfig } from './services/world-storage'
+import { loadModelFromCSM } from './utils/csmUtils'
+import { getMacroDepth, getMicroDepth } from './config/depth-config'
 
 function App() {
   const [pubkey, setPubkey] = useState<string | null>(null)
@@ -65,20 +69,20 @@ function App() {
   const [worldCSM, setWorldCSM] = useState<string>('')
   const [isScriptPanelOpen, setIsScriptPanelOpen] = useState(false)
 
+  // Publish world modal
+  const [isPublishWorldOpen, setIsPublishWorldOpen] = useState(false)
+
   // MoQ streaming URL state
   const [streamingUrl, setStreamingUrl] = useState<string | null>(VOICE_CONFIG.DEBUG_RELAY_URL)
 
   // Fetch streaming URL from live event (if not using debug URL)
   useEffect(() => {
     if (VOICE_CONFIG.DEBUG_RELAY_URL) {
-      console.log('[App] Using DEBUG MoQ relay URL:', VOICE_CONFIG.DEBUG_RELAY_URL)
       setStreamingUrl(VOICE_CONFIG.DEBUG_RELAY_URL)
     } else {
-      console.log('[App] Fetching MoQ relay URL from live event...')
       import('./services/live-event').then(({ fetchLiveEvent }) => {
         fetchLiveEvent().then(liveEvent => {
           if (liveEvent?.streaming_url) {
-            console.log('[App] MoQ streaming URL from live event:', liveEvent.streaming_url)
             setStreamingUrl(liveEvent.streaming_url)
           } else {
             console.warn('[App] No streaming URL found in live event')
@@ -125,11 +129,8 @@ function App() {
       const loginSettings = LoginSettingsService.load()
 
       if (!loginSettings) {
-        console.log('[App] No login settings found')
         return
       }
-
-      console.log('[App] Auto-login with method:', loginSettings.method)
 
       try {
         if (loginSettings.method === 'guest') {
@@ -157,7 +158,6 @@ function App() {
         } else if (loginSettings.method === 'extension') {
           // Try to reconnect with extension
           if (!window.nostr) {
-            console.log('[App] Extension not available, clearing settings')
             LoginSettingsService.clear()
             return
           }
@@ -194,7 +194,6 @@ function App() {
           setPubkey(publicKey)
         } else if (loginSettings.method === 'amber') {
           // Amber auto-login not supported (requires user interaction)
-          console.log('[App] Amber auto-login not supported, clearing settings')
           LoginSettingsService.clear()
         }
       } catch (error) {
@@ -231,8 +230,6 @@ function App() {
 
         if (state) {
           // Auto-restore state
-          console.log('[App] Restoring previous state')
-
           // Build avatar config from restored state
           const restoredConfig: AvatarConfig = {
             avatarType: state.avatarType || 'vox',
@@ -241,7 +238,6 @@ function App() {
             avatarData: state.avatarData,
             avatarMod: state.avatarMod,
           }
-          console.log('[App] Restoring avatar config:', restoredConfig)
           setAvatarConfig(restoredConfig)
 
           // Publish state with restored data
@@ -256,7 +252,6 @@ function App() {
           })
         } else {
           // No previous state, show avatar selection
-          console.log('[App] No previous state found, showing avatar selection')
           setShowSelectAvatar(true)
           // Still dismiss the restore modal
         }
@@ -287,6 +282,47 @@ function App() {
     }
   }, [pubkey, avatarStateService, toast])
 
+  // Auto-load world from Nostr when user logs in
+  useEffect(() => {
+    if (!pubkey || !geometryControllerRef.current) return
+
+    const autoLoadWorld = async () => {
+      try {
+        const world = await fetchCurrentWorld(pubkey)
+
+        if (world) {
+          // Validate world matches current configuration
+          const validation = validateWorldConfig(world)
+
+          if (validation.valid) {
+            const totalDepth = getMacroDepth() + getMicroDepth()
+
+            await loadModelFromCSM(world.csmCode, 'world', totalDepth)
+
+            // Trigger mesh update
+            if (geometryControllerRef.current) {
+              geometryControllerRef.current.forceUpdate()
+            }
+
+            toast({
+              title: 'World loaded',
+              description: world.title || 'Your saved world has been loaded',
+              status: 'success',
+              duration: 3000,
+            })
+          } else {
+            console.warn('[App] World config mismatch:', validation.error)
+          }
+        }
+      } catch (error) {
+        console.error('[App] Failed to auto-load world:', error)
+        // Don't show toast for errors, just log them
+      }
+    }
+
+    autoLoadWorld()
+  }, [pubkey, toast])
+
   // Helper to publish initial state
   const publishInitialState = (restoredState?: Partial<AvatarState>) => {
     // Set avatar state service on voice manager
@@ -300,7 +336,6 @@ function App() {
       avatarData: restoredState?.avatarData ?? avatarConfig.avatarData,
       avatarMod: restoredState?.avatarMod ?? avatarConfig.avatarMod,
     }
-    console.log('[App] Publishing initial state with config:', config)
 
     // Use restored position or default
     const position = restoredState?.position ?? { x: 4, y: 0, z: 4 }
@@ -481,8 +516,6 @@ function App() {
       avatarData: selection.avatarData,
     }
 
-    console.log('[App] Avatar selection received:', selection)
-    console.log('[App] Setting avatar config:', config)
     setAvatarConfig(config)
     setTeleportAnimationType(selection.teleportAnimationType)
     setShowSelectAvatar(false)
@@ -592,6 +625,20 @@ function App() {
     }
   }, [])
 
+  const handlePublishWorld = () => {
+    // Ensure geometry controller is initialized before opening modal
+    if (!geometryControllerRef.current) {
+      toast({
+        title: 'World not ready',
+        description: 'Please wait for the world to initialize',
+        status: 'warning',
+        duration: 3000,
+      })
+      return
+    }
+    setIsPublishWorldOpen(true)
+  }
+
   return (
       <>
         <WorldCanvas
@@ -631,6 +678,8 @@ function App() {
             onToggleVoice={handleToggleVoice}
             onToggleMic={handleToggleMic}
             speechEnabled={speechEnabled}
+            onPublishWorld={handlePublishWorld}
+            isLoggedIn={true}
           />
         )}
 
@@ -704,6 +753,14 @@ function App() {
 
         {/* Script Panel (edit mode) */}
         {isEditMode && isScriptPanelOpen && <ScriptPanel csmText={worldCSM} />}
+
+        {/* Publish World Modal */}
+        <PublishWorldModal
+          isOpen={isPublishWorldOpen}
+          onClose={() => setIsPublishWorldOpen(false)}
+          accountManager={accountManager}
+          geometryControllerRef={geometryControllerRef}
+        />
 
       </>
   )

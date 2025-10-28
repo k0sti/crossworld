@@ -30,7 +30,6 @@ export class GeometryController {
 
       this.worker.addEventListener('message', (event) => {
         if (event.data.type === 'ready') {
-          console.log('Geometry worker initialized');
           resolve();
         } else if (event.data.type === 'geometry') {
           this.handleGeometryUpdate(event.data.data);
@@ -68,6 +67,14 @@ export class GeometryController {
 
   getStats() {
     return this.stats;
+  }
+
+  getMacroDepth(): number {
+    return this.macroDepth;
+  }
+
+  getMicroDepth(): number {
+    return this.microDepth;
   }
 
   setGroundRenderMode(useCube: boolean) {
@@ -108,6 +115,42 @@ export class GeometryController {
     if (this.worker) {
       this.worker.postMessage({ type: 'removeVoxel', x, y, z });
     }
+  }
+
+  forceUpdate() {
+    console.log('[GeometryController] forceUpdate - triggering mesh regeneration');
+    if (this.worker) {
+      this.worker.postMessage({ type: 'forceUpdate' });
+    }
+  }
+
+  async getCSM(): Promise<string> {
+    return new Promise((resolve, reject) => {
+      if (!this.worker) {
+        reject(new Error('Worker not initialized'));
+        return;
+      }
+
+      const handler = (event: MessageEvent) => {
+        if (event.data.type === 'csm-export') {
+          this.worker?.removeEventListener('message', handler);
+          if (event.data.error) {
+            reject(new Error(event.data.error));
+          } else {
+            resolve(event.data.csmText);
+          }
+        }
+      };
+
+      this.worker.addEventListener('message', handler);
+      this.worker.postMessage({ type: 'exportCSM' });
+
+      // Timeout after 5 seconds
+      setTimeout(() => {
+        this.worker?.removeEventListener('message', handler);
+        reject(new Error('CSM export timeout'));
+      }, 5000);
+    });
   }
 
   async reinitialize(macroDepth: number, microDepth: number, onGeometryUpdate: (geometry: GeometryResult) => void): Promise<void> {
