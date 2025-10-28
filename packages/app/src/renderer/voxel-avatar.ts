@@ -1,3 +1,4 @@
+import * as logger from '../utils/logger';
 import * as THREE from 'three';
 import type { GeometryData } from '@workspace/wasm';
 import { Transform } from './transform';
@@ -110,7 +111,7 @@ export class VoxelAvatar extends BaseAvatar {
     const size = new THREE.Vector3();
     bbox.getSize(size);
 
-    console.log(`VoxelAvatar created for ${this.config.userNpub}:`, {
+    logger.log('renderer', `VoxelAvatar created for ${this.config.userNpub}:`, {
       vertices: vertices.length / 3,
       triangles: indices.length / 3,
       size: { x: size.x, y: size.y, z: size.z }
@@ -128,6 +129,11 @@ export class VoxelAvatar extends BaseAvatar {
       } else {
         this.mesh.material.dispose();
       }
+    }
+
+    // Dispose profile icon
+    if (this.profileIcon) {
+      this.profileIcon.dispose();
     }
   }
 }

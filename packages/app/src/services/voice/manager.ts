@@ -3,6 +3,7 @@ import { MoqConnectionManager, moqConnection } from './connection'
 import { AudioPublisher } from './publisher'
 import { AudioSubscriber, type Participant } from './subscriber'
 import type { AvatarStateService } from '../avatar-state'
+import * as logger from '../../utils/logger'
 
 export type VoiceStatus = 'disconnected' | 'connecting' | 'connected'
 
@@ -74,11 +75,11 @@ export class VoiceManager {
    */
   async connect(streamingUrl: string, npub: string): Promise<void> {
     if (this.status.peek() === 'connected') {
-      console.log('Already connected to voice')
+      logger.log('voice', 'Already connected to voice')
       return
     }
 
-    console.log('Connecting to voice chat...')
+    logger.log('voice', 'Connecting to voice chat...')
     this.currentNpub = npub
     this.error.set(null)
 
@@ -114,9 +115,9 @@ export class VoiceManager {
       // Start listening for participants
       await this.subscriber.startListening()
 
-      console.log('Voice chat connected')
+      logger.log('voice', 'Voice chat connected')
     } catch (err) {
-      console.error('Failed to connect to voice:', err)
+      logger.error('voice', 'Failed to connect to voice:', err)
       this.error.set(err instanceof Error ? err.message : 'Connection failed')
       throw err
     }
@@ -130,7 +131,7 @@ export class VoiceManager {
       return
     }
 
-    console.log('Disconnecting from voice chat...')
+    logger.log('voice', 'Disconnecting from voice chat...')
 
     try {
       // Disable mic if enabled
@@ -147,9 +148,9 @@ export class VoiceManager {
       this.error.set(null)
       this.currentNpub = null
 
-      console.log('Voice chat disconnected')
+      logger.log('voice', 'Voice chat disconnected')
     } catch (err) {
-      console.error('Error disconnecting from voice:', err)
+      logger.error('voice', 'Error disconnecting from voice:', err)
     }
   }
 

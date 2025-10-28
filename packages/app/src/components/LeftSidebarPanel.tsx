@@ -48,8 +48,6 @@ interface LeftSidebarPanelProps {
   onToggleEditMode: (isEditMode: boolean) => void
   isChatOpen: boolean
   onToggleChat: () => void
-  isClientListOpen: boolean
-  onToggleClientList: () => void
   // Voice props
   voiceConnected: boolean
   voiceConnecting: boolean
@@ -59,6 +57,9 @@ interface LeftSidebarPanelProps {
   onToggleVoice: () => void
   onToggleMic: () => void
   speechEnabled: boolean
+  // World storage
+  onPublishWorld?: () => void
+  isLoggedIn?: boolean
 }
 
 export function LeftSidebarPanel({
@@ -68,8 +69,6 @@ export function LeftSidebarPanel({
   onToggleEditMode,
   isChatOpen,
   onToggleChat,
-  isClientListOpen,
-  onToggleClientList,
   voiceConnected,
   voiceConnecting,
   micEnabled,
@@ -78,6 +77,8 @@ export function LeftSidebarPanel({
   onToggleVoice,
   onToggleMic,
   speechEnabled,
+  onPublishWorld,
+  isLoggedIn,
 }: LeftSidebarPanelProps) {
   const handleOpenPanel = useCallback((type: ConfigPanelType) => {
     // If clicking the same panel, close it; otherwise open the new panel
@@ -115,15 +116,12 @@ export function LeftSidebarPanel({
       // 3. Chat
       actions.push(onToggleChat)
 
-      // 4. Client list
-      actions.push(onToggleClientList)
-
-      // 5. Voice (if enabled and speech enabled)
+      // 4. Voice (if enabled and speech enabled)
       if (ENABLE_VOICE_CHAT && speechEnabled) {
         actions.push(onToggleVoice)
       }
 
-      // 6. Mic (if voice connected and speech enabled)
+      // 5. Mic (if voice connected and speech enabled)
       if (ENABLE_VOICE_CHAT && speechEnabled && voiceConnected) {
         actions.push(onToggleMic)
       }
@@ -146,11 +144,9 @@ export function LeftSidebarPanel({
     isEditMode,
     activePanelType,
     isChatOpen,
-    isClientListOpen,
     voiceConnected,
     onToggleEditMode,
     onToggleChat,
-    onToggleClientList,
     onToggleVoice,
     onToggleMic,
     handleOpenPanel,
@@ -170,33 +166,11 @@ export function LeftSidebarPanel({
       borderRight="1px solid rgba(255, 255, 255, 0.1)"
     >
       <VStack spacing={0} align="stretch">
-        {/* Walk/Edit Mode Toggle */}
-        {ENABLE_EDIT_MODE && (
-          <>
-            <SidebarIcon
-              icon={isEditMode ? "✏️" : "🚶"}
-              onClick={() => onToggleEditMode(!isEditMode)}
-              isActive={isEditMode}
-            />
-            <Divider borderColor="rgba(255, 255, 255, 0.1)" my={1} />
-          </>
-        )}
-
-        {/* Config Icons */}
-        <SidebarIcon
-          icon="🎭"
-          onClick={() => handleOpenPanel('avatar')}
-          isActive={activePanelType === 'avatar'}
-        />
+        {/* Chat Icon */}
         <SidebarIcon
           icon="💬"
           onClick={onToggleChat}
           isActive={isChatOpen}
-        />
-        <SidebarIcon
-          icon="👥"
-          onClick={onToggleClientList}
-          isActive={isClientListOpen}
         />
 
         {ENABLE_VOICE_CHAT && speechEnabled && (
@@ -215,6 +189,33 @@ export function LeftSidebarPanel({
             />
 
             <Divider borderColor="rgba(255, 255, 255, 0.1)" my={1} />
+          </>
+        )}
+
+        {/* Publish World button (only visible in edit mode and logged in) */}
+        {ENABLE_EDIT_MODE && isEditMode && isLoggedIn && onPublishWorld && (
+          <>
+            <Divider borderColor="rgba(255, 255, 255, 0.1)" my={1} />
+            <Box
+              as="button"
+              onClick={onPublishWorld}
+              width="100%"
+              py={2}
+              px={2}
+              bg="rgba(80, 80, 80, 0.3)"
+              borderRadius="md"
+              border="1px solid rgba(255, 255, 255, 0.1)"
+              _hover={{
+                bg: 'rgba(100, 100, 100, 0.4)',
+                borderColor: 'rgba(255, 255, 255, 0.2)',
+              }}
+              cursor="pointer"
+              transition="all 0.1s"
+            >
+              <Text color="white" fontSize="sm" textAlign="center">
+                Publish
+              </Text>
+            </Box>
           </>
         )}
 

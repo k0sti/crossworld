@@ -1,29 +1,30 @@
+import * as logger from './utils/logger';
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { useToast, IconButton } from '@chakra-ui/react'
-import { useNavigate } from 'react-router-dom'
+import { useToast, Box, Text } from '@chakra-ui/react'
 import { useAccountManager } from 'applesauce-react/hooks'
 import { TopBar, ConfigPanelType, ProfilePanel } from '@crossworld/common'
-import { FiEdit3 } from 'react-icons/fi'
 import { WorldCanvas } from './components/WorldCanvas'
-import { LeftSidebarPanel } from './components/LeftSidebarPanel'
+import { ConfigPanel } from './components/ConfigPanel'
 import { NetworkConfigPanel } from './components/NetworkConfigPanel'
 import { InfoPanel } from './components/InfoPanel'
 import { SelectAvatar, type AvatarSelection } from './components/SelectAvatar'
 import { ChatPanel } from './components/ChatPanel'
 import { ClientListPanel } from './components/ClientListPanel'
 import { RestoreStateModal } from './components/RestoreStateModal'
+import { PublishWorldModal } from './components/PublishWorldModal'
 import { ColorPalette } from './components/ColorPalette'
+import { ScriptPanel } from './components/ScriptPanel'
 import { AvatarStateService, type AvatarConfig, type AvatarState } from './services/avatar-state'
 import { useVoice } from './hooks/useVoice'
-import { npubEncode } from 'nostr-tools/nip19'
 import type { TeleportAnimationType } from './renderer/teleport-animation'
-import { VOICE_CONFIG } from './config'
 import { LoginSettingsService } from '@crossworld/common'
 import { ExtensionAccount, SimpleAccount } from 'applesauce-accounts/accounts'
 import { ExtensionSigner } from 'applesauce-signers'
+import { fetchCurrentWorld, validateWorldConfig } from './services/world-storage'
+import { loadModelFromCSM } from './utils/csmUtils'
+import { getMacroDepth, getMicroDepth } from './config/depth-config'
 
 function App() {
-  const navigate = useNavigate()
   const [pubkey, setPubkey] = useState<string | null>(null)
   const [isEditMode, setIsEditMode] = useState(false)
   const [isCameraMode, setIsCameraMode] = useState(false)
@@ -60,33 +61,20 @@ function App() {
   // Speech/Voice enabled state
   const [speechEnabled, setSpeechEnabled] = useState(false)
 
+  // Time of day state
+  const [timeOfDay, setTimeOfDay] = useState(0.35); // Start slightly after sunrise
+  const [sunAutoMove, setSunAutoMove] = useState(false); // Start with sun fixed
+  const [sunSpeed, setSunSpeed] = useState(0.01);
+
   const geometryControllerRef = useRef<any>(null)
   const sceneManagerRef = useRef<any>(null)
 
-  // MoQ streaming URL state
-  const [streamingUrl, setStreamingUrl] = useState<string | null>(VOICE_CONFIG.DEBUG_RELAY_URL)
+  // World CSM state
+  const [worldCSM, setWorldCSM] = useState<string>('')
+  const [isScriptPanelOpen, setIsScriptPanelOpen] = useState(false)
 
-  // Fetch streaming URL from live event (if not using debug URL)
-  useEffect(() => {
-    if (VOICE_CONFIG.DEBUG_RELAY_URL) {
-      console.log('[App] Using DEBUG MoQ relay URL:', VOICE_CONFIG.DEBUG_RELAY_URL)
-      setStreamingUrl(VOICE_CONFIG.DEBUG_RELAY_URL)
-    } else {
-      console.log('[App] Fetching MoQ relay URL from live event...')
-      import('./services/live-event').then(({ fetchLiveEvent }) => {
-        fetchLiveEvent().then(liveEvent => {
-          if (liveEvent?.streaming_url) {
-            console.log('[App] MoQ streaming URL from live event:', liveEvent.streaming_url)
-            setStreamingUrl(liveEvent.streaming_url)
-          } else {
-            console.warn('[App] No streaming URL found in live event')
-          }
-        }).catch(err => {
-          console.error('[App] Failed to fetch live event:', err)
-        })
-      })
-    }
-  }, [])
+  // Publish world modal
+  const [isPublishWorldOpen, setIsPublishWorldOpen] = useState(false)
 
   // Voice auto-connect disabled - user must manually connect
   // useEffect(() => {
@@ -97,9 +85,9 @@ function App() {
   //       const npub = npubEncode(pubkey)
   //       await voice.connect(streamingUrl, npub)
   //       voiceAutoConnected.current = true
-  //       console.log('[App] Auto-connected to voice chat')
+  //       logger.log('ui', '[App] Auto-connected to voice chat')
   //     } catch (err) {
-  //       console.error('[App] Failed to auto-connect to voice:', err)
+  //       logger.error('ui', '[App] Failed to auto-connect to voice:', err)
   //     }
   //   }
 
@@ -123,18 +111,15 @@ function App() {
       const loginSettings = LoginSettingsService.load()
 
       if (!loginSettings) {
-        console.log('[App] No login settings found')
         return
       }
-
-      console.log('[App] Auto-login with method:', loginSettings.method)
 
       try {
         if (loginSettings.method === 'guest') {
           // Restore guest account
           const guestData = LoginSettingsService.loadGuestAccount()
           if (!guestData) {
-            console.error('[App] Guest account data missing')
+            logger.error('ui', '[App] Guest account data missing')
             LoginSettingsService.clear()
             return
           }
@@ -155,7 +140,6 @@ function App() {
         } else if (loginSettings.method === 'extension') {
           // Try to reconnect with extension
           if (!window.nostr) {
-            console.log('[App] Extension not available, clearing settings')
             LoginSettingsService.clear()
             return
           }
@@ -164,7 +148,7 @@ function App() {
           const publicKey = await signer.getPublicKey()
 
           if (publicKey !== loginSettings.pubkey) {
-            console.warn('[App] Extension pubkey mismatch, clearing settings')
+            logger.warn('ui', '[App] Extension pubkey mismatch, clearing settings')
             LoginSettingsService.clear()
             return
           }
@@ -192,11 +176,10 @@ function App() {
           setPubkey(publicKey)
         } else if (loginSettings.method === 'amber') {
           // Amber auto-login not supported (requires user interaction)
-          console.log('[App] Amber auto-login not supported, clearing settings')
           LoginSettingsService.clear()
         }
       } catch (error) {
-        console.error('[App] Auto-login failed:', error)
+        logger.error('ui', '[App] Auto-login failed:', error)
         LoginSettingsService.clear()
         toast({
           title: 'Auto-login failed',
@@ -229,8 +212,6 @@ function App() {
 
         if (state) {
           // Auto-restore state
-          console.log('[App] Restoring previous state')
-
           // Build avatar config from restored state
           const restoredConfig: AvatarConfig = {
             avatarType: state.avatarType || 'vox',
@@ -239,7 +220,6 @@ function App() {
             avatarData: state.avatarData,
             avatarMod: state.avatarMod,
           }
-          console.log('[App] Restoring avatar config:', restoredConfig)
           setAvatarConfig(restoredConfig)
 
           // Publish state with restored data
@@ -254,7 +234,6 @@ function App() {
           })
         } else {
           // No previous state, show avatar selection
-          console.log('[App] No previous state found, showing avatar selection')
           setShowSelectAvatar(true)
           // Still dismiss the restore modal
         }
@@ -265,7 +244,7 @@ function App() {
         }
         setShowRestoreModal(false)
       } catch (err) {
-        console.error('[App] Failed to query/restore state:', err)
+        logger.error('ui', '[App] Failed to query/restore state:', err)
         // On error, show avatar selection
         setShowSelectAvatar(true)
 
@@ -285,6 +264,47 @@ function App() {
     }
   }, [pubkey, avatarStateService, toast])
 
+  // Auto-load world from Nostr when user logs in
+  useEffect(() => {
+    if (!pubkey || !geometryControllerRef.current) return
+
+    const autoLoadWorld = async () => {
+      try {
+        const world = await fetchCurrentWorld(pubkey)
+
+        if (world) {
+          // Validate world matches current configuration
+          const validation = validateWorldConfig(world)
+
+          if (validation.valid) {
+            const totalDepth = getMacroDepth() + getMicroDepth()
+
+            await loadModelFromCSM(world.csmCode, 'world', totalDepth)
+
+            // Trigger mesh update
+            if (geometryControllerRef.current) {
+              geometryControllerRef.current.forceUpdate()
+            }
+
+            toast({
+              title: 'World loaded',
+              description: world.title || 'Your saved world has been loaded',
+              status: 'success',
+              duration: 3000,
+            })
+          } else {
+            logger.warn('ui', '[App] World config mismatch:', validation.error)
+          }
+        }
+      } catch (error) {
+        logger.error('ui', '[App] Failed to auto-load world:', error)
+        // Don't show toast for errors, just log them
+      }
+    }
+
+    autoLoadWorld()
+  }, [pubkey, toast])
+
   // Helper to publish initial state
   const publishInitialState = (restoredState?: Partial<AvatarState>) => {
     // Set avatar state service on voice manager
@@ -298,7 +318,6 @@ function App() {
       avatarData: restoredState?.avatarData ?? avatarConfig.avatarData,
       avatarMod: restoredState?.avatarMod ?? avatarConfig.avatarMod,
     }
-    console.log('[App] Publishing initial state with config:', config)
 
     // Use restored position or default
     const position = restoredState?.position ?? { x: 4, y: 0, z: 4 }
@@ -394,6 +413,31 @@ function App() {
     }
   }, [pubkey, isEditMode, isExploring, avatarStateService, voice.isConnected, voice.micEnabled, isChatOpen])
 
+  // Reset script panel state when exiting edit mode
+  useEffect(() => {
+    if (!isEditMode) {
+      setIsScriptPanelOpen(false)
+    }
+  }, [isEditMode])
+
+  // Toggle script panel with 'l' key in edit mode
+  useEffect(() => {
+    if (!isEditMode) return
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if user is typing in an input/textarea
+      const target = e.target as HTMLElement
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return
+
+      if (e.key === 'l' || e.key === 'L') {
+        setIsScriptPanelOpen(prev => !prev)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isEditMode])
+
   // Set up camera mode exit callback (triggered when pointer lock is released)
   useEffect(() => {
     if (sceneManagerRef.current) {
@@ -454,8 +498,6 @@ function App() {
       avatarData: selection.avatarData,
     }
 
-    console.log('[App] Avatar selection received:', selection)
-    console.log('[App] Setting avatar config:', config)
     setAvatarConfig(config)
     setTeleportAnimationType(selection.teleportAnimationType)
     setShowSelectAvatar(false)
@@ -487,70 +529,6 @@ function App() {
     setActivePanelType('profile')
   }
 
-  const handleToggleVoice = async () => {
-    if (!pubkey) {
-      toast({
-        title: 'Login required',
-        description: 'Please login to use voice chat',
-        status: 'warning',
-        duration: 3000,
-      })
-      return
-    }
-
-    if (!streamingUrl) {
-      toast({
-        title: 'Voice unavailable',
-        description: 'MoQ streaming URL not configured',
-        status: 'error',
-        duration: 3000,
-      })
-      return
-    }
-
-    try {
-      if (voice.isConnected) {
-        await voice.disconnect()
-        toast({
-          title: 'Voice disconnected',
-          status: 'info',
-          duration: 2000,
-        })
-      } else {
-        const npub = npubEncode(pubkey)
-        await voice.connect(streamingUrl, npub)
-        toast({
-          title: 'Voice connected',
-          description: 'You can now enable your microphone',
-          status: 'success',
-          duration: 2000,
-        })
-      }
-    } catch (err) {
-      console.error('Voice toggle error:', err)
-      toast({
-        title: 'Voice error',
-        description: err instanceof Error ? err.message : 'Failed to toggle voice',
-        status: 'error',
-        duration: 4000,
-      })
-    }
-  }
-
-  const handleToggleMic = async () => {
-    try {
-      await voice.toggleMic()
-    } catch (err) {
-      console.error('Mic toggle error:', err)
-      toast({
-        title: 'Microphone error',
-        description: err instanceof Error ? err.message : 'Failed to toggle microphone',
-        status: 'error',
-        duration: 4000,
-      })
-    }
-  }
-
   const handleColorSelect = (_color: string, index: number) => {
     if (sceneManagerRef.current) {
       sceneManagerRef.current.setSelectedColorIndex(index)
@@ -564,6 +542,20 @@ function App() {
       geometryControllerRef.current.setGroundRenderMode(true)
     }
   }, [])
+
+  const handlePublishWorld = () => {
+    // Ensure geometry controller is initialized before opening modal
+    if (!geometryControllerRef.current) {
+      toast({
+        title: 'World not ready',
+        description: 'Please wait for the world to initialize',
+        status: 'warning',
+        duration: 3000,
+      })
+      return
+    }
+    setIsPublishWorldOpen(true)
+  }
 
   return (
       <>
@@ -579,6 +571,11 @@ function App() {
           sceneManagerRef={sceneManagerRef}
           speechEnabled={speechEnabled}
           onSpeechEnabledChange={setSpeechEnabled}
+          onWorldCSMUpdate={setWorldCSM}
+          timeOfDay={timeOfDay}
+          sunAutoMove={sunAutoMove}
+          sunSpeed={sunSpeed}
+          onPublishWorld={handlePublishWorld}
         />
         <TopBar
           pubkey={pubkey}
@@ -586,39 +583,23 @@ function App() {
           onOpenPanel={setActivePanelType}
           onOpenProfile={() => setActivePanelType('profile')}
           activePanelType={activePanelType}
-          centerContent={
-            <IconButton
-              aria-label="Open editor"
-              icon={<FiEdit3 />}
-              onClick={() => navigate('/editor')}
-              variant="ghost"
-              size="sm"
-              title="Voxel Editor"
-            />
-          }
+          isEditMode={isEditMode}
+          onToggleEditMode={() => setIsEditMode(!isEditMode)}
         />
-        {pubkey && (
-          <LeftSidebarPanel
-            onOpenPanel={setActivePanelType}
-            activePanelType={activePanelType}
-            isEditMode={isEditMode}
-            onToggleEditMode={setIsEditMode}
-            isChatOpen={isChatOpen}
-            onToggleChat={() => setIsChatOpen(!isChatOpen)}
-            isClientListOpen={isClientListOpen}
-            onToggleClientList={() => setIsClientListOpen(!isClientListOpen)}
-            voiceConnected={voice.isConnected}
-            voiceConnecting={voice.status === 'connecting'}
-            micEnabled={voice.micEnabled}
-            participantCount={voice.participantCount}
-            voiceError={voice.error}
-            onToggleVoice={handleToggleVoice}
-            onToggleMic={handleToggleMic}
-            speechEnabled={speechEnabled}
-          />
-        )}
 
         {/* Config Panels */}
+        {activePanelType === 'config' && (
+          <ConfigPanel
+            onClose={() => setActivePanelType(null)}
+            onOpenPanel={setActivePanelType}
+            timeOfDay={timeOfDay}
+            onTimeOfDayChange={setTimeOfDay}
+            sunAutoMove={sunAutoMove}
+            onSunAutoMoveChange={setSunAutoMove}
+            sunSpeed={sunSpeed}
+            onSunSpeedChange={setSunSpeed}
+          />
+        )}
         <NetworkConfigPanel
           isOpen={activePanelType === 'network'}
           onClose={() => setActivePanelType(null)}
@@ -654,12 +635,44 @@ function App() {
         {/* Chat Panel */}
         <ChatPanel isOpen={isChatOpen} currentPubkey={pubkey} onViewProfile={handleViewProfile} />
 
-        {/* Client List Panel */}
+        {/* Client List Panel - Hide when menu is open */}
         <ClientListPanel
-          isOpen={isClientListOpen}
+          isOpen={isClientListOpen && activePanelType !== 'config'}
           statusService={avatarStateService}
           onOpenProfile={handleViewProfile}
+          isEditMode={isEditMode}
         />
+
+        {/* Chat Button (bottom left) */}
+        {pubkey && (
+          <Box
+            as="button"
+            onClick={() => setIsChatOpen(!isChatOpen)}
+            position="fixed"
+            bottom={4}
+            left={4}
+            w="48px"
+            h="48px"
+            bg={isChatOpen ? "rgba(120, 120, 120, 0.2)" : "rgba(80, 80, 80, 0.1)"}
+            border="1px solid rgba(255, 255, 255, 0.1)"
+            _hover={{
+              bg: 'rgba(120, 120, 120, 0.2)',
+              borderColor: 'rgba(255, 255, 255, 0.2)'
+            }}
+            _active={{
+              bg: 'rgba(60, 60, 60, 0.3)',
+            }}
+            transition="all 0.1s"
+            cursor="pointer"
+            display="flex"
+            alignItems="center"
+            justifyContent="center"
+            zIndex={1500}
+            borderRadius="md"
+          >
+            <Text fontSize="xl">💬</Text>
+          </Box>
+        )}
 
         {/* Loading State Modal */}
         <RestoreStateModal
@@ -684,6 +697,17 @@ function App() {
 
         {/* Color Palette (edit mode) */}
         <ColorPalette isVisible={isEditMode} onColorSelect={handleColorSelect} />
+
+        {/* Script Panel (edit mode) */}
+        {isEditMode && isScriptPanelOpen && <ScriptPanel csmText={worldCSM} />}
+
+        {/* Publish World Modal */}
+        <PublishWorldModal
+          isOpen={isPublishWorldOpen}
+          onClose={() => setIsPublishWorldOpen(false)}
+          accountManager={accountManager}
+          geometryControllerRef={geometryControllerRef}
+        />
 
       </>
   )

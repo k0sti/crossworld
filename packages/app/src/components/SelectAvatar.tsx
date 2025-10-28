@@ -1,3 +1,4 @@
+import * as logger from '../utils/logger';
 import {
   VStack,
   HStack,
@@ -113,9 +114,7 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
 
   // Load models configuration
   useEffect(() => {
-    console.log('[SelectAvatar] Loading models config...');
     loadModelsConfig().then(config => {
-      console.log('[SelectAvatar] Models config loaded:', config);
       const vox = config.vox.map(([label, filename]) => ({
         id: filename.replace('.vox', ''),
         label,
@@ -133,12 +132,11 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
       // Always select random VOX model when opening selector
       if (vox.length > 0) {
         const randomIndex = Math.floor(Math.random() * vox.length);
-        console.log('[SelectAvatar] Auto-selecting random VOX model:', vox[randomIndex].id);
         setSelectedId(vox[randomIndex].id);
         setAvatarType('vox');
       }
     }).catch(error => {
-      console.error('[SelectAvatar] Failed to load models config:', error);
+      logger.error('ui', '[SelectAvatar] Failed to load models config:', error);
       setModelsLoaded(true); // Still set to true to show the error state
     });
   }, []);
@@ -158,8 +156,6 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
 
   // Initialize preview scene when canvas is ready
   useEffect(() => {
-    console.log('[SelectAvatar] Scene init effect:', { isOpen, hasCanvas: !!previewCanvas });
-
     if (!isOpen || !previewCanvas) {
       setSceneReady(false);
       return;
@@ -191,7 +187,6 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
     scene.add(directionalLight);
 
     previewSceneRef.current = { scene, camera, renderer, cameraDistance };
-    console.log('[SelectAvatar] Scene initialized successfully');
     setSceneReady(true);
 
     // Mouse wheel zoom handler
@@ -238,17 +233,13 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
 
   // Update preview when selection changes (but NOT when just switching tabs)
   useEffect(() => {
-    console.log('[SelectAvatar] Preview effect triggered:', { isOpen, selectedId, avatarUrl, sceneReady, hasScene: !!previewSceneRef.current });
-
     if (!isOpen || !sceneReady || !previewSceneRef.current) {
-      console.log('[SelectAvatar] Preview effect skipped - modal closed or scene not ready');
       return;
     }
 
     // Don't reload preview if no model is selected yet
     // CSM models are an exception - they always have code to render
     if (!selectedId && !avatarUrl && avatarType !== 'csm') {
-      console.log('[SelectAvatar] Preview effect skipped - no model selected');
       return;
     }
 
@@ -292,7 +283,7 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
 
           // Check if result contains an error
           if ('error' in result) {
-            console.error('[SelectAvatar] CSM parse error:', result.error);
+            logger.error('ui', '[SelectAvatar] CSM parse error:', result.error);
             throw new Error(result.error);
           }
 
@@ -335,10 +326,10 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
           mesh.rotation.y = Math.PI; // Rotate 180 degrees to show front
           scene.add(mesh);
           previewSceneRef.current.mesh = mesh;
-          console.log('[SelectAvatar] CSM model loaded successfully');
+          logger.log('ui', '[SelectAvatar] CSM model loaded successfully');
           return;
         } catch (error) {
-          console.error('[SelectAvatar] Failed to load CSM model:', error);
+          logger.error('ui', '[SelectAvatar] Failed to load CSM model:', error);
           // Show error placeholder (wrapped in group for consistent rotation)
           const geometry = new THREE.BoxGeometry(0.5, 1, 0.5);
           const material = new THREE.MeshStandardMaterial({ color: 0xff0000 });
@@ -359,25 +350,21 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
       // Determine the model URL based on selection
       if (avatarUrl) {
         modelUrl = avatarUrl;
-        console.log('[SelectAvatar] Loading preview from URL:', modelUrl);
       } else if (selectedId && selectedId !== 'file') {
         if (avatarType === 'vox') {
           const model = voxModels.find(m => m.id === selectedId);
           if (model) {
             modelUrl = `${import.meta.env.BASE_URL}assets/models/vox/${model.filename}`;
-            console.log('[SelectAvatar] Loading VOX preview:', modelUrl);
           }
         } else if (avatarType === 'glb') {
           const model = glbModels.find(m => m.id === selectedId);
           if (model) {
             modelUrl = `${import.meta.env.BASE_URL}assets/models/glb/${model.filename}`;
-            console.log('[SelectAvatar] Loading GLB preview:', modelUrl);
           }
         }
       }
 
       if (!modelUrl) {
-        console.log('[SelectAvatar] No model URL, showing placeholder');
         // Show placeholder (wrapped in group for consistent rotation)
         const geometry = new THREE.BoxGeometry(0.5, 1, 0.5);
         const material = new THREE.MeshStandardMaterial({ color: 0x6496fa });
@@ -423,9 +410,8 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
           wrapper.rotation.y = Math.PI; // Rotate 180 degrees to show front
           scene.add(wrapper);
           previewSceneRef.current.mesh = wrapper;
-          console.log('[SelectAvatar] GLB model loaded successfully');
         } catch (error) {
-          console.error('[SelectAvatar] Failed to load GLB model:', error);
+          logger.error('ui', '[SelectAvatar] Failed to load GLB model:', error);
           // Show error placeholder (wrapped in group for consistent rotation)
           const geometry = new THREE.BoxGeometry(0.5, 1, 0.5);
           const material = new THREE.MeshStandardMaterial({ color: 0xff0000 });
@@ -484,9 +470,8 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
           mesh.rotation.y = Math.PI; // Rotate 180 degrees to show front
           scene.add(mesh);
           previewSceneRef.current.mesh = mesh;
-          console.log('[SelectAvatar] VOX model loaded successfully');
         } catch (error) {
-          console.error('[SelectAvatar] Failed to load VOX model:', error);
+          logger.error('ui', '[SelectAvatar] Failed to load VOX model:', error);
           // Show error placeholder (wrapped in group for consistent rotation)
           const geometry = new THREE.BoxGeometry(0.5, 1, 0.5);
           const material = new THREE.MeshStandardMaterial({ color: 0xff0000 });
@@ -513,7 +498,6 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
       avatarData: avatarType === 'csm' ? csmCode : undefined,
       teleportAnimationType,
     };
-    console.log('[SelectAvatar] Saving avatar selection:', selection);
     onSave(selection);
     onClose();
   };
@@ -546,7 +530,6 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
           key={model.id}
           as="button"
           onClick={() => {
-            console.log('[SelectAvatar] Model selected:', model.id, 'type:', avatarType);
             setSelectedId(model.id);
             setAvatarUrl('');
           }}

@@ -1,3 +1,4 @@
+import * as logger from '../utils/logger';
 /**
  * Login settings service for persisting user login information
  */
@@ -26,9 +27,9 @@ export class LoginSettingsService {
   static save(settings: LoginSettings): void {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(settings))
-      console.log('[LoginSettings] Saved:', settings.method, settings.pubkey.slice(0, 8))
+      logger.log('service', '[LoginSettings] Saved:', settings.method, settings.pubkey.slice(0, 8))
     } catch (error) {
-      console.error('[LoginSettings] Failed to save:', error)
+      logger.error('service', '[LoginSettings] Failed to save:', error)
     }
   }
 
@@ -43,10 +44,10 @@ export class LoginSettingsService {
       }
 
       const settings = JSON.parse(stored) as LoginSettings
-      console.log('[LoginSettings] Loaded:', settings.method, settings.pubkey.slice(0, 8))
+      logger.log('service', '[LoginSettings] Loaded:', settings.method, settings.pubkey.slice(0, 8))
       return settings
     } catch (error) {
-      console.error('[LoginSettings] Failed to load:', error)
+      logger.error('service', '[LoginSettings] Failed to load:', error)
       return null
     }
   }
@@ -57,9 +58,9 @@ export class LoginSettingsService {
   static clear(): void {
     try {
       localStorage.removeItem(STORAGE_KEY)
-      console.log('[LoginSettings] Cleared')
+      logger.log('service', '[LoginSettings] Cleared')
     } catch (error) {
-      console.error('[LoginSettings] Failed to clear:', error)
+      logger.error('service', '[LoginSettings] Failed to clear:', error)
     }
   }
 
@@ -69,9 +70,9 @@ export class LoginSettingsService {
   static saveGuestAccount(data: GuestAccountData): void {
     try {
       localStorage.setItem(GUEST_ACCOUNT_KEY, JSON.stringify(data))
-      console.log('[LoginSettings] Saved guest account:', data.name)
+      logger.log('service', '[LoginSettings] Saved guest account:', data.name)
     } catch (error) {
-      console.error('[LoginSettings] Failed to save guest account:', error)
+      logger.error('service', '[LoginSettings] Failed to save guest account:', error)
     }
   }
 
@@ -84,7 +85,7 @@ export class LoginSettingsService {
       const stored = localStorage.getItem(GUEST_ACCOUNT_KEY)
       if (stored) {
         const data = JSON.parse(stored) as GuestAccountData
-        console.log('[LoginSettings] Loaded guest account:', data.name)
+        logger.log('service', '[LoginSettings] Loaded guest account:', data.name)
         return data
       }
 
@@ -92,7 +93,7 @@ export class LoginSettingsService {
       const legacy = localStorage.getItem('guestAccount')
       if (legacy) {
         const data = JSON.parse(legacy) as GuestAccountData
-        console.log('[LoginSettings] Loaded legacy guest account:', data.name)
+        logger.log('service', '[LoginSettings] Loaded legacy guest account:', data.name)
         // Migrate to new location
         this.saveGuestAccount(data)
         localStorage.removeItem('guestAccount')
@@ -101,7 +102,7 @@ export class LoginSettingsService {
 
       return null
     } catch (error) {
-      console.error('[LoginSettings] Failed to load guest account:', error)
+      logger.error('service', '[LoginSettings] Failed to load guest account:', error)
       return null
     }
   }
@@ -113,9 +114,9 @@ export class LoginSettingsService {
     try {
       localStorage.removeItem(GUEST_ACCOUNT_KEY)
       localStorage.removeItem('guestAccount')
-      console.log('[LoginSettings] Cleared guest account')
+      logger.log('service', '[LoginSettings] Cleared guest account')
     } catch (error) {
-      console.error('[LoginSettings] Failed to clear guest account:', error)
+      logger.error('service', '[LoginSettings] Failed to clear guest account:', error)
     }
   }
 

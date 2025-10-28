@@ -1,3 +1,4 @@
+import * as logger from '../utils/logger';
 import { VStack, Text, Input, Button, HStack, IconButton, useToast, Tooltip, InputGroup, InputRightElement, Badge, Box } from '@chakra-ui/react'
 import { useState, useEffect, useRef } from 'react'
 import { FiPlus, FiTrash2, FiRefreshCw } from 'react-icons/fi'
@@ -63,7 +64,7 @@ export function NetworkConfigPanel({ isOpen, onClose }: NetworkConfigPanelProps)
         try {
           relay.close()
         } catch (e) {
-          console.error('Error closing relay:', e)
+          logger.error('ui', 'Error closing relay:', e)
         }
       })
       relayInstances.current.clear()
@@ -154,7 +155,7 @@ export function NetworkConfigPanel({ isOpen, onClose }: NetworkConfigPanelProps)
       try {
         instance.close()
       } catch (e) {
-        console.error(`Error closing relay ${url}:`, e)
+        logger.error('ui', `Error closing relay ${url}:`, e)
       }
       relayInstances.current.delete(url)
     }
@@ -292,7 +293,7 @@ export function NetworkConfigPanel({ isOpen, onClose }: NetworkConfigPanelProps)
       try {
         relay.close()
       } catch (e) {
-        console.error(`Error closing relay ${url}:`, e)
+        logger.error('ui', `Error closing relay ${url}:`, e)
       }
     })
     relayInstances.current.clear()

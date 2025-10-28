@@ -1,1 +1,1 @@
-export type ConfigPanelType = 'network' | 'profile' | 'avatar' | 'info' | null
+export type ConfigPanelType = 'config' | 'network' | 'profile' | 'avatar' | 'info' | 'world' | null

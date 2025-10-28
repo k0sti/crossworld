@@ -1,3 +1,4 @@
+import * as logger from '../../utils/logger';
 import * as Moq from '@kixelated/moq'
 import { Effect, Signal } from '@kixelated/signals'
 import { MoqConnectionManager } from './connection'
@@ -29,7 +30,7 @@ class LocationWatcher {
     this.discoverySource = source
 
     const path = Moq.Path.from(`crossworld/location/${LIVE_CHAT_D_TAG}/${npub}`)
-    console.log('[Location Subscriber] Creating watcher for:', {
+    logger.log('voice', '[Location Subscriber] Creating watcher for:', {
       npub,
       path: String(path),
       source,
@@ -62,18 +63,18 @@ class LocationWatcher {
                   discoverySource: this.discoverySource,
                 }
                 this.location.set(participantLocation)
-                console.log('[Location Subscriber] Received location for', npub, ':', location)
+                logger.log('voice', '[Location Subscriber] Received location for', npub, ':', location)
               }
             }
           } catch (err) {
-            console.error('[Location Subscriber] Error reading location for', npub, ':', err)
+            logger.error('voice', '[Location Subscriber] Error reading location for', npub, ':', err)
           }
         })
       })
 
-      console.log('[Location Subscriber] Watcher created for:', npub)
+      logger.log('voice', '[Location Subscriber] Watcher created for:', npub)
     } catch (err) {
-      console.error('[Location Subscriber] Failed to create watcher for', npub, ':', err)
+      logger.error('voice', '[Location Subscriber] Failed to create watcher for', npub, ':', err)
     }
   }
 
@@ -82,7 +83,7 @@ class LocationWatcher {
    */
   markDualDiscovery(): void {
     if (this.discoverySource !== 'both') {
-      console.log('[Location Subscriber] Participant now discovered via both sources:', this.npub)
+      logger.log('voice', '[Location Subscriber] Participant now discovered via both sources:', this.npub)
       this.discoverySource = 'both'
     }
   }
@@ -91,7 +92,7 @@ class LocationWatcher {
    * Clean up resources
    */
   close(): void {
-    console.log('[Location Subscriber] Closing watcher for:', this.npub)
+    logger.log('voice', '[Location Subscriber] Closing watcher for:', this.npub)
     this.signals.close()
     if (this.track) {
       this.track.close()
@@ -122,7 +123,7 @@ export class LocationSubscriber {
    */
   setOwnNpub(npub: string): void {
     this.ownNpub = npub
-    console.log('[Location Subscriber] Own npub set:', npub)
+    logger.log('voice', '[Location Subscriber] Own npub set:', npub)
   }
 
   /**
@@ -134,9 +135,9 @@ export class LocationSubscriber {
       throw new Error('Not connected to MoQ relay')
     }
 
-    console.log('[Location Subscriber] Starting location discovery via MoQ announcements...')
+    logger.log('voice', '[Location Subscriber] Starting location discovery via MoQ announcements...')
     this.startAnnouncementListener(conn)
-    console.log('[Location Subscriber] Now listening for location broadcasts')
+    logger.log('voice', '[Location Subscriber] Now listening for location broadcasts')
   }
 
   /**
@@ -151,7 +152,7 @@ export class LocationSubscriber {
     const signal = this.announcementAbortController.signal
 
     const prefix = Moq.Path.from(`crossworld/location/${LIVE_CHAT_D_TAG}`)
-    console.log('[Location Subscriber] Listening for announcements with prefix:', String(prefix))
+    logger.log('voice', '[Location Subscriber] Listening for announcements with prefix:', String(prefix))
 
     const announced = connection.announced(prefix)
 
@@ -163,7 +164,7 @@ export class LocationSubscriber {
           const entry = await announced.next()
           if (!entry) break
 
-          console.log('[Location Subscriber] Announcement received:', {
+          logger.log('voice', '[Location Subscriber] Announcement received:', {
             path: String(entry.path),
             active: entry.active,
           })
@@ -176,14 +177,14 @@ export class LocationSubscriber {
         }
       } catch (err) {
         if (!signal.aborted) {
-          console.error('[Location Subscriber] Announcement loop failed:', err)
+          logger.error('voice', '[Location Subscriber] Announcement loop failed:', err)
         }
       }
     })()
 
     loop.catch((err) => {
       if (!signal.aborted) {
-        console.error('[Location Subscriber] Announcement loop error:', err)
+        logger.error('voice', '[Location Subscriber] Announcement loop error:', err)
       }
     })
   }
@@ -197,11 +198,11 @@ export class LocationSubscriber {
     const npub = segments[segments.length - 1]
 
     if (!npub || npub === this.ownNpub) {
-      console.log('[Location Subscriber] Skipping own broadcast or invalid npub')
+      logger.log('voice', '[Location Subscriber] Skipping own broadcast or invalid npub')
       return
     }
 
-    console.log('[Location Subscriber] Participant location announced:', npub)
+    logger.log('voice', '[Location Subscriber] Participant location announced:', npub)
 
     const existing = this.watchers.get(npub)
     if (existing) {
@@ -222,7 +223,7 @@ export class LocationSubscriber {
 
     if (!npub) return
 
-    console.log('[Location Subscriber] Location announcement ended:', npub)
+    logger.log('voice', '[Location Subscriber] Location announcement ended:', npub)
     this.removeWatcher(npub)
   }
 
@@ -231,7 +232,7 @@ export class LocationSubscriber {
    */
   private createWatcher(connection: Moq.Connection.Established, npub: string, source: 'nostr' | 'moq' = 'moq'): void {
     try {
-      console.log('[Location Subscriber] Creating watcher for:', npub)
+      logger.log('voice', '[Location Subscriber] Creating watcher for:', npub)
       const watcher = new LocationWatcher(connection, npub, source)
 
       // Subscribe to location changes
@@ -240,10 +241,10 @@ export class LocationSubscriber {
       })
 
       this.watchers.set(npub, watcher)
-      console.log('[Location Subscriber] Watcher created. Total watchers:', this.watchers.size)
+      logger.log('voice', '[Location Subscriber] Watcher created. Total watchers:', this.watchers.size)
       this.updateLocationsList()
     } catch (err) {
-      console.error('[Location Subscriber] Failed to create watcher for', npub, ':', err)
+      logger.error('voice', '[Location Subscriber] Failed to create watcher for', npub, ':', err)
     }
   }
 
@@ -255,7 +256,7 @@ export class LocationSubscriber {
     if (watcher) {
       watcher.close()
       this.watchers.delete(npub)
-      console.log('[Location Subscriber] Watcher removed. Remaining:', this.watchers.size)
+      logger.log('voice', '[Location Subscriber] Watcher removed. Remaining:', this.watchers.size)
       this.updateLocationsList()
     }
   }
@@ -288,7 +289,7 @@ export class LocationSubscriber {
    * Stop listening and clean up all watchers
    */
   stopListening(): void {
-    console.log('[Location Subscriber] Stopping location listening...')
+    logger.log('voice', '[Location Subscriber] Stopping location listening...')
 
     if (this.announcementAbortController) {
       this.announcementAbortController.abort()
@@ -303,7 +304,7 @@ export class LocationSubscriber {
 
     this.locations.set(new Map())
 
-    console.log('[Location Subscriber] Stopped listening. Closed', count, 'watchers')
+    logger.log('voice', '[Location Subscriber] Stopped listening. Closed', count, 'watchers')
   }
 
   /**

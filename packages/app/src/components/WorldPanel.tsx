@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Box, Text, VStack, HStack, Slider, SliderTrack, SliderFilledTrack, SliderThumb, Switch, Badge, Popover, PopoverTrigger, PopoverContent, PopoverBody, Button } from '@chakra-ui/react';
+import { Box, Text, VStack, HStack, Switch, Badge, Popover, PopoverTrigger, PopoverContent, PopoverBody, Button } from '@chakra-ui/react';
 import { CubeCoord } from '../types/cube-coord';
-import { getMacroDepth, getMicroDepth, onDepthChange, setMacroDepth as setGlobalMacroDepth } from '../config/depth-config';
+import { getMacroDepth, getMicroDepth, onDepthChange, setMacroDepth as setGlobalMacroDepth, setMicroDepth as setGlobalMicroDepth } from '../config/depth-config';
 
 export interface DebugInfo {
   cursorWorld?: { x: number; y: number; z: number };
@@ -18,13 +18,6 @@ export interface DebugInfo {
 interface WorldPanelProps {
   info: DebugInfo;
   onApplyDepthSettings?: (worldDepth: number, scaleDepth: number) => void;
-  // Sun controls
-  timeOfDay: number;
-  onTimeOfDayChange: (time: number) => void;
-  sunAutoMove: boolean;
-  onSunAutoMoveChange: (auto: boolean) => void;
-  sunSpeed: number;
-  onSunSpeedChange: (speed: number) => void;
   // Speech feature
   speechEnabled: boolean;
   onSpeechEnabledChange: (enabled: boolean) => void;
@@ -34,25 +27,29 @@ interface WorldPanelProps {
   // Face mesh toggle
   faceMeshEnabled: boolean;
   onFaceMeshEnabledChange: (enabled: boolean) => void;
+  // Wireframe toggle
+  wireframeEnabled: boolean;
+  onWireframeEnabledChange: (enabled: boolean) => void;
   triangleCount?: number;
+  // Publish world
+  onPublishWorld?: () => void;
+  isLoggedIn?: boolean;
 }
 
 export function WorldPanel({
   info,
   onApplyDepthSettings,
-  timeOfDay,
-  onTimeOfDayChange,
-  sunAutoMove,
-  onSunAutoMoveChange,
-  sunSpeed,
-  onSunSpeedChange,
   speechEnabled,
   onSpeechEnabledChange,
   worldGridVisible,
   onWorldGridVisibleChange,
   faceMeshEnabled,
   onFaceMeshEnabledChange,
+  wireframeEnabled,
+  onWireframeEnabledChange,
   triangleCount,
+  onPublishWorld,
+  isLoggedIn,
 }: WorldPanelProps) {
   const [macroDepth, setMacroDepth] = useState(getMacroDepth());
   const [microDepth, setMicroDepth] = useState(getMicroDepth());
@@ -77,23 +74,16 @@ export function WorldPanel({
 
   const handleMicroChange = (newMicro: number) => {
     setMicroDepth(newMicro);
+    setGlobalMicroDepth(newMicro);
     if (onApplyDepthSettings) {
       const totalDepth = macroDepth + newMicro;
       onApplyDepthSettings(totalDepth, newMicro);
     }
   };
 
-  const getTimeOfDayLabel = (time: number): string => {
-    if (time < 0.25) return 'Night';
-    if (time < 0.35) return 'Dawn';
-    if (time < 0.65) return 'Day';
-    if (time < 0.75) return 'Dusk';
-    return 'Night';
-  };
-
   const currentMacro = macroDepth;
   const currentMicro = microDepth;
-  const worldSize = 1 << currentMacro; // 2^macro
+  const worldSize = 1 << currentMacro; // 2^macro (world size independent of micro)
 
   const formatNum = (n: number | undefined) => n?.toFixed(3) ?? 'N/A';
   const formatInt = (n: number | undefined) => n !== undefined ? Math.round(n).toString() : 'N/A';
@@ -105,8 +95,8 @@ export function WorldPanel({
   return (
     <Box
       position="fixed"
-      bottom={2}
-      left={14}
+      top="60px"
+      left={2}
       bg="rgba(0, 0, 0, 0.75)"
       color="white"
       p={2}
@@ -124,122 +114,84 @@ export function WorldPanel({
 
           {/* Macro depth selector */}
           <Popover placement="top">
-            <PopoverTrigger>
-              <Badge
-                colorScheme="cyan"
-                fontSize="xs"
-                cursor="pointer"
-                _hover={{ opacity: 0.8 }}
-              >
-                macro {currentMacro}
-              </Badge>
-            </PopoverTrigger>
-            <PopoverContent bg="gray.800" borderColor="cyan.500" width="auto" pointerEvents="auto">
-              <PopoverBody p={1}>
-                <VStack spacing={1}>
-                  {[8, 7, 6, 5, 4, 3, 2, 1].map((depth) => (
-                    <Button
-                      key={depth}
-                      size="xs"
-                      variant={currentMacro === depth ? 'solid' : 'ghost'}
-                      colorScheme="cyan"
-                      onClick={() => handleMacroChange(depth)}
-                      width="100%"
-                    >
-                      {depth}
-                    </Button>
-                  ))}
-                </VStack>
-              </PopoverBody>
-            </PopoverContent>
+            {({ onClose }) => (
+              <>
+                <PopoverTrigger>
+                  <Badge
+                    colorScheme="cyan"
+                    fontSize="xs"
+                    cursor="pointer"
+                    _hover={{ opacity: 0.8 }}
+                  >
+                    macro {currentMacro}
+                  </Badge>
+                </PopoverTrigger>
+                <PopoverContent bg="gray.800" borderColor="cyan.500" width="auto" pointerEvents="auto">
+                  <PopoverBody p={1}>
+                    <VStack spacing={1}>
+                      {[8, 7, 6, 5, 4, 3, 2, 1].map((depth) => (
+                        <Button
+                          key={depth}
+                          size="xs"
+                          variant={currentMacro === depth ? 'solid' : 'ghost'}
+                          colorScheme="cyan"
+                          onClick={() => {
+                            handleMacroChange(depth);
+                            onClose();
+                          }}
+                          width="100%"
+                        >
+                          {depth}
+                        </Button>
+                      ))}
+                    </VStack>
+                  </PopoverBody>
+                </PopoverContent>
+              </>
+            )}
           </Popover>
 
           {/* Micro depth selector */}
           <Popover placement="top">
-            <PopoverTrigger>
-              <Badge
-                colorScheme="cyan"
-                fontSize="xs"
-                cursor="pointer"
-                _hover={{ opacity: 0.8 }}
-              >
-                micro {currentMicro}
-              </Badge>
-            </PopoverTrigger>
-            <PopoverContent bg="gray.800" borderColor="cyan.500" width="auto" pointerEvents="auto">
-              <PopoverBody p={1}>
-                <VStack spacing={1}>
-                  {[3, 2, 1, 0].map((depth) => (
-                    <Button
-                      key={depth}
-                      size="xs"
-                      variant={currentMicro === depth ? 'solid' : 'ghost'}
-                      colorScheme="cyan"
-                      onClick={() => handleMicroChange(depth)}
-                      width="100%"
-                    >
-                      {depth}
-                    </Button>
-                  ))}
-                </VStack>
-              </PopoverBody>
-            </PopoverContent>
+            {({ onClose }) => (
+              <>
+                <PopoverTrigger>
+                  <Badge
+                    colorScheme="cyan"
+                    fontSize="xs"
+                    cursor="pointer"
+                    _hover={{ opacity: 0.8 }}
+                  >
+                    micro {currentMicro}
+                  </Badge>
+                </PopoverTrigger>
+                <PopoverContent bg="gray.800" borderColor="cyan.500" width="auto" pointerEvents="auto">
+                  <PopoverBody p={1}>
+                    <VStack spacing={1}>
+                      {[3, 2, 1, 0].map((depth) => (
+                        <Button
+                          key={depth}
+                          size="xs"
+                          variant={currentMicro === depth ? 'solid' : 'ghost'}
+                          colorScheme="cyan"
+                          onClick={() => {
+                            handleMicroChange(depth);
+                            onClose();
+                          }}
+                          width="100%"
+                        >
+                          {depth}
+                        </Button>
+                      ))}
+                    </VStack>
+                  </PopoverBody>
+                </PopoverContent>
+              </>
+            )}
           </Popover>
 
-          <Badge colorScheme="blue" fontSize="xs">size {worldSize}×{worldSize}</Badge>
+          <Badge colorScheme="blue" fontSize="xs">size {worldSize}</Badge>
         </HStack>
-
-        {/* Time of day */}
-        <Box pointerEvents="auto">
-          <HStack spacing={2} mb={1}>
-            <Text color="yellow.300">Time</Text>
-            <Text color="yellow.200" fontWeight="bold" fontSize="xs">
-              {getTimeOfDayLabel(timeOfDay)}
-            </Text>
-            <Switch
-              isChecked={sunAutoMove}
-              onChange={(e) => onSunAutoMoveChange(e.target.checked)}
-              size="sm"
-              colorScheme="yellow"
-              ml="auto"
-            />
-          </HStack>
-          <Slider
-            value={timeOfDay}
-            onChange={onTimeOfDayChange}
-            min={0}
-            max={1}
-            step={0.01}
-            size="sm"
-            mb={1}
-          >
-            <SliderTrack bg="gray.700">
-              <SliderFilledTrack bg="yellow.400" />
-            </SliderTrack>
-            <SliderThumb boxSize={3} />
-          </Slider>
-          {sunAutoMove && (
-            <Box mb={1}>
-              <HStack spacing={2} mb={1}>
-                <Text color="yellow.300">Speed</Text>
-                <Text color="yellow.200" fontSize="xs">{sunSpeed.toFixed(3)}x</Text>
-              </HStack>
-              <Slider
-                value={sunSpeed}
-                onChange={onSunSpeedChange}
-                min={0.001}
-                max={0.1}
-                step={0.001}
-                size="sm"
-              >
-                <SliderTrack bg="gray.700">
-                  <SliderFilledTrack bg="yellow.400" />
-                </SliderTrack>
-                <SliderThumb boxSize={3} />
-              </Slider>
-            </Box>
-          )}
-        </Box>
 
         {/* Cursor info with badge */}
         <HStack spacing={1}>
@@ -293,6 +245,43 @@ export function WorldPanel({
             colorScheme="orange"
           />
         </HStack>
+
+        {/* Wireframe toggle */}
+        <HStack spacing={2} justify="space-between" pointerEvents="auto">
+          <Text color="pink.300">Wireframe</Text>
+          <Switch
+            isChecked={wireframeEnabled}
+            onChange={(e) => onWireframeEnabledChange(e.target.checked)}
+            size="sm"
+            colorScheme="pink"
+          />
+        </HStack>
+
+        {/* Publish World button (only visible when logged in) */}
+        {isLoggedIn && onPublishWorld && (
+          <Box
+            as="button"
+            onClick={onPublishWorld}
+            width="100%"
+            py={2}
+            px={2}
+            bg="rgba(80, 80, 80, 0.3)"
+            borderRadius="md"
+            border="1px solid rgba(255, 255, 255, 0.1)"
+            _hover={{
+              bg: 'rgba(100, 100, 100, 0.4)',
+              borderColor: 'rgba(255, 255, 255, 0.2)',
+            }}
+            cursor="pointer"
+            transition="all 0.1s"
+            pointerEvents="auto"
+            mt={1}
+          >
+            <Text color="white" fontSize="sm" textAlign="center">
+              Publish
+            </Text>
+          </Box>
+        )}
       </VStack>
     </Box>
   );

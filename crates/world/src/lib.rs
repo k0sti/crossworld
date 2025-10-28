@@ -20,16 +20,16 @@ pub struct GeometryEngine {
 #[wasm_bindgen]
 impl GeometryEngine {
     #[wasm_bindgen(constructor)]
-    pub fn new(world_depth: u32, scale_depth: u32) -> Self {
+    pub fn new(macro_depth: u32, micro_depth: u32) -> Self {
         web_sys::console::log_1(
             &format!(
-                "GeometryEngine initialized with world_depth={}, scale_depth={}",
-                world_depth, scale_depth
+                "GeometryEngine initialized with macro_depth={}, micro_depth={}",
+                macro_depth, micro_depth
             )
             .into(),
         );
         Self {
-            engine: RefCell::new(GeometryEngineInternal::new(world_depth, scale_depth)),
+            engine: RefCell::new(GeometryEngineInternal::new(macro_depth, micro_depth)),
         }
     }
 
@@ -78,11 +78,17 @@ impl GeometryEngine {
     pub fn set_ground_render_mode(&self, use_cube: bool) {
         self.engine.borrow_mut().set_ground_render_mode(use_cube);
     }
+
+    /// Export the current world state to CSM format
+    #[wasm_bindgen(js_name = exportToCSM)]
+    pub fn export_to_csm(&self) -> String {
+        self.engine.borrow().export_to_csm()
+    }
 }
 
 impl Default for GeometryEngine {
     fn default() -> Self {
-        Self::new(3, 0) // Default: depth 3 (macro=3, micro=0), scale 0
+        Self::new(3, 0) // Default: macro depth 3, micro depth 0
     }
 }
 

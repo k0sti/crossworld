@@ -1,5 +1,5 @@
 import { Box, Grid, VStack, Text } from '@chakra-ui/react'
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { DAWNBRINGER_32 } from '@crossworld/editor'
 
 interface ColorPaletteProps {
@@ -66,9 +66,8 @@ export function ColorPalette({ isVisible, onColorSelect }: ColorPaletteProps) {
             const leftIndex = i;
             const rightIndex = i + 16;
             return (
-              <>
+              <React.Fragment key={i}>
                 <Box
-                  key={leftIndex}
                   as="button"
                   w="24px"
                   h="24px"
@@ -103,7 +102,7 @@ export function ColorPalette({ isVisible, onColorSelect }: ColorPaletteProps) {
                   transition="all 0.1s"
                   title={`${rightIndex}: ${DAWNBRINGER_32[rightIndex]}`}
                 />
-              </>
+              </React.Fragment>
             );
           })}
         </Grid>

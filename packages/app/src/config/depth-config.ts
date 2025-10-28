@@ -1,3 +1,4 @@
+import * as logger from '../utils/logger';
 /**
  * Shared depth configuration for the entire application.
  * This is the single source of truth for macro and micro depth values.
@@ -6,8 +7,8 @@
 /** Current macro depth - octree subdivision levels */
 let currentMacroDepth = 3;
 
-/** Current micro depth - rendering scale depth (fixed at 0) */
-const currentMicroDepth = 0;
+/** Current micro depth - rendering scale depth */
+let currentMicroDepth = 0;
 
 /** Callbacks to notify when depth changes */
 const depthChangeListeners: Array<(macroDepth: number, microDepth: number) => void> = [];
@@ -20,7 +21,7 @@ export function getMacroDepth(): number {
 }
 
 /**
- * Get current micro depth (always 0)
+ * Get current micro depth
  */
 export function getMicroDepth(): number {
   return currentMicroDepth;
@@ -38,10 +39,22 @@ export function getTotalDepth(): number {
  */
 export function setMacroDepth(depth: number): void {
   if (depth < 1 || depth > 10) {
-    console.warn(`Invalid macro depth ${depth}, must be between 1 and 10`);
+    logger.warn('common', `Invalid macro depth ${depth}, must be between 1 and 10`);
     return;
   }
   currentMacroDepth = depth;
+  notifyListeners();
+}
+
+/**
+ * Set micro depth and notify listeners
+ */
+export function setMicroDepth(depth: number): void {
+  if (depth < 0 || depth > 3) {
+    logger.warn('common', `Invalid micro depth ${depth}, must be between 0 and 3`);
+    return;
+  }
+  currentMicroDepth = depth;
   notifyListeners();
 }
 

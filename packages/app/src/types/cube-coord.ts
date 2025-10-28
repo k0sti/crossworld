@@ -1,32 +1,29 @@
 import {
-  getMaxVoxelsPerSide,
-  getWorldSize,
   getHalfWorld,
-  getWorldToOctreeScale,
   getVoxelSize as getVoxelSizeFromGeometry
 } from '../constants/geometry';
-import { getMicroDepth, getTotalDepth } from '../config/depth-config';
+import { getMacroDepth, getMicroDepth } from '../config/depth-config';
 
 /**
  * Represents a cube coordinate in octree space at a specific depth level.
  *
- * Coordinates are always in octree space at max depth (0 to maxVoxelsPerSide-1).
- * The depth field indicates the target depth for operations (coarser depths use fewer bits).
+ * Coordinates are in octree space at the target depth (0 to 2^depth-1).
+ * The depth field indicates the depth level for these coordinates.
  *
  * Coordinate system (origin centered at ground plane):
  * - World space: x[-halfWorld, halfWorld] (worldSize units per side)
- * - Octree space: x[0, maxVoxelsPerSide-1] (voxels per side at max depth)
+ * - Octree space at depth d: x[0, 2^d-1] (voxels per side at depth d)
  * - World (0,0,0) maps to octree center
  * - Ground plane is at y=0
  */
 export interface CubeCoord {
-  /** X coordinate in octree space at max depth [0, maxVoxelsPerSide) */
+  /** X coordinate in octree space at target depth [0, 2^depth) */
   x: number;
-  /** Y coordinate in octree space at max depth [0, maxVoxelsPerSide) */
+  /** Y coordinate in octree space at target depth [0, 2^depth) */
   y: number;
-  /** Z coordinate in octree space at max depth [0, maxVoxelsPerSide) */
+  /** Z coordinate in octree space at target depth [0, 2^depth) */
   z: number;
-  /** Target octree depth level (totalDepth=finest, lower=coarser) */
+  /** Target octree depth level (higher=finer subdivision) */
   depth: number;
 }
 
@@ -44,19 +41,30 @@ export function worldToCube(
   worldZ: number,
   depth: number
 ): CubeCoord {
-  const microDepth = getMicroDepth();
-  const totalDepth = getTotalDepth();
+  const macroDepth = getMacroDepth();
+  const halfWorld = getHalfWorld(macroDepth);
 
-  const halfWorld = getHalfWorld(totalDepth, microDepth);
-  const worldToOctreeScale = getWorldToOctreeScale(microDepth);
+  // Convert world coords to octree coords at target depth
+  // World: x[-halfWorld, halfWorld] (in world units)
+  // Octree: x[0, 2^depth-1] (in octree voxels at target depth)
+  let octreeX: number, octreeY: number, octreeZ: number;
 
-  // Convert world coords to octree coords at max depth
-  // World: x[-halfWorld, halfWorld]
-  // Octree: x[0, maxVoxelsPerSide-1]
-  // Apply uniform +halfWorld offset to center the coordinate system
-  const octreeX = Math.floor((worldX + halfWorld) * worldToOctreeScale);
-  const octreeY = Math.floor((worldY + halfWorld) * worldToOctreeScale);
-  const octreeZ = Math.floor((worldZ + halfWorld) * worldToOctreeScale);
+  if (depth >= macroDepth) {
+    // Fine voxels: multiple octree voxels per world unit
+    // voxelsPerWorldUnit = 2^(depth-macro)
+    const scale = 1 << (depth - macroDepth);
+    octreeX = Math.floor((worldX + halfWorld) * scale);
+    octreeY = Math.floor((worldY + halfWorld) * scale);
+    octreeZ = Math.floor((worldZ + halfWorld) * scale);
+  } else {
+    // Coarse voxels: fractional octree voxels per world unit
+    // Each voxel covers multiple world units
+    // worldUnitsPerVoxel = 2^(macro-depth)
+    const scale = 1 << (macroDepth - depth);
+    octreeX = Math.floor((worldX + halfWorld) / scale);
+    octreeY = Math.floor((worldY + halfWorld) / scale);
+    octreeZ = Math.floor((worldZ + halfWorld) / scale);
+  }
 
   return {
     x: octreeX,
@@ -74,19 +82,24 @@ export function worldToCube(
 export function cubeToWorld(
   coord: CubeCoord
 ): [number, number, number] {
-  const microDepth = getMicroDepth();
-  const totalDepth = getTotalDepth();
+  const macroDepth = getMacroDepth();
+  const halfWorld = getHalfWorld(macroDepth);
 
-  const worldSize = getWorldSize(totalDepth, microDepth);
-  const maxVoxelsPerSide = getMaxVoxelsPerSide(totalDepth);
-  const halfWorld = getHalfWorld(totalDepth, microDepth);
+  let worldX: number, worldY: number, worldZ: number;
 
-  const scale = worldSize / maxVoxelsPerSide;
-
-  // Remove the +halfWorld offset to convert back to centered world coords
-  const worldX = coord.x * scale - halfWorld;
-  const worldY = coord.y * scale - halfWorld;
-  const worldZ = coord.z * scale - halfWorld;
+  if (coord.depth >= macroDepth) {
+    // Fine voxels: multiple octree voxels per world unit
+    const scale = 1 << (coord.depth - macroDepth);
+    worldX = coord.x / scale - halfWorld;
+    worldY = coord.y / scale - halfWorld;
+    worldZ = coord.z / scale - halfWorld;
+  } else {
+    // Coarse voxels: each voxel covers multiple world units
+    const scale = 1 << (macroDepth - coord.depth);
+    worldX = coord.x * scale - halfWorld;
+    worldY = coord.y * scale - halfWorld;
+    worldZ = coord.z * scale - halfWorld;
+  }
 
   return [worldX, worldY, worldZ];
 }
@@ -97,9 +110,9 @@ export function cubeToWorld(
  * @returns Voxel size in world units
  */
 export function getVoxelSize(depth: number): number {
-  const totalDepth = getTotalDepth();
+  const macroDepth = getMacroDepth();
   const microDepth = getMicroDepth();
-  return getVoxelSizeFromGeometry(depth, totalDepth, microDepth);
+  return getVoxelSizeFromGeometry(depth, macroDepth, microDepth);
 }
 
 /**
@@ -110,9 +123,8 @@ export function getVoxelSize(depth: number): number {
  * @returns true if coordinates are valid
  */
 export function isWithinWorldBounds(x: number, z: number, size: number = 1): boolean {
-  const totalDepth = getTotalDepth();
-  const microDepth = getMicroDepth();
-  const halfWorld = getHalfWorld(totalDepth, microDepth);
+  const macroDepth = getMacroDepth();
+  const halfWorld = getHalfWorld(macroDepth);
 
   const minBound = -halfWorld;
   const maxBound = halfWorld - size;
@@ -126,9 +138,8 @@ export function isWithinWorldBounds(x: number, z: number, size: number = 1): boo
  * @param z Octree Z coordinate
  * @returns true if coordinates are valid
  */
-export function isWithinOctreeBounds(x: number, y: number, z: number): boolean {
-  const totalDepth = getTotalDepth();
-  const maxVoxelsPerSide = getMaxVoxelsPerSide(totalDepth);
+export function isWithinOctreeBounds(x: number, y: number, z: number, depth: number): boolean {
+  const maxVoxelsPerSide = 1 << depth; // 2^depth
 
   return x >= 0 && x < maxVoxelsPerSide &&
          y >= 0 && y < maxVoxelsPerSide &&
@@ -142,9 +153,8 @@ export function isWithinOctreeBounds(x: number, y: number, z: number): boolean {
  * @returns Clamped [x, z] coordinates
  */
 export function clampToWorldBounds(x: number, z: number): [number, number] {
-  const totalDepth = getTotalDepth();
-  const microDepth = getMicroDepth();
-  const halfWorld = getHalfWorld(totalDepth, microDepth);
+  const macroDepth = getMacroDepth();
+  const halfWorld = getHalfWorld(macroDepth);
 
   const minBound = -halfWorld + 1;
   const maxBound = halfWorld - 1;

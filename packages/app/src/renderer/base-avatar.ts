@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Transform } from './transform';
 import { TeleportAnimation, type TeleportAnimationType } from './teleport-animation';
+import { ProfileIcon } from './profile-icon';
 
 /**
  * Common interface for all avatar types (GLB, VOX, etc.)
@@ -18,6 +19,10 @@ export interface IAvatar {
   teleportTo(x: number, z: number, animationType: TeleportAnimationType): void;
   setPositionImmediate(x: number, z: number): void;
   setRunSpeed(isRunning: boolean): void;
+
+  // Profile icon
+  setProfilePicture(pictureUrl: string | null): Promise<void>;
+  setDisplayName(displayName: string): void;
 
   // State
   isCurrentlyMoving(): boolean;
@@ -44,6 +49,7 @@ export abstract class BaseAvatar implements IAvatar {
   protected isRunning: boolean = false;
   protected teleportAnimation: TeleportAnimation | null = null;
   protected scene: THREE.Scene | null = null;
+  protected profileIcon: ProfileIcon | null = null;
 
   // Smooth movement properties
   protected velocity: THREE.Vector2 = new THREE.Vector2(0, 0);
@@ -66,6 +72,11 @@ export abstract class BaseAvatar implements IAvatar {
 
     this.group = new THREE.Group();
     this.transform.applyToObject3D(this.group);
+
+    // Create profile icon and add to group
+    this.profileIcon = new ProfileIcon(0.8);
+    this.profileIcon.setPosition(0, 2.1, 0); // Position above avatar (lowered to be closer)
+    this.group.add(this.profileIcon.getSprite());
   }
 
   // ========== Abstract methods (subclass-specific) ==========
@@ -113,6 +124,21 @@ export abstract class BaseAvatar implements IAvatar {
 
   setScene(scene: THREE.Scene): void {
     this.scene = scene;
+  }
+
+  async setProfilePicture(pictureUrl: string | null): Promise<void> {
+    if (!this.profileIcon) return;
+
+    if (pictureUrl) {
+      await this.profileIcon.loadPicture(pictureUrl);
+    } else {
+      this.profileIcon.resetToDefault();
+    }
+  }
+
+  setDisplayName(displayName: string): void {
+    if (!this.profileIcon) return;
+    this.profileIcon.setDisplayName(displayName);
   }
 
   setPositionImmediate(x: number, z: number): void {
