@@ -1,5 +1,8 @@
 use crate::mesh_builder::MeshBuilder;
-use crate::neighbor_traversal::traverse_octree_with_neighbors;
+use crate::neighbor_traversal::{
+    traverse_with_neighbors, NeighborGrid, OFFSET_BACK, OFFSET_DOWN, OFFSET_FRONT, OFFSET_LEFT,
+    OFFSET_RIGHT, OFFSET_UP,
+};
 use crate::octree::Cube;
 
 /// Face direction for cube faces
@@ -84,136 +87,84 @@ where
     B: MeshBuilder,
     F: Fn(i32) -> [f32; 3] + Copy,
 {
-    let grid_size = 1 << max_depth; // 2^max_depth
-    let voxel_size = 1.0 / grid_size as f32;
+    // Create initial neighbor grid and traverse
+    let grid = NeighborGrid::new(root, 33, 0);
+    let mut face_count = 0;
+    traverse_with_neighbors(
+        &grid,
+        &mut |view, coord, _subleaf| {
+            let center = view.center();
+            let center_id = center.id();
 
-    // Traverse octree with neighbor context
-    traverse_octree_with_neighbors(root, max_depth, |view, coord| {
-        let center = view.center();
+            // Only process empty voxels
+            if center_id != 0 {
+                return false;
+            }
 
-        // Only process leaf voxels (Solid nodes that won't subdivide further)
-        // Skip if this is a branching node (Cubes)
-        if matches!(**center, Cube::Cubes(_)) {
-            return;
-        }
+            // Calculate voxel size based on actual depth of this voxel
+            // coord.depth counts down from max_depth as we traverse
+            // Coordinate space: positions are in [0, 2^(max_depth - coord.depth + 1))
+            // because octants start in [0, 2) space, not [0, 1)
+            let voxel_size = 1.0 / (1 << (max_depth - coord.depth - 1)) as f32;
 
-        let center_id = center.id();
+            // Calculate position in normalized [0,1] space
+            let x = coord.pos.x as f32 * voxel_size;
+            let y = coord.pos.y as f32 * voxel_size;
+            let z = coord.pos.z as f32 * voxel_size;
 
-        // Only process empty voxels
-        if center_id != 0 {
-            return;
-        }
+            // Check all 6 neighbors for subdivision requirements and face generation
+            // For each direction, we render the opposite face of the solid neighbor
+            // with normal pointing from solid into empty space
+            const DIRECTIONS: [(Face, i32, f32, f32, f32); 6] = [
+                (Face::Right, OFFSET_LEFT, -1.0, 0.0, 0.0), // Left neighbor: render RIGHT face
+                (Face::Left, OFFSET_RIGHT, 1.0, 0.0, 0.0),  // Right neighbor: render LEFT face
+                (Face::Top, OFFSET_DOWN, 0.0, -1.0, 0.0),   // Down neighbor: render TOP face
+                (Face::Bottom, OFFSET_UP, 0.0, 1.0, 0.0),   // Up neighbor: render BOTTOM face
+                (Face::Front, OFFSET_BACK, 0.0, 0.0, -1.0), // Back neighbor: render FRONT face
+                (Face::Back, OFFSET_FRONT, 0.0, 0.0, 1.0),  // Front neighbor: render BACK face
+            ];
 
-        // Calculate position in normalized [0,1] space
-        let x = coord.pos.x as f32 * voxel_size;
-        let y = coord.pos.y as f32 * voxel_size;
-        let z = coord.pos.z as f32 * voxel_size;
+            let mut should_subdivide = false;
 
-        // Check all 6 neighbors and add faces where neighbor is solid
-        // For each direction, we render the opposite face of the solid neighbor
-        // with normal pointing from solid into empty space
+            for (face, dir_offset, dx, dy, dz) in DIRECTIONS {
+                if let Some(neighbor_cube) = view.get(dir_offset) {
+                    let neighbor_id = neighbor_cube.id();
 
-        // Left neighbor solid: render its RIGHT face (normal +X pointing into empty)
-        check_and_add_face(
-            Face::Right,
-            view.left(),
-            x - voxel_size,
-            y,
-            z,
-            voxel_size,
-            builder,
-            &color_fn,
-        );
+                    // Skip empty neighbors
+                    if neighbor_id == 0 {
+                        continue;
+                    }
 
-        // Right neighbor solid: render its LEFT face (normal -X pointing into empty)
-        check_and_add_face(
-            Face::Left,
-            view.right(),
-            x + voxel_size,
-            y,
-            z,
-            voxel_size,
-            builder,
-            &color_fn,
-        );
+                    // Check if neighbor is subdivided (branch node)
+                    // If so, we need to subdivide this voxel to match the detail level
+                    if matches!(**neighbor_cube, Cube::Cubes(_)) {
+                        should_subdivide = true;
+                        continue; // Don't generate face, need to subdivide first
+                    }
 
-        // Down neighbor solid: render its TOP face (normal +Y pointing into empty)
-        check_and_add_face(
-            Face::Top,
-            view.down(),
-            x,
-            y - voxel_size,
-            z,
-            voxel_size,
-            builder,
-            &color_fn,
-        );
+                    // Neighbor is a leaf at the same depth - generate face
+                    let nx = x + dx * voxel_size;
+                    let ny = y + dy * voxel_size;
+                    let nz = z + dz * voxel_size;
+                    let vertices = face.vertices(nx, ny, nz, voxel_size);
+                    let normal = face.normal();
+                    let color = color_fn(neighbor_id);
+                    builder.add_face(vertices, normal, color);
+                    face_count += 1;
+                }
+            }
 
-        // Up neighbor solid: render its BOTTOM face (normal -Y pointing into empty)
-        check_and_add_face(
-            Face::Bottom,
-            view.up(),
-            x,
-            y + voxel_size,
-            z,
-            voxel_size,
-            builder,
-            &color_fn,
-        );
+            // Subdivide if any neighbor is octa
+            should_subdivide
+        },
+        max_depth,
+    );
 
-        // Back neighbor solid: render its FRONT face (normal +Z pointing into empty)
-        check_and_add_face(
-            Face::Front,
-            view.back(),
-            x,
-            y,
-            z - voxel_size,
-            voxel_size,
-            builder,
-            &color_fn,
-        );
-
-        // Front neighbor solid: render its BACK face (normal -Z pointing into empty)
-        check_and_add_face(
-            Face::Back,
-            view.front(),
-            x,
-            y,
-            z + voxel_size,
-            voxel_size,
-            builder,
-            &color_fn,
-        );
-    });
-}
-
-/// Check if neighbor is solid and add face if needed
-#[allow(clippy::too_many_arguments)]
-fn check_and_add_face<B, F>(
-    face: Face,
-    neighbor: Option<&std::rc::Rc<Cube<i32>>>,
-    x: f32,
-    y: f32,
-    z: f32,
-    size: f32,
-    builder: &mut B,
-    color_fn: &F,
-) where
-    B: MeshBuilder,
-    F: Fn(i32) -> [f32; 3],
-{
-    if let Some(neighbor_cube) = neighbor {
-        let neighbor_id = neighbor_cube.id();
-
-        // Only add face if neighbor is solid (non-zero)
-        if neighbor_id != 0 {
-            let vertices = face.vertices(x, y, z, size);
-            let normal = face.normal();
-            let color = color_fn(neighbor_id);
-
-            builder.add_face(vertices, normal, color);
-        }
-    }
+    tracing::debug!(
+        "[generate_face_mesh] Generated {} faces at max_depth={}",
+        face_count,
+        max_depth
+    );
 }
 
 #[cfg(test)]
