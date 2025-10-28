@@ -104,8 +104,8 @@ where
             // Calculate voxel size based on actual depth of this voxel
             // coord.depth counts down from max_depth as we traverse
             // Coordinate space: positions are in [0, 2^(max_depth - coord.depth + 1))
-            // because octants start in [0, 2) space, not [0, 1)
-            let voxel_size = 1.0 / (1 << (max_depth - coord.depth - 1)) as f32;
+            // because octants start in [0, 2) space and double each level down
+            let voxel_size = 1.0 / (1 << (max_depth - coord.depth + 1)) as f32;
 
             // Calculate position in normalized [0,1] space
             let x = coord.pos.x as f32 * voxel_size;
