@@ -1,3 +1,4 @@
+import * as logger from '../utils/logger';
 import { SimplePool, type Event } from 'nostr-tools'
 import { npubEncode } from 'nostr-tools/nip19'
 import { WORLD_RELAYS, getLiveChatATag, getAvatarStateDTag, AVATAR_STATE_CONFIG } from '../config'
@@ -133,7 +134,7 @@ export class AvatarStateService {
    */
   async startSubscription(): Promise<void> {
     if (this.subscription) {
-      console.warn('Avatar state subscription already active')
+      logger.warn('service', 'Avatar state subscription already active')
       return
     }
 
@@ -145,7 +146,7 @@ export class AvatarStateService {
 
     // Step 1: Query existing state events (30317) without 'since'
     // This gets all current avatar states regardless of age
-    console.log('[AvatarState] Fetching existing state events...')
+    logger.log('service', '[AvatarState] Fetching existing state events...')
     const existingStates = await this.pool.querySync(
       WORLD_RELAYS,
       {
@@ -160,10 +161,10 @@ export class AvatarStateService {
       this.handleStateEvent(event)
     })
 
-    console.log(`[AvatarState] Loaded ${existingStates.length} existing state events`)
+    logger.log('service', `[AvatarState] Loaded ${existingStates.length} existing state events`)
 
     // Step 2: Query recent update events (1317) from the last hour
-    console.log('[AvatarState] Fetching recent update events...')
+    logger.log('service', '[AvatarState] Fetching recent update events...')
     const recentUpdates = await this.pool.querySync(
       WORLD_RELAYS,
       {
@@ -178,7 +179,7 @@ export class AvatarStateService {
       this.handleUpdateEvent(event)
     })
 
-    console.log(`[AvatarState] Loaded ${recentUpdates.length} recent update events`)
+    logger.log('service', `[AvatarState] Loaded ${recentUpdates.length} recent update events`)
 
     // Disable batching and send a single notification with all loaded states
     this.batchingNotifications = false
@@ -201,7 +202,7 @@ export class AvatarStateService {
           }
         },
         oneose: () => {
-          console.log('[AvatarState] Live subscription established')
+          logger.log('service', '[AvatarState] Live subscription established')
         },
       }
     )
@@ -243,7 +244,7 @@ export class AvatarStateService {
     // Parse state event
     const parsed = this.parseStateEvent(event)
     if (!parsed) {
-      console.warn(`[AvatarState] Skipping invalid state event from ${pubkey.slice(0, 8)}...`)
+      logger.warn('service', `[AvatarState] Skipping invalid state event from ${pubkey.slice(0, 8)}...`)
       return
     }
 
@@ -267,7 +268,7 @@ export class AvatarStateService {
     // Get the state event reference from 'a' tag
     const stateEventRef = this.getStateEventRef(event)
     if (!stateEventRef) {
-      console.warn('Update event missing state event reference')
+      logger.warn('service', 'Update event missing state event reference')
       return
     }
 
@@ -378,7 +379,7 @@ export class AvatarStateService {
       try {
         state.position = JSON.parse(positionStr)
       } catch (e) {
-        console.warn('[AvatarState] Failed to parse position in update event, keeping previous value')
+        logger.warn('service', '[AvatarState] Failed to parse position in update event, keeping previous value')
         // Don't update position if parsing fails
       }
     }
@@ -397,7 +398,7 @@ export class AvatarStateService {
       // If status is 'away', user has logged out - remove them completely
       if (status === 'away') {
         const pubkey = state.pubkey
-        console.log(`[AvatarState] User ${state.npub} went away, removing from state`)
+        logger.log('service', `[AvatarState] User ${state.npub} went away, removing from state`)
         this.userStates.delete(pubkey)
         this.stateEvents.delete(pubkey)
         this.updateEvents.delete(pubkey)
@@ -456,7 +457,7 @@ export class AvatarStateService {
       const avatarData = getTag('avatar_data')
       const avatarMod = getTag('avatar_mod')
 
-      console.log('[AvatarState] Parsed state event:', { avatarType, avatarId, avatarUrl, avatarDataLength: avatarData?.length, pubkey: event.pubkey.slice(0, 8) })
+      logger.log('service', '[AvatarState] Parsed state event:', { avatarType, avatarId, avatarUrl, avatarDataLength: avatarData?.length, pubkey: event.pubkey.slice(0, 8) })
 
       const clientName = getTag('client') || 'Unknown'
       const clientVersion = getTag('client_version')
@@ -467,7 +468,7 @@ export class AvatarStateService {
         try {
           position = JSON.parse(positionStr)
         } catch (e) {
-          console.warn('[AvatarState] Failed to parse position JSON, skipping event:', positionStr.slice(0, 50))
+          logger.warn('service', '[AvatarState] Failed to parse position JSON, skipping event:', positionStr.slice(0, 50))
           return null
         }
       }
@@ -493,7 +494,7 @@ export class AvatarStateService {
         customMessage: event.content || undefined,
       }
     } catch (err) {
-      console.error('Failed to parse state event:', err)
+      logger.error('service', 'Failed to parse state event:', err)
       return null
     }
   }
@@ -550,7 +551,7 @@ export class AvatarStateService {
     customMessage: string = ''
   ): Promise<void> {
     if (!this.accountManager?.active) {
-      console.warn('No active account, skipping state publish')
+      logger.warn('service', 'No active account, skipping state publish')
       return
     }
 
@@ -611,7 +612,7 @@ export class AvatarStateService {
         customMessage,
       }
     } catch (err) {
-      console.error('Failed to publish state event:', err)
+      logger.error('service', 'Failed to publish state event:', err)
       throw err
     }
   }
@@ -629,7 +630,7 @@ export class AvatarStateService {
     customMessage?: string
   }): Promise<void> {
     if (!this.accountManager?.active) {
-      console.warn('No active account, skipping update publish')
+      logger.warn('service', 'No active account, skipping update publish')
       return
     }
 
@@ -690,7 +691,7 @@ export class AvatarStateService {
       // Update current state
       Object.assign(this.currentState, update)
     } catch (err) {
-      console.error('Failed to publish update event:', err)
+      logger.error('service', 'Failed to publish update event:', err)
       throw err
     }
   }
@@ -775,14 +776,14 @@ export class AvatarStateService {
       )
 
       if (!stateEvent) {
-        console.log('No previous state found for user')
+        logger.log('service', 'No previous state found for user')
         return null
       }
 
       // Check if state is too old (expired)
       const eventAge = now - stateEvent.created_at
       if (eventAge > AVATAR_STATE_CONFIG.EVENT_EXPIRY_S) {
-        console.log('State event expired, too old to restore')
+        logger.log('service', 'State event expired, too old to restore')
         return null
       }
 
@@ -791,10 +792,10 @@ export class AvatarStateService {
         return null
       }
 
-      console.log('Found previous state:', parsed)
+      logger.log('service', 'Found previous state:', parsed)
       return parsed
     } catch (err) {
-      console.error('Failed to query last state:', err)
+      logger.error('service', 'Failed to query last state:', err)
       return null
     }
   }

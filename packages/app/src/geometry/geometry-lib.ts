@@ -1,3 +1,4 @@
+import * as logger from '../utils/logger';
 import init, { GeometryEngine, GeometryData } from '@workspace/wasm';
 import { getMacroDepth, getMicroDepth } from '../config/depth-config';
 
@@ -14,7 +15,7 @@ export async function initializeWasm(): Promise<void> {
 
   initPromise = init().then(() => {
     wasmInitialized = true;
-    console.log('WASM module initialized');
+    logger.log('geometry', 'WASM module initialized');
   });
 
   await initPromise;

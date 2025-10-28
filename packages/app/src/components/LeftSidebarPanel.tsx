@@ -166,24 +166,7 @@ export function LeftSidebarPanel({
       borderRight="1px solid rgba(255, 255, 255, 0.1)"
     >
       <VStack spacing={0} align="stretch">
-        {/* Walk/Edit Mode Toggle */}
-        {ENABLE_EDIT_MODE && (
-          <>
-            <SidebarIcon
-              icon={isEditMode ? "✏️" : "🚶"}
-              onClick={() => onToggleEditMode(!isEditMode)}
-              isActive={isEditMode}
-            />
-            <Divider borderColor="rgba(255, 255, 255, 0.1)" my={1} />
-          </>
-        )}
-
-        {/* Config Icons */}
-        <SidebarIcon
-          icon="🎭"
-          onClick={() => handleOpenPanel('avatar')}
-          isActive={activePanelType === 'avatar'}
-        />
+        {/* Chat Icon */}
         <SidebarIcon
           icon="💬"
           onClick={onToggleChat}
@@ -213,11 +196,26 @@ export function LeftSidebarPanel({
         {ENABLE_EDIT_MODE && isEditMode && isLoggedIn && onPublishWorld && (
           <>
             <Divider borderColor="rgba(255, 255, 255, 0.1)" my={1} />
-            <SidebarIcon
-              icon="💾"
+            <Box
+              as="button"
               onClick={onPublishWorld}
-              isActive={false}
-            />
+              width="100%"
+              py={2}
+              px={2}
+              bg="rgba(80, 80, 80, 0.3)"
+              borderRadius="md"
+              border="1px solid rgba(255, 255, 255, 0.1)"
+              _hover={{
+                bg: 'rgba(100, 100, 100, 0.4)',
+                borderColor: 'rgba(255, 255, 255, 0.2)',
+              }}
+              cursor="pointer"
+              transition="all 0.1s"
+            >
+              <Text color="white" fontSize="sm" textAlign="center">
+                Publish
+              </Text>
+            </Box>
           </>
         )}
 

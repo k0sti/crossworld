@@ -1,3 +1,4 @@
+import * as logger from '../utils/logger';
 import * as THREE from 'three';
 
 /**
@@ -134,7 +135,7 @@ export class ProfileIcon {
       // Mark as successfully loaded
       this.currentPictureUrl = pictureUrl;
     } catch (error) {
-      console.error('[ProfileIcon] Failed to load profile picture:', error);
+      logger.error('renderer', '[ProfileIcon] Failed to load profile picture:', error);
       // Reset on error to keep default texture
       this.currentPictureUrl = null;
     }

@@ -1,3 +1,4 @@
+import * as logger from '../utils/logger';
 import { useState, useEffect } from 'react'
 import {
   Modal,
@@ -70,9 +71,7 @@ export function PublishWorldModal({
         if (geometryControllerRef?.current) {
           macroDepth = geometryControllerRef.current.getMacroDepth()
           microDepth = geometryControllerRef.current.getMicroDepth()
-          console.log('[PublishWorld] Reading depths from geometry controller:', { macroDepth, microDepth })
         } else {
-          console.warn('[PublishWorld] Geometry controller not available, using global config')
         }
 
         if (macroDepth === 0 || macroDepth < 1 || macroDepth > 10) {
@@ -97,7 +96,7 @@ export function PublishWorldModal({
         })
         setCsmPreview(csmText)
       } catch (error) {
-        console.error('[PublishWorld] Failed to load stats:', error)
+        logger.error('ui', '[PublishWorld] Failed to load stats:', error)
         toast({
           title: 'Failed to load world stats',
           description: error instanceof Error ? error.message : 'Unknown error',
@@ -143,7 +142,7 @@ export function PublishWorldModal({
       setTitle('')
       setDescription('')
     } catch (error) {
-      console.error('[PublishWorld] Failed to publish:', error)
+      logger.error('ui', '[PublishWorld] Failed to publish:', error)
       toast({
         title: 'Failed to publish world',
         description: error instanceof Error ? error.message : 'Unknown error',

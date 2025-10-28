@@ -1,3 +1,4 @@
+import * as logger from '../utils/logger';
 import * as THREE from 'three';
 
 export class CameraController {
@@ -365,7 +366,7 @@ export class CameraController {
         pitch: state.pitch,
       };
     } catch (error) {
-      console.error('Failed to load camera state:', error);
+      logger.error('renderer', 'Failed to load camera state:', error);
       return null;
     }
   }

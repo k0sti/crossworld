@@ -1,3 +1,4 @@
+import * as logger from './logger';
 import init, { load_vox_from_bytes, type GeometryData } from '@workspace/wasm'
 
 /**
@@ -71,7 +72,7 @@ export async function loadVoxFromNostrProfile(
   try {
     return await loadVoxFromUrl(voxUrl, userNpub)
   } catch (error) {
-    console.error('Failed to load .vox from Nostr profile:', error)
+    logger.error('common', 'Failed to load .vox from Nostr profile:', error)
     return null
   }
 }

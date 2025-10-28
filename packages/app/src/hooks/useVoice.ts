@@ -1,3 +1,4 @@
+import * as logger from '../utils/logger';
 import { useEffect, useState } from 'react'
 import { voiceManager, type VoiceStatus } from '../services/voice/manager'
 import type { Participant } from '../services/voice/subscriber'
@@ -32,7 +33,7 @@ export function useVoice() {
     try {
       await voiceManager.connect(streamingUrl, npub)
     } catch (err) {
-      console.error('Failed to connect to voice:', err)
+      logger.error('voice', 'Failed to connect to voice:', err)
     }
   }
 
@@ -40,7 +41,7 @@ export function useVoice() {
     try {
       await voiceManager.disconnect()
     } catch (err) {
-      console.error('Failed to disconnect from voice:', err)
+      logger.error('voice', 'Failed to disconnect from voice:', err)
     }
   }
 
@@ -48,7 +49,7 @@ export function useVoice() {
     try {
       await voiceManager.toggleMic()
     } catch (err) {
-      console.error('Failed to toggle mic:', err)
+      logger.error('voice', 'Failed to toggle mic:', err)
     }
   }
 

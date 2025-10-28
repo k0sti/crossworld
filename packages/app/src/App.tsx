@@ -1,9 +1,10 @@
+import * as logger from './utils/logger';
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { useToast } from '@chakra-ui/react'
+import { useToast, Box, Text } from '@chakra-ui/react'
 import { useAccountManager } from 'applesauce-react/hooks'
 import { TopBar, ConfigPanelType, ProfilePanel } from '@crossworld/common'
 import { WorldCanvas } from './components/WorldCanvas'
-import { LeftSidebarPanel } from './components/LeftSidebarPanel'
+import { ConfigPanel } from './components/ConfigPanel'
 import { NetworkConfigPanel } from './components/NetworkConfigPanel'
 import { InfoPanel } from './components/InfoPanel'
 import { SelectAvatar, type AvatarSelection } from './components/SelectAvatar'
@@ -15,9 +16,7 @@ import { ColorPalette } from './components/ColorPalette'
 import { ScriptPanel } from './components/ScriptPanel'
 import { AvatarStateService, type AvatarConfig, type AvatarState } from './services/avatar-state'
 import { useVoice } from './hooks/useVoice'
-import { npubEncode } from 'nostr-tools/nip19'
 import type { TeleportAnimationType } from './renderer/teleport-animation'
-import { VOICE_CONFIG } from './config'
 import { LoginSettingsService } from '@crossworld/common'
 import { ExtensionAccount, SimpleAccount } from 'applesauce-accounts/accounts'
 import { ExtensionSigner } from 'applesauce-signers'
@@ -62,6 +61,11 @@ function App() {
   // Speech/Voice enabled state
   const [speechEnabled, setSpeechEnabled] = useState(false)
 
+  // Time of day state
+  const [timeOfDay, setTimeOfDay] = useState(0.35); // Start slightly after sunrise
+  const [sunAutoMove, setSunAutoMove] = useState(false); // Start with sun fixed
+  const [sunSpeed, setSunSpeed] = useState(0.01);
+
   const geometryControllerRef = useRef<any>(null)
   const sceneManagerRef = useRef<any>(null)
 
@@ -72,28 +76,6 @@ function App() {
   // Publish world modal
   const [isPublishWorldOpen, setIsPublishWorldOpen] = useState(false)
 
-  // MoQ streaming URL state
-  const [streamingUrl, setStreamingUrl] = useState<string | null>(VOICE_CONFIG.DEBUG_RELAY_URL)
-
-  // Fetch streaming URL from live event (if not using debug URL)
-  useEffect(() => {
-    if (VOICE_CONFIG.DEBUG_RELAY_URL) {
-      setStreamingUrl(VOICE_CONFIG.DEBUG_RELAY_URL)
-    } else {
-      import('./services/live-event').then(({ fetchLiveEvent }) => {
-        fetchLiveEvent().then(liveEvent => {
-          if (liveEvent?.streaming_url) {
-            setStreamingUrl(liveEvent.streaming_url)
-          } else {
-            console.warn('[App] No streaming URL found in live event')
-          }
-        }).catch(err => {
-          console.error('[App] Failed to fetch live event:', err)
-        })
-      })
-    }
-  }, [])
-
   // Voice auto-connect disabled - user must manually connect
   // useEffect(() => {
   //   if (!pubkey || !streamingUrl || voiceAutoConnected.current) return
@@ -103,9 +85,9 @@ function App() {
   //       const npub = npubEncode(pubkey)
   //       await voice.connect(streamingUrl, npub)
   //       voiceAutoConnected.current = true
-  //       console.log('[App] Auto-connected to voice chat')
+  //       logger.log('ui', '[App] Auto-connected to voice chat')
   //     } catch (err) {
-  //       console.error('[App] Failed to auto-connect to voice:', err)
+  //       logger.error('ui', '[App] Failed to auto-connect to voice:', err)
   //     }
   //   }
 
@@ -137,7 +119,7 @@ function App() {
           // Restore guest account
           const guestData = LoginSettingsService.loadGuestAccount()
           if (!guestData) {
-            console.error('[App] Guest account data missing')
+            logger.error('ui', '[App] Guest account data missing')
             LoginSettingsService.clear()
             return
           }
@@ -166,7 +148,7 @@ function App() {
           const publicKey = await signer.getPublicKey()
 
           if (publicKey !== loginSettings.pubkey) {
-            console.warn('[App] Extension pubkey mismatch, clearing settings')
+            logger.warn('ui', '[App] Extension pubkey mismatch, clearing settings')
             LoginSettingsService.clear()
             return
           }
@@ -197,7 +179,7 @@ function App() {
           LoginSettingsService.clear()
         }
       } catch (error) {
-        console.error('[App] Auto-login failed:', error)
+        logger.error('ui', '[App] Auto-login failed:', error)
         LoginSettingsService.clear()
         toast({
           title: 'Auto-login failed',
@@ -262,7 +244,7 @@ function App() {
         }
         setShowRestoreModal(false)
       } catch (err) {
-        console.error('[App] Failed to query/restore state:', err)
+        logger.error('ui', '[App] Failed to query/restore state:', err)
         // On error, show avatar selection
         setShowSelectAvatar(true)
 
@@ -311,11 +293,11 @@ function App() {
               duration: 3000,
             })
           } else {
-            console.warn('[App] World config mismatch:', validation.error)
+            logger.warn('ui', '[App] World config mismatch:', validation.error)
           }
         }
       } catch (error) {
-        console.error('[App] Failed to auto-load world:', error)
+        logger.error('ui', '[App] Failed to auto-load world:', error)
         // Don't show toast for errors, just log them
       }
     }
@@ -547,70 +529,6 @@ function App() {
     setActivePanelType('profile')
   }
 
-  const handleToggleVoice = async () => {
-    if (!pubkey) {
-      toast({
-        title: 'Login required',
-        description: 'Please login to use voice chat',
-        status: 'warning',
-        duration: 3000,
-      })
-      return
-    }
-
-    if (!streamingUrl) {
-      toast({
-        title: 'Voice unavailable',
-        description: 'MoQ streaming URL not configured',
-        status: 'error',
-        duration: 3000,
-      })
-      return
-    }
-
-    try {
-      if (voice.isConnected) {
-        await voice.disconnect()
-        toast({
-          title: 'Voice disconnected',
-          status: 'info',
-          duration: 2000,
-        })
-      } else {
-        const npub = npubEncode(pubkey)
-        await voice.connect(streamingUrl, npub)
-        toast({
-          title: 'Voice connected',
-          description: 'You can now enable your microphone',
-          status: 'success',
-          duration: 2000,
-        })
-      }
-    } catch (err) {
-      console.error('Voice toggle error:', err)
-      toast({
-        title: 'Voice error',
-        description: err instanceof Error ? err.message : 'Failed to toggle voice',
-        status: 'error',
-        duration: 4000,
-      })
-    }
-  }
-
-  const handleToggleMic = async () => {
-    try {
-      await voice.toggleMic()
-    } catch (err) {
-      console.error('Mic toggle error:', err)
-      toast({
-        title: 'Microphone error',
-        description: err instanceof Error ? err.message : 'Failed to toggle microphone',
-        status: 'error',
-        duration: 4000,
-      })
-    }
-  }
-
   const handleColorSelect = (_color: string, index: number) => {
     if (sceneManagerRef.current) {
       sceneManagerRef.current.setSelectedColorIndex(index)
@@ -654,6 +572,10 @@ function App() {
           speechEnabled={speechEnabled}
           onSpeechEnabledChange={setSpeechEnabled}
           onWorldCSMUpdate={setWorldCSM}
+          timeOfDay={timeOfDay}
+          sunAutoMove={sunAutoMove}
+          sunSpeed={sunSpeed}
+          onPublishWorld={handlePublishWorld}
         />
         <TopBar
           pubkey={pubkey}
@@ -661,29 +583,23 @@ function App() {
           onOpenPanel={setActivePanelType}
           onOpenProfile={() => setActivePanelType('profile')}
           activePanelType={activePanelType}
+          isEditMode={isEditMode}
+          onToggleEditMode={() => setIsEditMode(!isEditMode)}
         />
-        {pubkey && (
-          <LeftSidebarPanel
-            onOpenPanel={setActivePanelType}
-            activePanelType={activePanelType}
-            isEditMode={isEditMode}
-            onToggleEditMode={setIsEditMode}
-            isChatOpen={isChatOpen}
-            onToggleChat={() => setIsChatOpen(!isChatOpen)}
-            voiceConnected={voice.isConnected}
-            voiceConnecting={voice.status === 'connecting'}
-            micEnabled={voice.micEnabled}
-            participantCount={voice.participantCount}
-            voiceError={voice.error}
-            onToggleVoice={handleToggleVoice}
-            onToggleMic={handleToggleMic}
-            speechEnabled={speechEnabled}
-            onPublishWorld={handlePublishWorld}
-            isLoggedIn={true}
-          />
-        )}
 
         {/* Config Panels */}
+        {activePanelType === 'config' && (
+          <ConfigPanel
+            onClose={() => setActivePanelType(null)}
+            onOpenPanel={setActivePanelType}
+            timeOfDay={timeOfDay}
+            onTimeOfDayChange={setTimeOfDay}
+            sunAutoMove={sunAutoMove}
+            onSunAutoMoveChange={setSunAutoMove}
+            sunSpeed={sunSpeed}
+            onSunSpeedChange={setSunSpeed}
+          />
+        )}
         <NetworkConfigPanel
           isOpen={activePanelType === 'network'}
           onClose={() => setActivePanelType(null)}
@@ -719,13 +635,44 @@ function App() {
         {/* Chat Panel */}
         <ChatPanel isOpen={isChatOpen} currentPubkey={pubkey} onViewProfile={handleViewProfile} />
 
-        {/* Client List Panel */}
+        {/* Client List Panel - Hide when menu is open */}
         <ClientListPanel
-          isOpen={isClientListOpen}
+          isOpen={isClientListOpen && activePanelType !== 'config'}
           statusService={avatarStateService}
           onOpenProfile={handleViewProfile}
           isEditMode={isEditMode}
         />
+
+        {/* Chat Button (bottom left) */}
+        {pubkey && (
+          <Box
+            as="button"
+            onClick={() => setIsChatOpen(!isChatOpen)}
+            position="fixed"
+            bottom={4}
+            left={4}
+            w="48px"
+            h="48px"
+            bg={isChatOpen ? "rgba(120, 120, 120, 0.2)" : "rgba(80, 80, 80, 0.1)"}
+            border="1px solid rgba(255, 255, 255, 0.1)"
+            _hover={{
+              bg: 'rgba(120, 120, 120, 0.2)',
+              borderColor: 'rgba(255, 255, 255, 0.2)'
+            }}
+            _active={{
+              bg: 'rgba(60, 60, 60, 0.3)',
+            }}
+            transition="all 0.1s"
+            cursor="pointer"
+            display="flex"
+            alignItems="center"
+            justifyContent="center"
+            zIndex={1500}
+            borderRadius="md"
+          >
+            <Text fontSize="xl">💬</Text>
+          </Box>
+        )}
 
         {/* Loading State Modal */}
         <RestoreStateModal

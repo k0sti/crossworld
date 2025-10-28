@@ -1,3 +1,4 @@
+import * as logger from './utils/logger';
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { Root } from './Root.tsx'
@@ -25,5 +26,5 @@ ensureCubeWasmInitialized()
         </div>
       </div>
     `
-    console.error('[Init] Failed to initialize app:', error)
+    logger.error('common', '[Init] Failed to initialize app:', error)
   })

@@ -1,3 +1,4 @@
+import * as logger from './logger';
 import initWasm, { parse_csm_to_mesh, validate_csm } from '@workspace/wasm-cube';
 
 let initialized = false;
@@ -9,7 +10,7 @@ export async function ensureCubeWasmInitialized(): Promise<void> {
   if (!initialized) {
     await initWasm();
     initialized = true;
-    console.log('[CubeWasm] WASM module initialized');
+    logger.log('common', '[CubeWasm] WASM module initialized');
   }
 }
 

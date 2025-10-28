@@ -1,3 +1,4 @@
+import * as logger from './logger';
 import cubeInit from '@workspace/wasm-cube'
 import * as cubeWasm from '@workspace/wasm-cube'
 
@@ -34,7 +35,7 @@ export async function getModelCSM(geometryController?: any): Promise<string> {
     const csmText = await geometryController.getCSM()
     return csmText
   } catch (error) {
-    console.error('[CSM] Serialization error:', error)
+    logger.error('common', '[CSM] Serialization error:', error)
     throw error
   }
 }
@@ -55,7 +56,7 @@ export async function loadModelFromCSM(
       throw new Error((result as any).error)
     }
   } catch (error) {
-    console.error('[CSM] Load error:', error)
+    logger.error('common', '[CSM] Load error:', error)
     throw error
   }
 }
@@ -69,7 +70,7 @@ export async function getModelStats(geometryController?: any): Promise<{
   indexCount: number
 }> {
   if (!geometryController) {
-    console.warn('[CSM] No geometry controller provided for stats')
+    logger.warn('common', '[CSM] No geometry controller provided for stats')
     return {
       vertexCount: 0,
       faceCount: 0,
@@ -85,7 +86,7 @@ export async function getModelStats(geometryController?: any): Promise<{
       indexCount: (stats.triangles || 0) * 3
     }
   } catch (error) {
-    console.error('[CSM] Stats error:', error)
+    logger.error('common', '[CSM] Stats error:', error)
     return {
       vertexCount: 0,
       faceCount: 0,

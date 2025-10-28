@@ -160,11 +160,11 @@ where
         max_depth,
     );
 
-    tracing::debug!(
-        "[generate_face_mesh] Generated {} faces at max_depth={}",
-        face_count,
-        max_depth
-    );
+    // tracing::debug!(
+    //     "[generate_face_mesh] Generated {} faces at max_depth={}",
+    //     face_count,
+    //     max_depth
+    // );
 }
 
 #[cfg(test)]
