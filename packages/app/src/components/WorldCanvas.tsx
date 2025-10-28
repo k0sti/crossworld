@@ -1,3 +1,4 @@
+import * as logger from '../utils/logger';
 import { useEffect, useRef, useState } from 'react';
 import { Box } from '@chakra-ui/react';
 import { SceneManager } from '../renderer/scene';
@@ -20,6 +21,10 @@ interface WorldCanvasProps {
   speechEnabled?: boolean;
   onSpeechEnabledChange?: (enabled: boolean) => void;
   onWorldCSMUpdate?: (csmText: string) => void;
+  timeOfDay: number;
+  sunAutoMove: boolean;
+  sunSpeed: number;
+  onPublishWorld?: () => void;
 }
 
 export function WorldCanvas({
@@ -35,6 +40,10 @@ export function WorldCanvas({
   speechEnabled: externalSpeechEnabled,
   onSpeechEnabledChange: externalOnSpeechEnabledChange,
   onWorldCSMUpdate,
+  timeOfDay,
+  sunAutoMove,
+  sunSpeed,
+  onPublishWorld,
 }: WorldCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const localSceneManagerRef = useRef<SceneManager | null>(null);
@@ -44,9 +53,6 @@ export function WorldCanvas({
   const [debugInfo, setDebugInfo] = useState<DebugInfo>({});
 
   // Scene configuration state
-  const [timeOfDay, setTimeOfDay] = useState(0.35); // Start slightly after sunrise
-  const [sunAutoMove, setSunAutoMove] = useState(false); // Start with sun fixed
-  const [sunSpeed, setSunSpeed] = useState(0.01);
   const [internalSpeechEnabled, setInternalSpeechEnabled] = useState(false); // Disabled by default
   const [worldGridVisible, setWorldGridVisible] = useState(true); // Show helpers by default
   const [faceMeshEnabled, setFaceMeshEnabled] = useState(true); // Enabled by default
@@ -62,7 +68,7 @@ export function WorldCanvas({
     const sceneManager = localSceneManagerRef.current;
 
     if (!geometryController || !sceneManager) {
-      console.error('Cannot apply depth settings: geometry controller or scene manager not initialized');
+      logger.error('renderer', 'Cannot apply depth settings: geometry controller or scene manager not initialized');
       return;
     }
 
@@ -70,7 +76,6 @@ export function WorldCanvas({
     const macroDepth = worldDepth - scaleDepth;
     const microDepth = scaleDepth;
 
-    console.log(`Applying depth settings: macroDepth=${macroDepth}, microDepth=${microDepth}, totalDepth=${worldDepth}`);
 
     try {
       // Only reinitialize if MACRO depth changed (world size change)
@@ -78,7 +83,6 @@ export function WorldCanvas({
       const currentMacro = geometryController['macroDepth']; // Access private field for comparison
 
       if (currentMacro !== macroDepth) {
-        console.log(`Macro depth changed from ${currentMacro} to ${macroDepth}, reinitializing...`);
         await geometryController.reinitialize(macroDepth, microDepth, (geometry) => {
           sceneManager.updateGeometry(
             geometry.vertices,
@@ -87,12 +91,10 @@ export function WorldCanvas({
             geometry.colors
           );
         });
-        console.log('Geometry reinitialized successfully');
       } else {
-        console.log('Macro depth unchanged, skipping reinitialize (micro depth only affects coordinate precision)');
       }
     } catch (error) {
-      console.error('Failed to apply depth settings:', error);
+      logger.error('renderer', 'Failed to apply depth settings:', error);
     }
   };
 
@@ -134,7 +136,6 @@ export function WorldCanvas({
 
     // Set voxel edit callback for world cube editing
     sceneManager.setOnVoxelEdit((coord, colorIndex) => {
-      console.log('[WorldCanvas Voxel Edit]', { coord, colorIndex });
       if (colorIndex === 0) {
         // Remove voxel at specified depth
         geometryController.removeVoxelAtDepth(coord.x, coord.y, coord.z, coord.depth);
@@ -149,9 +150,8 @@ export function WorldCanvas({
       const avatarEngine = new AvatarEngine();
       avatarEngineRef.current = avatarEngine;
       sceneManager.setAvatarEngine(avatarEngine);
-      console.log('Avatar engine initialized');
     }).catch((error: unknown) => {
-      console.error('Failed to initialize WASM/Avatar engine:', error);
+      logger.error('renderer', 'Failed to initialize WASM/Avatar engine:', error);
     });
 
     // Initialize geometry controller
@@ -168,7 +168,7 @@ export function WorldCanvas({
       // Set initial face mesh mode (enabled by default)
       geometryController.setFaceMeshMode(true);
     }).catch((error) => {
-      console.error('Failed to initialize geometry controller:', error);
+      logger.error('renderer', 'Failed to initialize geometry controller:', error);
     });
 
     // Animation loop
@@ -256,13 +256,14 @@ export function WorldCanvas({
     sceneManager.setSunSpeed(sunSpeed);
   }, [sunSpeed]);
 
-  // Handle world grid visibility
+  // Handle world grid visibility - only show in edit mode
   useEffect(() => {
     const sceneManager = localSceneManagerRef.current;
     if (!sceneManager) return;
 
-    sceneManager.setWorldGridVisible(worldGridVisible);
-  }, [worldGridVisible]);
+    // Only show world grid when in edit mode AND the toggle is enabled
+    sceneManager.setWorldGridVisible(isEditMode && worldGridVisible);
+  }, [worldGridVisible, isEditMode]);
 
   // Handle face mesh mode
   useEffect(() => {
@@ -285,7 +286,7 @@ export function WorldCanvas({
     const sceneManager = localSceneManagerRef.current;
     if (!sceneManager) return;
 
-    console.log('Avatar update triggered:', {
+    logger.log('renderer', 'Avatar update triggered:', {
       isLoggedIn,
       avatarType: avatarConfig.avatarType,
       avatarId: avatarConfig.avatarId,
@@ -316,47 +317,40 @@ export function WorldCanvas({
           const { getModelUrl } = await import('../utils/modelConfig');
           const voxUrl = getModelUrl(avatarConfig.avatarId, 'vox');
           if (voxUrl) {
-            console.log('[WorldCanvas] Loading voxel avatar from disk:', voxUrl);
 
             sceneManager.createVoxelAvatarFromVoxFile(voxUrl, npubForColors, 1.0, currentTransform)
               .then(() => {
-                console.log('[WorldCanvas] Successfully loaded voxel avatar from disk');
                 // Refresh profile in case pubkey was set before avatar loaded
                 sceneManager.refreshCurrentAvatarProfile();
               })
               .catch(error => {
-                console.error('[WorldCanvas] Failed to load voxel avatar from disk:', error);
+                logger.error('renderer', '[WorldCanvas] Failed to load voxel avatar from disk:', error);
                 // Fallback to generated
-                console.log('[WorldCanvas] Falling back to generated model');
                 sceneManager.createVoxelAvatar('npub1default', 1.0, currentTransform);
                 sceneManager.refreshCurrentAvatarProfile();
               });
           } else {
-            console.warn('[WorldCanvas] Unknown voxel model ID:', avatarConfig.avatarId);
+            logger.warn('renderer', '[WorldCanvas] Unknown voxel model ID:', avatarConfig.avatarId);
             sceneManager.createVoxelAvatar('npub1default', 1.0, currentTransform);
             sceneManager.refreshCurrentAvatarProfile();
           }
         } else if (avatarConfig.avatarUrl) {
           // Load from custom URL
-          console.log('[WorldCanvas] Loading voxel avatar from URL:', avatarConfig.avatarUrl);
           sceneManager.createVoxelAvatarFromVoxFile(avatarConfig.avatarUrl, npubForColors, 1.0, currentTransform)
             .then(() => {
-              console.log('[WorldCanvas] Successfully loaded voxel avatar from URL');
               sceneManager.refreshCurrentAvatarProfile();
             })
             .catch(error => {
-              console.error('[WorldCanvas] Failed to load voxel avatar from URL:', error);
+              logger.error('renderer', '[WorldCanvas] Failed to load voxel avatar from URL:', error);
               sceneManager.createVoxelAvatar('npub1default', 1.0, currentTransform);
               sceneManager.refreshCurrentAvatarProfile();
             });
         } else if (avatarConfig.avatarData) {
           // TODO: Generate from avatarData (procedural generation)
-          console.log('[WorldCanvas] Avatar generation from avatarData not yet implemented');
           sceneManager.createVoxelAvatar('npub1default', 1.0, currentTransform);
           sceneManager.refreshCurrentAvatarProfile();
         } else {
           // Fallback to simple generated model
-          console.log('[WorldCanvas] Using simple generated voxel avatar');
           sceneManager.createVoxelAvatar('npub1default', 1.0, currentTransform);
           sceneManager.refreshCurrentAvatarProfile();
         }
@@ -380,7 +374,7 @@ export function WorldCanvas({
 
         // Load the GLB
         if (glbUrl) {
-          console.log('Loading GLB avatar:', glbUrl);
+          logger.log('renderer', 'Loading GLB avatar:', glbUrl);
           try {
             // Check if file exists before loading
             const checkResponse = await fetch(glbUrl, { method: 'HEAD' });
@@ -388,14 +382,14 @@ export function WorldCanvas({
               sceneManager.createAvatar(glbUrl, 1.0, currentTransform);
               sceneManager.refreshCurrentAvatarProfile();
             } else {
-              console.warn('GLB model not found:', glbUrl);
+              logger.warn('renderer', 'GLB model not found:', glbUrl);
               // Don't create avatar if model doesn't exist
             }
           } catch (error) {
-            console.error('Failed to check/load GLB avatar:', error);
+            logger.error('renderer', 'Failed to check/load GLB avatar:', error);
           }
         } else {
-          console.warn('No GLB URL available for avatar');
+          logger.warn('renderer', 'No GLB URL available for avatar');
         }
       } else if (avatarConfig.avatarType === 'csm') {
         // Remove old avatar
@@ -403,31 +397,29 @@ export function WorldCanvas({
 
         // Get CSM code from avatarData
         if (avatarConfig.avatarData) {
-          console.log('[WorldCanvas] Loading CSM avatar from avatarData');
           try {
             const { parseCsmToMesh } = await import('../utils/cubeWasm');
             const result = await parseCsmToMesh(avatarConfig.avatarData);
 
             if ('error' in result) {
-              console.error('[WorldCanvas] CSM parse error:', result.error);
+              logger.error('renderer', '[WorldCanvas] CSM parse error:', result.error);
               return;
             }
 
             // Create CSM avatar from mesh data
             sceneManager.createCsmAvatar(result, npubForColors, 1.0, currentTransform);
             sceneManager.refreshCurrentAvatarProfile();
-            console.log('[WorldCanvas] Successfully loaded CSM avatar');
           } catch (error) {
-            console.error('[WorldCanvas] Failed to load CSM avatar:', error);
+            logger.error('renderer', '[WorldCanvas] Failed to load CSM avatar:', error);
           }
         } else {
-          console.warn('[WorldCanvas] No avatarData provided for CSM avatar');
+          logger.warn('renderer', '[WorldCanvas] No avatarData provided for CSM avatar');
         }
       }
 
       // TODO: Apply avatarMod if present
       if (avatarConfig.avatarMod) {
-        console.log('Avatar modifications not yet implemented');
+        logger.log('renderer', 'Avatar modifications not yet implemented');
       }
       } else {
         sceneManager.removeAvatar();
@@ -447,25 +439,23 @@ export function WorldCanvas({
       zIndex={0}
     >
       <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: '100%' }} />
-      <DebugPanel
-        info={debugInfo}
-        onApplyDepthSettings={handleApplyDepthSettings}
-        timeOfDay={timeOfDay}
-        onTimeOfDayChange={setTimeOfDay}
-        sunAutoMove={sunAutoMove}
-        onSunAutoMoveChange={setSunAutoMove}
-        sunSpeed={sunSpeed}
-        onSunSpeedChange={setSunSpeed}
-        speechEnabled={speechEnabled}
-        onSpeechEnabledChange={setSpeechEnabled}
-        worldGridVisible={worldGridVisible}
-        onWorldGridVisibleChange={setWorldGridVisible}
-        faceMeshEnabled={faceMeshEnabled}
-        onFaceMeshEnabledChange={setFaceMeshEnabled}
-        wireframeEnabled={wireframeEnabled}
-        onWireframeEnabledChange={setWireframeEnabled}
-        triangleCount={triangleCount}
-      />
+      {isEditMode && (
+        <DebugPanel
+          info={debugInfo}
+          onApplyDepthSettings={handleApplyDepthSettings}
+          speechEnabled={speechEnabled}
+          onSpeechEnabledChange={setSpeechEnabled}
+          worldGridVisible={worldGridVisible}
+          onWorldGridVisibleChange={setWorldGridVisible}
+          faceMeshEnabled={faceMeshEnabled}
+          onFaceMeshEnabledChange={setFaceMeshEnabled}
+          wireframeEnabled={wireframeEnabled}
+          onWireframeEnabledChange={setWireframeEnabled}
+          triangleCount={triangleCount}
+          onPublishWorld={onPublishWorld}
+          isLoggedIn={isLoggedIn}
+        />
+      )}
     </Box>
   );
 }

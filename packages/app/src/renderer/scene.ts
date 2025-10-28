@@ -22,6 +22,7 @@ import { SunSystem } from './sun-system';
 import { PostProcessing } from './post-processing';
 import { profileCache } from '../services/profile-cache';
 import { DEFAULT_RELAYS } from '../config';
+import * as logger from '../utils/logger';
 
 /**
  * SceneManager - Manages the 3D scene with centered coordinate system
@@ -304,7 +305,7 @@ export class SceneManager {
   }
 
   private handleEditModeClick(event: MouseEvent, canvas: HTMLCanvasElement, isLeftClick: boolean): void {
-    console.log('[Edit Click]', { isLeftClick, mouseMode: this.mouseMode, cursorDepth: this.cursorDepth });
+    logger.log('renderer', '[Edit Click]', { isLeftClick, mouseMode: this.mouseMode, cursorDepth: this.cursorDepth });
 
     // Calculate mouse position
     // In mode 2 (shift rotate), raycast from center of screen
@@ -327,7 +328,7 @@ export class SceneManager {
     const intersectPoint = new THREE.Vector3();
     const didIntersect = this.raycaster.ray.intersectPlane(this.groundPlane, intersectPoint);
 
-    console.log('[Raycast]', { didIntersect, intersectPoint: didIntersect ? intersectPoint : null });
+    logger.log('renderer', '[Raycast]', { didIntersect, intersectPoint: didIntersect ? intersectPoint : null });
 
     if (didIntersect) {
       const size = this.getCursorSize();
@@ -342,11 +343,11 @@ export class SceneManager {
       const voxelZ = voxelCenterZ - halfSize;
       const voxelY = this.depthSelectMode === 1 ? 0 : -size;
 
-      console.log('[Voxel Pos]', { voxelX, voxelY, voxelZ, voxelCenterX, voxelCenterZ, size, depthSelectMode: this.depthSelectMode });
+      logger.log('renderer', '[Voxel Pos]', { voxelX, voxelY, voxelZ, voxelCenterX, voxelCenterZ, size, depthSelectMode: this.depthSelectMode });
 
       // Check if within valid world cube range (centered at origin)
       if (isWithinWorldBounds(voxelX, voxelZ, size)) {
-        console.log('[Voxel Action]', isLeftClick ? 'paint' : 'erase');
+        logger.log('renderer', '[Voxel Action]', isLeftClick ? 'paint' : 'erase');
         if (isLeftClick) {
           // Left click: use current color/erase mode
           this.paintVoxelWithSize(voxelX, voxelY, voxelZ, size);
@@ -355,7 +356,7 @@ export class SceneManager {
           this.eraseVoxelWithSize(voxelX, voxelY, voxelZ, size);
         }
       } else {
-        console.log('[Out of Bounds]', { voxelX, voxelZ, size });
+        logger.log('renderer', '[Out of Bounds]', { voxelX, voxelZ, size });
       }
     }
   }
@@ -392,7 +393,7 @@ export class SceneManager {
    * @param size Size of voxel in world units
    */
   private paintVoxelWithSize(x: number, y: number, z: number, size: number): void {
-    console.log('[Paint Voxel]', { x, y, z, size, selectedColor: this.selectedColorIndex });
+    logger.log('renderer', '[Paint Voxel]', { x, y, z, size, selectedColor: this.selectedColorIndex });
 
     // Check if clear/eraser mode is selected (index -1)
     const isClearMode = this.selectedColorIndex === -1;
@@ -408,19 +409,19 @@ export class SceneManager {
     // Convert world coordinates (corner) to cube coordinates (octree space)
     const coord = worldToCube(x, y, z, this.cursorDepth);
 
-    console.log('[Paint -> CubeCoord]', { coord, colorValue, hasCallback: !!this.onVoxelEdit });
+    logger.log('renderer', '[Paint -> CubeCoord]', { coord, colorValue, hasCallback: !!this.onVoxelEdit });
 
     // Call onVoxelEdit with CubeCoord
     this.onVoxelEdit?.(coord, colorValue);
   }
 
   private eraseVoxelWithSize(x: number, y: number, z: number, size: number): void {
-    console.log('[Erase Voxel]', { x, y, z, size });
+    logger.log('renderer', '[Erase Voxel]', { x, y, z, size });
 
     // Convert world coordinates to cube coordinates
     const coord = worldToCube(x, y, z, this.cursorDepth);
 
-    console.log('[Erase -> CubeCoord]', { coord, hasCallback: !!this.onVoxelEdit });
+    logger.log('renderer', '[Erase -> CubeCoord]', { coord, hasCallback: !!this.onVoxelEdit });
 
     // Call onVoxelEdit with CubeCoord
     this.onVoxelEdit?.(coord, 0);
@@ -464,7 +465,7 @@ export class SceneManager {
           }
           // Reset avatar movement state when entering camera mode
           this.resetAvatarMovementState();
-          console.log('[Mouse Mode] Switched to mode 2 (first-person camera rotation)');
+          logger.log('renderer', '[Mouse Mode] Switched to mode 2 (first-person camera rotation)');
         } else if (this.mouseMode === 2) {
           // Exit camera rotation mode
           this.mouseMode = 1;
@@ -476,7 +477,7 @@ export class SceneManager {
           this.isLeftMousePressed = false;
           this.isRightMousePressed = false;
           this.lastPaintedVoxel = null;
-          console.log('[Mouse Mode] Switched to mode 1 (paint/erase)');
+          logger.log('renderer', '[Mouse Mode] Switched to mode 1 (paint/erase)');
         }
         return;
       }
@@ -486,7 +487,7 @@ export class SceneManager {
         this.setEditMode(!this.isEditMode);
         // Reset avatar movement state when toggling edit mode
         this.resetAvatarMovementState();
-        console.log(`[Edit Mode] Toggled to ${this.isEditMode ? 'ON' : 'OFF'}`);
+        logger.log('renderer', `[Edit Mode] Toggled to ${this.isEditMode ? 'ON' : 'OFF'}`);
         return;
       }
 
@@ -497,7 +498,7 @@ export class SceneManager {
       if (event.code === 'Space') {
         event.preventDefault();
         this.depthSelectMode = this.depthSelectMode === 1 ? 2 : 1;
-        console.log(`[Depth Select] Switched to mode ${this.depthSelectMode} (y=${this.depthSelectMode === 1 ? 0 : -1})`);
+        logger.log('renderer', `[Depth Select] Switched to mode ${this.depthSelectMode} (y=${this.depthSelectMode === 1 ? 0 : -1})`);
       }
 
       // Cursor depth control with Arrow Up/Down
@@ -505,14 +506,14 @@ export class SceneManager {
         event.preventDefault();
         this.cursorDepth = Math.min(getTotalDepth(), this.cursorDepth + 1);
         this.updateCursorSize();
-        console.log(`[Cursor Depth] Increased to ${this.cursorDepth} (size=${this.getCursorSize()})`);
+        logger.log('renderer', `[Cursor Depth] Increased to ${this.cursorDepth} (size=${this.getCursorSize()})`);
       }
 
       if (event.code === 'ArrowDown') {
         event.preventDefault();
         this.cursorDepth = Math.max(0, this.cursorDepth - 1);
         this.updateCursorSize();
-        console.log(`[Cursor Depth] Decreased to ${this.cursorDepth} (size=${this.getCursorSize()})`);
+        logger.log('renderer', `[Cursor Depth] Decreased to ${this.cursorDepth} (size=${this.getCursorSize()})`);
       }
     };
 
@@ -549,7 +550,7 @@ export class SceneManager {
         this.isLeftMousePressed = false;
         this.isRightMousePressed = false;
         this.lastPaintedVoxel = null;
-        console.log('[Mouse Mode] Pointer lock exited (Escape), switched to mode 1');
+        logger.log('renderer', '[Mouse Mode] Pointer lock exited (Escape), switched to mode 1');
       }
     };
 
@@ -1107,7 +1108,7 @@ export class SceneManager {
    */
   createVoxelAvatar(userNpub: string, scale: number = 1.0, transform?: Transform): void {
     if (!this.avatarEngine) {
-      console.error('Avatar engine not initialized');
+      logger.error('renderer', 'Avatar engine not initialized');
       return;
     }
 
@@ -1138,7 +1139,7 @@ export class SceneManager {
       this.fetchAndApplyProfilePicture(this.currentUserPubkey, this.currentAvatar);
     }
 
-    console.log(`Created voxel avatar for ${userNpub}`);
+    logger.log('renderer', `Created voxel avatar for ${userNpub}`);
   }
 
   /**
@@ -1172,16 +1173,16 @@ export class SceneManager {
       this.currentAvatar = voxelAvatar;
 
       // Fetch and apply profile picture for current user
-      console.log(`[Scene] After avatar creation, currentUserPubkey: ${this.currentUserPubkey}`);
+      logger.log('renderer', `[Scene] After avatar creation, currentUserPubkey: ${this.currentUserPubkey}`);
       if (this.currentUserPubkey) {
         this.fetchAndApplyProfilePicture(this.currentUserPubkey, this.currentAvatar);
       } else {
-        console.log(`[Scene] No currentUserPubkey set, skipping profile fetch`);
+        logger.log('renderer', `[Scene] No currentUserPubkey set, skipping profile fetch`);
       }
 
-      console.log(`Created voxel avatar from .vox file: ${voxUrl}`);
+      logger.log('renderer', `Created voxel avatar from .vox file: ${voxUrl}`);
     } catch (error) {
-      console.error('Failed to load .vox avatar:', error);
+      logger.error('renderer', 'Failed to load .vox avatar:', error);
       throw error;
     }
   }
@@ -1222,7 +1223,7 @@ export class SceneManager {
       this.fetchAndApplyProfilePicture(this.currentUserPubkey, this.currentAvatar);
     }
 
-    console.log('Created CSM avatar');
+    logger.log('renderer', 'Created CSM avatar');
   }
 
   /**
@@ -1278,12 +1279,12 @@ export class SceneManager {
    * Set the current user's pubkey (to exclude from remote avatars)
    */
   setCurrentUserPubkey(pubkey: string | null): void {
-    console.log(`[Scene] setCurrentUserPubkey called: ${pubkey}`);
+    logger.log('renderer', `[Scene] setCurrentUserPubkey called: ${pubkey}`);
     this.currentUserPubkey = pubkey;
 
     // If we have an avatar already and now have a pubkey, fetch profile retroactively
     if (pubkey && this.currentAvatar) {
-      console.log(`[Scene] Avatar exists, fetching profile retroactively`);
+      logger.log('renderer', `[Scene] Avatar exists, fetching profile retroactively`);
       this.fetchAndApplyProfilePicture(pubkey, this.currentAvatar);
     }
   }
@@ -1292,9 +1293,9 @@ export class SceneManager {
    * Refresh profile picture for current avatar (call after avatar is loaded)
    */
   refreshCurrentAvatarProfile(): void {
-    console.log(`[Scene] refreshCurrentAvatarProfile called, pubkey: ${this.currentUserPubkey}, hasAvatar: ${!!this.currentAvatar}`);
+    logger.log('renderer', `[Scene] refreshCurrentAvatarProfile called, pubkey: ${this.currentUserPubkey}, hasAvatar: ${!!this.currentAvatar}`);
     if (this.currentUserPubkey && this.currentAvatar) {
-      console.log(`[Scene] Refreshing profile for current avatar`);
+      logger.log('renderer', `[Scene] Refreshing profile for current avatar`);
       this.fetchAndApplyProfilePicture(this.currentUserPubkey, this.currentAvatar);
     }
   }
@@ -1357,7 +1358,7 @@ export class SceneManager {
         avatar.dispose();
         this.remoteAvatars.delete(pubkey);
         this.remoteAvatarConfigs.delete(pubkey);
-        console.log(`Removed remote avatar for ${pubkey}`);
+        logger.log('renderer', `Removed remote avatar for ${pubkey}`);
       }
     }
 
@@ -1377,7 +1378,7 @@ export class SceneManager {
       );
 
       if (modelChanged) {
-        console.log(`[Scene] Model changed for ${state.npub}:`, {
+        logger.log('renderer', `[Scene] Model changed for ${state.npub}:`, {
           old: existingConfig,
           new: { avatarType: state.avatarType, avatarId: state.avatarId, avatarDataLength: state.avatarData?.length }
         });
@@ -1391,7 +1392,7 @@ export class SceneManager {
           existing.dispose();
           this.remoteAvatars.delete(pubkey);
           this.remoteAvatarConfigs.delete(pubkey);
-          console.log(`Recreating remote avatar for ${state.npub} due to model change`);
+          logger.log('renderer', `Recreating remote avatar for ${state.npub} due to model change`);
         }
         this.createRemoteAvatar(pubkey, state);
       } else {
@@ -1409,7 +1410,7 @@ export class SceneManager {
 
     const { position, avatarType, avatarId, avatarUrl, avatarData, npub } = state;
 
-    console.log(`[Scene] Creating remote avatar for ${npub}:`, { avatarType, avatarId, avatarUrl, avatarDataLength: avatarData?.length });
+    logger.log('renderer', `[Scene] Creating remote avatar for ${npub}:`, { avatarType, avatarId, avatarUrl, avatarDataLength: avatarData?.length });
 
     // Create transform from position data
     const transform = Transform.fromEventData(position);
@@ -1423,13 +1424,13 @@ export class SceneManager {
 
       // Generate or load geometry (use undefined for npub to preserve original colors)
       if (avatarId && avatarId !== 'generated') {
-        console.log(`[Scene] Loading VOX model from avatarId: ${avatarId}`);
+        logger.log('renderer', `[Scene] Loading VOX model from avatarId: ${avatarId}`);
         // Load from .vox file using model config
         import('../utils/modelConfig').then(({ getModelUrl }) => {
           const voxUrl = getModelUrl(avatarId, 'vox');
 
           if (!voxUrl) {
-            console.warn(`No model found for avatarId: ${avatarId}, using generated`);
+            logger.warn('renderer', `No model found for avatarId: ${avatarId}, using generated`);
             const geometryData = this.avatarEngine!.generate_avatar(npub);
             voxelAvatar.applyGeometry(geometryData);
             return;
@@ -1440,16 +1441,16 @@ export class SceneManager {
             loadVoxFromUrl(voxUrl, undefined).then((geometryData) => {
               voxelAvatar.applyGeometry(geometryData);
             }).catch(error => {
-              console.error('Failed to load .vox avatar for remote user:', error);
+              logger.error('renderer', 'Failed to load .vox avatar for remote user:', error);
               // Fallback to generated
               const geometryData = this.avatarEngine!.generate_avatar(npub);
               voxelAvatar.applyGeometry(geometryData);
             });
-          }).catch(console.error);
-        }).catch(console.error);
+          }).catch(err => logger.error('renderer', err));
+        }).catch(err => logger.error('renderer', err));
       } else {
         // Use procedurally generated model
-        console.log(`[Scene] No avatarId for ${npub}, using procedurally generated avatar`);
+        logger.log('renderer', `[Scene] No avatarId for ${npub}, using procedurally generated avatar`);
         const geometryData = this.avatarEngine.generate_avatar(npub);
         voxelAvatar.applyGeometry(geometryData);
       }
@@ -1462,17 +1463,17 @@ export class SceneManager {
       // Fetch and apply profile picture
       this.fetchAndApplyProfilePicture(pubkey, voxelAvatar, npub);
 
-      console.log(`Created remote voxel avatar for ${npub}`);
+      logger.log('renderer', `Created remote voxel avatar for ${npub}`);
     } else if (avatarType === 'csm') {
       // Create CSM avatar
       if (avatarData) {
-        console.log(`Creating remote CSM avatar for ${npub}`);
+        logger.log('renderer', `Creating remote CSM avatar for ${npub}`);
 
         // Parse CSM code to mesh
         import('../utils/cubeWasm').then(({ parseCsmToMesh }) => {
           parseCsmToMesh(avatarData).then((result) => {
             if ('error' in result) {
-              console.error(`Failed to parse CSM for remote avatar ${npub}:`, result.error);
+              logger.error('renderer', `Failed to parse CSM for remote avatar ${npub}:`, result.error);
               // Fallback to generated avatar
               const geometryData = this.avatarEngine!.generate_avatar(npub);
               const voxelAvatar = new VoxelAvatar({
@@ -1512,9 +1513,9 @@ export class SceneManager {
             // Fetch and apply profile picture
             this.fetchAndApplyProfilePicture(pubkey, voxelAvatar, npub);
 
-            console.log(`Created remote CSM avatar for ${npub}`);
+            logger.log('renderer', `Created remote CSM avatar for ${npub}`);
           }).catch(error => {
-            console.error(`Failed to load CSM avatar for remote user ${npub}:`, error);
+            logger.error('renderer', `Failed to load CSM avatar for remote user ${npub}:`, error);
             // Fallback to generated avatar
             const geometryData = this.avatarEngine!.generate_avatar(npub);
             const voxelAvatar = new VoxelAvatar({
@@ -1526,9 +1527,9 @@ export class SceneManager {
             this.remoteAvatars.set(pubkey, voxelAvatar);
             this.remoteAvatarConfigs.set(pubkey, { avatarType, avatarId, avatarData });
           });
-        }).catch(console.error);
+        }).catch(err => logger.error('renderer', err));
       } else {
-        console.warn(`No avatarData provided for remote CSM avatar ${npub}, using generated`);
+        logger.warn('renderer', `No avatarData provided for remote CSM avatar ${npub}, using generated`);
         // Fallback to generated avatar
         const geometryData = this.avatarEngine.generate_avatar(npub);
         const voxelAvatar = new VoxelAvatar({
@@ -1553,7 +1554,7 @@ export class SceneManager {
       // Fetch and apply profile picture
       this.fetchAndApplyProfilePicture(pubkey, glbAvatar, npub);
 
-      console.log(`Created remote GLB avatar for ${npub}`);
+      logger.log('renderer', `Created remote GLB avatar for ${npub}`);
     }
   }
 
@@ -1588,25 +1589,25 @@ export class SceneManager {
    * Fetch and apply profile picture and display name to an avatar
    */
   private async fetchAndApplyProfilePicture(pubkey: string, avatar: IAvatar, npub?: string): Promise<void> {
-    console.log(`[Scene] fetchAndApplyProfilePicture called for pubkey: ${pubkey}, npub: ${npub}`);
+    logger.log('renderer', `[Scene] fetchAndApplyProfilePicture called for pubkey: ${pubkey}, npub: ${npub}`);
     try {
       const profile = await profileCache.getProfile(pubkey, DEFAULT_RELAYS);
-      console.log(`[Scene] Profile fetched:`, profile);
+      logger.log('renderer', `[Scene] Profile fetched:`, profile);
 
       // Set display name for initials fallback
       const displayName = profile?.display_name || profile?.name || npub?.slice(0, 12) || '';
-      console.log(`[Scene] Setting display name: ${displayName}`);
+      logger.log('renderer', `[Scene] Setting display name: ${displayName}`);
       avatar.setDisplayName(displayName);
 
       // Set profile picture if available
       if (profile?.picture) {
-        console.log(`[Scene] Setting profile picture: ${profile.picture}`);
+        logger.log('renderer', `[Scene] Setting profile picture: ${profile.picture}`);
         await avatar.setProfilePicture(profile.picture);
       } else {
-        console.log(`[Scene] No profile picture available`);
+        logger.log('renderer', `[Scene] No profile picture available`);
       }
     } catch (error) {
-      console.warn(`[Scene] Failed to fetch profile picture for ${pubkey}:`, error);
+      logger.warn('renderer', `[Scene] Failed to fetch profile picture for ${pubkey}:`, error);
       // Still set display name for initials even if profile fetch fails
       if (npub) {
         avatar.setDisplayName(npub.slice(0, 12));
@@ -1734,6 +1735,6 @@ export class SceneManager {
       document.exitPointerLock();
     }
 
-    console.log('[SceneManager] Disposed');
+    logger.log('renderer', '[SceneManager] Disposed');
   }
 }

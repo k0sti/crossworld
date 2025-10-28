@@ -1,3 +1,4 @@
+import * as logger from '../utils/logger';
 import { SimplePool, type Event } from 'nostr-tools'
 import { WORLD_RELAYS } from '../config'
 import { getMacroDepth, getMicroDepth } from '../config/depth-config'
@@ -120,7 +121,7 @@ export async function publishWorld(
   try {
     await pool.publish(WORLD_RELAYS, signedEvent)
   } catch (err) {
-    console.error('Failed to publish world:', err)
+    logger.error('storage', 'Failed to publish world:', err)
     throw new Error('Failed to publish to relay')
   }
 

@@ -1,3 +1,4 @@
+import * as logger from '../../utils/logger';
 import * as Moq from '@kixelated/moq'
 import { Effect, Signal } from '@kixelated/signals'
 import { MoqConnectionManager } from './connection'
@@ -42,11 +43,11 @@ export class LocationPublisher {
    */
   async enable(npub: string): Promise<void> {
     if (this.enabledSignal.peek()) {
-      console.log('[Location Publisher] Already enabled')
+      logger.log('voice', '[Location Publisher] Already enabled')
       return
     }
 
-    console.log('[Location Publisher] Enabling for:', npub)
+    logger.log('voice', '[Location Publisher] Enabling for:', npub)
     this.npubSignal.set(npub)
     this.enabledSignal.set(true)
     this.enabled.set(true)
@@ -60,7 +61,7 @@ export class LocationPublisher {
       return
     }
 
-    console.log('[Location Publisher] Disabling')
+    logger.log('voice', '[Location Publisher] Disabling')
     this.enabledSignal.set(false)
     this.npubSignal.set(undefined)
     this.enabled.set(false)
@@ -94,9 +95,9 @@ export class LocationPublisher {
       const track = this.broadcast.subscribe('location', 0)
       const data = JSON.stringify(location)
       track.writeJson({ location: data })
-      console.log('[Location Publisher] Sent location:', location)
+      logger.log('voice', '[Location Publisher] Sent location:', location)
     } catch (err) {
-      console.error('[Location Publisher] Failed to send location:', err)
+      logger.error('voice', '[Location Publisher] Failed to send location:', err)
     }
   }
 
@@ -115,7 +116,7 @@ export class LocationPublisher {
 
     // Create broadcast path
     const path = Moq.Path.from(`crossworld/location/${LIVE_CHAT_D_TAG}/${npub}`)
-    console.log('[Location Publisher] Creating broadcast:', {
+    logger.log('voice', '[Location Publisher] Creating broadcast:', {
       path: String(path),
       npub,
       dTag: LIVE_CHAT_D_TAG,
@@ -125,7 +126,7 @@ export class LocationPublisher {
     this.broadcast = new Moq.Broadcast()
     conn.publish(path, this.broadcast)
 
-    console.log('[Location Publisher] Broadcast created and active')
+    logger.log('voice', '[Location Publisher] Broadcast created and active')
 
     // Send current location if available
     const currentLocation = this.locationSignal.peek()
@@ -135,7 +136,7 @@ export class LocationPublisher {
 
     // Cleanup: close broadcast when effect ends
     effect.cleanup(() => {
-      console.log('[Location Publisher] Closing broadcast:', String(path))
+      logger.log('voice', '[Location Publisher] Closing broadcast:', String(path))
       this.broadcast?.close()
       this.broadcast = null
     })

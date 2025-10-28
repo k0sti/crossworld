@@ -1,3 +1,4 @@
+import * as logger from '../utils/logger';
 import { Box, VStack, HStack, Input, IconButton, Text, Avatar } from '@chakra-ui/react'
 import { useState, useEffect, useRef } from 'react'
 import { FiSend, FiTrash2 } from 'react-icons/fi'
@@ -57,7 +58,7 @@ export function ChatPanel({ isOpen, currentPubkey, onViewProfile }: ChatPanelPro
           setProfileRelays(DEFAULT_RELAYS)
         }
       } catch (error) {
-        console.error('[ChatPanel] Failed to load relay config:', error)
+        logger.error('ui', '[ChatPanel] Failed to load relay config:', error)
         setEnabledRelays(DEFAULT_RELAYS)
         setProfileRelays(DEFAULT_RELAYS)
       }
@@ -110,18 +111,14 @@ export function ChatPanel({ isOpen, currentPubkey, onViewProfile }: ChatPanelPro
   useEffect(() => {
     if (!isOpen || enabledRelays.length === 0) return
 
-    console.log('[ChatPanel] Opening subscriptions with history...')
 
     const currentTime_s = Math.floor(Date.now() / 1000)
     const historySince_s = currentTime_s - CHAT_HISTORY_CONFIG.MAX_TIME_RANGE_S
 
-    console.log(`[ChatPanel] Fetching messages from last ${CHAT_HISTORY_CONFIG.MAX_TIME_RANGE_S}s (${CHAT_HISTORY_CONFIG.MAX_TIME_RANGE_S / 3600}h)`)
-    console.log(`[ChatPanel] Max messages: ${CHAT_HISTORY_CONFIG.MAX_MESSAGES}`)
 
     const connectToRelays = async () => {
       for (const relayUrl of enabledRelays) {
         try {
-          console.log(`[ChatPanel] Connecting to ${relayUrl}`)
 
           // Reuse existing relay instance or create new one
           let relay = relayInstancesRef.current.get(relayUrl)
@@ -148,11 +145,10 @@ export function ChatPanel({ isOpen, currentPubkey, onViewProfile }: ChatPanelPro
               )
 
               if (!hasCorrectTag) {
-                console.warn(`[ChatPanel] Event ${event.id} missing correct a-tag, ignoring`)
+                logger.warn('ui', `[ChatPanel] Event ${event.id} missing correct a-tag, ignoring`)
                 return
               }
 
-              console.log(`[ChatPanel] Received message:`, event.id)
 
               setMessages(prev => {
                 // Check if message already exists
@@ -173,14 +169,13 @@ export function ChatPanel({ isOpen, currentPubkey, onViewProfile }: ChatPanelPro
               })
             },
             error: (err: any) => {
-              console.error(`Relay ${relayUrl} streaming error:`, err)
+              logger.error('ui', `Relay ${relayUrl} streaming error:`, err)
             },
           })
 
           subscriptionsRef.current.push(streamingSub)
-          console.log(`[ChatPanel] Streaming subscription created for ${relayUrl}`)
         } catch (error) {
-          console.error(`[ChatPanel] Failed to connect to ${relayUrl}:`, error)
+          logger.error('ui', `[ChatPanel] Failed to connect to ${relayUrl}:`, error)
         }
       }
     }
@@ -189,12 +184,11 @@ export function ChatPanel({ isOpen, currentPubkey, onViewProfile }: ChatPanelPro
 
     // Cleanup: unsubscribe when chat closes
     return () => {
-      console.log(`[ChatPanel] Closing ${subscriptionsRef.current.length} subscriptions`)
       subscriptionsRef.current.forEach(sub => {
         try {
           sub.unsubscribe()
         } catch (e) {
-          console.error('[ChatPanel] Error unsubscribing:', e)
+          logger.error('ui', '[ChatPanel] Error unsubscribing:', e)
         }
       })
       subscriptionsRef.current = []
@@ -208,7 +202,7 @@ export function ChatPanel({ isOpen, currentPubkey, onViewProfile }: ChatPanelPro
         try {
           relay.close()
         } catch (e) {
-          console.error('Error closing relay:', e)
+          logger.error('ui', 'Error closing relay:', e)
         }
       })
       relayInstancesRef.current.clear()
@@ -222,7 +216,7 @@ export function ChatPanel({ isOpen, currentPubkey, onViewProfile }: ChatPanelPro
     try {
       const account = manager.accounts.find(a => a.pubkey === currentPubkey)
       if (!account || !account.signer) {
-        console.error('No account or signer found')
+        logger.error('ui', 'No account or signer found')
         return
       }
 
@@ -237,7 +231,6 @@ export function ChatPanel({ isOpen, currentPubkey, onViewProfile }: ChatPanelPro
 
       const signedEvent = await account.signer.signEvent(messageEvent)
 
-      console.log('[ChatPanel] Sending message:', signedEvent.id)
 
       // Publish to all enabled relays
       const publishPromises = []
@@ -245,20 +238,18 @@ export function ChatPanel({ isOpen, currentPubkey, onViewProfile }: ChatPanelPro
         const relay = relayInstancesRef.current.get(relayUrl)
         if (relay) {
           try {
-            console.log(`[ChatPanel] Publishing to ${relayUrl}`)
             publishPromises.push(relay.publish(signedEvent))
           } catch (error) {
-            console.error(`[ChatPanel] Failed to publish to ${relayUrl}:`, error)
+            logger.error('ui', `[ChatPanel] Failed to publish to ${relayUrl}:`, error)
           }
         }
       }
 
       await Promise.allSettled(publishPromises)
-      console.log('[ChatPanel] Message sent')
 
       setInputMessage('')
     } catch (error) {
-      console.error('Failed to send message:', error)
+      logger.error('ui', 'Failed to send message:', error)
     } finally {
       setIsSending(false)
     }
@@ -298,7 +289,7 @@ export function ChatPanel({ isOpen, currentPubkey, onViewProfile }: ChatPanelPro
     try {
       const account = manager.accounts.find(a => a.pubkey === currentPubkey)
       if (!account || !account.signer) {
-        console.error('[ChatPanel] No account or signer found for delete')
+        logger.error('ui', '[ChatPanel] No account or signer found for delete')
         return
       }
 
@@ -317,7 +308,6 @@ export function ChatPanel({ isOpen, currentPubkey, onViewProfile }: ChatPanelPro
 
       const signedEvent = await account.signer.signEvent(deleteEvent)
 
-      console.log('[ChatPanel] Sending delete request:', signedEvent.id)
 
       // Publish to all enabled relays
       const publishPromises = []
@@ -327,15 +317,14 @@ export function ChatPanel({ isOpen, currentPubkey, onViewProfile }: ChatPanelPro
           try {
             publishPromises.push(relay.publish(signedEvent))
           } catch (error) {
-            console.error(`[ChatPanel] Failed to publish delete to ${relayUrl}:`, error)
+            logger.error('ui', `[ChatPanel] Failed to publish delete to ${relayUrl}:`, error)
           }
         }
       }
 
       await Promise.allSettled(publishPromises)
-      console.log('[ChatPanel] Delete request sent')
     } catch (error) {
-      console.error('[ChatPanel] Failed to delete message:', error)
+      logger.error('ui', '[ChatPanel] Failed to delete message:', error)
     }
   }
 

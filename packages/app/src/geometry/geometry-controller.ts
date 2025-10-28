@@ -1,3 +1,4 @@
+import * as logger from '../utils/logger';
 import { GeometryResult } from '../workers/geometry-worker';
 import { getMacroDepth, getMicroDepth } from '../config/depth-config';
 
@@ -52,7 +53,7 @@ export class GeometryController {
   }
 
   private handleSaveCSM(csmText: string) {
-    console.log('[GeometryController] CSM update received');
+    logger.log('geometry', '[GeometryController] CSM update received');
 
     if (this.onCSMUpdate) {
       this.onCSMUpdate(csmText);
@@ -90,35 +91,35 @@ export class GeometryController {
   }
 
   setVoxelAtDepth(x: number, y: number, z: number, depth: number, colorIndex: number) {
-    console.log('[GeometryController] setVoxelAtDepth', { x, y, z, depth, colorIndex, hasWorker: !!this.worker });
+    logger.log('geometry', '[GeometryController] setVoxelAtDepth', { x, y, z, depth, colorIndex, hasWorker: !!this.worker });
     if (this.worker) {
       this.worker.postMessage({ type: 'setVoxelAtDepth', x, y, z, depth, colorIndex });
     }
   }
 
   setVoxel(x: number, y: number, z: number, colorIndex: number) {
-    console.log('[GeometryController] setVoxel', { x, y, z, colorIndex, hasWorker: !!this.worker });
+    logger.log('geometry', '[GeometryController] setVoxel', { x, y, z, colorIndex, hasWorker: !!this.worker });
     if (this.worker) {
       this.worker.postMessage({ type: 'setVoxel', x, y, z, colorIndex });
     }
   }
 
   removeVoxelAtDepth(x: number, y: number, z: number, depth: number) {
-    console.log('[GeometryController] removeVoxelAtDepth', { x, y, z, depth, hasWorker: !!this.worker });
+    logger.log('geometry', '[GeometryController] removeVoxelAtDepth', { x, y, z, depth, hasWorker: !!this.worker });
     if (this.worker) {
       this.worker.postMessage({ type: 'removeVoxelAtDepth', x, y, z, depth });
     }
   }
 
   removeVoxel(x: number, y: number, z: number) {
-    console.log('[GeometryController] removeVoxel', { x, y, z, hasWorker: !!this.worker });
+    logger.log('geometry', '[GeometryController] removeVoxel', { x, y, z, hasWorker: !!this.worker });
     if (this.worker) {
       this.worker.postMessage({ type: 'removeVoxel', x, y, z });
     }
   }
 
   forceUpdate() {
-    console.log('[GeometryController] forceUpdate - triggering mesh regeneration');
+    logger.log('geometry', '[GeometryController] forceUpdate - triggering mesh regeneration');
     if (this.worker) {
       this.worker.postMessage({ type: 'forceUpdate' });
     }

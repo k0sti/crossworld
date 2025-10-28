@@ -1,3 +1,4 @@
+import * as logger from '../utils/logger';
 import { GeometryGenerator } from '../geometry/geometry-lib';
 import { getMacroDepth } from '../config/depth-config';
 
@@ -98,7 +99,7 @@ class GeometryWorkerManager {
   }
 
   setVoxelAtDepth(x: number, y: number, z: number, depth: number, colorIndex: number) {
-    console.log('[GeometryWorker] setVoxelAtDepth', { x, y, z, depth, colorIndex, hasGenerator: !!this.generator });
+    logger.log('worker', '[GeometryWorker] setVoxelAtDepth', { x, y, z, depth, colorIndex, hasGenerator: !!this.generator });
     if (this.generator) {
       this.generator.setVoxelAtDepth(x, y, z, depth, colorIndex);
       this.scheduleAutoSave();
@@ -106,7 +107,7 @@ class GeometryWorkerManager {
   }
 
   setVoxel(x: number, y: number, z: number, colorIndex: number) {
-    console.log('[GeometryWorker] setVoxel', { x, y, z, colorIndex, hasGenerator: !!this.generator });
+    logger.log('worker', '[GeometryWorker] setVoxel', { x, y, z, colorIndex, hasGenerator: !!this.generator });
     if (this.generator) {
       this.generator.setVoxel(x, y, z, colorIndex);
       this.scheduleAutoSave();
@@ -114,7 +115,7 @@ class GeometryWorkerManager {
   }
 
   removeVoxelAtDepth(x: number, y: number, z: number, depth: number) {
-    console.log('[GeometryWorker] removeVoxelAtDepth', { x, y, z, depth, hasGenerator: !!this.generator });
+    logger.log('worker', '[GeometryWorker] removeVoxelAtDepth', { x, y, z, depth, hasGenerator: !!this.generator });
     if (this.generator) {
       this.generator.removeVoxelAtDepth(x, y, z, depth);
       this.scheduleAutoSave();
@@ -122,7 +123,7 @@ class GeometryWorkerManager {
   }
 
   removeVoxel(x: number, y: number, z: number) {
-    console.log('[GeometryWorker] removeVoxel', { x, y, z, hasGenerator: !!this.generator });
+    logger.log('worker', '[GeometryWorker] removeVoxel', { x, y, z, hasGenerator: !!this.generator });
     if (this.generator) {
       this.generator.removeVoxel(x, y, z);
       this.scheduleAutoSave();
@@ -147,8 +148,8 @@ class GeometryWorkerManager {
 
     const csmText = this.generator.exportToCSM();
     if (csmText) {
-      console.log('[GeometryWorker] Exporting world to CSM...');
-      console.log('[GeometryWorker] CSM Preview:', csmText.substring(0, 200));
+      logger.log('worker', '[GeometryWorker] Exporting world to CSM...');
+      logger.log('worker', '[GeometryWorker] CSM Preview:', csmText.substring(0, 200));
 
       // Send CSM data to main thread for download
       self.postMessage({ type: 'save-csm', csmText });

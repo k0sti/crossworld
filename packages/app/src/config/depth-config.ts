@@ -1,3 +1,4 @@
+import * as logger from '../utils/logger';
 /**
  * Shared depth configuration for the entire application.
  * This is the single source of truth for macro and micro depth values.
@@ -38,7 +39,7 @@ export function getTotalDepth(): number {
  */
 export function setMacroDepth(depth: number): void {
   if (depth < 1 || depth > 10) {
-    console.warn(`Invalid macro depth ${depth}, must be between 1 and 10`);
+    logger.warn('common', `Invalid macro depth ${depth}, must be between 1 and 10`);
     return;
   }
   currentMacroDepth = depth;
@@ -50,7 +51,7 @@ export function setMacroDepth(depth: number): void {
  */
 export function setMicroDepth(depth: number): void {
   if (depth < 0 || depth > 3) {
-    console.warn(`Invalid micro depth ${depth}, must be between 0 and 3`);
+    logger.warn('common', `Invalid micro depth ${depth}, must be between 0 and 3`);
     return;
   }
   currentMicroDepth = depth;

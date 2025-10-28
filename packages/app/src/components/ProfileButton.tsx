@@ -1,3 +1,4 @@
+import * as logger from '../utils/logger';
 import { useState, useEffect } from 'react'
 import {
   HStack,
@@ -28,7 +29,7 @@ function getWorldRelays(): string[] {
       return relays.filter((r: any) => r.enabledForWorld).map((r: any) => r.url)
     }
   } catch (error) {
-    console.error('[ProfileButton] Failed to load relay config:', error)
+    logger.error('ui', '[ProfileButton] Failed to load relay config:', error)
   }
 
   // Fallback to default world relays
@@ -107,11 +108,11 @@ export function ProfileButton({ pubkey, onLogin, onOpenProfile }: ProfileButtonP
             setProfile(metadata)
             return
           } catch (e) {
-            console.error('Failed to parse profile metadata:', e)
+            logger.error('ui', 'Failed to parse profile metadata:', e)
           }
         }
       } catch (error) {
-        console.error(`Failed to fetch profile from ${relayUrl}:`, error)
+        logger.error('ui', `Failed to fetch profile from ${relayUrl}:`, error)
       }
     }
   }
@@ -140,7 +141,7 @@ export function ProfileButton({ pubkey, onLogin, onOpenProfile }: ProfileButtonP
       // Publish guest account profile metadata only to world relays
       // (Never publish to profile relays - they are read-only for querying existing profiles)
       const worldRelays = getWorldRelays()
-      console.log('[ProfileButton] Publishing guest profile to world relays:', worldRelays)
+      logger.log('ui', '[ProfileButton] Publishing guest profile to world relays:', worldRelays)
 
       for (const relayUrl of worldRelays) {
         try {
@@ -150,7 +151,7 @@ export function ProfileButton({ pubkey, onLogin, onOpenProfile }: ProfileButtonP
             try { relay.close() } catch (e) {}
           }, 1000)
         } catch (error) {
-          console.error(`Failed to publish to ${relayUrl}:`, error)
+          logger.error('ui', `Failed to publish to ${relayUrl}:`, error)
         }
       }
 
@@ -162,7 +163,7 @@ export function ProfileButton({ pubkey, onLogin, onOpenProfile }: ProfileButtonP
           name,
         })
       } catch (error) {
-        console.error('Failed to save guest account:', error)
+        logger.error('ui', 'Failed to save guest account:', error)
       }
 
       // Save login settings
@@ -182,7 +183,7 @@ export function ProfileButton({ pubkey, onLogin, onOpenProfile }: ProfileButtonP
 
       onLogin(account.pubkey)
     } catch (error) {
-      console.error('Guest login error:', error)
+      logger.error('ui', 'Guest login error:', error)
       toast({
         title: 'Login failed',
         description: error instanceof Error ? error.message : 'Failed to create guest account',
@@ -263,7 +264,7 @@ export function ProfileButton({ pubkey, onLogin, onOpenProfile }: ProfileButtonP
       onLogin(publicKey)
       return true
     } catch (error) {
-      console.error('Amber connection error:', error)
+      logger.error('ui', 'Amber connection error:', error)
       return false
     }
   }
@@ -325,7 +326,7 @@ export function ProfileButton({ pubkey, onLogin, onOpenProfile }: ProfileButtonP
 
       onLogin(publicKey)
     } catch (error) {
-      console.error('Extension login error:', error)
+      logger.error('ui', 'Extension login error:', error)
       toast({
         title: 'Connection failed',
         description: error instanceof Error ? error.message : 'Failed to connect to extension',

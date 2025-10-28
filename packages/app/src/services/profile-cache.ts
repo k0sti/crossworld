@@ -1,3 +1,4 @@
+import * as logger from '../utils/logger';
 import { Relay } from 'applesauce-relay'
 
 export interface ProfileMetadata {
@@ -118,11 +119,11 @@ class ProfileCacheService {
             const metadata = JSON.parse(latestEvent.content) as ProfileMetadata
             return metadata
           } catch (e) {
-            console.error('[ProfileCache] Failed to parse profile metadata:', e)
+            logger.error('profile', '[ProfileCache] Failed to parse profile metadata:', e)
           }
         }
       } catch (error) {
-        console.error(`[ProfileCache] Failed to fetch from ${relayUrl}:`, error)
+        logger.error('profile', `[ProfileCache] Failed to fetch from ${relayUrl}:`, error)
       }
     }
 

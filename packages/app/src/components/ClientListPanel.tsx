@@ -1,3 +1,4 @@
+import * as logger from '../utils/logger';
 import { Box, HStack, Avatar, Popover, PopoverTrigger, PopoverContent, PopoverBody, VStack, Text, IconButton, Badge, Wrap, useToast } from '@chakra-ui/react'
 import { useState, useEffect, useCallback } from 'react'
 import { FiMapPin, FiMessageSquare, FiCompass, FiEdit3, FiMic, FiHeadphones, FiCopy, FiExternalLink } from 'react-icons/fi'
@@ -37,7 +38,7 @@ export function ClientListPanel({ isEditMode = false, statusService }: ClientLis
           setEnabledRelays(DEFAULT_RELAYS)
         }
       } catch (error) {
-        console.error('Failed to load relay config:', error)
+        logger.error('ui', 'Failed to load relay config:', error)
         setEnabledRelays(DEFAULT_RELAYS)
       }
     }

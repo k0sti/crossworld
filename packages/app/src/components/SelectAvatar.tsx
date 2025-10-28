@@ -1,3 +1,4 @@
+import * as logger from '../utils/logger';
 import {
   VStack,
   HStack,
@@ -135,7 +136,7 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
         setAvatarType('vox');
       }
     }).catch(error => {
-      console.error('[SelectAvatar] Failed to load models config:', error);
+      logger.error('ui', '[SelectAvatar] Failed to load models config:', error);
       setModelsLoaded(true); // Still set to true to show the error state
     });
   }, []);
@@ -282,7 +283,7 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
 
           // Check if result contains an error
           if ('error' in result) {
-            console.error('[SelectAvatar] CSM parse error:', result.error);
+            logger.error('ui', '[SelectAvatar] CSM parse error:', result.error);
             throw new Error(result.error);
           }
 
@@ -325,10 +326,10 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
           mesh.rotation.y = Math.PI; // Rotate 180 degrees to show front
           scene.add(mesh);
           previewSceneRef.current.mesh = mesh;
-          console.log('[SelectAvatar] CSM model loaded successfully');
+          logger.log('ui', '[SelectAvatar] CSM model loaded successfully');
           return;
         } catch (error) {
-          console.error('[SelectAvatar] Failed to load CSM model:', error);
+          logger.error('ui', '[SelectAvatar] Failed to load CSM model:', error);
           // Show error placeholder (wrapped in group for consistent rotation)
           const geometry = new THREE.BoxGeometry(0.5, 1, 0.5);
           const material = new THREE.MeshStandardMaterial({ color: 0xff0000 });
@@ -410,7 +411,7 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
           scene.add(wrapper);
           previewSceneRef.current.mesh = wrapper;
         } catch (error) {
-          console.error('[SelectAvatar] Failed to load GLB model:', error);
+          logger.error('ui', '[SelectAvatar] Failed to load GLB model:', error);
           // Show error placeholder (wrapped in group for consistent rotation)
           const geometry = new THREE.BoxGeometry(0.5, 1, 0.5);
           const material = new THREE.MeshStandardMaterial({ color: 0xff0000 });
@@ -470,7 +471,7 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
           scene.add(mesh);
           previewSceneRef.current.mesh = mesh;
         } catch (error) {
-          console.error('[SelectAvatar] Failed to load VOX model:', error);
+          logger.error('ui', '[SelectAvatar] Failed to load VOX model:', error);
           // Show error placeholder (wrapped in group for consistent rotation)
           const geometry = new THREE.BoxGeometry(0.5, 1, 0.5);
           const material = new THREE.MeshStandardMaterial({ color: 0xff0000 });

@@ -1,3 +1,4 @@
+import * as logger from './logger';
 export interface ModelConfig {
   glb: [string, string][];
   vox: [string, string][];
@@ -18,7 +19,7 @@ export async function loadModelsConfig(): Promise<ModelConfig> {
     modelsConfigCache = await response.json();
     return modelsConfigCache!;
   } catch (error) {
-    console.error('Failed to load models config:', error);
+    logger.error('common', 'Failed to load models config:', error);
     // Return empty config as fallback
     modelsConfigCache = { glb: [], vox: [] };
     return modelsConfigCache;
