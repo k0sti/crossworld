@@ -37,79 +37,59 @@ export class GeometryGenerator {
 
   generateFrame(): GeometryData | null {
     if (!this.engine) {
-      console.error('GeometryEngine not initialized');
       return null;
     }
     return this.engine.generate_frame();
   }
 
   setVoxelAtDepth(x: number, y: number, z: number, depth: number, colorIndex: number): void {
-    console.log('[GeometryLib] setVoxelAtDepth', { x, y, z, depth, colorIndex, hasEngine: !!this.engine });
     if (!this.engine) {
-      console.error('GeometryEngine not initialized');
       return;
     }
     // @ts-ignore - WASM binding exists but TypeScript can't see it
     this.engine.setVoxelAtDepth(x, y, z, depth, colorIndex);
-    console.log('[GeometryLib] setVoxelAtDepth completed');
   }
 
   setVoxel(x: number, y: number, z: number, colorIndex: number): void {
-    console.log('[GeometryLib] setVoxel', { x, y, z, colorIndex, hasEngine: !!this.engine });
     if (!this.engine) {
-      console.error('GeometryEngine not initialized');
       return;
     }
     this.engine.setVoxel(x, y, z, colorIndex);
-    console.log('[GeometryLib] setVoxel completed');
   }
 
   removeVoxelAtDepth(x: number, y: number, z: number, depth: number): void {
-    console.log('[GeometryLib] removeVoxelAtDepth', { x, y, z, depth, hasEngine: !!this.engine });
     if (!this.engine) {
-      console.error('GeometryEngine not initialized');
       return;
     }
     // @ts-ignore - WASM binding exists but TypeScript can't see it
     this.engine.removeVoxelAtDepth(x, y, z, depth);
-    console.log('[GeometryLib] removeVoxelAtDepth completed');
   }
 
   removeVoxel(x: number, y: number, z: number): void {
-    console.log('[GeometryLib] removeVoxel', { x, y, z, hasEngine: !!this.engine });
     if (!this.engine) {
-      console.error('GeometryEngine not initialized');
       return;
     }
     this.engine.removeVoxel(x, y, z);
-    console.log('[GeometryLib] removeVoxel completed');
   }
 
   setFaceMeshMode(enabled: boolean): void {
-    console.log('[GeometryLib] setFaceMeshMode', { enabled, hasEngine: !!this.engine });
     if (!this.engine) {
-      console.error('GeometryEngine not initialized');
       return;
     }
     // @ts-ignore - WASM binding exists but TypeScript can't see it
     this.engine.setFaceMeshMode(enabled);
-    console.log('[GeometryLib] setFaceMeshMode completed');
   }
 
   setGroundRenderMode(useCube: boolean): void {
-    console.log('[GeometryLib] setGroundRenderMode', { useCube, hasEngine: !!this.engine });
     if (!this.engine) {
-      console.error('GeometryEngine not initialized');
       return;
     }
     // @ts-ignore - WASM binding exists but TypeScript can't see it
     this.engine.setGroundRenderMode(useCube);
-    console.log('[GeometryLib] setGroundRenderMode completed');
   }
 
   exportToCSM(): string | null {
     if (!this.engine) {
-      console.error('GeometryEngine not initialized');
       return null;
     }
     // @ts-ignore - WASM binding exists but TypeScript can't see it

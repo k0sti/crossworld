@@ -6,7 +6,6 @@ import init, { AvatarEngine } from '@workspace/wasm';
 import type { AvatarStateService, AvatarConfig } from '../services/avatar-state';
 import type { TeleportAnimationType } from '../renderer/teleport-animation';
 import { DebugPanel, type DebugInfo } from './WorldPanel';
-import { setMacroDepth, setMicroDepth } from '../config/depth-config';
 
 interface WorldCanvasProps {
   isLoggedIn: boolean;
