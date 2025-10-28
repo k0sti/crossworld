@@ -106,6 +106,15 @@ export class GeometryGenerator {
     this.engine.setGroundRenderMode(useCube);
     console.log('[GeometryLib] setGroundRenderMode completed');
   }
+
+  exportToCSM(): string | null {
+    if (!this.engine) {
+      console.error('GeometryEngine not initialized');
+      return null;
+    }
+    // @ts-ignore - WASM binding exists but TypeScript can't see it
+    return this.engine.exportToCSM();
+  }
 }
 
 export { GeometryEngine, GeometryData };

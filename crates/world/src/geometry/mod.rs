@@ -56,4 +56,9 @@ impl GeometryEngine {
     pub fn set_ground_render_mode(&mut self, use_cube: bool) {
         self.cube_ground.set_ground_render_mode(use_cube);
     }
+
+    /// Export the current world state to CSM format
+    pub fn export_to_csm(&self) -> String {
+        self.cube_ground.export_to_csm()
+    }
 }

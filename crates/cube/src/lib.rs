@@ -5,6 +5,7 @@ mod neighbor_traversal;
 mod octree;
 mod parser;
 mod render;
+mod serializer;
 
 // Only compile WASM bindings when "wasm" feature is enabled
 #[cfg(feature = "wasm")]
@@ -23,6 +24,7 @@ pub use render::{
     render_orthographic, render_orthographic_2d, render_orthographic_3d, RenderedImage,
     ViewDirection,
 };
+pub use serializer::serialize_csm;
 
 // Re-export glam for convenience
 pub use glam;

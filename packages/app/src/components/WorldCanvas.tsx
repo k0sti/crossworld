@@ -20,6 +20,7 @@ interface WorldCanvasProps {
   sceneManagerRef?: React.MutableRefObject<any>;
   speechEnabled?: boolean;
   onSpeechEnabledChange?: (enabled: boolean) => void;
+  onWorldCSMUpdate?: (csmText: string) => void;
 }
 
 export function WorldCanvas({
@@ -34,6 +35,7 @@ export function WorldCanvas({
   sceneManagerRef,
   speechEnabled: externalSpeechEnabled,
   onSpeechEnabledChange: externalOnSpeechEnabledChange,
+  onWorldCSMUpdate,
 }: WorldCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const localSceneManagerRef = useRef<SceneManager | null>(null);
@@ -163,7 +165,7 @@ export function WorldCanvas({
       );
       // Update triangle count
       setTriangleCount(geometry.stats.triangles);
-    }).then(() => {
+    }, onWorldCSMUpdate).then(() => {
       // Set initial face mesh mode (enabled by default)
       geometryController.setFaceMeshMode(true);
     }).catch((error) => {

@@ -78,6 +78,12 @@ impl GeometryEngine {
     pub fn set_ground_render_mode(&self, use_cube: bool) {
         self.engine.borrow_mut().set_ground_render_mode(use_cube);
     }
+
+    /// Export the current world state to CSM format
+    #[wasm_bindgen(js_name = exportToCSM)]
+    pub fn export_to_csm(&self) -> String {
+        self.engine.borrow().export_to_csm()
+    }
 }
 
 impl Default for GeometryEngine {
