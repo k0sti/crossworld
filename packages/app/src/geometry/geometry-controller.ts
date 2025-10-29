@@ -1,6 +1,6 @@
 import * as logger from '../utils/logger';
 import { GeometryResult } from '../workers/geometry-worker';
-import { getMacroDepth, getMicroDepth } from '../config/depth-config';
+import { getMacroDepth, getMicroDepth, getBorderDepth } from '../config/depth-config';
 
 export class GeometryController {
   private worker: Worker | null = null;
@@ -10,10 +10,12 @@ export class GeometryController {
   private onCSMUpdate?: (csmText: string) => void;
   private macroDepth: number;
   private microDepth: number;
+  private borderDepth: number;
 
-  constructor(macroDepth: number = getMacroDepth(), microDepth: number = getMicroDepth()) {
+  constructor(macroDepth: number = getMacroDepth(), microDepth: number = getMicroDepth(), borderDepth: number = getBorderDepth()) {
     this.macroDepth = macroDepth;
     this.microDepth = microDepth;
+    this.borderDepth = borderDepth;
   }
 
   async initialize(
@@ -39,7 +41,7 @@ export class GeometryController {
         }
       });
 
-      this.worker.postMessage({ type: 'init', macroDepth: this.macroDepth, microDepth: this.microDepth });
+      this.worker.postMessage({ type: 'init', macroDepth: this.macroDepth, microDepth: this.microDepth, borderDepth: this.borderDepth });
     });
   }
 
@@ -76,6 +78,10 @@ export class GeometryController {
 
   getMicroDepth(): number {
     return this.microDepth;
+  }
+
+  getBorderDepth(): number {
+    return this.borderDepth;
   }
 
   setGroundRenderMode(useCube: boolean) {
@@ -154,13 +160,14 @@ export class GeometryController {
     });
   }
 
-  async reinitialize(macroDepth: number, microDepth: number, onGeometryUpdate: (geometry: GeometryResult) => void): Promise<void> {
+  async reinitialize(macroDepth: number, microDepth: number, borderDepth: number, onGeometryUpdate: (geometry: GeometryResult) => void): Promise<void> {
     // Terminate existing worker
     this.destroy();
 
     // Update depths
     this.macroDepth = macroDepth;
     this.microDepth = microDepth;
+    this.borderDepth = borderDepth;
 
     // Reinitialize with new depths
     await this.initialize(onGeometryUpdate);

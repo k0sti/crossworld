@@ -12,12 +12,13 @@ impl GeometryEngine {
     /// # Arguments
     /// * `macro_depth` - World size depth (e.g., 3 = 8×8×8 world units)
     /// * `micro_depth` - Subdivision depth (0-3), used for mesh generation
+    /// * `_border_depth` - Number of border cube layers (not yet implemented)
     ///
     /// World size is determined by macro depth (2^macro_depth).
     /// Total depth (macro + micro) is used for mesh generation to get correct voxel sizes.
-    pub fn new(macro_depth: u32, micro_depth: u32) -> Self {
+    pub fn new(macro_depth: u32, micro_depth: u32, _border_depth: u32) -> Self {
         Self {
-            cube_ground: cube_ground::CubeGround::new(macro_depth, micro_depth),
+            cube_ground: cube_ground::CubeGround::new(macro_depth, micro_depth, _border_depth),
         }
     }
 

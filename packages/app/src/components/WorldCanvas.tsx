@@ -7,6 +7,7 @@ import init, { AvatarEngine } from '@workspace/wasm';
 import type { AvatarStateService, AvatarConfig } from '../services/avatar-state';
 import type { TeleportAnimationType } from '../renderer/teleport-animation';
 import { DebugPanel, type DebugInfo } from './WorldPanel';
+import { onDepthChange } from '../config/depth-config';
 
 interface WorldCanvasProps {
   isLoggedIn: boolean;
@@ -80,10 +81,11 @@ export function WorldCanvas({
     try {
       // Only reinitialize if MACRO depth changed (world size change)
       // Micro depth changes don't need reinit since Rust ignores it and world scale stays constant
-      const currentMacro = geometryController['macroDepth']; // Access private field for comparison
+      const currentMacro = geometryController.getMacroDepth();
+      const currentBorder = geometryController.getBorderDepth();
 
       if (currentMacro !== macroDepth) {
-        await geometryController.reinitialize(macroDepth, microDepth, (geometry) => {
+        await geometryController.reinitialize(macroDepth, microDepth, currentBorder, (geometry) => {
           sceneManager.updateGeometry(
             geometry.vertices,
             geometry.indices,
@@ -91,7 +93,6 @@ export function WorldCanvas({
             geometry.colors
           );
         });
-      } else {
       }
     } catch (error) {
       logger.error('renderer', 'Failed to apply depth settings:', error);
@@ -201,6 +202,37 @@ export function WorldCanvas({
       }
     };
   }, [avatarStateService]);
+
+  // Subscribe to depth config changes and reinitialize when macro or border depth changes
+  useEffect(() => {
+    const geometryController = localGeometryControllerRef.current;
+    const sceneManager = localSceneManagerRef.current;
+
+    if (!geometryController || !sceneManager) return;
+
+    const unsubscribe = onDepthChange((macroDepth, microDepth, borderDepth) => {
+      const currentMacro = geometryController.getMacroDepth();
+      const currentBorder = geometryController.getBorderDepth();
+
+      // Reinitialize if macro or border depth changed (these affect world generation)
+      if (currentMacro !== macroDepth || currentBorder !== borderDepth) {
+        logger.log('renderer', `[WorldCanvas] Depth changed: macro ${currentMacro}->${macroDepth}, border ${currentBorder}->${borderDepth}, reinitializing...`);
+        geometryController.reinitialize(macroDepth, microDepth, borderDepth, (geometry) => {
+          sceneManager.updateGeometry(
+            geometry.vertices,
+            geometry.indices,
+            geometry.normals,
+            geometry.colors
+          );
+          setTriangleCount(geometry.stats.triangles);
+        }).catch((error) => {
+          logger.error('renderer', 'Failed to reinitialize geometry controller:', error);
+        });
+      }
+    });
+
+    return unsubscribe;
+  }, []);
 
   // Handle current user pubkey changes
   useEffect(() => {

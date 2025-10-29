@@ -6,8 +6,9 @@ use noise::{Fbm, Perlin};
 
 pub struct CubeGround {
     octree: Octree,
-    macro_depth: u32,  // World size = 2^macro_depth, terrain generation depth
-    render_depth: u32, // Maximum traversal depth for mesh generation
+    macro_depth: u32,   // World size = 2^macro_depth, terrain generation depth
+    render_depth: u32,  // Maximum traversal depth for mesh generation
+    _border_depth: u32, // Number of border cube layers (not yet implemented)
     face_mesh_mode: bool,
 }
 
@@ -17,13 +18,14 @@ impl CubeGround {
     /// # Arguments
     /// * `macro_depth` - World size depth (e.g., 3 = 8×8×8 world units)
     /// * `micro_depth` - Additional subdivision levels for user edits (0-3)
+    /// * `_border_depth` - Number of border cube layers (not yet implemented)
     ///
     /// Architecture (macro_depth=3, micro_depth=3):
     /// - World size: 8×8×8 units (2^3)
     /// - Terrain generated at macro depth
     /// - User voxels can be placed up to macro+micro depth (depth 6)
     /// - Octree dynamically subdivides for finer edits
-    pub fn new(macro_depth: u32, micro_depth: u32) -> Self {
+    pub fn new(macro_depth: u32, micro_depth: u32, _border_depth: u32) -> Self {
         // Generate a random seed for unique world generation each time
         // Use JavaScript's Math.random() for WASM compatibility
         let random_value = js_sys::Math::random();
@@ -46,6 +48,7 @@ impl CubeGround {
             octree: Octree::new(root),
             macro_depth,
             render_depth,
+            _border_depth,
             face_mesh_mode: true,
         }
     }
@@ -145,15 +148,15 @@ impl CubeGround {
         // - Subdivided voxels (at macro+micro_depth) are correctly normalized
         // We scale by world_size (2^macro_depth) to convert to world units
         let world_size = (1 << self.macro_depth) as f32;
-        let half_world = world_size / 2.0;
+        let half_size = world_size / 2.0;
 
         let scaled_vertices: Vec<f32> = builder
             .vertices
             .chunks(3)
             .flat_map(|chunk| {
-                let x = chunk[0] * world_size - half_world;
-                let y = chunk[1] * world_size - half_world;
-                let z = chunk[2] * world_size - half_world;
+                let x = chunk[0] * world_size - half_size;
+                let y = chunk[1] * world_size - half_size;
+                let z = chunk[2] * world_size - half_size;
                 vec![x, y, z]
             })
             .collect();
@@ -169,7 +172,7 @@ impl CubeGround {
 
 impl Default for CubeGround {
     fn default() -> Self {
-        Self::new(3, 0) // Default: macro depth 3, micro depth 0
+        Self::new(3, 0, 0) // Default: macro depth 3, micro depth 0, no borders
     }
 }
 
