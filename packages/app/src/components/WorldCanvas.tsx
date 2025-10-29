@@ -53,12 +53,41 @@ export function WorldCanvas({
   const animationFrameRef = useRef<number | null>(null);
   const [debugInfo, setDebugInfo] = useState<DebugInfo>({});
 
-  // Scene configuration state
-  const [internalSpeechEnabled, setInternalSpeechEnabled] = useState(false); // Disabled by default
-  const [worldGridVisible, setWorldGridVisible] = useState(true); // Show helpers by default
-  const [faceMeshEnabled, setFaceMeshEnabled] = useState(true); // Enabled by default
-  const [wireframeEnabled, setWireframeEnabled] = useState(false); // Disabled by default
+  // Scene configuration state with localStorage persistence
+  const [internalSpeechEnabled, setInternalSpeechEnabled] = useState(() => {
+    const saved = localStorage.getItem('worldPanel.speechEnabled');
+    return saved !== null ? JSON.parse(saved) : false;
+  });
+  const [worldGridVisible, setWorldGridVisible] = useState(() => {
+    const saved = localStorage.getItem('worldPanel.worldGridVisible');
+    return saved !== null ? JSON.parse(saved) : false; // Hidden by default
+  });
+  const [faceMeshEnabled, setFaceMeshEnabled] = useState(() => {
+    const saved = localStorage.getItem('worldPanel.faceMeshEnabled');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+  const [wireframeEnabled, setWireframeEnabled] = useState(() => {
+    const saved = localStorage.getItem('worldPanel.wireframeEnabled');
+    return saved !== null ? JSON.parse(saved) : false;
+  });
   const [triangleCount, setTriangleCount] = useState<number | undefined>(undefined);
+
+  // Save settings to localStorage when they change
+  useEffect(() => {
+    localStorage.setItem('worldPanel.speechEnabled', JSON.stringify(internalSpeechEnabled));
+  }, [internalSpeechEnabled]);
+
+  useEffect(() => {
+    localStorage.setItem('worldPanel.worldGridVisible', JSON.stringify(worldGridVisible));
+  }, [worldGridVisible]);
+
+  useEffect(() => {
+    localStorage.setItem('worldPanel.faceMeshEnabled', JSON.stringify(faceMeshEnabled));
+  }, [faceMeshEnabled]);
+
+  useEffect(() => {
+    localStorage.setItem('worldPanel.wireframeEnabled', JSON.stringify(wireframeEnabled));
+  }, [wireframeEnabled]);
 
   // Use external speechEnabled if provided, otherwise use internal state
   const speechEnabled = externalSpeechEnabled ?? internalSpeechEnabled;

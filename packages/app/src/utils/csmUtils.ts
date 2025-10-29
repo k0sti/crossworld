@@ -1,6 +1,7 @@
 import * as logger from './logger';
 import cubeInit from '@workspace/wasm-cube'
 import * as cubeWasm from '@workspace/wasm-cube'
+import type { CubeCoord } from '../types/cube-coord'
 
 let wasmInitialized = false
 let initPromise: Promise<void> | null = null
@@ -121,4 +122,80 @@ export function formatBytes(bytes: number): string {
   const sizes = ['B', 'KB', 'MB']
   const i = Math.floor(Math.log(bytes) / Math.log(k))
   return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
+}
+
+/**
+ * Vec3-like structure for 3D vectors
+ */
+export interface Vec3 {
+  x: number
+  y: number
+  z: number
+}
+
+/**
+ * Raycast result from octree
+ */
+export interface RaycastResult {
+  /** Octree coordinates of hit voxel */
+  coord: CubeCoord
+  /** World position of hit (in normalized [0, 1] space) */
+  position: Vec3
+  /** Surface normal */
+  normal: Vec3
+}
+
+/**
+ * Cast a ray through the octree and find the first non-empty voxel
+ * @param modelId Model identifier
+ * @param pos Ray origin in normalized [0, 1] cube space {x, y, z}
+ * @param dir Ray direction (will be normalized) {x, y, z}
+ * @returns RaycastResult if hit, null otherwise
+ */
+export async function raycastOctree(
+  modelId: string,
+  pos: Vec3,
+  dir: Vec3
+): Promise<RaycastResult | null> {
+  await ensureWasmInitialized()
+  try {
+    const result = (cubeWasm as any).raycast_octree(
+      modelId,
+      pos.x,
+      pos.y,
+      pos.z,
+      dir.x,
+      dir.y,
+      dir.z
+    )
+
+    // Check if result is null (no hit) or an error
+    if (!result) return null
+    if (typeof result === 'object' && 'error' in result) {
+      throw new Error((result as any).error)
+    }
+
+    // Transform flat WASM result into structured result
+    return {
+      coord: {
+        x: result.x,
+        y: result.y,
+        z: result.z,
+        depth: result.depth
+      },
+      position: {
+        x: result.world_x,
+        y: result.world_y,
+        z: result.world_z
+      },
+      normal: {
+        x: result.normal_x,
+        y: result.normal_y,
+        z: result.normal_z
+      }
+    }
+  } catch (error) {
+    logger.error('common', '[Raycast] Error:', error)
+    throw error
+  }
 }
