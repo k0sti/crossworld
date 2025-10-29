@@ -10,8 +10,11 @@ let currentMacroDepth = 3;
 /** Current micro depth - rendering scale depth */
 let currentMicroDepth = 0;
 
+/** Current border depth - number of border cube layers */
+let currentBorderDepth = 0;
+
 /** Callbacks to notify when depth changes */
-const depthChangeListeners: Array<(macroDepth: number, microDepth: number) => void> = [];
+const depthChangeListeners: Array<(macroDepth: number, microDepth: number, borderDepth: number) => void> = [];
 
 /**
  * Get current macro depth
@@ -25,6 +28,13 @@ export function getMacroDepth(): number {
  */
 export function getMicroDepth(): number {
   return currentMicroDepth;
+}
+
+/**
+ * Get current border depth
+ */
+export function getBorderDepth(): number {
+  return currentBorderDepth;
 }
 
 /**
@@ -59,9 +69,21 @@ export function setMicroDepth(depth: number): void {
 }
 
 /**
+ * Set border depth and notify listeners
+ */
+export function setBorderDepth(depth: number): void {
+  if (depth < 0 || depth > 5) {
+    logger.warn('common', `Invalid border depth ${depth}, must be between 0 and 5`);
+    return;
+  }
+  currentBorderDepth = depth;
+  notifyListeners();
+}
+
+/**
  * Subscribe to depth changes
  */
-export function onDepthChange(callback: (macroDepth: number, microDepth: number) => void): () => void {
+export function onDepthChange(callback: (macroDepth: number, microDepth: number, borderDepth: number) => void): () => void {
   depthChangeListeners.push(callback);
   // Return unsubscribe function
   return () => {
@@ -77,6 +99,6 @@ export function onDepthChange(callback: (macroDepth: number, microDepth: number)
  */
 function notifyListeners(): void {
   depthChangeListeners.forEach(callback => {
-    callback(currentMacroDepth, currentMicroDepth);
+    callback(currentMacroDepth, currentMicroDepth, currentBorderDepth);
   });
 }

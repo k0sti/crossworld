@@ -1,6 +1,6 @@
 import * as logger from '../utils/logger';
 import init, { GeometryEngine, GeometryData } from '@workspace/wasm';
-import { getMacroDepth, getMicroDepth } from '../config/depth-config';
+import { getMacroDepth, getMicroDepth, getBorderDepth } from '../config/depth-config';
 
 let wasmInitialized = false;
 let initPromise: Promise<void> | null = null;
@@ -25,15 +25,17 @@ export class GeometryGenerator {
   private engine: GeometryEngine | null = null;
   private macroDepth: number;
   private microDepth: number;
+  private borderDepth: number;
 
-  constructor(macroDepth: number = getMacroDepth(), microDepth: number = getMicroDepth()) {
+  constructor(macroDepth: number = getMacroDepth(), microDepth: number = getMicroDepth(), borderDepth: number = getBorderDepth()) {
     this.macroDepth = macroDepth;
     this.microDepth = microDepth;
+    this.borderDepth = borderDepth;
   }
 
   async initialize(): Promise<void> {
     await initializeWasm();
-    this.engine = new GeometryEngine(this.macroDepth, this.microDepth);
+    this.engine = new GeometryEngine(this.macroDepth, this.microDepth, this.borderDepth);
   }
 
   generateFrame(): GeometryData | null {

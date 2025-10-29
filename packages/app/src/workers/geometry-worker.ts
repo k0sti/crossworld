@@ -11,6 +11,7 @@ export interface GeometryMessage {
   colorIndex?: number;
   macroDepth?: number;
   microDepth?: number;
+  borderDepth?: number;
   enabled?: boolean;
   useCube?: boolean;
 }
@@ -35,8 +36,8 @@ class GeometryWorkerManager {
   private saveTimeout: ReturnType<typeof setTimeout> | null = null;
   private saveDebounceMs = 2000; // Save 2 seconds after last modification
 
-  async initialize(macroDepth: number = getMacroDepth(), microDepth: number = 0) {
-    this.generator = new GeometryGenerator(macroDepth, microDepth);
+  async initialize(macroDepth: number = getMacroDepth(), microDepth: number = 0, borderDepth: number = 0) {
+    this.generator = new GeometryGenerator(macroDepth, microDepth, borderDepth);
     await this.generator.initialize();
     self.postMessage({ type: 'ready' });
     this.startUpdateLoop();
@@ -211,7 +212,7 @@ self.addEventListener('message', async (event) => {
 
   switch (message.type) {
     case 'init':
-      await manager.initialize(message.macroDepth, message.microDepth);
+      await manager.initialize(message.macroDepth, message.microDepth, message.borderDepth);
       break;
 
     case 'update':

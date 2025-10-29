@@ -20,16 +20,20 @@ pub struct GeometryEngine {
 #[wasm_bindgen]
 impl GeometryEngine {
     #[wasm_bindgen(constructor)]
-    pub fn new(macro_depth: u32, micro_depth: u32) -> Self {
+    pub fn new(macro_depth: u32, micro_depth: u32, _border_depth: u32) -> Self {
         web_sys::console::log_1(
             &format!(
-                "GeometryEngine initialized with macro_depth={}, micro_depth={}",
-                macro_depth, micro_depth
+                "GeometryEngine initialized with macro_depth={}, micro_depth={}, border_depth={}",
+                macro_depth, micro_depth, _border_depth
             )
             .into(),
         );
         Self {
-            engine: RefCell::new(GeometryEngineInternal::new(macro_depth, micro_depth)),
+            engine: RefCell::new(GeometryEngineInternal::new(
+                macro_depth,
+                micro_depth,
+                _border_depth,
+            )),
         }
     }
 
@@ -88,7 +92,7 @@ impl GeometryEngine {
 
 impl Default for GeometryEngine {
     fn default() -> Self {
-        Self::new(3, 0) // Default: macro depth 3, micro depth 0
+        Self::new(3, 0, 0) // Default: macro depth 3, micro depth 0, no borders
     }
 }
 
