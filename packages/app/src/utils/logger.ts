@@ -33,6 +33,9 @@ const STORAGE_KEY = 'crossworld:log-config';
 
 function loadConfig(): void {
   try {
+    if (typeof localStorage === 'undefined') {
+      return;
+    }
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
@@ -50,6 +53,9 @@ function loadConfig(): void {
 
 function saveConfig(): void {
   try {
+    if (typeof localStorage === 'undefined') {
+      return;
+    }
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
       enabled: Array.from(config.enabled),
       masterEnabled: config.masterEnabled,
