@@ -265,6 +265,8 @@ export function ProfileButton({ pubkey, onLogin, onOpenProfile }: ProfileButtonP
       return true
     } catch (error) {
       logger.error('ui', 'Amber connection error:', error)
+      // Clear any stale login settings
+      LoginSettingsService.clear()
       return false
     }
   }
@@ -327,9 +329,19 @@ export function ProfileButton({ pubkey, onLogin, onOpenProfile }: ProfileButtonP
       onLogin(publicKey)
     } catch (error) {
       logger.error('ui', 'Extension login error:', error)
+
+      // Clear any stale login settings that might be causing issues
+      LoginSettingsService.clear()
+
+      // Provide user-friendly error message
+      const errorMessage = error instanceof Error ? error.message : 'Failed to connect to extension'
+      const isExtensionError = errorMessage.includes('bounds') || errorMessage.includes('extension')
+
       toast({
         title: 'Connection failed',
-        description: error instanceof Error ? error.message : 'Failed to connect to extension',
+        description: isExtensionError
+          ? 'Extension connection failed. Please try again or use a different login method.'
+          : errorMessage,
         status: 'error',
         duration: 5000,
         isClosable: true,
