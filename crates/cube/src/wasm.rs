@@ -8,6 +8,7 @@ use crate::{
     generate_mesh_hierarchical, parse_csm, serialize_csm, ColorMapper, Cube, DefaultMeshBuilder,
     HsvColorMapper, Octree, PaletteColorMapper,
 };
+use glam::Vec3;
 
 #[derive(Serialize, Deserialize)]
 pub struct MeshResult {
@@ -357,4 +358,75 @@ fn set_voxel_at_path(cube: &Cube<i32>, path: &[usize], color_index: i32) -> Cube
             Cube::Solid(color_index)
         }
     }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct RaycastResult {
+    /// Octree coordinates of hit voxel
+    pub x: i32,
+    pub y: i32,
+    pub z: i32,
+    pub depth: u32,
+    /// World position of hit (in normalized [0, 1] space)
+    pub world_x: f32,
+    pub world_y: f32,
+    pub world_z: f32,
+    /// Surface normal
+    pub normal_x: f32,
+    pub normal_y: f32,
+    pub normal_z: f32,
+}
+
+/// Cast a ray through the octree
+/// pos: ray origin in world space [x, y, z] (normalized [0, 1] cube space)
+/// dir: ray direction [x, y, z] (should be normalized)
+/// Returns hit information or null if no hit
+#[wasm_bindgen]
+pub fn raycast_octree(
+    model_id: &str,
+    pos_x: f32,
+    pos_y: f32,
+    pos_z: f32,
+    dir_x: f32,
+    dir_y: f32,
+    dir_z: f32,
+) -> JsValue {
+    MODEL_STORAGE.with(|storage| {
+        let models = storage.borrow();
+        if let Some(model_data) = models.get(model_id) {
+            let pos = Vec3::new(pos_x, pos_y, pos_z);
+            let dir = Vec3::new(dir_x, dir_y, dir_z).normalize();
+
+            // Define empty test: value == -1 (empty) or value == 0 (air)
+            let is_empty = |v: &i32| *v == -1 || *v == 0;
+
+            if let Some(hit) = model_data.cube.raycast(
+                pos,
+                dir,
+                model_data.max_depth as u32,
+                &is_empty,
+            ) {
+                let result = RaycastResult {
+                    x: hit.coord.pos.x,
+                    y: hit.coord.pos.y,
+                    z: hit.coord.pos.z,
+                    depth: hit.coord.depth,
+                    world_x: hit.position.x,
+                    world_y: hit.position.y,
+                    world_z: hit.position.z,
+                    normal_x: hit.normal.x,
+                    normal_y: hit.normal.y,
+                    normal_z: hit.normal.z,
+                };
+                serde_wasm_bindgen::to_value(&result).unwrap()
+            } else {
+                JsValue::NULL
+            }
+        } else {
+            let error = ParseError {
+                error: format!("Model not found: {}", model_id),
+            };
+            serde_wasm_bindgen::to_value(&error).unwrap()
+        }
+    })
 }
