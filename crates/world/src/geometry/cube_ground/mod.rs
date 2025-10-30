@@ -1,7 +1,7 @@
 mod builder;
 
 use crate::GeometryData;
-use crossworld_cube::{ColorMapper, Cube, DefaultMeshBuilder, Octree, glam::IVec3, serialize_csm};
+use crossworld_cube::{ColorMapper, Cube, CubeCoord, DefaultMeshBuilder, Octree, glam::IVec3, serialize_csm};
 use noise::{Fbm, Perlin};
 
 pub struct CubeGround {
@@ -81,7 +81,7 @@ impl CubeGround {
         self.octree.root = self
             .octree
             .root
-            .updated(Cube::Solid(color_index), depth, pos)
+            .update(CubeCoord::new(pos, depth), Cube::Solid(color_index))
             .simplified();
     }
 
