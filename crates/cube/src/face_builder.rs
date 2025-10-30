@@ -93,13 +93,6 @@ where
     traverse_with_neighbors(
         &grid,
         &mut |view, coord, _subleaf| {
-            let center = view.center();
-            let center_id = center.id();
-
-            // Only process empty voxels
-            if center_id != 0 {
-                return false;
-            }
 
             // Calculate voxel size based on actual depth of this voxel
             // coord.depth counts down from max_depth as we traverse
@@ -128,18 +121,22 @@ where
 
             for (face, dir_offset, dx, dy, dz) in DIRECTIONS {
                 if let Some(neighbor_cube) = view.get(dir_offset) {
-                    let neighbor_id = neighbor_cube.id();
-
-                    // Skip empty neighbors
-                    if neighbor_id == 0 {
-                        continue;
-                    }
-
                     // Check if neighbor is subdivided (branch node)
                     // If so, we need to subdivide this voxel to match the detail level
                     if matches!(**neighbor_cube, Cube::Cubes(_)) {
                         should_subdivide = true;
                         continue; // Don't generate face, need to subdivide first
+                    }
+
+                    let center_id = view.center().id();
+                    // Only process empty voxels
+                    if center_id != 0 {
+                        continue;
+                    }
+                    let neighbor_id = neighbor_cube.id();
+                    // Skip empty neighbors
+                    if neighbor_id == 0 {
+                        continue;
                     }
 
                     // Neighbor is a leaf at the same depth - generate face
