@@ -5,6 +5,7 @@ mod neighbor_traversal;
 mod octree;
 mod parser;
 mod raycast;
+mod raycast_aether;
 mod render;
 mod serializer;
 
