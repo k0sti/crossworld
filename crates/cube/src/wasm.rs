@@ -5,7 +5,7 @@ use std::rc::Rc;
 use wasm_bindgen::prelude::*;
 
 use crate::{
-    generate_mesh_hierarchical, parse_csm, serialize_csm, ColorMapper, Cube, DefaultMeshBuilder,
+    generate_mesh_hierarchical, glam::Vec3, parse_csm, serialize_csm, ColorMapper, Cube, DefaultMeshBuilder,
     HsvColorMapper, Octree, PaletteColorMapper,
 };
 
@@ -359,10 +359,6 @@ fn set_voxel_at_path(cube: &Cube<i32>, path: &[usize], color_index: i32) -> Cube
     }
 }
 
-// TODO: Raycast function needs to be reimplemented to use the new standalone raycast API
-// The new API uses: raycast(cube, cast_state, cube_coord, entry_normal, ray_origin, ray_direction)
-// This is incompatible with the simple pos+dir raycast that was here before.
-/*
 #[derive(Serialize, Deserialize)]
 pub struct RaycastResult {
     /// Octree coordinates of hit voxel
@@ -380,12 +376,12 @@ pub struct RaycastResult {
     pub normal_z: f32,
 }
 
-/// Cast a ray through the octree
+/// Cast a ray through the octree using the aether raycast implementation
 /// pos: ray origin in world space [x, y, z] (normalized [0, 1] cube space)
 /// dir: ray direction [x, y, z] (should be normalized)
 /// Returns hit information or null if no hit
 #[wasm_bindgen]
-pub fn raycast_octree(
+pub fn raycast_aether(
     model_id: &str,
     pos_x: f32,
     pos_y: f32,
@@ -432,4 +428,3 @@ pub fn raycast_octree(
         }
     })
 }
-*/

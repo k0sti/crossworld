@@ -1,5 +1,6 @@
 import * as logger from './logger';
-import initWasm, { parse_csm_to_mesh, validate_csm } from '@workspace/wasm-cube';
+import initWasm from '@workspace/wasm-cube';
+import * as cube from '@workspace/wasm-cube';
 
 let initialized = false;
 
@@ -19,7 +20,7 @@ export async function ensureCubeWasmInitialized(): Promise<void> {
  */
 export async function parseCsmToMesh(csmCode: string) {
   await ensureCubeWasmInitialized();
-  return parse_csm_to_mesh(csmCode);
+  return cube.parse_csm_to_mesh(csmCode);
 }
 
 /**
@@ -27,5 +28,51 @@ export async function parseCsmToMesh(csmCode: string) {
  */
 export async function validateCsm(csmCode: string) {
   await ensureCubeWasmInitialized();
-  return validate_csm(csmCode);
+  return cube.validate_csm(csmCode);
+}
+
+/**
+ * Load a CSM model into Rust MODEL_STORAGE for raycasting
+ */
+export async function loadModelFromCsm(modelId: string, csmText: string, maxDepth: number) {
+  await ensureCubeWasmInitialized();
+  // @ts-expect-error - WASM exports not fully typed in generated .d.ts
+  return cube.load_model_from_csm(modelId, csmText, maxDepth);
+}
+
+/**
+ * Raycast through octree using aether implementation (async, checks init)
+ */
+export async function raycastAether(
+  modelId: string,
+  posX: number,
+  posY: number,
+  posZ: number,
+  dirX: number,
+  dirY: number,
+  dirZ: number
+) {
+  await ensureCubeWasmInitialized();
+  // @ts-expect-error - WASM exports not fully typed in generated .d.ts
+  return cube.raycast_aether(modelId, posX, posY, posZ, dirX, dirY, dirZ);
+}
+
+/**
+ * Raycast through octree using aether implementation (synchronous, assumes WASM is initialized)
+ */
+export function raycastAetherSync(
+  modelId: string,
+  posX: number,
+  posY: number,
+  posZ: number,
+  dirX: number,
+  dirY: number,
+  dirZ: number
+) {
+  if (!initialized) {
+    logger.error('common', '[CubeWasm] Attempted to call raycastAetherSync before WASM initialization');
+    return null;
+  }
+  // @ts-expect-error - WASM exports not fully typed in generated .d.ts
+  return cube.raycast_aether(modelId, posX, posY, posZ, dirX, dirY, dirZ);
 }
