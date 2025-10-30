@@ -1,3 +1,4 @@
+use crate::CubeCoord;
 use glam::IVec3;
 use std::rc::Rc;
 
@@ -137,15 +138,15 @@ impl<T> Cube<T> {
         }
     }
 
-    /// Get cube at specific position and depth
-    /// Similar to Scala's apply(depth, pos)
-    pub fn get(&self, depth: u32, pos: IVec3) -> &Cube<T> {
-        if depth == 0 {
+    /// Get cube at specific coordinate
+    pub fn get(&self, cube_coord: CubeCoord) -> &Cube<T> {
+        if cube_coord.depth == 0 {
             self
         } else {
-            let d = depth - 1;
-            let index = Self::index(d, pos);
-            self.get_child_or_self(index).get(d, pos)
+            let d = cube_coord.depth - 1;
+            let index = Self::index(d, cube_coord.pos);
+            let child_coord = CubeCoord::new(cube_coord.pos, d);
+            self.get_child_or_self(index).get(child_coord)
         }
     }
 
@@ -272,16 +273,84 @@ impl<T: Clone> Cube<T> {
         Cube::Cubes(Box::new(children))
     }
 
-    /// Immutably update cube at position and depth
-    pub fn updated(&self, cube: Cube<T>, depth: u32, pos: IVec3) -> Self {
-        if depth == 0 {
+    /// Update this cube with subcube at cube_coord
+    pub fn update(&self, cube_coord: CubeCoord, cube: Cube<T>) -> Self {
+        if cube_coord.depth == 0 {
             cube
         } else {
-            let d = depth - 1;
-            let index = Self::index(d, pos);
+            let d = cube_coord.depth - 1;
+            let index = Self::index(d, cube_coord.pos);
             let child = self.get_child_or_self(index);
-            let new_child = child.updated(cube, d, pos);
+            let child_coord = CubeCoord::new(cube_coord.pos, d);
+            let new_child = child.update(child_coord, cube);
             self.updated_index(index, new_child)
+        }
+    }
+
+    /// Update this cube with cube at depth and offset, scaled with given scale depth
+    ///
+    /// Places the source cube at the target depth and offset, where the source cube
+    /// occupies 2^scale voxels in each dimension at the target depth.
+    ///
+    /// Example: update_depth(2, (0, 2, 0), 1, cube) places cube at depth 2
+    /// covering positions x=[0,1], y=[2,3], z=[0,1]
+    pub fn update_depth(&self, depth: u32, offset: IVec3, scale: u32, cube: Cube<T>) -> Self {
+        if scale == 0 {
+            self.update(CubeCoord::new(offset, depth), cube)
+        } else {
+            let mut result = self.clone();
+            let size = 1 << scale; // 2^scale
+
+            for z in 0..size {
+                for y in 0..size {
+                    for x in 0..size {
+                        let target_pos = offset + IVec3::new(x, y, z);
+                        let source_pos = IVec3::new(x, y, z);
+                        let source_coord = CubeCoord::new(source_pos, scale);
+                        let subcube = (*cube.get(source_coord)).clone();
+                        let target_coord = CubeCoord::new(target_pos, depth);
+                        result = result.update(target_coord, subcube);
+                    }
+                }
+            }
+
+            result
+        }
+    }
+
+    /// Recursive version: Update this cube with cube at depth and offset, scaled with given scale depth
+    ///
+    /// More efficient than update_depth as it recursively traverses the octree structure
+    /// instead of iterating through all leaf positions.
+    ///
+    /// Places the source cube at the target depth and offset, where the source cube
+    /// occupies 2^scale voxels in each dimension at the target depth.
+    ///
+    /// Example: update_depth_tree(2, (0, 2, 0), 1, cube) places cube at depth 2
+    /// covering positions x=[0,1], y=[2,3], z=[0,1]
+    pub fn update_depth_tree(&self, depth: u32, offset: IVec3, scale: u32, cube: &Cube<T>) -> Self {
+        if scale == 0 {
+            self.update(CubeCoord::new(offset, depth), cube.clone())
+        } else {
+            let mut result = self.clone();
+            let half_size = 1 << (scale - 1); // 2^(scale-1)
+
+            // Process each octant
+            for octant_idx in 0..8 {
+                let octant_pos = IVec3::from_octant_index(octant_idx);
+                let target_offset = offset + octant_pos * half_size;
+
+                // Get the corresponding child from source
+                let source_child = match cube {
+                    Cube::Cubes(children) => children[octant_idx].as_ref(),
+                    Cube::Solid(_) => cube, // Uniform cube, use same value for all octants
+                    _ => cube, // Planes/Slices treated as uniform
+                };
+
+                result = result.update_depth_tree(depth, target_offset, scale - 1, source_child);
+            }
+
+            result
         }
     }
 }
@@ -333,7 +402,7 @@ impl Cube<i32> {
 
     /// Get ID at specific position and depth
     pub fn get_id(&self, depth: u32, pos: IVec3) -> i32 {
-        self.get(depth, pos).id()
+        self.get(CubeCoord::new(pos, depth)).id()
     }
 
     /// Merge two cubes (union operation with preference for non-empty)
@@ -752,21 +821,36 @@ mod tests {
         ]);
 
         // Test get at depth 1
-        assert_eq!(cube.get(1, IVec3::new(0, 0, 0)).id(), 1);
-        assert_eq!(cube.get(1, IVec3::new(1, 0, 0)).id(), 5);
-        assert_eq!(cube.get(1, IVec3::new(1, 1, 1)).id(), 8);
+        assert_eq!(
+            cube.get(CubeCoord::new(IVec3::new(0, 0, 0), 1)).id(),
+            1
+        );
+        assert_eq!(
+            cube.get(CubeCoord::new(IVec3::new(1, 0, 0), 1)).id(),
+            5
+        );
+        assert_eq!(
+            cube.get(CubeCoord::new(IVec3::new(1, 1, 1), 1)).id(),
+            8
+        );
     }
 
     #[test]
-    fn test_cube_updated() {
+    fn test_cube_update() {
         let cube = Cube::Solid(0);
 
-        // Update at depth 2, position (1, 0, 0)
-        let updated = cube.updated(Cube::Solid(42), 2, IVec3::new(2, 0, 0));
+        // Update at depth 2, position (2, 0, 0)
+        let updated = cube.update(CubeCoord::new(IVec3::new(2, 0, 0), 2), Cube::Solid(42));
 
         // Verify the update
-        assert_eq!(updated.get(2, IVec3::new(2, 0, 0)).id(), 42);
-        assert_eq!(updated.get(2, IVec3::new(0, 0, 0)).id(), 0);
+        assert_eq!(
+            updated.get(CubeCoord::new(IVec3::new(2, 0, 0), 2)).id(),
+            42
+        );
+        assert_eq!(
+            updated.get(CubeCoord::new(IVec3::new(0, 0, 0), 2)).id(),
+            0
+        );
     }
 
     #[test]
@@ -866,5 +950,96 @@ mod tests {
         assert_eq!(cube.get_child(0).unwrap().id(), 0); // (0,0,0)
         assert_eq!(cube.get_child(7).unwrap().id(), 7); // (1,1,1)
         assert_eq!(cube.get_child(4).unwrap().id(), 1); // (1,0,0)
+    }
+
+    #[test]
+    fn test_update_depth_vs_update_depth_tree() {
+        // Create a source cube with distinct values in each octant
+        let source = Cube::cubes([
+            Rc::new(Cube::Solid(1)),
+            Rc::new(Cube::Solid(2)),
+            Rc::new(Cube::Solid(3)),
+            Rc::new(Cube::Solid(4)),
+            Rc::new(Cube::Solid(5)),
+            Rc::new(Cube::Solid(6)),
+            Rc::new(Cube::Solid(7)),
+            Rc::new(Cube::Solid(8)),
+        ]);
+
+        let target = Cube::Solid(0);
+        let offset = IVec3::new(0, 2, 0);
+        let depth = 3;
+        let scale = 1;
+
+        // Update using both methods
+        let result1 = target.update_depth(depth, offset, scale, source.clone());
+        let result2 = target.update_depth_tree(depth, offset, scale, &source);
+
+        // Verify all positions match
+        let size = 1 << scale;
+        for z in 0..size {
+            for y in 0..size {
+                for x in 0..size {
+                    let pos = offset + IVec3::new(x, y, z);
+                    let id1 = result1.get(CubeCoord::new(pos, depth)).id();
+                    let id2 = result2.get(CubeCoord::new(pos, depth)).id();
+                    assert_eq!(
+                        id1, id2,
+                        "Mismatch at position {:?}: update_depth={}, update_depth_tree={}",
+                        pos, id1, id2
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_update_depth_tree_nested() {
+        // Test with scale=2 (4x4x4 region)
+        let source = Cube::cubes([
+            Rc::new(Cube::cubes([
+                Rc::new(Cube::Solid(10)),
+                Rc::new(Cube::Solid(11)),
+                Rc::new(Cube::Solid(12)),
+                Rc::new(Cube::Solid(13)),
+                Rc::new(Cube::Solid(14)),
+                Rc::new(Cube::Solid(15)),
+                Rc::new(Cube::Solid(16)),
+                Rc::new(Cube::Solid(17)),
+            ])),
+            Rc::new(Cube::Solid(20)),
+            Rc::new(Cube::Solid(30)),
+            Rc::new(Cube::Solid(40)),
+            Rc::new(Cube::Solid(50)),
+            Rc::new(Cube::Solid(60)),
+            Rc::new(Cube::Solid(70)),
+            Rc::new(Cube::Solid(80)),
+        ]);
+
+        let target = Cube::Solid(0);
+        let offset = IVec3::new(0, 0, 0);
+        let depth = 3;
+        let scale = 2;
+
+        // Test both methods produce same result
+        let result_loop = target.update_depth(depth, offset, scale, source.clone());
+        let result_tree = target.update_depth_tree(depth, offset, scale, &source);
+
+        // Verify all positions match between methods
+        let size = 1 << scale;
+        for z in 0..size {
+            for y in 0..size {
+                for x in 0..size {
+                    let pos = offset + IVec3::new(x, y, z);
+                    let id_loop = result_loop.get(CubeCoord::new(pos, depth)).id();
+                    let id_tree = result_tree.get(CubeCoord::new(pos, depth)).id();
+                    assert_eq!(
+                        id_loop, id_tree,
+                        "Mismatch at position {:?}: update_depth={}, update_depth_tree={}",
+                        pos, id_loop, id_tree
+                    );
+                }
+            }
+        }
     }
 }
