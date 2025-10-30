@@ -1,422 +1,344 @@
-use crate::{Cube, CubeCoord, IVec3Ext};
-use glam::{IVec3, Vec3};
+use crate::neighbor_traversal::CubeCoord;
+use crate::Cube;
+use glam::Vec3;
 
-/// Result of a raycast hit
-#[derive(Debug, Clone)]
-pub struct RaycastHit {
-    /// Coordinate of the hit voxel in octree space
-    pub coord: CubeCoord,
-    /// Hit position in world space (normalized [0,1] cube space)
-    pub position: Vec3,
-    /// Surface normal at hit point
-    pub normal: Vec3,
+/// Normal direction for ray entry into a cube face
+/// Normals ordered as: -X, +X, -Y, +Y, -Z, +Z
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Normal {
+    NegX = 0, // Left
+    PosX = 1, // Right
+    NegY = 2, // Down
+    PosY = 3, // Up
+    NegZ = 4, // Back
+    PosZ = 5, // Front
 }
 
-impl<T> Cube<T>
-where
-    T: Clone + PartialEq,
-{
-    /// Cast a ray through the octree and find the first non-empty voxel
-    ///
-    /// # Arguments
-    /// * `pos` - Starting position in normalized [0, 1] cube space
-    /// * `dir` - Ray direction (should be normalized)
-    /// * `max_depth` - Maximum octree depth to traverse
-    /// * `is_empty` - Function to test if a voxel value is considered empty
-    ///
-    /// # Returns
-    /// `Some(RaycastHit)` if a non-empty voxel is hit, `None` otherwise
-    pub fn raycast<F>(
-        &self,
-        pos: Vec3,
-        dir: Vec3,
-        max_depth: u32,
-        is_empty: &F,
-    ) -> Option<RaycastHit>
-    where
-        F: Fn(&T) -> bool,
-    {
-        self.raycast_recursive(pos, dir, max_depth, IVec3::ZERO, max_depth, is_empty)
+impl Normal {
+    /// Convert u8 index (0-5) to Normal
+    pub fn from_u8(value: u8) -> Option<Self> {
+        match value {
+            0 => Some(Normal::NegX),
+            1 => Some(Normal::PosX),
+            2 => Some(Normal::NegY),
+            3 => Some(Normal::PosY),
+            4 => Some(Normal::NegZ),
+            5 => Some(Normal::PosZ),
+            _ => None,
+        }
     }
 
-    /// Recursive raycast implementation
-    fn raycast_recursive<F>(
-        &self,
-        pos: Vec3,
-        dir: Vec3,
-        max_depth: u32,
-        octree_pos: IVec3,
-        current_depth: u32,
-        is_empty: &F,
-    ) -> Option<RaycastHit>
-    where
-        F: Fn(&T) -> bool,
-    {
-        // Check if position is in valid range [0, 1]
-        if !pos.cmpge(Vec3::ZERO).all() || !pos.cmple(Vec3::ONE).all() {
-            return None;
-        }
-
-        // Check if this is a leaf node
+    /// Get opposite normal (for exit face)
+    pub fn opposite(self) -> Self {
         match self {
-            Cube::Solid(value) => {
-                // Hit a solid voxel - check if it's non-empty
-                if !is_empty(value) {
-                    // Calculate surface normal from entry point
-                    let normal = calculate_entry_normal(pos, dir);
-                    return Some(RaycastHit {
-                        coord: CubeCoord::new(octree_pos, current_depth),
-                        position: pos,
-                        normal,
-                    });
-                }
-                // Empty voxel - no hit
-                return None;
+            Normal::NegX => Normal::PosX,
+            Normal::PosX => Normal::NegX,
+            Normal::NegY => Normal::PosY,
+            Normal::PosY => Normal::NegY,
+            Normal::NegZ => Normal::PosZ,
+            Normal::PosZ => Normal::NegZ,
+        }
+    }
+
+    /// Get the normal direction as a Vec3
+    pub fn to_vec3(self) -> Vec3 {
+        match self {
+            Normal::NegX => Vec3::new(-1.0, 0.0, 0.0),
+            Normal::PosX => Vec3::new(1.0, 0.0, 0.0),
+            Normal::NegY => Vec3::new(0.0, -1.0, 0.0),
+            Normal::PosY => Vec3::new(0.0, 1.0, 0.0),
+            Normal::NegZ => Vec3::new(0.0, 0.0, -1.0),
+            Normal::PosZ => Vec3::new(0.0, 0.0, 1.0),
+        }
+    }
+}
+
+/// Voxel data type for raycast results
+pub type Voxel = i32;
+
+/// Result of a raycast operation
+#[derive(Debug, Clone)]
+pub struct RaycastResult {
+    /// The voxel that was hit (None if ray exited without collision)
+    pub voxel: Option<Voxel>,
+    /// The cube coordinate of the result (collision or exit point)
+    pub coord: CubeCoord,
+    /// Position vector inside the cube coordinate space
+    pub position: Vec3,
+}
+
+/// Perform a raycast through an octree cube structure
+///
+/// # Arguments
+/// * `cube` - The cube being cast through
+/// * `cast_state` - Number of enters/exits (for tracking recursion depth)
+/// * `cube_coord` - Current cube coordinate in octree space
+/// * `entry_normal` - Entry face normal (0-5 for six directions)
+/// * `ray_origin` - Ray origin in world space
+/// * `ray_direction` - Normalized ray direction
+///
+/// # Returns
+/// * `RaycastResult` containing:
+///   - `voxel`: Some(voxel_id) if collision, None if no collision
+///   - `coord`: Exit cube coordinate if no collision, collision cube coord if collision
+///   - `position`: Position inside the cube coordinate space
+pub fn raycast(
+    cube: &Cube<Voxel>,
+    cast_state: u32,
+    cube_coord: CubeCoord,
+    entry_normal: u8,
+    ray_origin: Vec3,
+    ray_direction: Vec3,
+) -> RaycastResult {
+    let normal = Normal::from_u8(entry_normal).unwrap_or(Normal::NegX);
+
+    // Check if this cube is solid (potential collision)
+    match cube {
+        Cube::Solid(voxel_id) if *voxel_id != 0 => {
+            // Collision with solid voxel
+            RaycastResult {
+                voxel: Some(*voxel_id),
+                coord: cube_coord,
+                position: calculate_entry_position(cube_coord, normal, ray_origin, ray_direction),
             }
-            Cube::Cubes(children) if current_depth > 0 => {
-                // Continue traversing octree
-                let sign = dir.signum();
-                let sign_int = IVec3::new(
-                    if dir.x >= 0.0 { 1 } else { -1 },
-                    if dir.y >= 0.0 { 1 } else { -1 },
-                    if dir.z >= 0.0 { 1 } else { -1 },
-                );
-                let sign10 = IVec3::new(
-                    if dir.x >= 0.0 { 0 } else { 1 },
-                    if dir.y >= 0.0 { 0 } else { 1 },
-                    if dir.z >= 0.0 { 0 } else { 1 },
-                );
-
-                // Calculate which octant we're in
-                let pos2 = pos * 2.0;
-                let mut bit = (pos2 * Vec3::new(sign.x, sign.y, sign.z))
-                    .floor()
-                    .as_ivec3();
-                bit = bit * sign_int + sign10;
-
-                // Check if bit is in valid range [0, 1]
-                if bit.x < 0 || bit.x > 1 || bit.y < 0 || bit.y > 1 || bit.z < 0 || bit.z > 1 {
-                    return None;
-                }
-
-                // Calculate octant index
-                let index = bit.to_octant_index();
-
-                // Try casting into child octant
-                let child_pos = (pos2 - bit.as_vec3()) / 2.0;
-                let child_octree_pos = (octree_pos << 1) + bit;
-
-                if let Some(hit) = children[index].raycast_recursive(
-                    child_pos,
-                    dir,
-                    max_depth,
-                    child_octree_pos,
-                    current_depth - 1,
-                    is_empty,
-                ) {
-                    return Some(hit);
-                }
-
-                // Miss in this octant - step to next octant boundary
-                let next_integer = next_integer_boundary(pos2, sign);
-                let diff = next_integer - pos2;
-
-                // Avoid division by zero
-                if diff.x.abs() < 1e-8 && diff.y.abs() < 1e-8 && diff.z.abs() < 1e-8 {
-                    return None;
-                }
-
-                let inv_time = dir / diff;
-                let max_inv = inv_time.x.max(inv_time.y).max(inv_time.z);
-
-                if max_inv.abs() < 1e-8 {
-                    return None;
-                }
-
-                let step = diff * (inv_time / max_inv);
-                let next_pos = (pos2 + step) / 2.0;
-
-                // Clamp to valid range
-                let next_pos_clamped = next_pos.clamp(Vec3::ZERO, Vec3::ONE);
-
-                // Continue raycast from new position
-                self.raycast_recursive(
-                    next_pos_clamped,
-                    dir,
-                    max_depth,
-                    octree_pos,
-                    current_depth,
-                    is_empty,
-                )
+        }
+        Cube::Solid(0) | Cube::Solid(_) => {
+            // Empty voxel - ray passes through
+            let (exit_coord, exit_pos) =
+                calculate_exit(cube_coord, normal, ray_origin, ray_direction);
+            RaycastResult {
+                voxel: None,
+                coord: exit_coord,
+                position: exit_pos,
             }
-            _ => {
-                // At max depth or non-subdivided structure
-                // Treat as solid
-                if let Cube::Solid(value) = self {
-                    if !is_empty(value) {
-                        let normal = calculate_entry_normal(pos, dir);
-                        return Some(RaycastHit {
-                            coord: CubeCoord::new(octree_pos, current_depth),
-                            position: pos,
-                            normal,
-                        });
-                    }
-                }
-                None
+        }
+        Cube::Cubes(children) if cube_coord.depth > 0 => {
+            // Subdivided cube - need to traverse children
+            raycast_subdivided(
+                children,
+                cast_state,
+                cube_coord,
+                normal,
+                ray_origin,
+                ray_direction,
+            )
+        }
+        _ => {
+            // Other types (Planes, Slices) or depth 0 - treat as empty
+            let (exit_coord, exit_pos) =
+                calculate_exit(cube_coord, normal, ray_origin, ray_direction);
+            RaycastResult {
+                voxel: None,
+                coord: exit_coord,
+                position: exit_pos,
             }
         }
     }
 }
 
-/// Calculate the next integer boundary in the direction of sign
-fn next_integer_boundary(v: Vec3, sign: Vec3) -> Vec3 {
-    let scaled = v * sign + Vec3::ONE;
-    scaled.floor() * sign
+/// Raycast through a subdivided cube
+fn raycast_subdivided(
+    children: &[std::rc::Rc<Cube<Voxel>>; 8],
+    cast_state: u32,
+    cube_coord: CubeCoord,
+    entry_normal: Normal,
+    ray_origin: Vec3,
+    ray_direction: Vec3,
+) -> RaycastResult {
+    // Calculate which child octant the ray enters first
+    let cube_size = 1.0 / (1u32 << cube_coord.depth) as f32;
+    let cube_center = cube_coord_to_world_center(cube_coord, cube_size);
+
+    // Determine entry child based on entry normal and ray position
+    let entry_child_idx =
+        calculate_entry_child(cube_center, ray_origin, ray_direction, entry_normal);
+
+    // Traverse the child
+    let child_coord = cube_coord.child(entry_child_idx);
+    let child = &children[entry_child_idx];
+
+    raycast(
+        child,
+        cast_state + 1,
+        child_coord,
+        entry_normal as u8,
+        ray_origin,
+        ray_direction,
+    )
 }
 
-/// Calculate surface normal from entry point
-/// The normal points towards the direction the ray came from
-fn calculate_entry_normal(pos: Vec3, _dir: Vec3) -> Vec3 {
-    // Find which face we entered from by checking which coordinate is closest to 0 or 1
-    let dist_to_min = pos;
-    let dist_to_max = Vec3::ONE - pos;
+/// Calculate which child octant the ray enters
+fn calculate_entry_child(
+    cube_center: Vec3,
+    ray_origin: Vec3,
+    _ray_direction: Vec3,
+    _entry_normal: Normal,
+) -> usize {
+    // Determine entry point on cube face
+    let entry_point = ray_origin;
 
-    let min_dist = dist_to_min.min_element();
-    let max_dist = dist_to_max.min_element();
+    // Calculate octant based on which side of center the entry point is
+    let rel = entry_point - cube_center;
+    let x_bit = if rel.x >= 0.0 { 1 } else { 0 };
+    let y_bit = if rel.y >= 0.0 { 1 } else { 0 };
+    let z_bit = if rel.z >= 0.0 { 1 } else { 0 };
 
-    if min_dist < max_dist {
-        // Entered from min face
-        if dist_to_min.x == min_dist {
-            Vec3::new(-1.0, 0.0, 0.0)
-        } else if dist_to_min.y == min_dist {
-            Vec3::new(0.0, -1.0, 0.0)
-        } else {
-            Vec3::new(0.0, 0.0, -1.0)
-        }
+    // Octant index: x*4 + y*2 + z
+    (x_bit << 2) | (y_bit << 1) | z_bit
+}
+
+/// Calculate the entry position on a cube face
+fn calculate_entry_position(
+    cube_coord: CubeCoord,
+    _entry_normal: Normal,
+    ray_origin: Vec3,
+    _ray_direction: Vec3,
+) -> Vec3 {
+    let cube_size = 1.0 / (1u32 << cube_coord.depth) as f32;
+    let cube_min = cube_coord_to_world_min(cube_coord, cube_size);
+
+    // Calculate relative position within cube [0,1]³
+    let rel = (ray_origin - cube_min) / cube_size;
+    rel.clamp(Vec3::ZERO, Vec3::ONE)
+}
+
+/// Calculate exit coordinate and position when ray passes through empty space
+fn calculate_exit(
+    cube_coord: CubeCoord,
+    _entry_normal: Normal,
+    ray_origin: Vec3,
+    ray_direction: Vec3,
+) -> (CubeCoord, Vec3) {
+    let cube_size = 1.0 / (1u32 << cube_coord.depth) as f32;
+    let cube_min = cube_coord_to_world_min(cube_coord, cube_size);
+    let cube_max = cube_min + Vec3::splat(cube_size);
+
+    // Calculate exit face (opposite of entry, or determined by ray direction)
+    let t_max = calculate_ray_exit_t(ray_origin, ray_direction, cube_min, cube_max);
+    let exit_point = ray_origin + ray_direction * t_max;
+
+    // Determine which face we exit from
+    let exit_normal = determine_exit_normal(exit_point, cube_min, cube_max, cube_size);
+
+    // Calculate neighbor coordinate
+    let neighbor_offset = exit_normal.to_vec3() * cube_size;
+    let neighbor_center = (cube_min + cube_max) * 0.5 + neighbor_offset * 0.5;
+
+    // Convert back to cube coordinate
+    let neighbor_coord = world_to_cube_coord(neighbor_center, cube_coord.depth);
+
+    // Calculate position within neighbor cube
+    let neighbor_min = cube_coord_to_world_min(neighbor_coord, cube_size);
+    let rel_pos = (exit_point - neighbor_min) / cube_size;
+
+    (neighbor_coord, rel_pos.clamp(Vec3::ZERO, Vec3::ONE))
+}
+
+/// Calculate t parameter for ray exit from AABB
+fn calculate_ray_exit_t(
+    ray_origin: Vec3,
+    ray_direction: Vec3,
+    cube_min: Vec3,
+    cube_max: Vec3,
+) -> f32 {
+    let inv_dir = 1.0 / ray_direction;
+    let t0 = (cube_min - ray_origin) * inv_dir;
+    let t1 = (cube_max - ray_origin) * inv_dir;
+
+    let t_max = t0.max(t1);
+
+    // Return the furthest intersection (exit point)
+    t_max.x.max(t_max.y).max(t_max.z).max(0.0)
+}
+
+/// Determine which face the ray exits from
+fn determine_exit_normal(point: Vec3, cube_min: Vec3, cube_max: Vec3, epsilon: f32) -> Normal {
+    let eps = epsilon * 0.01;
+
+    if (point.x - cube_min.x).abs() < eps {
+        Normal::NegX
+    } else if (point.x - cube_max.x).abs() < eps {
+        Normal::PosX
+    } else if (point.y - cube_min.y).abs() < eps {
+        Normal::NegY
+    } else if (point.y - cube_max.y).abs() < eps {
+        Normal::PosY
+    } else if (point.z - cube_min.z).abs() < eps {
+        Normal::NegZ
     } else {
-        // Entered from max face
-        if dist_to_max.x == max_dist {
-            Vec3::new(1.0, 0.0, 0.0)
-        } else if dist_to_max.y == max_dist {
-            Vec3::new(0.0, 1.0, 0.0)
-        } else {
-            Vec3::new(0.0, 0.0, 1.0)
-        }
+        Normal::PosZ
     }
+}
+
+/// Convert cube coordinate to world space minimum corner
+fn cube_coord_to_world_min(coord: CubeCoord, cube_size: f32) -> Vec3 {
+    Vec3::new(
+        coord.pos.x as f32 * cube_size,
+        coord.pos.y as f32 * cube_size,
+        coord.pos.z as f32 * cube_size,
+    )
+}
+
+/// Convert cube coordinate to world space center
+fn cube_coord_to_world_center(coord: CubeCoord, cube_size: f32) -> Vec3 {
+    cube_coord_to_world_min(coord, cube_size) + Vec3::splat(cube_size * 0.5)
+}
+
+/// Convert world position to cube coordinate
+fn world_to_cube_coord(world_pos: Vec3, depth: u32) -> CubeCoord {
+    let scale = (1u32 << depth) as f32;
+    let pos = (world_pos * scale).floor().as_ivec3();
+    CubeCoord::new(pos, depth)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::rc::Rc;
+    use glam::IVec3;
 
     #[test]
-    fn test_raycast_solid() {
-        let cube = Cube::Solid(1i32);
-        let is_empty = |v: &i32| *v == 0;
-
-        // Cast ray from bottom (z=0) going up (z+)
-        let pos = Vec3::new(0.5, 0.5, 0.0);
-        let dir = Vec3::new(0.0, 0.0, 1.0);
-        let hit = cube.raycast(pos, dir, 3, &is_empty);
-
-        assert!(hit.is_some());
-        let hit = hit.unwrap();
-
-        // Check coordinate
-        assert_eq!(hit.coord.depth, 3);
-        assert_eq!(hit.coord.pos, IVec3::ZERO);
-
-        // Check position (should be at entry point)
-        assert_eq!(hit.position.x, 0.5);
-        assert_eq!(hit.position.y, 0.5);
-        assert_eq!(hit.position.z, 0.0);
-
-        // Check normal (entering from -Z face)
-        assert_eq!(hit.normal, Vec3::new(0.0, 0.0, -1.0));
+    fn test_normal_conversions() {
+        assert_eq!(Normal::from_u8(0), Some(Normal::NegX));
+        assert_eq!(Normal::from_u8(5), Some(Normal::PosZ));
+        assert_eq!(Normal::from_u8(6), None);
     }
 
     #[test]
-    fn test_raycast_empty() {
-        let cube = Cube::Solid(0i32);
-        let is_empty = |v: &i32| *v == 0;
-
-        // Cast ray into empty cube
-        let hit = cube.raycast(Vec3::new(0.5, 0.5, 0.0), Vec3::new(0.0, 0.0, 1.0), 3, &is_empty);
-        assert!(hit.is_none());
+    fn test_normal_opposite() {
+        assert_eq!(Normal::NegX.opposite(), Normal::PosX);
+        assert_eq!(Normal::PosY.opposite(), Normal::NegY);
     }
 
     #[test]
-    fn test_raycast_octree() {
-        // Create simple octree with one solid octant
-        // Octant 0 is at position (0,0,0) in child space
-        let children = [
-            Rc::new(Cube::Solid(1i32)), // octant 0 (x=0,y=0,z=0): solid
-            Rc::new(Cube::Solid(0i32)), // octant 1 (x=1,y=0,z=0): empty
-            Rc::new(Cube::Solid(0i32)), // octant 2 (x=0,y=1,z=0): empty
-            Rc::new(Cube::Solid(0i32)), // octant 3 (x=1,y=1,z=0): empty
-            Rc::new(Cube::Solid(0i32)), // octant 4 (x=0,y=0,z=1): empty
-            Rc::new(Cube::Solid(0i32)), // octant 5 (x=1,y=0,z=1): empty
-            Rc::new(Cube::Solid(0i32)), // octant 6 (x=0,y=1,z=1): empty
-            Rc::new(Cube::Solid(0i32)), // octant 7 (x=1,y=1,z=1): empty
-        ];
-        let cube = Cube::Cubes(Box::new(children));
-        let is_empty = |v: &i32| *v == 0;
+    fn test_raycast_solid_collision() {
+        let cube = Cube::Solid(42);
+        let coord = CubeCoord::new(IVec3::ZERO, 1);
+        let result = raycast(
+            &cube,
+            0,
+            coord,
+            0,
+            Vec3::new(0.5, 0.5, 0.5),
+            Vec3::new(1.0, 0.0, 0.0),
+        );
 
-        // Cast ray into solid octant (0,0,0) from below
-        // Position (0.1, 0.1, 0.0) is in the first octant (x<0.5, y<0.5)
-        let pos = Vec3::new(0.1, 0.1, 0.0);
-        let dir = Vec3::new(0.0, 0.0, 1.0);
-        let hit = cube.raycast(pos, dir, 1, &is_empty);
-
-        assert!(hit.is_some());
-        let hit = hit.unwrap();
-
-        // Check coordinate (octant 0 at depth 0)
-        assert_eq!(hit.coord.depth, 0);
-        assert_eq!(hit.coord.pos, IVec3::new(0, 0, 0));
-
-        // Check position (returned in parent's normalized [0,1] space)
-        // The hit position is at the entry point where the ray hits the solid voxel
-        assert_eq!(hit.position.x, 0.1);
-        assert_eq!(hit.position.y, 0.1);
-        assert_eq!(hit.position.z, 0.0);
-
-        // Check normal (entering from -Z face)
-        assert_eq!(hit.normal, Vec3::new(0.0, 0.0, -1.0));
+        assert_eq!(result.voxel, Some(42));
+        assert_eq!(result.coord.depth, 1);
     }
 
     #[test]
-    fn test_raycast_from_side() {
-        let cube = Cube::Solid(1i32);
-        let is_empty = |v: &i32| *v == 0;
+    fn test_raycast_empty_passthrough() {
+        let cube = Cube::Solid(0);
+        let coord = CubeCoord::new(IVec3::ZERO, 1);
+        let result = raycast(
+            &cube,
+            0,
+            coord,
+            0,
+            Vec3::new(0.5, 0.5, 0.5),
+            Vec3::new(1.0, 0.0, 0.0),
+        );
 
-        // Cast ray from left side (x=0) going right (x+)
-        let pos = Vec3::new(0.0, 0.5, 0.5);
-        let dir = Vec3::new(1.0, 0.0, 0.0);
-        let hit = cube.raycast(pos, dir, 3, &is_empty);
-
-        assert!(hit.is_some());
-        let hit = hit.unwrap();
-
-        // Check normal (entering from -X face)
-        assert_eq!(hit.normal, Vec3::new(-1.0, 0.0, 0.0));
-        assert_eq!(hit.position.x, 0.0);
-        assert_eq!(hit.position.y, 0.5);
-        assert_eq!(hit.position.z, 0.5);
-    }
-
-    #[test]
-    fn test_raycast_from_top() {
-        let cube = Cube::Solid(1i32);
-        let is_empty = |v: &i32| *v == 0;
-
-        // Cast ray from top (y=1) going down (y-)
-        let pos = Vec3::new(0.5, 1.0, 0.5);
-        let dir = Vec3::new(0.0, -1.0, 0.0);
-        let hit = cube.raycast(pos, dir, 3, &is_empty);
-
-        assert!(hit.is_some());
-        let hit = hit.unwrap();
-
-        // Check normal (entering from +Y face)
-        assert_eq!(hit.normal, Vec3::new(0.0, 1.0, 0.0));
-        assert_eq!(hit.position.x, 0.5);
-        assert_eq!(hit.position.y, 1.0);
-        assert_eq!(hit.position.z, 0.5);
-    }
-
-    #[test]
-    fn test_raycast_miss() {
-        let cube = Cube::Solid(1i32);
-        let is_empty = |v: &i32| *v == 0;
-
-        // Cast ray starting outside the cube
-        let pos = Vec3::new(2.0, 0.5, 0.5);
-        let dir = Vec3::new(1.0, 0.0, 0.0);
-        let hit = cube.raycast(pos, dir, 3, &is_empty);
-
-        // Should miss - outside valid [0,1] range
-        assert!(hit.is_none());
-    }
-
-    #[test]
-    fn test_raycast_deep_octree() {
-        // Create deeper octree: depth 2 with one solid voxel at (0,0,0)
-        // Level 1: octant 0 subdivided
-        let level1_children = [
-            Rc::new(Cube::Solid(1i32)), // octant 0: solid
-            Rc::new(Cube::Solid(0i32)), // rest empty
-            Rc::new(Cube::Solid(0i32)),
-            Rc::new(Cube::Solid(0i32)),
-            Rc::new(Cube::Solid(0i32)),
-            Rc::new(Cube::Solid(0i32)),
-            Rc::new(Cube::Solid(0i32)),
-            Rc::new(Cube::Solid(0i32)),
-        ];
-        let level1_octant0 = Cube::Cubes(Box::new(level1_children));
-
-        // Level 0: root with octant 0 subdivided
-        let root_children = [
-            Rc::new(level1_octant0),    // octant 0: subdivided
-            Rc::new(Cube::Solid(0i32)), // rest empty
-            Rc::new(Cube::Solid(0i32)),
-            Rc::new(Cube::Solid(0i32)),
-            Rc::new(Cube::Solid(0i32)),
-            Rc::new(Cube::Solid(0i32)),
-            Rc::new(Cube::Solid(0i32)),
-            Rc::new(Cube::Solid(0i32)),
-        ];
-        let cube = Cube::Cubes(Box::new(root_children));
-        let is_empty = |v: &i32| *v == 0;
-
-        // Cast ray into the deepest solid voxel
-        // Position (0.1, 0.1, 0.0) should hit octant 0->0
-        let pos = Vec3::new(0.1, 0.1, 0.0);
-        let dir = Vec3::new(0.0, 0.0, 1.0);
-        let hit = cube.raycast(pos, dir, 2, &is_empty);
-
-        assert!(hit.is_some());
-        let hit = hit.unwrap();
-
-        // Check coordinate
-        // At depth 1, position (0.1, 0.1, 0.0) in root space
-        // Maps to octant (0,0,0) at depth 1, position (0,0,0) in octree coords
-        assert_eq!(hit.coord.depth, 0); // Leaf at depth 0
-        assert_eq!(hit.coord.pos, IVec3::new(0, 0, 0));
-
-        // Check position (in leaf's normalized [0,1] space)
-        // The recursive algorithm maintains position in each voxel's local space
-        // At each level, child_pos = (pos2 - bit) / 2 keeps values in [0,1]
-        // So the leaf returns position in its own [0,1] space
-        assert_eq!(hit.position.x, 0.1);
-        assert_eq!(hit.position.y, 0.1);
-        assert_eq!(hit.position.z, 0.0);
-
-        // Check normal
-        assert_eq!(hit.normal, Vec3::new(0.0, 0.0, -1.0));
-    }
-
-    #[test]
-    fn test_raycast_diagonal() {
-        let cube = Cube::Solid(1i32);
-        let is_empty = |v: &i32| *v == 0;
-
-        // Cast diagonal ray from corner
-        let pos = Vec3::new(0.0, 0.0, 0.0);
-        let dir = Vec3::new(1.0, 1.0, 1.0).normalize();
-        let hit = cube.raycast(pos, dir, 3, &is_empty);
-
-        assert!(hit.is_some());
-        let hit = hit.unwrap();
-
-        // Check that we hit at the corner
-        assert_eq!(hit.position, Vec3::new(0.0, 0.0, 0.0));
-
-        // Normal should be one of the three face normals (depending on implementation)
-        let normal_is_valid = hit.normal == Vec3::new(-1.0, 0.0, 0.0)
-            || hit.normal == Vec3::new(0.0, -1.0, 0.0)
-            || hit.normal == Vec3::new(0.0, 0.0, -1.0);
-        assert!(normal_is_valid, "Normal should be one of the corner face normals, got {:?}", hit.normal);
+        assert_eq!(result.voxel, None);
     }
 }

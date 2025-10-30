@@ -21,7 +21,7 @@ pub use neighbor_traversal::{
 };
 pub use octree::{octant_char_to_index, octant_index_to_char, Axis, Cube, IVec3Ext, Octree, Quad};
 pub use parser::{parse_csm, CsmError};
-pub use raycast::RaycastHit;
+pub use raycast::{raycast, Normal, RaycastResult, Voxel};
 pub use render::{
     render_orthographic, render_orthographic_2d, render_orthographic_3d, RenderedImage,
     ViewDirection,

@@ -8,7 +8,6 @@ use crate::{
     generate_mesh_hierarchical, parse_csm, serialize_csm, ColorMapper, Cube, DefaultMeshBuilder,
     HsvColorMapper, Octree, PaletteColorMapper,
 };
-use glam::Vec3;
 
 #[derive(Serialize, Deserialize)]
 pub struct MeshResult {
@@ -360,6 +359,10 @@ fn set_voxel_at_path(cube: &Cube<i32>, path: &[usize], color_index: i32) -> Cube
     }
 }
 
+// TODO: Raycast function needs to be reimplemented to use the new standalone raycast API
+// The new API uses: raycast(cube, cast_state, cube_coord, entry_normal, ray_origin, ray_direction)
+// This is incompatible with the simple pos+dir raycast that was here before.
+/*
 #[derive(Serialize, Deserialize)]
 pub struct RaycastResult {
     /// Octree coordinates of hit voxel
@@ -400,12 +403,11 @@ pub fn raycast_octree(
             // Define empty test: value == -1 (empty) or value == 0 (air)
             let is_empty = |v: &i32| *v == -1 || *v == 0;
 
-            if let Some(hit) = model_data.cube.raycast(
-                pos,
-                dir,
-                model_data.max_depth as u32,
-                &is_empty,
-            ) {
+            if let Some(hit) =
+                model_data
+                    .cube
+                    .raycast(pos, dir, model_data.max_depth as u32, &is_empty)
+            {
                 let result = RaycastResult {
                     x: hit.coord.pos.x,
                     y: hit.coord.pos.y,
@@ -430,3 +432,4 @@ pub fn raycast_octree(
         }
     })
 }
+*/
