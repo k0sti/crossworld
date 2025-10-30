@@ -208,12 +208,19 @@ export function CubeEditorView(_props: CubeEditorViewProps) {
             const clampedX = Math.max(voxelSize / 2, Math.min(CUBE_SIZE - voxelSize / 2, worldX))
             const clampedZ = Math.max(voxelSize / 2, Math.min(CUBE_SIZE - voxelSize / 2, worldZ))
 
-            // Update cursor position state
-            setCursorPosition({
-              x: gridX,
-              y: 0,
-              z: gridZ
+            // Log raycast details (always log to catch flipping)
+            console.log('[CubeEditor] Raycast:', {
+              intersectPoint: { x: point.x.toFixed(6), y: point.y.toFixed(6), z: point.z.toFixed(6) },
+              voxelSize: voxelSize.toFixed(6),
+              gridCoords: { x: gridX, z: gridZ },
+              worldPos: { x: worldX.toFixed(6), z: worldZ.toFixed(6) },
+              clampedPos: { x: clampedX.toFixed(6), z: clampedZ.toFixed(6) },
+              previewBoxPos: { x: clampedX.toFixed(6), z: clampedZ.toFixed(6) }
             })
+
+            // Update cursor position state
+            const newCursorPos = { x: gridX, y: 0, z: gridZ }
+            setCursorPosition(newCursorPos)
 
             // Position preview box on top of ground (y = voxelSize / 2)
             const boxY = voxelSize / 2
@@ -320,7 +327,16 @@ export function CubeEditorView(_props: CubeEditorViewProps) {
     const groundPlane = scene.children.find(
       child => child instanceof THREE.Mesh && child.material && !(child.material as THREE.MeshBasicMaterial).visible
     )
-    if (!groundPlane) return
+
+    console.log('[CubeEditor] Click raycast:', {
+      groundPlaneFound: !!groundPlane,
+      sceneChildren: scene.children.length
+    })
+
+    if (!groundPlane) {
+      console.warn('[CubeEditor] Ground plane not found!')
+      return
+    }
 
     const intersects = raycaster.intersectObject(groundPlane)
 
@@ -337,7 +353,14 @@ export function CubeEditorView(_props: CubeEditorViewProps) {
       const clampedX = Math.max(0, Math.min(CUBE_SIZE - 1, gridX))
       const clampedZ = Math.max(0, Math.min(CUBE_SIZE - 1, gridZ))
 
-      console.log(`[CubeEditor] Drawing at (${clampedX}, ${gridY}, ${clampedZ}) with depth ${depth}, color index ${selectedColorIndex}, color ${selectedColor}`)
+      console.log('[CubeEditor] Click details:', {
+        clickPoint: { x: point.x.toFixed(6), y: point.y.toFixed(6), z: point.z.toFixed(6) },
+        gridCoords: { x: gridX, y: gridY, z: gridZ },
+        clampedCoords: { x: clampedX, y: gridY, z: clampedZ },
+        depth,
+        colorIndex: selectedColorIndex,
+        color: selectedColor
+      })
 
       // Call WASM draw function (add 1 to index because palette mapper uses index-1)
       const result = wasmModule.draw(MODEL_ID, selectedColorIndex + 1, clampedX, gridY, clampedZ, depth)

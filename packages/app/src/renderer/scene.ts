@@ -108,7 +108,6 @@ export class SceneManager {
   // Active edit plane (set when clicking voxel face in edit mode)
   private activeEditPlane: THREE.Plane | null = null;
   private activeEditPlaneNormal: THREE.Vector3 | null = null;
-  private activeEditPlanePoint: THREE.Vector3 | null = null;
   private editPlaneGridHelper: THREE.GridHelper | null = null;
 
   // Face highlight for hovered face in edit mode
@@ -380,9 +379,8 @@ export class SceneManager {
 
     const faceCenter = new THREE.Vector3(faceCenterX, faceCenterY, faceCenterZ);
 
-    // Store plane normal and point (use face center for grid alignment)
+    // Store plane normal (use face center for grid alignment)
     this.activeEditPlaneNormal = normal.clone();
-    this.activeEditPlanePoint = faceCenter.clone();
 
     // Create plane from face center and normal
     this.activeEditPlane = new THREE.Plane();
@@ -433,7 +431,6 @@ export class SceneManager {
   private clearActiveEditPlane(): void {
     this.activeEditPlane = null;
     this.activeEditPlaneNormal = null;
-    this.activeEditPlanePoint = null;
 
     if (this.editPlaneGridHelper) {
       this.scene.remove(this.editPlaneGridHelper);
@@ -537,9 +534,9 @@ export class SceneManager {
     const halfSize = size / 2;
 
     // First, try to raycast to geometry mesh to detect clicked face
-    let voxelX: number;
-    let voxelY: number;
-    let voxelZ: number;
+    let voxelX = 0;
+    let voxelY = 0;
+    let voxelZ = 0;
     let hasGeometryHit = false;
 
     if (this.geometryMesh) {
@@ -999,6 +996,8 @@ export class SceneManager {
   private updateCursorFromRaycaster(): void {
     if (!this.previewCube) return;
 
+    console.log('[CURSOR UPDATE] updateCursorFromRaycaster called');
+
     const size = this.getCursorSize();
     const halfSize = size / 2;
 
@@ -1084,7 +1083,23 @@ export class SceneManager {
 
       if (isInBounds) {
         // Store current cursor coordinate
-        this.currentCursorCoord = worldToCube(voxelX, voxelY, voxelZ, this.cursorDepth);
+        const newCoord = worldToCube(voxelX, voxelY, voxelZ, this.cursorDepth);
+
+        // Log if coordinate changed
+        if (!this.currentCursorCoord ||
+            this.currentCursorCoord.x !== newCoord.x ||
+            this.currentCursorCoord.y !== newCoord.y ||
+            this.currentCursorCoord.z !== newCoord.z) {
+          logger.log('renderer', '[Cursor Coord Change - DrawPlane]', {
+            oldCoord: this.currentCursorCoord,
+            newCoord,
+            voxelCorner: { x: voxelX.toFixed(6), y: voxelY.toFixed(6), z: voxelZ.toFixed(6) },
+            cursorCenter: { x: cursorX.toFixed(6), y: cursorY.toFixed(6), z: cursorZ.toFixed(6) },
+            depth: this.cursorDepth
+          });
+        }
+
+        this.currentCursorCoord = newCoord;
 
         // Position preview cube at voxel area center
         this.currentGridPosition.set(cursorX, cursorY, cursorZ);
@@ -1133,7 +1148,25 @@ export class SceneManager {
 
       if (isInBounds) {
         // Store cursor coordinate using cursor voxel position
-        this.currentCursorCoord = worldToCube(cursorVoxelX, cursorVoxelY, cursorVoxelZ, this.cursorDepth);
+        const newCoord = worldToCube(cursorVoxelX, cursorVoxelY, cursorVoxelZ, this.cursorDepth);
+
+        // Log if coordinate changed
+        if (!this.currentCursorCoord ||
+            this.currentCursorCoord.x !== newCoord.x ||
+            this.currentCursorCoord.y !== newCoord.y ||
+            this.currentCursorCoord.z !== newCoord.z) {
+          logger.log('renderer', '[Cursor Coord Change - GeometryHit]', {
+            oldCoord: this.currentCursorCoord,
+            newCoord,
+            hitPoint: { x: geometryHitPoint.x.toFixed(6), y: geometryHitPoint.y.toFixed(6), z: geometryHitPoint.z.toFixed(6) },
+            voxelCorner: { x: cursorVoxelX.toFixed(6), y: cursorVoxelY.toFixed(6), z: cursorVoxelZ.toFixed(6) },
+            cursorCenter: { x: cursorX.toFixed(6), y: cursorY.toFixed(6), z: cursorZ.toFixed(6) },
+            normal: geometryHitNormal,
+            depth: this.cursorDepth
+          });
+        }
+
+        this.currentCursorCoord = newCoord;
 
         // Position preview cube at voxel area center
         this.currentGridPosition.set(cursorX, cursorY, cursorZ);
@@ -1180,7 +1213,24 @@ export class SceneManager {
 
           if (isInBounds) {
             // Store current cursor coordinate
-            this.currentCursorCoord = worldToCube(voxelX, voxelY, voxelZ, this.cursorDepth);
+            const newCoord = worldToCube(voxelX, voxelY, voxelZ, this.cursorDepth);
+
+            // Log if coordinate changed
+            if (!this.currentCursorCoord ||
+                this.currentCursorCoord.x !== newCoord.x ||
+                this.currentCursorCoord.y !== newCoord.y ||
+                this.currentCursorCoord.z !== newCoord.z) {
+              logger.log('renderer', '[Cursor Coord Change - ActivePlane]', {
+                oldCoord: this.currentCursorCoord,
+                newCoord,
+                intersectPoint: { x: intersectPoint.x.toFixed(6), y: intersectPoint.y.toFixed(6), z: intersectPoint.z.toFixed(6) },
+                voxelCorner: { x: voxelX.toFixed(6), y: voxelY.toFixed(6), z: voxelZ.toFixed(6) },
+                cursorCenter: { x: cursorX.toFixed(6), y: cursorY.toFixed(6), z: cursorZ.toFixed(6) },
+                depth: this.cursorDepth
+              });
+            }
+
+            this.currentCursorCoord = newCoord;
 
             // Position preview cube at voxel area center
             this.currentGridPosition.set(cursorX, cursorY, cursorZ);
@@ -1210,7 +1260,25 @@ export class SceneManager {
 
           if (isInBounds) {
             // Store current cursor coordinate (using corner position)
-            this.currentCursorCoord = worldToCube(voxelX, voxelY, voxelZ, this.cursorDepth);
+            const newCoord = worldToCube(voxelX, voxelY, voxelZ, this.cursorDepth);
+
+            // Log if coordinate changed
+            if (!this.currentCursorCoord ||
+                this.currentCursorCoord.x !== newCoord.x ||
+                this.currentCursorCoord.y !== newCoord.y ||
+                this.currentCursorCoord.z !== newCoord.z) {
+              logger.log('renderer', '[Cursor Coord Change - GroundPlane]', {
+                oldCoord: this.currentCursorCoord,
+                newCoord,
+                intersectPoint: { x: intersectPoint.x.toFixed(6), y: intersectPoint.y.toFixed(6), z: intersectPoint.z.toFixed(6) },
+                voxelCenter: { x: voxelCenterX.toFixed(6), y: voxelCenterY.toFixed(6), z: voxelCenterZ.toFixed(6) },
+                voxelCorner: { x: voxelX.toFixed(6), y: voxelY.toFixed(6), z: voxelZ.toFixed(6) },
+                depth: this.cursorDepth,
+                depthSelectMode: this.depthSelectMode
+              });
+            }
+
+            this.currentCursorCoord = newCoord;
 
             // Position preview cube at center of voxel (world space)
             this.currentGridPosition.set(voxelCenterX, voxelY + halfSize, voxelCenterZ);
@@ -1601,11 +1669,19 @@ export class SceneManager {
           if (hit.face && hit.point) {
             // Transform normal from object space to world space
             const worldNormal = hit.face.normal.clone().transformDirection(this.geometryMesh.matrixWorld).normalize();
-            this.updateFaceHighlight(hit.point, worldNormal, size);
 
-            // Store hit info for voxel cursor positioning
+            // Apply small epsilon in direction of hit normal to prevent boundary flipping
+            const epsilon = size * 1e-6;
+            const adjustedPoint = hit.point.clone();
+            adjustedPoint.x += worldNormal.x * epsilon;
+            adjustedPoint.y += worldNormal.y * epsilon;
+            adjustedPoint.z += worldNormal.z * epsilon;
+
+            this.updateFaceHighlight(adjustedPoint, worldNormal, size);
+
+            // Store adjusted hit info for voxel cursor positioning
             hasGeometryHit = true;
-            geometryHitPoint = hit.point.clone();
+            geometryHitPoint = adjustedPoint;
             geometryHitNormal = worldNormal;
           } else {
             this.hideFaceHighlight();
@@ -1645,7 +1721,24 @@ export class SceneManager {
 
         if (isInBounds) {
           // Store current cursor coordinate
-          this.currentCursorCoord = worldToCube(voxelX, voxelY, voxelZ, this.cursorDepth);
+          const newCoord = worldToCube(voxelX, voxelY, voxelZ, this.cursorDepth);
+
+          // Only log when coordinate changes
+          if (!this.currentCursorCoord ||
+              this.currentCursorCoord.x !== newCoord.x ||
+              this.currentCursorCoord.y !== newCoord.y ||
+              this.currentCursorCoord.z !== newCoord.z) {
+            console.log('[MOUSEMOVE CURSOR] DrawPlane CHANGED:', {
+              oldCoord: this.currentCursorCoord,
+              newCoord,
+              planeHitPoint,
+              voxelCenter: { x: voxelCenterX, y: voxelCenterY, z: voxelCenterZ },
+              cursorCenter: { x: cursorX, y: cursorY, z: cursorZ },
+              voxelCorner: { x: voxelX, y: voxelY, z: voxelZ }
+            });
+          }
+
+          this.currentCursorCoord = newCoord;
 
           // Position preview cube at voxel area center
           this.currentGridPosition.set(cursorX, cursorY, cursorZ);
@@ -1680,7 +1773,7 @@ export class SceneManager {
         const size = this.getCursorSize();
         const halfSize = size / 2;
 
-        // Convert hit point to CubeCoord to snap to voxel grid
+        // Convert adjusted hit point to CubeCoord to snap to voxel grid
         const coord = worldToCube(geometryHitPoint.x, geometryHitPoint.y, geometryHitPoint.z, this.cursorDepth);
         const [voxelX, voxelY, voxelZ] = cubeToWorld(coord);
 
@@ -1716,7 +1809,24 @@ export class SceneManager {
 
         if (isInBounds) {
           // Store cursor coordinate using cursor voxel position
-          this.currentCursorCoord = worldToCube(cursorVoxelX, cursorVoxelY, cursorVoxelZ, this.cursorDepth);
+          const newCoord = worldToCube(cursorVoxelX, cursorVoxelY, cursorVoxelZ, this.cursorDepth);
+
+          // Only log when coordinate changes
+          if (!this.currentCursorCoord ||
+              this.currentCursorCoord.x !== newCoord.x ||
+              this.currentCursorCoord.y !== newCoord.y ||
+              this.currentCursorCoord.z !== newCoord.z) {
+            console.log('[MOUSEMOVE CURSOR] GeometryHit CHANGED:', {
+              oldCoord: this.currentCursorCoord,
+              newCoord,
+              hitPoint: geometryHitPoint,
+              hitNormal: geometryHitNormal,
+              cursorCenter: { x: cursorX, y: cursorY, z: cursorZ },
+              voxelCorner: { x: cursorVoxelX, y: cursorVoxelY, z: cursorVoxelZ }
+            });
+          }
+
+          this.currentCursorCoord = newCoord;
 
           // Position preview cube at voxel area center
           this.currentGridPosition.set(cursorX, cursorY, cursorZ);
@@ -1821,14 +1931,14 @@ export class SceneManager {
             }
           } else {
             // Ground plane mode (no active edit plane normal)
-            // Snap all three axes to grid centered on the intersection point
+            // Snap X and Z axes to grid centered on the intersection point
             const voxelCenterX = snapToGrid(intersectPoint.x, size);
-            const voxelCenterY = snapToGrid(intersectPoint.y, size);
             const voxelCenterZ = snapToGrid(intersectPoint.z, size);
 
             // Calculate corner position (world space)
             const voxelX = voxelCenterX - halfSize;
             const voxelZ = voxelCenterZ - halfSize;
+            // Y position based on depth select mode (not snapped to grid for ground plane)
             const voxelY = this.depthSelectMode === 1 ? 0 : -size;
 
             // Check if within world bounds (all axes)
@@ -1839,8 +1949,25 @@ export class SceneManager {
               voxelZ >= -halfWorld && voxelZ + size <= halfWorld;
 
             if (isInBounds) {
-              // Store current cursor coordinate (using corner position)
-              this.currentCursorCoord = worldToCube(voxelX, voxelY, voxelZ, this.cursorDepth);
+              // Store cursor coordinate
+              const newCoord = worldToCube(voxelX, voxelY, voxelZ, this.cursorDepth);
+
+              // Only log when coordinate changes
+              if (!this.currentCursorCoord ||
+                  this.currentCursorCoord.x !== newCoord.x ||
+                  this.currentCursorCoord.y !== newCoord.y ||
+                  this.currentCursorCoord.z !== newCoord.z) {
+                console.log('[MOUSEMOVE CURSOR] GroundPlane CHANGED:', {
+                  oldCoord: this.currentCursorCoord,
+                  newCoord,
+                  intersectPoint,
+                  voxelCenter: { x: voxelCenterX, z: voxelCenterZ },
+                  voxelCorner: { x: voxelX, y: voxelY, z: voxelZ },
+                  depthSelectMode: this.depthSelectMode
+                });
+              }
+
+              this.currentCursorCoord = newCoord;
 
               // Position preview cube at center of voxel (world space)
               this.currentGridPosition.set(voxelCenterX, voxelY + halfSize, voxelCenterZ);
