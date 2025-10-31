@@ -24,6 +24,10 @@ import { PostProcessing } from './post-processing';
 import { profileCache } from '../services/profile-cache';
 import { DEFAULT_RELAYS } from '../config';
 import * as logger from '../utils/logger';
+import { VoxelCursor } from './cursor';
+import { EditMode } from './edit-mode';
+import { PlacementMode } from './placement-mode';
+import type { MainMode } from '@crossworld/common';
 
 /**
  * SceneManager - Manages the 3D scene with centered coordinate system
@@ -52,9 +56,19 @@ export class SceneManager {
   private raycaster: THREE.Raycaster;
   private mouse: THREE.Vector2;
   private lastTime: number = 0;
+
+  // Mode system
+  private currentMode: MainMode = 'walk';
+  private voxelCursor: VoxelCursor | null = null;
+  private editMode: EditMode | null = null;
+  private placementMode: PlacementMode | null = null;
+
+  // Legacy edit mode properties (TODO: migrate to EditMode class)
   private isEditMode: boolean = false;
   private previewCube: THREE.LineSegments | null = null;
   private currentGridPosition: THREE.Vector3 = new THREE.Vector3();
+  private currentCursorCoord: CubeCoord | null = null;
+
   private onPositionUpdate?: (x: number, y: number, z: number, quaternion: [number, number, number, number], moveStyle?: string) => void;
   private cameraController: CameraController | null = null;
   private selectedColorIndex: number = 0;
@@ -86,9 +100,6 @@ export class SceneManager {
   // initialized to macroDepth (3)
   private cursorDepth: number = getMacroDepth();
 
-  // Current cursor coordinate (null when not in edit mode or cursor not visible)
-  private currentCursorCoord: CubeCoord | null = null;
-
   // Remote avatars for other users
   private remoteAvatars: Map<string, IAvatar> = new Map();
   private remoteAvatarConfigs: Map<string, { avatarType: string; avatarId?: string; avatarData?: string }> = new Map();
@@ -116,9 +127,6 @@ export class SceneManager {
   private activeEditPlane: THREE.Plane | null = null;
   private activeEditPlaneNormal: THREE.Vector3 | null = null;
   private editPlaneGridHelper: THREE.GridHelper | null = null;
-
-  // Face highlight for hovered face in edit mode
-  private faceHighlightMesh: THREE.Mesh | null = null;
 
   // WASD movement state for avatar (when camera movement is not active)
   private avatarMoveForward = false;
@@ -183,7 +191,11 @@ export class SceneManager {
     this.setupOriginHelpers();
     this.setupCrosshair();
     this.setupCheckerPlane();
-    this.setupFaceHighlight();
+
+    // Initialize cursor and mode system
+    this.voxelCursor = new VoxelCursor(this.scene, this.cursorDepth);
+    this.editMode = new EditMode(this.voxelCursor);
+    this.placementMode = new PlacementMode(this.scene);
 
     // Initialize camera controller for both walk and edit modes
     this.cameraController = new CameraController(this.camera, canvas);
