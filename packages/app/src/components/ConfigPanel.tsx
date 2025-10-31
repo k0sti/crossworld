@@ -1,4 +1,4 @@
-import { Box, SimpleGrid, Text, VStack, HStack, Slider, SliderTrack, SliderFilledTrack, SliderThumb, Switch, Popover, PopoverTrigger, PopoverContent, PopoverBody } from '@chakra-ui/react'
+import { Box, Text, VStack, HStack, Slider, SliderTrack, SliderFilledTrack, SliderThumb, Switch, Popover, PopoverTrigger, PopoverContent, PopoverBody } from '@chakra-ui/react'
 import { useState, useEffect } from 'react'
 import type { ConfigPanelType } from '@crossworld/common'
 import { type LogTag, isLogEnabled, setLogEnabled, subscribeToLogConfig, isMasterLogEnabled, setMasterLogEnabled } from '../utils/logger'
@@ -19,21 +19,24 @@ const LOG_TAGS: Array<{ tag: LogTag; label: string }> = [
   { tag: 'service', label: 'Service' },
 ]
 
-interface ConfigIconProps {
-  icon: string
+interface ConfigButtonProps {
+  label: string
   onClick: () => void
 }
 
-function ConfigIcon({ icon, onClick }: ConfigIconProps) {
+function ConfigButton({ label, onClick }: ConfigButtonProps) {
   return (
     <Box
       as="button"
       onClick={onClick}
-      aspectRatio={1}
-      bg="rgba(80, 80, 80, 0.1)"
+      w="100%"
+      py={2}
+      px={3}
+      bg="rgba(80, 80, 80, 0.3)"
       border="1px solid rgba(255, 255, 255, 0.1)"
+      borderRadius="md"
       _hover={{
-        bg: 'rgba(120, 120, 120, 0.2)',
+        bg: 'rgba(120, 120, 120, 0.4)',
         borderColor: 'rgba(255, 255, 255, 0.2)'
       }}
       _active={{
@@ -41,11 +44,9 @@ function ConfigIcon({ icon, onClick }: ConfigIconProps) {
       }}
       transition="all 0.1s"
       cursor="pointer"
-      display="flex"
-      alignItems="center"
-      justifyContent="center"
+      textAlign="center"
     >
-      <Text fontSize="2xl" transition="all 0.3s">{icon}</Text>
+      <Text fontSize="sm" color="white" fontWeight="medium">{label}</Text>
     </Box>
   )
 }
@@ -130,21 +131,21 @@ export function ConfigPanel({
       minWidth="320px"
     >
       <VStack align="stretch" spacing={2}>
-        {/* Icon Grid */}
-        <SimpleGrid columns={3} gap={0}>
-          <ConfigIcon
-            icon="🌐"
+        {/* Navigation Buttons */}
+        <VStack spacing={1} align="stretch">
+          <ConfigButton
+            label="Network"
             onClick={() => handleOpenPanel('network')}
           />
-          <ConfigIcon
-            icon="🎭"
+          <ConfigButton
+            label="Avatar"
             onClick={() => handleOpenPanel('avatar')}
           />
-          <ConfigIcon
-            icon="ℹ️"
+          <ConfigButton
+            label="Info"
             onClick={() => handleOpenPanel('info')}
           />
-        </SimpleGrid>
+        </VStack>
 
         {/* Time of day controls */}
         <Box pointerEvents="auto">

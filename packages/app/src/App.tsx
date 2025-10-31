@@ -2,7 +2,7 @@ import * as logger from './utils/logger';
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useToast, Box, Text } from '@chakra-ui/react'
 import { useAccountManager } from 'applesauce-react/hooks'
-import { TopBar, ConfigPanelType, ProfilePanel } from '@crossworld/common'
+import { TopBar, ConfigPanelType, ProfilePanel, MainMode } from '@crossworld/common'
 import { WorldCanvas } from './components/WorldCanvas'
 import { ConfigPanel } from './components/ConfigPanel'
 import { NetworkConfigPanel } from './components/NetworkConfigPanel'
@@ -13,6 +13,7 @@ import { ClientListPanel } from './components/ClientListPanel'
 import { RestoreStateModal } from './components/RestoreStateModal'
 import { PublishWorldModal } from './components/PublishWorldModal'
 import { ColorPalette } from './components/ColorPalette'
+import { ModelSelector } from './components/ModelSelector'
 import { ScriptPanel } from './components/ScriptPanel'
 import { AvatarStateService, type AvatarConfig, type AvatarState } from './services/avatar-state'
 import { useVoice } from './hooks/useVoice'
@@ -26,7 +27,7 @@ import { getMacroDepth, getMicroDepth } from './config/depth-config'
 
 function App() {
   const [pubkey, setPubkey] = useState<string | null>(null)
-  const [isEditMode, setIsEditMode] = useState(false)
+  const [mainMode, setMainMode] = useState<MainMode>('walk')
   const [isCameraMode, setIsCameraMode] = useState(false)
   const [activePanelType, setActivePanelType] = useState<ConfigPanelType>(null)
   const [isChatOpen, setIsChatOpen] = useState(false)
@@ -68,6 +69,9 @@ function App() {
 
   const geometryControllerRef = useRef<any>(null)
   const sceneManagerRef = useRef<any>(null)
+
+  // Derived value for backward compatibility
+  const isEditMode = mainMode === 'edit'
 
   // World CSM state
   const [worldCSM, setWorldCSM] = useState<string>('')
@@ -535,6 +539,11 @@ function App() {
     }
   }
 
+  const handleModelSelect = (_modelPath: string, _index: number) => {
+    // TODO: Implement model selection logic for placement mode
+    logger.log('ui', `[App] Model selected: ${_modelPath}`)
+  }
+
   // Initialize ground render mode when geometry controller is ready
   useEffect(() => {
     if (geometryControllerRef.current) {
@@ -583,8 +592,8 @@ function App() {
           onOpenPanel={setActivePanelType}
           onOpenProfile={() => setActivePanelType('profile')}
           activePanelType={activePanelType}
-          isEditMode={isEditMode}
-          onToggleEditMode={() => setIsEditMode(!isEditMode)}
+          mainMode={mainMode}
+          onModeChange={setMainMode}
         />
 
         {/* Config Panels */}
@@ -697,6 +706,9 @@ function App() {
 
         {/* Color Palette (edit mode) */}
         <ColorPalette isVisible={isEditMode} onColorSelect={handleColorSelect} />
+
+        {/* Model Selector (placement mode) */}
+        <ModelSelector isVisible={mainMode === 'placement'} onModelSelect={handleModelSelect} />
 
         {/* Script Panel (edit mode) */}
         {isEditMode && isScriptPanelOpen && <ScriptPanel csmText={worldCSM} />}

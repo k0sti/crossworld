@@ -4,6 +4,8 @@ import { ProfileButton } from './ProfileButton'
 import { ConfigPanelType } from '../types/config'
 import { ReactNode } from 'react'
 
+export type MainMode = 'walk' | 'edit' | 'placement'
+
 interface TopBarProps {
   pubkey: string | null
   onLogin: (pubkey: string) => void
@@ -11,11 +13,11 @@ interface TopBarProps {
   onOpenProfile: () => void
   activePanelType: ConfigPanelType
   centerContent?: ReactNode
-  isEditMode?: boolean
-  onToggleEditMode?: () => void
+  mainMode?: MainMode
+  onModeChange?: (mode: MainMode) => void
 }
 
-export function TopBar({ pubkey, onLogin, onOpenPanel, onOpenProfile, activePanelType, centerContent, isEditMode, onToggleEditMode }: TopBarProps) {
+export function TopBar({ pubkey, onLogin, onOpenPanel, onOpenProfile, activePanelType, centerContent, mainMode = 'walk', onModeChange }: TopBarProps) {
   const handleMenuClick = () => {
     // Toggle config panel
     if (activePanelType === 'config') {
@@ -24,6 +26,12 @@ export function TopBar({ pubkey, onLogin, onOpenPanel, onOpenProfile, activePane
       onOpenPanel('config')
     }
   }
+
+  const modes: Array<{ mode: MainMode; emoji: string; label: string }> = [
+    { mode: 'walk', emoji: '🚶', label: 'Walk' },
+    { mode: 'edit', emoji: '🏗️', label: 'Edit' },
+    { mode: 'placement', emoji: '📦', label: 'Placement' }
+  ]
 
   return (
     <Box
@@ -49,31 +57,38 @@ export function TopBar({ pubkey, onLogin, onOpenPanel, onOpenProfile, activePane
         )}
 
         <HStack spacing={2}>
-          {/* Edit Mode Toggle */}
-          {pubkey && isEditMode !== undefined && onToggleEditMode && (
-            <Box
-              as="button"
-              onClick={onToggleEditMode}
-              w="40px"
-              h="40px"
-              bg={isEditMode ? "rgba(255, 165, 0, 0.2)" : "rgba(80, 80, 80, 0.1)"}
-              border="1px solid rgba(255, 255, 255, 0.1)"
-              _hover={{
-                bg: isEditMode ? 'rgba(255, 165, 0, 0.3)' : 'rgba(120, 120, 120, 0.2)',
-                borderColor: 'rgba(255, 255, 255, 0.2)'
-              }}
-              _active={{
-                bg: 'rgba(60, 60, 60, 0.3)',
-              }}
-              transition="all 0.1s"
-              cursor="pointer"
-              display="flex"
-              alignItems="center"
-              justifyContent="center"
-              borderRadius="md"
-            >
-              <Text fontSize="lg">{isEditMode ? '🏗️' : '🚶'}</Text>
-            </Box>
+          {/* Mode Radio Buttons */}
+          {pubkey && onModeChange && (
+            <HStack spacing={1}>
+              {modes.map(({ mode, emoji, label }) => (
+                <Box
+                  key={mode}
+                  as="button"
+                  onClick={() => onModeChange(mode)}
+                  px={3}
+                  py={2}
+                  bg={mainMode === mode ? "rgba(255, 165, 0, 0.2)" : "rgba(80, 80, 80, 0.1)"}
+                  border="1px solid"
+                  borderColor={mainMode === mode ? "rgba(255, 165, 0, 0.5)" : "rgba(255, 255, 255, 0.1)"}
+                  _hover={{
+                    bg: mainMode === mode ? 'rgba(255, 165, 0, 0.3)' : 'rgba(120, 120, 120, 0.2)',
+                    borderColor: mainMode === mode ? 'rgba(255, 165, 0, 0.6)' : 'rgba(255, 255, 255, 0.2)'
+                  }}
+                  _active={{
+                    bg: 'rgba(60, 60, 60, 0.3)',
+                  }}
+                  transition="all 0.1s"
+                  cursor="pointer"
+                  display="flex"
+                  alignItems="center"
+                  gap={2}
+                  borderRadius="md"
+                >
+                  <Text fontSize="md">{emoji}</Text>
+                  <Text fontSize="sm" color="white">{label}</Text>
+                </Box>
+              ))}
+            </HStack>
           )}
 
           <IconButton

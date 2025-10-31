@@ -7,6 +7,7 @@ export { ProfilePanel } from './components/ProfilePanel'
 
 // Types
 export type { ConfigPanelType } from './types/config'
+export type { MainMode } from './components/TopBar'
 
 // Config
 export { DEFAULT_RELAYS, DEFAULT_RELAY_STATES, WORLD_RELAYS, APP_NPUB, APP_PUBKEY } from './config'
