@@ -115,16 +115,16 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
   // Load models configuration
   useEffect(() => {
     loadModelsConfig().then(config => {
-      const vox = config.vox.map(([label, filename]) => ({
+      const vox = config.vox?.map(([label, filename]) => ({
         id: filename.replace('.vox', ''),
         label,
         filename
-      }));
-      const glb = config.glb.map(([label, filename]) => ({
+      })) || [];
+      const glb = config.glb?.map(([label, filename]) => ({
         id: filename.replace('.glb', ''),
         label,
         filename
-      }));
+      })) || [];
       setVoxModels(vox);
       setGlbModels(glb);
       setModelsLoaded(true);
