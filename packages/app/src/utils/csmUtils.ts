@@ -53,7 +53,7 @@ export async function loadModelFromCSM(
   await ensureWasmInitialized()
   try {
     // Validate CSM syntax using the new API
-    const error = cubeWasm.validateCsm(csmText)
+    const error = cubeWasm.validate_csm(csmText)
     if (error) {
       throw new Error(error.error)
     }
