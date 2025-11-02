@@ -11,7 +11,7 @@ mod serializer;
 
 // Only compile WASM bindings when "wasm" feature is enabled
 #[cfg(feature = "wasm")]
-mod wasm;
+mod cube_wasm; // Unified Cube-centric interface
 
 pub use face_builder::generate_face_mesh;
 pub use mesh::{ColorMapper, HsvColorMapper, PaletteColorMapper};

@@ -1,5 +1,5 @@
 import * as logger from '../utils/logger';
-import init, { GeometryEngine, GeometryData } from '@workspace/wasm';
+import init, { WorldCube, GeometryData } from '@workspace/wasm';
 import { getMacroDepth, getMicroDepth, getBorderDepth } from '../config/depth-config';
 
 let wasmInitialized = false;
@@ -22,7 +22,7 @@ export async function initializeWasm(): Promise<void> {
 }
 
 export class GeometryGenerator {
-  private engine: GeometryEngine | null = null;
+  private engine: WorldCube | null = null;
   private macroDepth: number;
   private microDepth: number;
   private borderDepth: number;
@@ -31,18 +31,25 @@ export class GeometryGenerator {
     this.macroDepth = macroDepth;
     this.microDepth = microDepth;
     this.borderDepth = borderDepth;
+    logger.log('geometry', `GeometryGenerator created with macro=${macroDepth}, micro=${microDepth}, border=${borderDepth}`);
   }
 
   async initialize(): Promise<void> {
     await initializeWasm();
-    this.engine = new GeometryEngine(this.macroDepth, this.microDepth, this.borderDepth);
+    logger.log('geometry', `Creating WorldCube with macro=${this.macroDepth}, micro=${this.microDepth}, border=${this.borderDepth}`);
+    this.engine = new WorldCube(this.macroDepth, this.microDepth, this.borderDepth);
+    logger.log('geometry', 'WorldCube created successfully');
   }
 
   generateFrame(): GeometryData | null {
     if (!this.engine) {
+      logger.warn('geometry', 'generateFrame called but engine is null');
       return null;
     }
-    return this.engine.generate_frame();
+    logger.log('geometry', 'Generating frame...');
+    const data = this.engine.generateFrame();
+    logger.log('geometry', `Frame generated: ${data.vertices.length} vertices, ${data.indices.length} indices`);
+    return data;
   }
 
   setVoxelAtDepth(x: number, y: number, z: number, depth: number, colorIndex: number): void {
@@ -75,29 +82,28 @@ export class GeometryGenerator {
     this.engine.removeVoxel(x, y, z);
   }
 
-  setFaceMeshMode(enabled: boolean): void {
-    if (!this.engine) {
-      return;
-    }
-    // @ts-ignore - WASM binding exists but TypeScript can't see it
-    this.engine.setFaceMeshMode(enabled);
-  }
-
-  setGroundRenderMode(useCube: boolean): void {
-    if (!this.engine) {
-      return;
-    }
-    // @ts-ignore - WASM binding exists but TypeScript can't see it
-    this.engine.setGroundRenderMode(useCube);
-  }
-
   exportToCSM(): string | null {
     if (!this.engine) {
       return null;
     }
-    // @ts-ignore - WASM binding exists but TypeScript can't see it
     return this.engine.exportToCSM();
+  }
+
+  // New unified interface methods
+  root(): string | null {
+    if (!this.engine) {
+      return null;
+    }
+    return this.engine.root();
+  }
+
+  setRoot(csmCode: string): void {
+    if (!this.engine) {
+      return;
+    }
+    this.engine.setRoot(csmCode);
   }
 }
 
-export { GeometryEngine, GeometryData };
+// Export WorldCube as GeometryEngine for backward compatibility
+export { WorldCube as GeometryEngine, GeometryData };

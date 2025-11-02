@@ -2,7 +2,7 @@ mod avatar;
 mod geometry;
 
 use avatar::AvatarManager;
-use geometry::GeometryEngine as GeometryEngineInternal;
+use geometry::world_cube::WorldCube as WorldCubeInternal;
 use std::cell::RefCell;
 use wasm_bindgen::prelude::*;
 
@@ -12,24 +12,27 @@ pub fn init() {
     tracing_wasm::set_as_global_default();
 }
 
+/// WorldCube - The main world terrain cube
+///
+/// This replaces the old GeometryEngine with a simpler, direct interface.
 #[wasm_bindgen]
-pub struct GeometryEngine {
-    engine: RefCell<GeometryEngineInternal>,
+pub struct WorldCube {
+    inner: RefCell<WorldCubeInternal>,
 }
 
 #[wasm_bindgen]
-impl GeometryEngine {
+impl WorldCube {
     #[wasm_bindgen(constructor)]
     pub fn new(macro_depth: u32, micro_depth: u32, _border_depth: u32) -> Self {
         web_sys::console::log_1(
             &format!(
-                "GeometryEngine initialized with macro_depth={}, micro_depth={}, border_depth={}",
+                "WorldCube initialized with macro_depth={}, micro_depth={}, border_depth={}",
                 macro_depth, micro_depth, _border_depth
             )
             .into(),
         );
         Self {
-            engine: RefCell::new(GeometryEngineInternal::new(
+            inner: RefCell::new(WorldCubeInternal::new(
                 macro_depth,
                 micro_depth,
                 _border_depth,
@@ -37,60 +40,82 @@ impl GeometryEngine {
         }
     }
 
-    #[wasm_bindgen]
+    #[wasm_bindgen(js_name = generateFrame)]
     pub fn generate_frame(&self) -> GeometryData {
-        self.engine.borrow().generate_frame()
+        tracing::info!("[WorldCube WASM] generateFrame called");
+        let result = self.inner.borrow().generate_mesh();
+        tracing::info!(
+            "[WorldCube WASM] Generated mesh: {} vertices, {} indices",
+            result.vertices().len(),
+            result.indices().len()
+        );
+        result
     }
 
-    /// Set voxel in cube ground at specified depth
+    /// Set voxel in world cube at specified depth
     /// depth: octree depth (7=finest detail, 4=coarse, etc.)
     #[wasm_bindgen(js_name = setVoxelAtDepth)]
     pub fn set_voxel_at_depth(&self, x: i32, y: i32, z: i32, depth: u32, color_index: i32) {
-        self.engine
+        self.inner
             .borrow_mut()
             .set_voxel_at_depth(x, y, z, depth, color_index);
     }
 
-    /// Set single voxel in cube ground
+    /// Set single voxel in world cube
     #[wasm_bindgen(js_name = setVoxel)]
     pub fn set_voxel(&self, x: i32, y: i32, z: i32, color_index: i32) {
-        self.engine.borrow_mut().set_voxel(x, y, z, color_index);
+        self.inner.borrow_mut().set_voxel(x, y, z, color_index);
     }
 
-    /// Remove voxel from cube ground at specified depth
+    /// Remove voxel from world cube at specified depth
     #[wasm_bindgen(js_name = removeVoxelAtDepth)]
     pub fn remove_voxel_at_depth(&self, x: i32, y: i32, z: i32, depth: u32) {
-        self.engine
+        self.inner
             .borrow_mut()
             .remove_voxel_at_depth(x, y, z, depth);
     }
 
-    /// Remove voxel from cube ground
+    /// Remove voxel from world cube
     #[wasm_bindgen(js_name = removeVoxel)]
     pub fn remove_voxel(&self, x: i32, y: i32, z: i32) {
-        self.engine.borrow_mut().remove_voxel(x, y, z);
-    }
-
-    /// Set face mesh mode (neighbor-aware culling)
-    #[wasm_bindgen(js_name = setFaceMeshMode)]
-    pub fn set_face_mesh_mode(&self, enabled: bool) {
-        self.engine.borrow_mut().set_face_mesh_mode(enabled);
-    }
-
-    /// Set ground render mode (cube vs plane)
-    #[wasm_bindgen(js_name = setGroundRenderMode)]
-    pub fn set_ground_render_mode(&self, use_cube: bool) {
-        self.engine.borrow_mut().set_ground_render_mode(use_cube);
+        self.inner.borrow_mut().remove_voxel(x, y, z);
     }
 
     /// Export the current world state to CSM format
     #[wasm_bindgen(js_name = exportToCSM)]
     pub fn export_to_csm(&self) -> String {
-        self.engine.borrow().export_to_csm()
+        self.inner.borrow().export_to_csm()
+    }
+
+    /// Get reference to the root cube (NEW unified interface method)
+    ///
+    /// This enables direct manipulation using the unified Cube interface.
+    /// Returns a serialized cube that can be deserialized on the JS side.
+    pub fn root(&self) -> String {
+        // For now, just export as CSM
+        // TODO: Return actual WasmCube reference when cross-crate WASM types are sorted out
+        self.export_to_csm()
+    }
+
+    /// Set a new root cube (NEW unified interface method)
+    ///
+    /// Load a cube from CSM format and replace the entire world.
+    ///
+    /// # Arguments
+    /// * `csm_code` - Cubescript format text
+    #[wasm_bindgen(js_name = setRoot)]
+    pub fn set_root(&self, csm_code: &str) -> Result<(), JsValue> {
+        match crossworld_cube::parse_csm(csm_code) {
+            Ok(octree) => {
+                self.inner.borrow_mut().set_root(octree.root);
+                Ok(())
+            }
+            Err(e) => Err(JsValue::from_str(&format!("Parse error: {}", e))),
+        }
     }
 }
 
-impl Default for GeometryEngine {
+impl Default for WorldCube {
     fn default() -> Self {
         Self::new(3, 0, 0) // Default: macro depth 3, micro depth 0, no borders
     }
