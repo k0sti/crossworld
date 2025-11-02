@@ -13,6 +13,8 @@ export interface DebugInfo {
   worldSize?: number;
   isEditMode?: boolean;
   timeOfDay?: number;
+  placementModel?: string | null;
+  placementScale?: number;
 }
 
 export type RaycastMethod = 'three.js' | 'aether' | 'vibed';
@@ -257,6 +259,15 @@ export function WorldPanel({
           <Badge colorScheme="yellow" fontSize="xs">depth {info.cursorDepth ?? 'N/A'}</Badge>
           <Text fontSize="xs">({formatVecInt(info.cursorWorld)})</Text>
         </HStack>
+
+        {/* Placement Model info (only in placement mode) */}
+        {info.placementModel && (
+          <HStack spacing={1}>
+            <Text color="orange.300">Model</Text>
+            <Badge colorScheme="orange" fontSize="xs">scale {info.placementScale ?? 0}</Badge>
+            <Text fontSize="xs" isTruncated maxWidth="150px">{info.placementModel}</Text>
+          </HStack>
+        )}
 
         {/* Camera info */}
         <HStack spacing={1}>

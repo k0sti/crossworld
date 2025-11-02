@@ -539,9 +539,11 @@ function App() {
     }
   }
 
-  const handleModelSelect = (_modelPath: string, _index: number) => {
-    // TODO: Implement model selection logic for placement mode
-    logger.log('ui', `[App] Model selected: ${_modelPath}`)
+  const handleModelSelect = (modelPath: string, _index: number) => {
+    if (sceneManagerRef.current) {
+      sceneManagerRef.current.setSelectedModel(modelPath)
+      logger.log('ui', `[App] Model selected: ${modelPath}`)
+    }
   }
 
   // Initialize ground render mode when geometry controller is ready
@@ -571,6 +573,7 @@ function App() {
         <WorldCanvas
           isLoggedIn={pubkey !== null}
           isEditMode={isEditMode}
+          mainMode={mainMode}
           isCameraMode={isCameraMode}
           avatarConfig={avatarConfig}
           teleportAnimationType={teleportAnimationType}
