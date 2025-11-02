@@ -45,7 +45,11 @@ function copyAssetsPlugin() {
       // Create output directory
       mkdirSync(outDir, { recursive: true })
 
-      // Copy models.json
+      // Copy avatars.json and models.json
+      copyFileSync(
+        path.join(assetsRoot, 'avatars.json'),
+        path.join(outDir, 'avatars.json')
+      )
       copyFileSync(
         path.join(assetsRoot, 'models.json'),
         path.join(outDir, 'models.json')

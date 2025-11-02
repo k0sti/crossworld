@@ -1,4 +1,5 @@
 import * as logger from './logger';
+
 export interface ModelConfig {
   glb: [string, string][];
   vox: [string, string][];
@@ -12,14 +13,14 @@ export async function loadModelsConfig(): Promise<ModelConfig> {
   }
 
   try {
-    const response = await fetch(`${import.meta.env.BASE_URL}assets/models.json`);
+    const response = await fetch(`${import.meta.env.BASE_URL}assets/avatars.json`);
     if (!response.ok) {
-      throw new Error(`Failed to load models.json: ${response.status}`);
+      throw new Error(`Failed to load avatars.json: ${response.status}`);
     }
     modelsConfigCache = await response.json();
     return modelsConfigCache!;
   } catch (error) {
-    logger.error('common', 'Failed to load models config:', error);
+    logger.error('common', 'Failed to load avatars config:', error);
     // Return empty config as fallback
     modelsConfigCache = { glb: [], vox: [] };
     return modelsConfigCache;
