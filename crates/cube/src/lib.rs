@@ -4,7 +4,6 @@ mod mesh;
 mod neighbor_traversal;
 mod octree;
 mod parser;
-mod raycast;
 mod raycast_aether;
 mod render;
 mod serializer;
@@ -25,7 +24,6 @@ pub use octree::{
     OCTANT_POSITIONS,
 };
 pub use parser::{parse_csm, CsmError};
-pub use raycast::{raycast, Normal, RaycastResult, Voxel};
 pub use render::{
     render_orthographic, render_orthographic_2d, render_orthographic_3d, RenderedImage,
     ViewDirection,

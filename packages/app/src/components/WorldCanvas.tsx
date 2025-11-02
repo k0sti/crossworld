@@ -6,7 +6,7 @@ import { GeometryController } from '../geometry/geometry-controller';
 import init, { AvatarEngine } from '@workspace/wasm';
 import type { AvatarStateService, AvatarConfig } from '../services/avatar-state';
 import type { TeleportAnimationType } from '../renderer/teleport-animation';
-import { DebugPanel, type DebugInfo, type RaycastMethod } from './WorldPanel';
+import { DebugPanel, type DebugInfo } from './WorldPanel';
 import { onDepthChange } from '../config/depth-config';
 import type { MainMode } from '@crossworld/common';
 
@@ -73,10 +73,6 @@ export function WorldCanvas({
     const saved = localStorage.getItem('worldPanel.wireframeEnabled');
     return saved !== null ? JSON.parse(saved) : false;
   });
-  const [raycastMethod, setRaycastMethod] = useState<RaycastMethod>(() => {
-    const saved = localStorage.getItem('worldPanel.raycastMethod');
-    return (saved !== null ? JSON.parse(saved) : 'three.js') as RaycastMethod;
-  });
   const [triangleCount, setTriangleCount] = useState<number | undefined>(undefined);
 
   // Save settings to localStorage when they change
@@ -95,14 +91,6 @@ export function WorldCanvas({
   useEffect(() => {
     localStorage.setItem('worldPanel.wireframeEnabled', JSON.stringify(wireframeEnabled));
   }, [wireframeEnabled]);
-
-  useEffect(() => {
-    localStorage.setItem('worldPanel.raycastMethod', JSON.stringify(raycastMethod));
-    // Update scene manager raycast method
-    if (localSceneManagerRef.current) {
-      localSceneManagerRef.current.setRaycastMethod(raycastMethod);
-    }
-  }, [raycastMethod]);
 
   // Use external speechEnabled if provided, otherwise use internal state
   const speechEnabled = externalSpeechEnabled ?? internalSpeechEnabled;
@@ -210,8 +198,8 @@ export function WorldCanvas({
       // Update triangle count
       setTriangleCount(geometry.stats.triangles);
     }, (csmText: string) => {
-      // Load into Rust for raycasting
-      sceneManager.loadWorldOctree(csmText);
+      // Load into WASM for raycasting
+      sceneManager.loadWorldCube(csmText);
       // Call parent callback if provided
       onWorldCSMUpdate?.(csmText);
     }).catch((error) => {
@@ -535,8 +523,6 @@ export function WorldCanvas({
           wireframeEnabled={wireframeEnabled}
           onWireframeEnabledChange={setWireframeEnabled}
           triangleCount={triangleCount}
-          raycastMethod={raycastMethod}
-          onRaycastMethodChange={setRaycastMethod}
           onPublishWorld={onPublishWorld}
           isLoggedIn={isLoggedIn}
         />
