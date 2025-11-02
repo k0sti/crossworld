@@ -150,8 +150,13 @@ fn raycast_subdivided(
     let cube_center = cube_coord_to_world_center(cube_coord, cube_size);
 
     // Determine entry child based on entry normal and ray position
-    let entry_child_idx =
-        calculate_entry_child(cube_center, cube_size, ray_origin, ray_direction, entry_normal);
+    let entry_child_idx = calculate_entry_child(
+        cube_center,
+        cube_size,
+        ray_origin,
+        ray_direction,
+        entry_normal,
+    );
 
     // Traverse the child
     let child_coord = cube_coord.child(entry_child_idx);
@@ -435,7 +440,11 @@ mod tests {
         let exit_point = origin + direction * t;
 
         // Should exit at x=1.0
-        assert!((exit_point.x - 1.0).abs() < 0.001, "Exit X should be 1.0, got {}", exit_point.x);
+        assert!(
+            (exit_point.x - 1.0).abs() < 0.001,
+            "Exit X should be 1.0, got {}",
+            exit_point.x
+        );
         assert!((exit_point.y - 0.5).abs() < 0.001, "Y should remain 0.5");
         assert!((exit_point.z - 0.5).abs() < 0.001, "Z should remain 0.5");
     }
@@ -452,7 +461,11 @@ mod tests {
         let exit_point = origin + direction * t;
 
         // Should exit at y=0.0
-        assert!((exit_point.y - 0.0).abs() < 0.001, "Exit Y should be 0.0, got {}", exit_point.y);
+        assert!(
+            (exit_point.y - 0.0).abs() < 0.001,
+            "Exit Y should be 0.0, got {}",
+            exit_point.y
+        );
         assert!((exit_point.x - 0.5).abs() < 0.001, "X should remain 0.5");
     }
 
@@ -475,7 +488,11 @@ mod tests {
             || (exit_point.y - 0.0).abs() < 0.001
             || (exit_point.z - 0.0).abs() < 0.001;
 
-        assert!(at_boundary, "Exit point {:?} should be at cube boundary", exit_point);
+        assert!(
+            at_boundary,
+            "Exit point {:?} should be at cube boundary",
+            exit_point
+        );
     }
 
     #[test]
@@ -502,8 +519,10 @@ mod tests {
         let exit_point = origin + direction * t;
 
         // Should exit through X face
-        assert!((exit_point.x - 1.0).abs() < 0.001 || (exit_point.x - 0.0).abs() < 0.001,
-                "Should exit through X face");
+        assert!(
+            (exit_point.x - 1.0).abs() < 0.001 || (exit_point.x - 0.0).abs() < 0.001,
+            "Should exit through X face"
+        );
     }
 
     #[test]
@@ -579,38 +598,29 @@ mod tests {
         // Ray enters from negative X into the lower corner
         let ray_origin = Vec3::new(0.0, 0.25, 0.25);
         let ray_dir = Vec3::new(1.0, 0.0, 0.0);
-        let child_idx = calculate_entry_child(
-            cube_center,
-            cube_size,
-            ray_origin,
-            ray_dir,
-            entry_normal,
-        );
+        let child_idx =
+            calculate_entry_child(cube_center, cube_size, ray_origin, ray_dir, entry_normal);
         assert_eq!(child_idx, 0, "Should be octant 0 (---) ");
 
         // Octant 3: x<center (always, since entering from NegX), y>=center, z>=center
         let ray_origin = Vec3::new(0.0, 0.75, 0.75);
-        let child_idx = calculate_entry_child(
-            cube_center,
-            cube_size,
-            ray_origin,
-            ray_dir,
-            entry_normal,
-        );
+        let child_idx =
+            calculate_entry_child(cube_center, cube_size, ray_origin, ray_dir, entry_normal);
         // Entry at (0, 0.75, 0.75), rel = (-0.5, 0.25, 0.25), octant = 011 = 3
-        assert_eq!(child_idx, 3, "Entry at (0, 0.75, 0.75) should be octant 3 (x-, y+, z+)");
+        assert_eq!(
+            child_idx, 3,
+            "Entry at (0, 0.75, 0.75) should be octant 3 (x-, y+, z+)"
+        );
 
         // Octant 2: x<center, y<center, z>=center
         let ray_origin = Vec3::new(0.0, 0.25, 0.75);
-        let child_idx = calculate_entry_child(
-            cube_center,
-            cube_size,
-            ray_origin,
-            ray_dir,
-            entry_normal,
-        );
+        let child_idx =
+            calculate_entry_child(cube_center, cube_size, ray_origin, ray_dir, entry_normal);
         // Entry at (0, 0.25, 0.75), rel = (-0.5, -0.25, 0.25), octant = 001 = 1
-        assert_eq!(child_idx, 1, "Entry at (0, 0.25, 0.75) should be octant 1 (x-, y-, z+)");
+        assert_eq!(
+            child_idx, 1,
+            "Entry at (0, 0.25, 0.75) should be octant 1 (x-, y-, z+)"
+        );
     }
 
     #[test]
@@ -626,14 +636,12 @@ mod tests {
         // X is negative, so octant should be: x=0, y=1, z=1 = octant 3
         let ray_origin = Vec3::new(0.0, 0.5, 0.5);
         let ray_dir = Vec3::new(1.0, 0.0, 0.0);
-        let child_idx = calculate_entry_child(
-            cube_center,
-            cube_size,
-            ray_origin,
-            ray_dir,
-            entry_normal,
+        let child_idx =
+            calculate_entry_child(cube_center, cube_size, ray_origin, ray_dir, entry_normal);
+        assert_eq!(
+            child_idx, 3,
+            "Entry at (0, 0.5, 0.5) should be octant 3 (x-, y+, z+)"
         );
-        assert_eq!(child_idx, 3, "Entry at (0, 0.5, 0.5) should be octant 3 (x-, y+, z+)");
     }
 
     #[test]
@@ -740,7 +748,10 @@ mod tests {
 
         let result = raycast(&cube, 0, coord, Normal::NegX as u8, origin, direction);
 
-        assert_eq!(result.voxel, None, "Should pass through empty subdivided cube");
+        assert_eq!(
+            result.voxel, None,
+            "Should pass through empty subdivided cube"
+        );
     }
 
     #[test]
@@ -775,7 +786,10 @@ mod tests {
 
         // The ray should potentially hit octant 7, but this depends on correct traversal
         // This is a complex case that tests the overall algorithm
-        println!("Diagonal ray result: voxel={:?}, coord={:?}", result.voxel, result.coord);
+        println!(
+            "Diagonal ray result: voxel={:?}, coord={:?}",
+            result.voxel, result.coord
+        );
     }
 
     #[test]
@@ -784,12 +798,36 @@ mod tests {
 
         // Test exiting with different entry normals
         let test_cases = [
-            (Normal::NegX, Vec3::new(0.0, 0.5, 0.5), Vec3::new(1.0, 0.0, 0.0)),
-            (Normal::PosX, Vec3::new(1.0, 0.5, 0.5), Vec3::new(-1.0, 0.0, 0.0)),
-            (Normal::NegY, Vec3::new(0.5, 0.0, 0.5), Vec3::new(0.0, 1.0, 0.0)),
-            (Normal::PosY, Vec3::new(0.5, 1.0, 0.5), Vec3::new(0.0, -1.0, 0.0)),
-            (Normal::NegZ, Vec3::new(0.5, 0.5, 0.0), Vec3::new(0.0, 0.0, 1.0)),
-            (Normal::PosZ, Vec3::new(0.5, 0.5, 1.0), Vec3::new(0.0, 0.0, -1.0)),
+            (
+                Normal::NegX,
+                Vec3::new(0.0, 0.5, 0.5),
+                Vec3::new(1.0, 0.0, 0.0),
+            ),
+            (
+                Normal::PosX,
+                Vec3::new(1.0, 0.5, 0.5),
+                Vec3::new(-1.0, 0.0, 0.0),
+            ),
+            (
+                Normal::NegY,
+                Vec3::new(0.5, 0.0, 0.5),
+                Vec3::new(0.0, 1.0, 0.0),
+            ),
+            (
+                Normal::PosY,
+                Vec3::new(0.5, 1.0, 0.5),
+                Vec3::new(0.0, -1.0, 0.0),
+            ),
+            (
+                Normal::NegZ,
+                Vec3::new(0.5, 0.5, 0.0),
+                Vec3::new(0.0, 0.0, 1.0),
+            ),
+            (
+                Normal::PosZ,
+                Vec3::new(0.5, 0.5, 1.0),
+                Vec3::new(0.0, 0.0, -1.0),
+            ),
         ];
 
         for (entry_normal, origin, direction) in test_cases.iter() {

@@ -1,74 +1,70 @@
-use crate::mesh_builder::MeshBuilder;
+use crate::face::Face;
 use crate::neighbor_traversal::{
     traverse_with_neighbors, NeighborGrid, OFFSET_BACK, OFFSET_DOWN, OFFSET_FRONT, OFFSET_LEFT,
     OFFSET_RIGHT, OFFSET_UP,
 };
 use crate::octree::Cube;
 
-/// Face direction for cube faces
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Face {
-    Top,    // +Y
-    Bottom, // -Y
-    Left,   // -X
-    Right,  // +X
-    Front,  // +Z
-    Back,   // -Z
+/// Builder interface for constructing meshes
+pub trait MeshBuilder {
+    /// Add a single face to the mesh
+    ///
+    /// # Arguments
+    /// * `vertices` - Four vertices forming a quad (counter-clockwise)
+    /// * `normal` - Normal vector for the face
+    /// * `color` - RGB color for the face
+    fn add_face(&mut self, vertices: [[f32; 3]; 4], normal: [f32; 3], color: [f32; 3]);
 }
 
-impl Face {
-    /// Get the normal vector for this face (pointing into the solid voxel)
-    fn normal(self) -> [f32; 3] {
-        match self {
-            Face::Top => [0.0, 1.0, 0.0],
-            Face::Bottom => [0.0, -1.0, 0.0],
-            Face::Left => [-1.0, 0.0, 0.0],
-            Face::Right => [1.0, 0.0, 0.0],
-            Face::Front => [0.0, 0.0, 1.0],
-            Face::Back => [0.0, 0.0, -1.0],
+/// Default mesh builder that accumulates data into vectors
+pub struct DefaultMeshBuilder {
+    pub vertices: Vec<f32>,
+    pub indices: Vec<u32>,
+    pub normals: Vec<f32>,
+    pub colors: Vec<f32>,
+    vertex_count: u32,
+}
+
+impl DefaultMeshBuilder {
+    pub fn new() -> Self {
+        Self {
+            vertices: Vec::new(),
+            indices: Vec::new(),
+            normals: Vec::new(),
+            colors: Vec::new(),
+            vertex_count: 0,
         }
     }
+}
 
-    /// Get the four vertices for this face in counter-clockwise order when viewed from outside
-    fn vertices(self, x: f32, y: f32, z: f32, size: f32) -> [[f32; 3]; 4] {
-        match self {
-            Face::Top => [
-                [x, y + size, z],
-                [x, y + size, z + size],
-                [x + size, y + size, z + size],
-                [x + size, y + size, z],
-            ],
-            Face::Bottom => [
-                [x, y, z],
-                [x + size, y, z],
-                [x + size, y, z + size],
-                [x, y, z + size],
-            ],
-            Face::Left => [
-                [x, y, z + size],
-                [x, y + size, z + size],
-                [x, y + size, z],
-                [x, y, z],
-            ],
-            Face::Right => [
-                [x + size, y, z],
-                [x + size, y + size, z],
-                [x + size, y + size, z + size],
-                [x + size, y, z + size],
-            ],
-            Face::Front => [
-                [x + size, y, z + size],
-                [x + size, y + size, z + size],
-                [x, y + size, z + size],
-                [x, y, z + size],
-            ],
-            Face::Back => [
-                [x, y, z],
-                [x, y + size, z],
-                [x + size, y + size, z],
-                [x + size, y, z],
-            ],
+impl Default for DefaultMeshBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl MeshBuilder for DefaultMeshBuilder {
+    fn add_face(&mut self, vertices: [[f32; 3]; 4], normal: [f32; 3], color: [f32; 3]) {
+        let base_index = self.vertex_count;
+
+        // Add vertices
+        for vertex in &vertices {
+            self.vertices.extend_from_slice(vertex);
+            self.normals.extend_from_slice(&normal);
+            self.colors.extend_from_slice(&color);
         }
+
+        // Add indices for two triangles (0,1,2) and (0,2,3)
+        self.indices.extend_from_slice(&[
+            base_index,
+            base_index + 1,
+            base_index + 2,
+            base_index,
+            base_index + 2,
+            base_index + 3,
+        ]);
+
+        self.vertex_count += 4;
     }
 }
 
@@ -93,7 +89,6 @@ where
     traverse_with_neighbors(
         &grid,
         &mut |view, coord, _subleaf| {
-
             // Calculate voxel size based on actual depth of this voxel
             // coord.depth counts down from max_depth as we traverse
             // Coordinate space: positions are in [0, 2^(max_depth - coord.depth + 1))
@@ -123,7 +118,7 @@ where
                 if let Some(neighbor_cube) = view.get(dir_offset) {
                     // Check if neighbor is subdivided (branch node)
                     // If so, we need to subdivide this voxel to match the detail level
-                    if matches!(**neighbor_cube, Cube::Cubes(_)) {
+                    if !neighbor_cube.is_leaf() {
                         should_subdivide = true;
                         continue; // Don't generate face, need to subdivide first
                     }
@@ -167,7 +162,6 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mesh_builder::DefaultMeshBuilder;
     use crate::octree::Cube;
     use std::rc::Rc;
 

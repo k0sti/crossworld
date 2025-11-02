@@ -18,7 +18,11 @@ struct ModelsIndex {
     models: Vec<ModelEntry>,
 }
 
-fn traverse_directory(dir: &Path, base_dir: &Path, models: &mut Vec<ModelEntry>) -> std::io::Result<()> {
+fn traverse_directory(
+    dir: &Path,
+    base_dir: &Path,
+    models: &mut Vec<ModelEntry>,
+) -> std::io::Result<()> {
     if !dir.is_dir() {
         return Ok(());
     }
@@ -33,12 +37,14 @@ fn traverse_directory(dir: &Path, base_dir: &Path, models: &mut Vec<ModelEntry>)
             if let Some(ext) = path.extension() {
                 let ext_str = ext.to_string_lossy().to_lowercase();
                 if ext_str == "vox" || ext_str == "glb" {
-                    let relative_path = path.strip_prefix(base_dir)
+                    let relative_path = path
+                        .strip_prefix(base_dir)
                         .unwrap_or(&path)
                         .to_string_lossy()
                         .replace('\\', "/");
 
-                    let name = path.file_stem()
+                    let name = path
+                        .file_stem()
                         .unwrap_or_default()
                         .to_string_lossy()
                         .to_string();
