@@ -35,6 +35,12 @@ export function getModelFilename(modelId: string, type: 'vox' | 'glb'): string |
 
   const models = type === 'vox' ? modelsConfigCache.vox : modelsConfigCache.glb;
 
+  // Safety check: ensure models is iterable
+  if (!Array.isArray(models)) {
+    logger.error('common', `Invalid models config for type ${type}:`, models);
+    return null;
+  }
+
   // Find by ID (filename without extension)
   for (const [_label, filename] of models) {
     const id = filename.replace(`.${type}`, '');

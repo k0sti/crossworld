@@ -214,9 +214,6 @@ export function WorldCanvas({
       sceneManager.loadWorldOctree(csmText);
       // Call parent callback if provided
       onWorldCSMUpdate?.(csmText);
-    }).then(() => {
-      // Set initial face mesh mode (enabled by default)
-      geometryController.setFaceMeshMode(true);
     }).catch((error) => {
       logger.error('renderer', 'Failed to initialize geometry controller:', error);
     });
@@ -354,13 +351,10 @@ export function WorldCanvas({
     sceneManager.setWorldGridVisible(isEditMode && worldGridVisible);
   }, [worldGridVisible, isEditMode]);
 
-  // Handle face mesh mode
-  useEffect(() => {
-    const geometryController = localGeometryControllerRef.current;
-    if (!geometryController) return;
-
-    geometryController.setFaceMeshMode(faceMeshEnabled);
-  }, [faceMeshEnabled]);
+  // Note: Face mesh mode is now always enabled, this effect is deprecated
+  // useEffect(() => {
+  //   Face mesh mode is always enabled in the new implementation
+  // }, [faceMeshEnabled]);
 
   // Handle wireframe mode
   useEffect(() => {

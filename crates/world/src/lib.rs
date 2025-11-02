@@ -24,13 +24,6 @@ pub struct WorldCube {
 impl WorldCube {
     #[wasm_bindgen(constructor)]
     pub fn new(macro_depth: u32, micro_depth: u32, _border_depth: u32) -> Self {
-        web_sys::console::log_1(
-            &format!(
-                "WorldCube initialized with macro_depth={}, micro_depth={}, border_depth={}",
-                macro_depth, micro_depth, _border_depth
-            )
-            .into(),
-        );
         Self {
             inner: RefCell::new(WorldCubeInternal::new(
                 macro_depth,
@@ -42,14 +35,7 @@ impl WorldCube {
 
     #[wasm_bindgen(js_name = generateFrame)]
     pub fn generate_frame(&self) -> GeometryData {
-        tracing::info!("[WorldCube WASM] generateFrame called");
-        let result = self.inner.borrow().generate_mesh();
-        tracing::info!(
-            "[WorldCube WASM] Generated mesh: {} vertices, {} indices",
-            result.vertices().len(),
-            result.indices().len()
-        );
-        result
+        self.inner.borrow().generate_mesh()
     }
 
     /// Set voxel in world cube at specified depth
@@ -214,7 +200,6 @@ pub struct AvatarEngine {
 impl AvatarEngine {
     #[wasm_bindgen(constructor)]
     pub fn new() -> Self {
-        web_sys::console::log_1(&"AvatarEngine initialized".into());
         Self {
             manager: AvatarManager::new(),
         }

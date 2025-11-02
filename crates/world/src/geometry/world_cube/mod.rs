@@ -31,8 +31,6 @@ impl WorldCube {
         let random_value = js_sys::Math::random();
         let seed = (random_value * (u32::MAX as f64)) as u32;
 
-        tracing::info!("[WorldCube] Generating new world with seed: {}", seed);
-
         let noise = Perlin::new(seed);
         let fbm = Fbm::new(seed);
 
@@ -57,27 +55,7 @@ impl WorldCube {
     /// Coordinates and depth are in octree space (TypeScript handles scaling)
     /// The octree will automatically subdivide to support the requested depth
     pub fn set_voxel_at_depth(&mut self, x: i32, y: i32, z: i32, depth: u32, color_index: i32) {
-        tracing::info!(
-            "[Rust set_voxel_at_depth] x={}, y={}, z={}, depth={}, color={}, macro_depth={}",
-            x,
-            y,
-            z,
-            depth,
-            color_index,
-            self.macro_depth
-        );
-
-        // Calculate position at the target depth
         let pos = IVec3::new(x, y, z);
-
-        tracing::info!(
-            "[Rust set_voxel_at_depth] setting at position: {:?} at depth={}",
-            pos,
-            depth
-        );
-
-        // Update octree node at the target depth
-        // The octree will dynamically subdivide as needed
         self.octree.root = self
             .octree
             .root
@@ -107,9 +85,6 @@ impl WorldCube {
     }
 
     pub fn generate_mesh(&self) -> GeometryData {
-        tracing::info!("[WorldCube] generate_mesh called, render_depth={}, face_mesh_mode={}",
-            self.render_depth, self.face_mesh_mode);
-
         // Generate mesh from octree using appropriate mesh builder
         let color_mapper = DawnbringerColorMapper::new();
         let mut builder = DefaultMeshBuilder::new();
@@ -135,9 +110,6 @@ impl WorldCube {
             );
         }
 
-        tracing::info!("[WorldCube] Mesh builder stats: {} vertices, {} indices before scaling",
-            builder.vertices.len() / 3, builder.indices.len());
-
         // Scale and offset vertices to match world coordinates
         // The mesh generator outputs vertices in [0,1] space where:
         // - Terrain voxels (at macro_depth) are correctly normalized
@@ -156,9 +128,6 @@ impl WorldCube {
                 vec![x, y, z]
             })
             .collect();
-
-        tracing::info!("[WorldCube] Returning geometry: {} vertices, {} triangles",
-            scaled_vertices.len() / 3, builder.indices.len() / 3);
 
         GeometryData::new(
             scaled_vertices,
