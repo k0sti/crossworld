@@ -87,14 +87,44 @@ export class PlacementMode {
    * Create Three.js mesh from VOX data
    */
   private createMeshFromVoxData(voxData: any): THREE.Mesh | null {
-    // For now, create a simple cube as placeholder
-    // TODO: Implement proper voxel to mesh conversion
-    const geometry = new THREE.BoxGeometry(1, 1, 1);
-    const material = new THREE.MeshBasicMaterial({
-      color: 0xff8800,
+    if (!voxData || !voxData.vertices || !voxData.indices) {
+      console.error('Invalid vox data');
+      return null;
+    }
+
+    // Create geometry from vox data
+    const geometry = new THREE.BufferGeometry();
+
+    // Set vertices (positions)
+    const positions = new Float32Array(voxData.vertices);
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+    // Set indices
+    const indices = new Uint32Array(voxData.indices);
+    geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+
+    // Set normals if available
+    if (voxData.normals && voxData.normals.length > 0) {
+      const normals = new Float32Array(voxData.normals);
+      geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+    } else {
+      geometry.computeVertexNormals();
+    }
+
+    // Set colors if available
+    if (voxData.colors && voxData.colors.length > 0) {
+      const colors = new Float32Array(voxData.colors);
+      geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    }
+
+    // Create material with vertex colors
+    const material = new THREE.MeshStandardMaterial({
+      vertexColors: true,
       transparent: true,
-      opacity: 0.5
+      opacity: 0.7,
+      side: THREE.DoubleSide
     });
+
     return new THREE.Mesh(geometry, material);
   }
 

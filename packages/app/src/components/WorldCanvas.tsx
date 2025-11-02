@@ -8,10 +8,12 @@ import type { AvatarStateService, AvatarConfig } from '../services/avatar-state'
 import type { TeleportAnimationType } from '../renderer/teleport-animation';
 import { DebugPanel, type DebugInfo, type RaycastMethod } from './WorldPanel';
 import { onDepthChange } from '../config/depth-config';
+import type { MainMode } from '@crossworld/common';
 
 interface WorldCanvasProps {
   isLoggedIn: boolean;
   isEditMode: boolean;
+  mainMode: MainMode;
   isCameraMode: boolean;
   avatarConfig: AvatarConfig;
   teleportAnimationType: TeleportAnimationType;
@@ -31,6 +33,7 @@ interface WorldCanvasProps {
 export function WorldCanvas({
   isLoggedIn,
   isEditMode,
+  mainMode,
   isCameraMode,
   avatarConfig,
   teleportAnimationType,
@@ -288,7 +291,15 @@ export function WorldCanvas({
     sceneManager.setCurrentUserPubkey(currentUserPubkey || null);
   }, [currentUserPubkey]);
 
-  // Handle edit mode changes
+  // Handle main mode changes (walk/edit/placement)
+  useEffect(() => {
+    const sceneManager = localSceneManagerRef.current;
+    if (!sceneManager) return;
+
+    sceneManager.setMainMode(mainMode);
+  }, [mainMode]);
+
+  // Handle edit mode changes (for backward compatibility)
   useEffect(() => {
     const sceneManager = localSceneManagerRef.current;
     if (!sceneManager) return;

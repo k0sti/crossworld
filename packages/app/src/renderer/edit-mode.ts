@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 import type { CubeCoord } from '../types/cube-coord';
 import { VoxelCursor } from './cursor';
 

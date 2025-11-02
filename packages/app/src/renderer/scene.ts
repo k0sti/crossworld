@@ -24,8 +24,8 @@ import { PostProcessing } from './post-processing';
 import { profileCache } from '../services/profile-cache';
 import { DEFAULT_RELAYS } from '../config';
 import * as logger from '../utils/logger';
-import { VoxelCursor } from './cursor';
-import { EditMode } from './edit-mode';
+// import { VoxelCursor } from './cursor';
+// import { EditMode } from './edit-mode';
 import { PlacementMode } from './placement-mode';
 import type { MainMode } from '@crossworld/common';
 
@@ -59,13 +59,14 @@ export class SceneManager {
 
   // Mode system
   private currentMode: MainMode = 'walk';
-  private voxelCursor: VoxelCursor | null = null;
-  private editMode: EditMode | null = null;
+  // private voxelCursor: VoxelCursor | null = null;
+  // private editMode: EditMode | null = null; // TODO: Use EditMode class instead of legacy edit mode
   private placementMode: PlacementMode | null = null;
 
   // Legacy edit mode properties (TODO: migrate to EditMode class)
   private isEditMode: boolean = false;
   private previewCube: THREE.LineSegments | null = null;
+  private faceHighlightMesh: THREE.Mesh | null = null;
   private currentGridPosition: THREE.Vector3 = new THREE.Vector3();
   private currentCursorCoord: CubeCoord | null = null;
 
@@ -188,13 +189,14 @@ export class SceneManager {
     this.setupMouseMoveListener(canvas);
     this.setupKeyboardListener(canvas);
     this.setupEditModeHelpers();
+    this.setupFaceHighlight();
     this.setupOriginHelpers();
     this.setupCrosshair();
     this.setupCheckerPlane();
 
     // Initialize cursor and mode system
-    this.voxelCursor = new VoxelCursor(this.scene, this.cursorDepth);
-    this.editMode = new EditMode(this.voxelCursor);
+    // this.voxelCursor = new VoxelCursor(this.scene, this.cursorDepth);
+    // this.editMode = new EditMode(this.voxelCursor); // TODO: Use EditMode class instead of legacy edit mode
     this.placementMode = new PlacementMode(this.scene);
 
     // Initialize camera controller for both walk and edit modes
@@ -332,9 +334,9 @@ export class SceneManager {
       this.clearActiveEditPlane();
     });
 
-    // Right click handler - prevent context menu in edit mode (used for camera look)
+    // Right click handler - prevent context menu in edit and placement modes
     canvas.addEventListener('contextmenu', (event) => {
-      if (this.isEditMode) {
+      if (this.isEditMode || this.currentMode === 'placement') {
         event.preventDefault();
       }
     });
@@ -723,6 +725,12 @@ export class SceneManager {
     this.selectedColorIndex = colorIndex;
   }
 
+  async setSelectedModel(modelPath: string): Promise<void> {
+    if (this.placementMode) {
+      await this.placementMode.setModel(modelPath);
+    }
+  }
+
   /**
    * Get the current cursor coordinate (null if cursor not visible)
    */
@@ -844,6 +852,53 @@ export class SceneManager {
         return;
       }
 
+      // Cursor depth/scale control with Arrow Up/Down (works in edit and placement modes)
+      if (event.code === 'ArrowUp') {
+        event.preventDefault();
+
+        // Placement mode: increase model scale
+        if (this.currentMode === 'placement' && this.placementMode) {
+          const currentScale = this.placementMode.getScale();
+          this.placementMode.setScale(currentScale + 1);
+          logger.log('renderer', `[Placement Scale] Increased to ${currentScale + 1}`);
+        }
+        // Edit mode: increase cursor depth
+        else if (this.isEditMode) {
+          this.cursorDepth = Math.min(getTotalDepth(), this.cursorDepth + 1);
+          this.updateCursorSize();
+          logger.log('renderer', `[Cursor Depth] Increased to ${this.cursorDepth} (size=${this.getCursorSize()})`);
+          // Update cursor position immediately
+          if (this.mouseMode === 2) {
+            this.updateVoxelCursorAtCenter();
+          } else {
+            this.updateCursorVisualization();
+          }
+        }
+      }
+
+      if (event.code === 'ArrowDown') {
+        event.preventDefault();
+
+        // Placement mode: decrease model scale
+        if (this.currentMode === 'placement' && this.placementMode) {
+          const currentScale = this.placementMode.getScale();
+          this.placementMode.setScale(Math.max(0, currentScale - 1));
+          logger.log('renderer', `[Placement Scale] Decreased to ${Math.max(0, currentScale - 1)}`);
+        }
+        // Edit mode: decrease cursor depth
+        else if (this.isEditMode) {
+          this.cursorDepth = Math.max(0, this.cursorDepth - 1);
+          this.updateCursorSize();
+          logger.log('renderer', `[Cursor Depth] Decreased to ${this.cursorDepth} (size=${this.getCursorSize()})`);
+          // Update cursor position immediately
+          if (this.mouseMode === 2) {
+            this.updateVoxelCursorAtCenter();
+          } else {
+            this.updateCursorVisualization();
+          }
+        }
+      }
+
       // Edit mode specific controls
       if (!this.isEditMode) return;
 
@@ -852,33 +907,6 @@ export class SceneManager {
         event.preventDefault();
         this.depthSelectMode = this.depthSelectMode === 1 ? 2 : 1;
         logger.log('renderer', `[Depth Select] Switched to mode ${this.depthSelectMode} (y=${this.depthSelectMode === 1 ? 0 : -1})`);
-        // Update cursor position immediately
-        if (this.mouseMode === 2) {
-          this.updateVoxelCursorAtCenter();
-        } else {
-          this.updateCursorVisualization();
-        }
-      }
-
-      // Cursor depth control with Arrow Up/Down
-      if (event.code === 'ArrowUp') {
-        event.preventDefault();
-        this.cursorDepth = Math.min(getTotalDepth(), this.cursorDepth + 1);
-        this.updateCursorSize();
-        logger.log('renderer', `[Cursor Depth] Increased to ${this.cursorDepth} (size=${this.getCursorSize()})`);
-        // Update cursor position immediately
-        if (this.mouseMode === 2) {
-          this.updateVoxelCursorAtCenter();
-        } else {
-          this.updateCursorVisualization();
-        }
-      }
-
-      if (event.code === 'ArrowDown') {
-        event.preventDefault();
-        this.cursorDepth = Math.max(0, this.cursorDepth - 1);
-        this.updateCursorSize();
-        logger.log('renderer', `[Cursor Depth] Decreased to ${this.cursorDepth} (size=${this.getCursorSize()})`);
         // Update cursor position immediately
         if (this.mouseMode === 2) {
           this.updateVoxelCursorAtCenter();
@@ -1589,6 +1617,44 @@ export class SceneManager {
         this.camera.quaternion.setFromEuler(euler);
 
         // Don't return - continue to update voxel cursor below (if in edit mode)
+      }
+
+      // Placement mode: update model cursor position
+      if (this.currentMode === 'placement' && this.placementMode) {
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        const mouseY = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+        this.mouse.x = mouseX;
+        this.mouse.y = mouseY;
+        this.raycaster.setFromCamera(this.mouse, this.camera);
+
+        // Raycast to geometry or ground
+        const hit = this.raycastGeometry();
+        if (hit) {
+          // Position model at hit point
+          this.placementMode.setPosition(hit.point.x, hit.point.y, hit.point.z);
+          this.placementMode.show();
+
+          // Calculate cube coord for placement
+          const brush = this.placementMode.getBrush();
+          const baseSize = Math.pow(2, brush.size);
+          const scaleMultiplier = Math.pow(2, brush.scale);
+          const finalSize = baseSize * scaleMultiplier;
+          const halfSize = finalSize / 2;
+
+          // Calculate corner position
+          const voxelX = hit.point.x - halfSize;
+          const voxelY = hit.point.y - halfSize;
+          const voxelZ = hit.point.z - halfSize;
+
+          // Convert to cube coordinate
+          const coord = worldToCube(voxelX, voxelY, voxelZ, brush.size);
+          this.placementMode.setCursorCoord(coord);
+        } else {
+          this.placementMode.hide();
+        }
+        return;
       }
 
       // Edit mode only: update voxel cursor and face highlight
@@ -2346,8 +2412,42 @@ export class SceneManager {
   /**
    * Set edit mode to show/hide grid helpers
    */
+  setMainMode(mode: MainMode): void {
+    const previousMode = this.currentMode;
+    this.currentMode = mode;
+
+    // Hide cursors from previous mode
+    if (previousMode === 'edit' && this.previewCube) {
+      this.previewCube.visible = false;
+    }
+    if (previousMode === 'placement' && this.placementMode) {
+      this.placementMode.hide();
+    }
+
+    // Update legacy isEditMode flag for backward compatibility
+    this.isEditMode = (mode === 'edit');
+
+    // Reset mouse mode when switching modes
+    if (this.mouseMode === 2) {
+      this.mouseMode = 1;
+      document.exitPointerLock();
+      if (this.crosshair) {
+        this.crosshair.style.display = 'none';
+      }
+    }
+
+    // Reset input state
+    this.isLeftMousePressed = false;
+    this.isRightMousePressed = false;
+    this.lastPaintedVoxel = null;
+    if (mode !== 'edit') {
+      this.clearActiveEditPlane();
+    }
+  }
+
   setEditMode(isEditMode: boolean): void {
-    this.isEditMode = isEditMode;
+    // Map to MainMode for backward compatibility
+    this.setMainMode(isEditMode ? 'edit' : 'walk');
 
     if (this.previewCube && !isEditMode) {
       this.previewCube.visible = false;
@@ -2808,7 +2908,9 @@ export class SceneManager {
       },
       worldSize: worldSize,
       isEditMode: this.isEditMode,
-      timeOfDay: this.sunSystem?.getTimeOfDay()
+      timeOfDay: this.sunSystem?.getTimeOfDay(),
+      placementModel: this.placementMode?.getBrush().modelPath,
+      placementScale: this.placementMode?.getScale()
     };
   }
 
