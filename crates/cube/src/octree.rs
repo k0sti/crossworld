@@ -2,6 +2,18 @@ use crate::CubeCoord;
 use glam::IVec3;
 use std::rc::Rc;
 
+/// Pre-computed octant positions for fast lookup
+pub const OCTANT_POSITIONS: [IVec3; 8] = [
+    IVec3::new(0, 0, 0), // 0: a
+    IVec3::new(0, 0, 1), // 1: b
+    IVec3::new(0, 1, 0), // 2: c
+    IVec3::new(0, 1, 1), // 3: d
+    IVec3::new(1, 0, 0), // 4: e
+    IVec3::new(1, 0, 1), // 5: f
+    IVec3::new(1, 1, 0), // 6: g
+    IVec3::new(1, 1, 1), // 7: h
+];
+
 /// Extension trait for IVec3 to add octree-specific functionality
 pub trait IVec3Ext {
     /// Convert octant index (0-7) to 3D position (each component 0 or 1)
@@ -17,18 +29,18 @@ pub trait IVec3Ext {
 }
 
 impl IVec3Ext for IVec3 {
+    #[inline]
     fn from_octant_index(index: usize) -> Self {
-        IVec3::new(
-            ((index >> 2) & 1) as i32,
-            ((index >> 1) & 1) as i32,
-            (index & 1) as i32,
-        )
+        debug_assert!(index < 8, "Octant index must be 0-7");
+        OCTANT_POSITIONS[index]
     }
 
+    #[inline]
     fn to_octant_index(self) -> usize {
         ((self.x << 2) | (self.y << 1) | self.z) as usize
     }
 
+    #[inline]
     fn step0(self) -> Self {
         IVec3::new(
             if self.x == 0 { 0 } else { 1 },
@@ -114,8 +126,27 @@ impl<T> Cube<T> {
         Cube::Slices { axis, layers }
     }
 
+    /// Check if this cube is a leaf node (not subdivided into octants)
+    #[inline]
+    pub fn is_leaf(&self) -> bool {
+        !matches!(self, Cube::Cubes(_))
+    }
+
+    /// Iterate over octant indices (0-7)
+    #[inline]
+    pub fn octant_indices() -> impl Iterator<Item = usize> {
+        0..8
+    }
+
+    /// Iterate over octant positions
+    #[inline]
+    pub fn octant_positions() -> impl Iterator<Item = IVec3> {
+        OCTANT_POSITIONS.iter().copied()
+    }
+
     /// Calculate octant index at given depth for position
     /// Returns which octant (0-7) the position falls into at this depth level
+    #[inline]
     pub fn index(depth: u32, pos: IVec3) -> usize {
         let p = (pos >> depth) & 1; // Get LSB at this depth level
         p.to_octant_index()
@@ -123,6 +154,7 @@ impl<T> Cube<T> {
 
     /// Get child cube by octant index (0-7)
     /// Octant layout: a=0 (x-,y-,z-) to h=7 (x+,y+,z+)
+    #[inline]
     pub fn get_child(&self, index: usize) -> Option<&Rc<Cube<T>>> {
         match self {
             Cube::Cubes(children) if index < 8 => Some(&children[index]),
@@ -131,6 +163,7 @@ impl<T> Cube<T> {
     }
 
     /// Get child or return self for uniform structures
+    #[inline]
     fn get_child_or_self(&self, index: usize) -> &Cube<T> {
         match self {
             Cube::Cubes(children) if index < 8 => &children[index],
@@ -344,7 +377,7 @@ impl<T: Clone> Cube<T> {
                 let source_child = match cube {
                     Cube::Cubes(children) => children[octant_idx].as_ref(),
                     Cube::Solid(_) => cube, // Uniform cube, use same value for all octants
-                    _ => cube, // Planes/Slices treated as uniform
+                    _ => cube,              // Planes/Slices treated as uniform
                 };
 
                 result = result.update_depth_tree(depth, target_offset, scale - 1, source_child);
@@ -387,6 +420,7 @@ impl<T: Clone + PartialEq> Cube<T> {
 
 impl Cube<i32> {
     /// Get ID value for this cube
+    #[inline]
     pub fn id(&self) -> i32 {
         match self {
             Cube::Solid(v) => *v,
@@ -401,6 +435,7 @@ impl Cube<i32> {
     }
 
     /// Get ID at specific position and depth
+    #[inline]
     pub fn get_id(&self, depth: u32, pos: IVec3) -> i32 {
         self.get(CubeCoord::new(pos, depth)).id()
     }
@@ -821,18 +856,9 @@ mod tests {
         ]);
 
         // Test get at depth 1
-        assert_eq!(
-            cube.get(CubeCoord::new(IVec3::new(0, 0, 0), 1)).id(),
-            1
-        );
-        assert_eq!(
-            cube.get(CubeCoord::new(IVec3::new(1, 0, 0), 1)).id(),
-            5
-        );
-        assert_eq!(
-            cube.get(CubeCoord::new(IVec3::new(1, 1, 1), 1)).id(),
-            8
-        );
+        assert_eq!(cube.get(CubeCoord::new(IVec3::new(0, 0, 0), 1)).id(), 1);
+        assert_eq!(cube.get(CubeCoord::new(IVec3::new(1, 0, 0), 1)).id(), 5);
+        assert_eq!(cube.get(CubeCoord::new(IVec3::new(1, 1, 1), 1)).id(), 8);
     }
 
     #[test]
@@ -843,14 +869,8 @@ mod tests {
         let updated = cube.update(CubeCoord::new(IVec3::new(2, 0, 0), 2), Cube::Solid(42));
 
         // Verify the update
-        assert_eq!(
-            updated.get(CubeCoord::new(IVec3::new(2, 0, 0), 2)).id(),
-            42
-        );
-        assert_eq!(
-            updated.get(CubeCoord::new(IVec3::new(0, 0, 0), 2)).id(),
-            0
-        );
+        assert_eq!(updated.get(CubeCoord::new(IVec3::new(2, 0, 0), 2)).id(), 42);
+        assert_eq!(updated.get(CubeCoord::new(IVec3::new(0, 0, 0), 2)).id(), 0);
     }
 
     #[test]
