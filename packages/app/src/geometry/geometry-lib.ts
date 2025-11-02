@@ -61,15 +61,6 @@ export class GeometryGenerator {
     logger.log('geometry', `Set voxel at (${x}, ${y}, ${z}) depth=${depth} color=${colorIndex}`);
   }
 
-  setVoxel(x: number, y: number, z: number, colorIndex: number): void {
-    if (!this.engine) {
-      logger.warn('geometry', 'Cannot set voxel: engine not initialized');
-      return;
-    }
-    this.engine.setVoxel(x, y, z, colorIndex);
-    logger.log('geometry', `Set voxel at (${x}, ${y}, ${z}) color=${colorIndex}`);
-  }
-
   removeVoxelAtDepth(x: number, y: number, z: number, depth: number): void {
     if (!this.engine) {
       logger.warn('geometry', 'Cannot remove voxel: engine not initialized');
@@ -78,15 +69,6 @@ export class GeometryGenerator {
     // @ts-ignore - WASM binding exists but TypeScript can't see it
     this.engine.removeVoxelAtDepth(x, y, z, depth);
     logger.log('geometry', `Removed voxel at (${x}, ${y}, ${z}) depth=${depth}`);
-  }
-
-  removeVoxel(x: number, y: number, z: number): void {
-    if (!this.engine) {
-      logger.warn('geometry', 'Cannot remove voxel: engine not initialized');
-      return;
-    }
-    this.engine.removeVoxel(x, y, z);
-    logger.log('geometry', `Removed voxel at (${x}, ${y}, ${z})`);
   }
 
   exportToCSM(): string | null {

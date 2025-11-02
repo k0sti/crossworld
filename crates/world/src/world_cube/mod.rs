@@ -62,22 +62,11 @@ impl WorldCube {
             .update(CubeCoord::new(pos, depth), Cube::Solid(color_index))
             .simplified();
     }
-
-    /// Set a single voxel at world coordinates (convenience method)
-    pub fn set_voxel(&mut self, x: i32, y: i32, z: i32, color_index: i32) {
-        self.set_voxel_at_depth(x, y, z, self.macro_depth, color_index);
-    }
-
+    
     /// Remove a voxel at world coordinates at specified depth
     pub fn remove_voxel_at_depth(&mut self, x: i32, y: i32, z: i32, depth: u32) {
         self.set_voxel_at_depth(x, y, z, depth, 0);
     }
-
-    /// Remove a voxel at world coordinates (convenience method)
-    pub fn remove_voxel(&mut self, x: i32, y: i32, z: i32) {
-        self.set_voxel(x, y, z, 0);
-    }
-
 
     /// Export the octree to CSM format
     pub fn export_to_csm(&self) -> String {

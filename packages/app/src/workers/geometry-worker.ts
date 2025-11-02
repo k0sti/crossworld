@@ -1,6 +1,6 @@
 import * as logger from '../utils/logger';
 import { GeometryGenerator } from '../geometry/geometry-lib';
-import { getMacroDepth } from '../config/depth-config';
+import { getMacroDepth, getMicroDepth } from '../config/depth-config';
 
 export interface GeometryMessage {
   type: 'init' | 'update' | 'setVoxelAtDepth' | 'setVoxel' | 'removeVoxelAtDepth' | 'removeVoxel' | 'forceUpdate' | 'exportCSM';
@@ -108,7 +108,9 @@ class GeometryWorkerManager {
   setVoxel(x: number, y: number, z: number, colorIndex: number) {
     logger.log('worker', '[GeometryWorker] setVoxel', { x, y, z, colorIndex, hasGenerator: !!this.generator });
     if (this.generator) {
-      this.generator.setVoxel(x, y, z, colorIndex);
+      // Use setVoxelAtDepth with the total depth (finest level of detail)
+      const depth = getMacroDepth() + getMicroDepth();
+      this.generator.setVoxelAtDepth(x, y, z, depth, colorIndex);
       this.scheduleAutoSave();
     }
   }
@@ -124,7 +126,9 @@ class GeometryWorkerManager {
   removeVoxel(x: number, y: number, z: number) {
     logger.log('worker', '[GeometryWorker] removeVoxel', { x, y, z, hasGenerator: !!this.generator });
     if (this.generator) {
-      this.generator.removeVoxel(x, y, z);
+      // Use removeVoxelAtDepth with the total depth (finest level of detail)
+      const depth = getMacroDepth() + getMicroDepth();
+      this.generator.removeVoxelAtDepth(x, y, z, depth);
       this.scheduleAutoSave();
     }
   }
