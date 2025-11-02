@@ -17,8 +17,6 @@ export interface DebugInfo {
   placementScale?: number;
 }
 
-export type RaycastMethod = 'three.js' | 'aether' | 'vibed';
-
 interface WorldPanelProps {
   info: DebugInfo;
   onApplyDepthSettings?: (worldDepth: number, scaleDepth: number) => void;
@@ -35,9 +33,6 @@ interface WorldPanelProps {
   wireframeEnabled: boolean;
   onWireframeEnabledChange: (enabled: boolean) => void;
   triangleCount?: number;
-  // Raycast method
-  raycastMethod: RaycastMethod;
-  onRaycastMethodChange: (method: RaycastMethod) => void;
   // Publish world
   onPublishWorld?: () => void;
   isLoggedIn?: boolean;
@@ -55,8 +50,6 @@ export function WorldPanel({
   wireframeEnabled,
   onWireframeEnabledChange,
   triangleCount,
-  raycastMethod,
-  onRaycastMethodChange,
   onPublishWorld,
   isLoggedIn,
 }: WorldPanelProps) {
@@ -273,69 +266,6 @@ export function WorldPanel({
         <HStack spacing={1}>
           <Text color="blue.300">Camera</Text>
           <Text fontSize="xs">({formatVec(info.cameraPos)})</Text>
-        </HStack>
-
-        {/* Raycast method selector */}
-        <HStack spacing={1}>
-          <Text color="red.300">Raycast</Text>
-          <Popover placement="top">
-            {({ onClose }) => (
-              <>
-                <PopoverTrigger>
-                  <Badge
-                    colorScheme="red"
-                    fontSize="xs"
-                    cursor="pointer"
-                    _hover={{ opacity: 0.8 }}
-                  >
-                    {raycastMethod}
-                  </Badge>
-                </PopoverTrigger>
-                <PopoverContent bg="gray.800" borderColor="red.500" width="auto" pointerEvents="auto">
-                  <PopoverBody p={1}>
-                    <VStack spacing={1} align="stretch">
-                      <Button
-                        size="xs"
-                        variant={raycastMethod === 'three.js' ? 'solid' : 'ghost'}
-                        colorScheme="red"
-                        onClick={() => {
-                          onRaycastMethodChange('three.js');
-                          onClose();
-                        }}
-                        width="100%"
-                      >
-                        three.js
-                      </Button>
-                      <Button
-                        size="xs"
-                        variant={raycastMethod === 'aether' ? 'solid' : 'ghost'}
-                        colorScheme="red"
-                        onClick={() => {
-                          onRaycastMethodChange('aether');
-                          onClose();
-                        }}
-                        width="100%"
-                      >
-                        aether
-                      </Button>
-                      <Button
-                        size="xs"
-                        variant={raycastMethod === 'vibed' ? 'solid' : 'ghost'}
-                        colorScheme="red"
-                        onClick={() => {
-                          onRaycastMethodChange('vibed');
-                          onClose();
-                        }}
-                        width="100%"
-                      >
-                        vibed
-                      </Button>
-                    </VStack>
-                  </PopoverBody>
-                </PopoverContent>
-              </>
-            )}
-          </Popover>
         </HStack>
 
         {/* Speech toggle */}
