@@ -138,6 +138,7 @@ impl WorldCube {
     }
 
     /// Get reference to the root cube
+    #[allow(dead_code)]
     pub fn root(&self) -> &Cube<i32> {
         &self.octree.root
     }

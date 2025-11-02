@@ -44,7 +44,7 @@ where
         &self,
         pos: Vec3,
         dir: Vec3,
-        max_depth: u32,
+        _max_depth: u32,
         octree_pos: IVec3,
         current_depth: u32,
         is_empty: &F,
@@ -71,7 +71,7 @@ where
                     });
                 }
                 // Empty voxel - no hit
-                return None;
+                None
             }
             Cube::Cubes(children) if current_depth > 0 => {
                 // Continue traversing octree
@@ -109,7 +109,7 @@ where
                 if let Some(hit) = children[index].raycast_recursive(
                     child_pos,
                     dir,
-                    max_depth,
+                    _max_depth,
                     child_octree_pos,
                     current_depth - 1,
                     is_empty,
@@ -143,7 +143,7 @@ where
                 self.raycast_recursive(
                     next_pos_clamped,
                     dir,
-                    max_depth,
+                    _max_depth,
                     octree_pos,
                     current_depth,
                     is_empty,

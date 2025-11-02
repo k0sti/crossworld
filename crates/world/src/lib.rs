@@ -1,8 +1,8 @@
 mod avatar;
-mod geometry;
+mod world_cube;
 
 use avatar::AvatarManager;
-use geometry::world_cube::WorldCube as WorldCubeInternal;
+use world_cube::WorldCube as WorldCubeInternal;
 use std::cell::RefCell;
 use wasm_bindgen::prelude::*;
 
