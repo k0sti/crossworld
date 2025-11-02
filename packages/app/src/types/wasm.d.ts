@@ -10,9 +10,9 @@ declare module '@workspace/wasm' {
     setVoxel(x: number, y: number, z: number, color_index: number): void;
     removeVoxelAtDepth(x: number, y: number, z: number, depth: number): void;
     removeVoxel(x: number, y: number, z: number): void;
-    setFaceMeshMode(enabled: boolean): void;
-    setGroundRenderMode(use_cube: boolean): void;
     exportToCSM(): string;
+    root(): string;
+    setRoot(csm_code: string): void;
   }
 
   export class AvatarEngine {

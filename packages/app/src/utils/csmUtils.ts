@@ -42,20 +42,23 @@ export async function getModelCSM(geometryController?: any): Promise<string> {
 }
 
 /**
- * Load model from CSM text (uses cube WASM module for parsing)
+ * Load world from CSM text (this function is deprecated - CSM loading should go through GeometryController)
+ * For now, this is a stub that validates the CSM but doesn't load it into the old model system
  */
 export async function loadModelFromCSM(
   csmText: string,
-  modelId: string = 'world',
-  totalDepth: number
+  _modelId: string = 'world',
+  _totalDepth: number
 ): Promise<void> {
   await ensureWasmInitialized()
   try {
-    const result = (cubeWasm as any).load_model_from_csm(modelId, csmText, totalDepth)
-    // Check if result is an error
-    if (result && typeof result === 'object' && 'error' in result) {
-      throw new Error((result as any).error)
+    // Validate CSM syntax using the new API
+    const error = cubeWasm.validateCsm(csmText)
+    if (error) {
+      throw new Error(error.error)
     }
+    logger.log('common', '[CSM] CSM validated successfully')
+    // Note: Actual loading should be done through GeometryController.setRoot()
   } catch (error) {
     logger.error('common', '[CSM] Load error:', error)
     throw error
