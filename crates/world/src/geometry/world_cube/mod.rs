@@ -4,7 +4,7 @@ use crate::GeometryData;
 use crossworld_cube::{ColorMapper, Cube, CubeCoord, DefaultMeshBuilder, Octree, glam::IVec3, serialize_csm};
 use noise::{Fbm, Perlin};
 
-pub struct CubeGround {
+pub struct WorldCube {
     octree: Octree,
     macro_depth: u32,   // World size = 2^macro_depth, terrain generation depth
     render_depth: u32,  // Maximum traversal depth for mesh generation
@@ -12,8 +12,8 @@ pub struct CubeGround {
     face_mesh_mode: bool,
 }
 
-impl CubeGround {
-    /// Create new CubeGround with specified macro depth
+impl WorldCube {
+    /// Create new WorldCube with specified macro depth
     ///
     /// # Arguments
     /// * `macro_depth` - World size depth (e.g., 3 = 8×8×8 world units)
@@ -31,7 +31,7 @@ impl CubeGround {
         let random_value = js_sys::Math::random();
         let seed = (random_value * (u32::MAX as f64)) as u32;
 
-        tracing::info!("[CubeGround] Generating new world with seed: {}", seed);
+        tracing::info!("[WorldCube] Generating new world with seed: {}", seed);
 
         let noise = Perlin::new(seed);
         let fbm = Fbm::new(seed);
@@ -100,16 +100,6 @@ impl CubeGround {
         self.set_voxel(x, y, z, 0);
     }
 
-    /// Set face mesh mode (neighbor-aware culling)
-    pub fn set_face_mesh_mode(&mut self, enabled: bool) {
-        tracing::info!("[CubeGround] Setting face mesh mode: {}", enabled);
-        self.face_mesh_mode = enabled;
-    }
-
-    /// Set ground render mode (currently unused, placeholder for future)
-    pub fn set_ground_render_mode(&mut self, _use_cube: bool) {
-        tracing::info!("[CubeGround] Ground render mode not yet implemented");
-    }
 
     /// Export the octree to CSM format
     pub fn export_to_csm(&self) -> String {
@@ -117,6 +107,9 @@ impl CubeGround {
     }
 
     pub fn generate_mesh(&self) -> GeometryData {
+        tracing::info!("[WorldCube] generate_mesh called, render_depth={}, face_mesh_mode={}",
+            self.render_depth, self.face_mesh_mode);
+
         // Generate mesh from octree using appropriate mesh builder
         let color_mapper = DawnbringerColorMapper::new();
         let mut builder = DefaultMeshBuilder::new();
@@ -142,6 +135,9 @@ impl CubeGround {
             );
         }
 
+        tracing::info!("[WorldCube] Mesh builder stats: {} vertices, {} indices before scaling",
+            builder.vertices.len() / 3, builder.indices.len());
+
         // Scale and offset vertices to match world coordinates
         // The mesh generator outputs vertices in [0,1] space where:
         // - Terrain voxels (at macro_depth) are correctly normalized
@@ -161,6 +157,9 @@ impl CubeGround {
             })
             .collect();
 
+        tracing::info!("[WorldCube] Returning geometry: {} vertices, {} triangles",
+            scaled_vertices.len() / 3, builder.indices.len() / 3);
+
         GeometryData::new(
             scaled_vertices,
             builder.indices,
@@ -168,9 +167,21 @@ impl CubeGround {
             builder.colors,
         )
     }
+
+    /// Get reference to the root cube
+    pub fn root(&self) -> &Cube<i32> {
+        &self.octree.root
+    }
+
+    /// Set a new root cube
+    ///
+    /// Replaces the entire octree root. The cube will be simplified automatically.
+    pub fn set_root(&mut self, cube: Cube<i32>) {
+        self.octree.root = cube.simplified();
+    }
 }
 
-impl Default for CubeGround {
+impl Default for WorldCube {
     fn default() -> Self {
         Self::new(3, 0, 0) // Default: macro depth 3, micro depth 0, no borders
     }
