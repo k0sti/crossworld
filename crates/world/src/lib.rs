@@ -47,24 +47,12 @@ impl WorldCube {
             .set_voxel_at_depth(x, y, z, depth, color_index);
     }
 
-    /// Set single voxel in world cube
-    #[wasm_bindgen(js_name = setVoxel)]
-    pub fn set_voxel(&self, x: i32, y: i32, z: i32, color_index: i32) {
-        self.inner.borrow_mut().set_voxel(x, y, z, color_index);
-    }
-
     /// Remove voxel from world cube at specified depth
     #[wasm_bindgen(js_name = removeVoxelAtDepth)]
     pub fn remove_voxel_at_depth(&self, x: i32, y: i32, z: i32, depth: u32) {
         self.inner
             .borrow_mut()
             .remove_voxel_at_depth(x, y, z, depth);
-    }
-
-    /// Remove voxel from world cube
-    #[wasm_bindgen(js_name = removeVoxel)]
-    pub fn remove_voxel(&self, x: i32, y: i32, z: i32) {
-        self.inner.borrow_mut().remove_voxel(x, y, z);
     }
 
     /// Export the current world state to CSM format
