@@ -157,7 +157,7 @@ impl WasmCube {
     /// # Arguments
     /// * `pos_x, pos_y, pos_z` - Ray origin in normalized [0,1] space
     /// * `dir_x, dir_y, dir_z` - Ray direction (should be normalized)
-    /// * `far` - If true, returns position on far side of contact plane; if false, near side
+    /// * `far` - If true, returns the cube coord where ray hit (far side); if false, returns the neighbor coord on near side
     /// * `max_depth` - Maximum octree depth to traverse
     ///
     /// # Returns
@@ -173,23 +173,32 @@ impl WasmCube {
         far: bool,
         max_depth: u32,
     ) -> JsValue {
-        let mut pos = Vec3::new(pos_x, pos_y, pos_z);
+        let pos = Vec3::new(pos_x, pos_y, pos_z);
         let dir = Vec3::new(dir_x, dir_y, dir_z).normalize();
-
-        // If far=true, nudge position forward slightly to get far side coordinate
-        if far {
-            pos += dir * 0.0001;
-        }
 
         // Define empty test: value == -1 (empty) or value == 0 (air)
         let is_empty = |v: &i32| *v == -1 || *v == 0;
 
+        // Perform raycast first
         if let Some(hit) = self.inner.raycast(pos, dir, max_depth, &is_empty) {
+            let coord = if far {
+                // Return the cube coordinate where the ray hit (far side)
+                hit.coord
+            } else {
+                // Return the cube coordinate on the near side (neighbor in opposite direction of normal)
+                let offset = IVec3::new(
+                    -hit.normal.x.signum() as i32,
+                    -hit.normal.y.signum() as i32,
+                    -hit.normal.z.signum() as i32,
+                );
+                CubeCoord::new(hit.coord.pos + offset, hit.coord.depth)
+            };
+
             let result = RaycastResult {
-                x: hit.coord.pos.x,
-                y: hit.coord.pos.y,
-                z: hit.coord.pos.z,
-                depth: hit.coord.depth,
+                x: coord.pos.x,
+                y: coord.pos.y,
+                z: coord.pos.z,
+                depth: coord.depth,
                 world_x: hit.position.x,
                 world_y: hit.position.y,
                 world_z: hit.position.z,
