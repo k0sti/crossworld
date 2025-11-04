@@ -19,6 +19,8 @@ export interface GeometryResult {
   indices: Uint32Array;
   normals: Float32Array;
   colors: Float32Array;
+  uvs: Float32Array;
+  materialIds: Uint8Array;
   stats: {
     vertices: number;
     triangles: number;
@@ -68,12 +70,16 @@ class GeometryWorkerManager {
       const indices = new Uint32Array(geometryData.indices);
       const normals = new Float32Array(geometryData.normals);
       const colors = new Float32Array(geometryData.colors);
+      const uvs = new Float32Array((geometryData as any).uvs || []);
+      const materialIds = new Uint8Array((geometryData as any).materialIds || []);
 
       const result: GeometryResult = {
         vertices,
         indices,
         normals,
         colors,
+        uvs,
+        materialIds,
         stats: {
           vertices: vertices.length / 3,
           triangles: indices.length / 3
@@ -87,7 +93,9 @@ class GeometryWorkerManager {
           vertices.buffer,
           indices.buffer,
           normals.buffer,
-          colors.buffer
+          colors.buffer,
+          uvs.buffer,
+          materialIds.buffer
         ]
       });
     }
