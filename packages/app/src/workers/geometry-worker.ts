@@ -29,6 +29,7 @@ export interface GeometryResult {
 class GeometryWorkerManager {
   private generator: GeometryGenerator | null = null;
   private isRunning = false;
+  private needsGeometryUpdate = false; // Flag to trigger mesh regeneration
   private updateInterval = 33; // ~30 FPS for geometry updates
   private lastUpdate = 0;
   private saveTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -38,6 +39,8 @@ class GeometryWorkerManager {
     this.generator = new GeometryGenerator(macroDepth, microDepth, borderDepth);
     await this.generator.initialize();
     self.postMessage({ type: 'ready' });
+    // Generate initial geometry for the ground cube
+    this.needsGeometryUpdate = true;
     this.startUpdateLoop();
   }
 
@@ -50,8 +53,11 @@ class GeometryWorkerManager {
     if (!this.isRunning || !this.generator) return;
 
     const now = performance.now();
-    if (now - this.lastUpdate >= this.updateInterval) {
+    // Only regenerate mesh when needed (after voxel modifications)
+    // CubeManager handles queuing, so it's safe to call generateGeometry
+    if (this.needsGeometryUpdate && now - this.lastUpdate >= this.updateInterval) {
       this.generateGeometry();
+      this.needsGeometryUpdate = false;
       this.lastUpdate = now;
     }
 
@@ -100,7 +106,9 @@ class GeometryWorkerManager {
   setVoxelAtDepth(x: number, y: number, z: number, depth: number, colorIndex: number) {
     logger.log('worker', '[GeometryWorker] setVoxelAtDepth', { x, y, z, depth, colorIndex, hasGenerator: !!this.generator });
     if (this.generator) {
+      // CubeManager queues this operation
       this.generator.setVoxelAtDepth(x, y, z, depth, colorIndex);
+      this.needsGeometryUpdate = true; // Request mesh regeneration
       this.scheduleAutoSave();
     }
   }
@@ -111,6 +119,7 @@ class GeometryWorkerManager {
       // Use setVoxelAtDepth with the total depth (finest level of detail)
       const depth = getMacroDepth() + getMicroDepth();
       this.generator.setVoxelAtDepth(x, y, z, depth, colorIndex);
+      this.needsGeometryUpdate = true; // Request mesh regeneration
       this.scheduleAutoSave();
     }
   }
@@ -118,7 +127,9 @@ class GeometryWorkerManager {
   removeVoxelAtDepth(x: number, y: number, z: number, depth: number) {
     logger.log('worker', '[GeometryWorker] removeVoxelAtDepth', { x, y, z, depth, hasGenerator: !!this.generator });
     if (this.generator) {
+      // CubeManager queues this operation
       this.generator.removeVoxelAtDepth(x, y, z, depth);
+      this.needsGeometryUpdate = true; // Request mesh regeneration
       this.scheduleAutoSave();
     }
   }
@@ -129,6 +140,7 @@ class GeometryWorkerManager {
       // Use removeVoxelAtDepth with the total depth (finest level of detail)
       const depth = getMacroDepth() + getMicroDepth();
       this.generator.removeVoxelAtDepth(x, y, z, depth);
+      this.needsGeometryUpdate = true; // Request mesh regeneration
       this.scheduleAutoSave();
     }
   }
@@ -160,6 +172,7 @@ class GeometryWorkerManager {
   }
 
   forceUpdate() {
+    this.needsGeometryUpdate = true;
     this.generateGeometry();
   }
 
