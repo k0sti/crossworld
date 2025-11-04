@@ -52,7 +52,17 @@ impl WorldCube {
     }
 
     /// Set a voxel at octree coordinates
-    /// Coordinates and depth are in octree space (TypeScript handles scaling)
+    ///
+    /// # Coordinate System
+    /// - Coordinates are in octree space at the specified depth
+    /// - TypeScript handles world→octree conversion via worldToCube()
+    /// - At depth d: valid coordinates are [0, 2^d - 1] per axis
+    /// - Example with macroDepth=3:
+    ///   * depth=0: coords [0,0] (entire world = one voxel)
+    ///   * depth=1: coords [0,1] (2×2×2 voxels)
+    ///   * depth=2: coords [0,3] (4×4×4 voxels)
+    ///   * depth=3: coords [0,7] (8×8×8 voxels, 1 voxel = 1 world unit)
+    ///
     /// The octree will automatically subdivide to support the requested depth
     pub fn set_voxel_at_depth(&mut self, x: i32, y: i32, z: i32, depth: u32, color_index: i32) {
         let pos = IVec3::new(x, y, z);
