@@ -17,7 +17,13 @@ import {
 } from '../types/cube-coord';
 // import { scaleCubeCoord } from '../types/raycast-utils'; // TODO: Fix cursor scaling logic before re-enabling
 import { getWorldSize } from '../constants/geometry';
-import { getMacroDepth, getTotalDepth } from '../config/depth-config';
+import {
+  getMacroDepth,
+
+  cursorDepthToAbsolute,
+  getMinCursorDepth,
+  getMaxCursorDepth
+} from '../config/depth-config';
 import { CheckerPlane } from './checker-plane';
 import { loadCubeFromCsm, raycastWasm } from '../utils/cubeWasm';
 import { raycastMesh, type MeshRaycastResult } from '../utils/meshRaycast';
@@ -101,9 +107,12 @@ export class SceneManager {
   private depthSelectMode: 1 | 2 = 1;
 
   // Cursor depth - single source of truth for current cursor depth
-  // depth can be 0 to totalDepth (macro+micro, smaller depth = larger voxel size)
-  // initialized to macroDepth (3)
-  private cursorDepth: number = getMacroDepth();
+  // Cursor depth is now relative to base depth (macro + border)
+  // cursorDepth = 0 means unit cubes (1x1x1 world units) at base depth
+  // cursorDepth < 0 means larger voxels (e.g., -1 = 2x2x2 units)
+  // cursorDepth > 0 means smaller subdivisions (up to micro_depth)
+  // initialized to 0 (unit cubes)
+  private cursorDepth: number = 0;
 
   // Remote avatars for other users
   private remoteAvatars: Map<string, IAvatar> = new Map();
@@ -585,7 +594,7 @@ export class SceneManager {
     const halfSize = size / 2;
 
     // Convert hit point to CubeCoord to snap to voxel grid
-    const coord = worldToCube(point.x, point.y, point.z, this.cursorDepth);
+    const coord = worldToCube(point.x, point.y, point.z, this.getAbsoluteCursorDepth());
     const [voxelX, voxelY, voxelZ] = cubeToWorld(coord);
 
     // Calculate voxel center
@@ -686,7 +695,7 @@ export class SceneManager {
     if (!this.faceHighlightMesh) return;
 
     // Convert world hit point to CubeCoord
-    const coord = worldToCube(point.x, point.y, point.z, this.cursorDepth);
+    const coord = worldToCube(point.x, point.y, point.z, this.getAbsoluteCursorDepth());
 
     // Convert CubeCoord back to world position (corner of voxel)
     const [voxelX, voxelY, voxelZ] = cubeToWorld(coord);
@@ -768,7 +777,7 @@ export class SceneManager {
 
       // Calculate voxel position using SPACE mode (same as cursor)
       // Convert hit point to CubeCoord to snap to voxel grid
-      const coord = worldToCube(hit.point.x, hit.point.y, hit.point.z, this.cursorDepth);
+      const coord = worldToCube(hit.point.x, hit.point.y, hit.point.z, this.getAbsoluteCursorDepth());
       const [hitVoxelX, hitVoxelY, hitVoxelZ] = cubeToWorld(coord);
 
       // Calculate voxel center of the hit voxel
@@ -870,10 +879,18 @@ export class SceneManager {
   }
 
   /**
-   * Get the current cursor depth
+   * Get the current cursor depth (relative to base depth)
    */
   getCursorDepth(): number {
     return this.cursorDepth;
+  }
+
+  /**
+   * Get the absolute octree depth for the current cursor
+   * Converts relative cursor depth to absolute octree depth
+   */
+  private getAbsoluteCursorDepth(): number {
+    return cursorDepthToAbsolute(this.cursorDepth);
   }
 
   /**
@@ -898,7 +915,7 @@ export class SceneManager {
     const colorValue = this.selectedColorIndex + 32;
 
     // Convert world coordinates (corner) to cube coordinates (octree space)
-    const coord = worldToCube(x, y, z, this.cursorDepth);
+    const coord = worldToCube(x, y, z, this.getAbsoluteCursorDepth());
 
     logger.log('renderer', '[Paint -> CubeCoord]', { coord, colorValue, hasCallback: !!this.onVoxelEdit });
 
@@ -910,7 +927,7 @@ export class SceneManager {
     logger.log('renderer', '[Erase Voxel]', { x, y, z, size });
 
     // Convert world coordinates to cube coordinates
-    const coord = worldToCube(x, y, z, this.cursorDepth);
+    const coord = worldToCube(x, y, z, this.getAbsoluteCursorDepth());
 
     logger.log('renderer', '[Erase -> CubeCoord]', { coord, hasCallback: !!this.onVoxelEdit });
 
@@ -995,7 +1012,7 @@ export class SceneManager {
         }
         // Edit mode: increase cursor depth
         else if (this.isEditMode) {
-          this.cursorDepth = Math.min(getTotalDepth(), this.cursorDepth + 1);
+          this.cursorDepth = Math.min(getMaxCursorDepth(), this.cursorDepth + 1);
           this.updateCursorSize();
           logger.log('renderer', `[Cursor Depth] Increased to ${this.cursorDepth} (size=${this.getCursorSize()})`);
           // Update cursor position immediately
@@ -1018,7 +1035,7 @@ export class SceneManager {
         }
         // Edit mode: decrease cursor depth
         else if (this.isEditMode) {
-          this.cursorDepth = Math.max(0, this.cursorDepth - 1);
+          this.cursorDepth = Math.max(getMinCursorDepth(), this.cursorDepth - 1);
           this.updateCursorSize();
           logger.log('renderer', `[Cursor Depth] Decreased to ${this.cursorDepth} (size=${this.getCursorSize()})`);
           // Update cursor position immediately
@@ -1191,7 +1208,7 @@ export class SceneManager {
   }
 
   private getCursorSize(): number {
-    return getVoxelSizeFromCubeCoord(this.cursorDepth);
+    return getVoxelSizeFromCubeCoord(this.getAbsoluteCursorDepth());
   }
 
   private updateCursorSize(): void {
@@ -1213,7 +1230,7 @@ export class SceneManager {
       const voxelY = this.depthSelectMode === 1 ? 0 : -size;
 
       // Update cursor coordinate with new depth
-      this.currentCursorCoord = worldToCube(voxelX, voxelY, voxelZ, this.cursorDepth);
+      this.currentCursorCoord = worldToCube(voxelX, voxelY, voxelZ, this.getAbsoluteCursorDepth());
 
       // Update preview cube position
       this.currentGridPosition.set(voxelCenterX, voxelY + halfSize, voxelCenterZ);
@@ -1320,7 +1337,7 @@ export class SceneManager {
 
       if (isInBounds) {
         // Store current cursor coordinate
-        const newCoord = worldToCube(voxelX, voxelY, voxelZ, this.cursorDepth);
+        const newCoord = worldToCube(voxelX, voxelY, voxelZ, this.getAbsoluteCursorDepth());
 
         // Only log when coordinate changes
         if (!this.currentCursorCoord ||
@@ -1371,7 +1388,7 @@ export class SceneManager {
     } else if (hasGeometryHit && geometryHitPoint && geometryHitNormal) {
       // Geometry hit - position cursor using SPACE mode
       // Convert hit point to CubeCoord to snap to voxel grid
-      const coord = worldToCube(geometryHitPoint.x, geometryHitPoint.y, geometryHitPoint.z, this.cursorDepth);
+      const coord = worldToCube(geometryHitPoint.x, geometryHitPoint.y, geometryHitPoint.z, this.getAbsoluteCursorDepth());
       const [hitVoxelX, hitVoxelY, hitVoxelZ] = cubeToWorld(coord);
 
       // Calculate voxel center of the hit voxel
@@ -1404,7 +1421,7 @@ export class SceneManager {
 
       if (isInBounds) {
         // Store current cursor coordinate
-        const newCoord = worldToCube(voxelX, voxelY, voxelZ, this.cursorDepth);
+        const newCoord = worldToCube(voxelX, voxelY, voxelZ, this.getAbsoluteCursorDepth());
 
         // Only log when coordinate changes
         if (!this.currentCursorCoord ||
@@ -1526,7 +1543,7 @@ export class SceneManager {
 
       if (isInBounds) {
         // Store current cursor coordinate
-        this.currentCursorCoord = worldToCube(voxelX, voxelY, voxelZ, this.cursorDepth);
+        this.currentCursorCoord = worldToCube(voxelX, voxelY, voxelZ, this.getAbsoluteCursorDepth());
 
         // Position preview cube at voxel area center
         this.currentGridPosition.set(cursorX, cursorY, cursorZ);
@@ -1563,7 +1580,7 @@ export class SceneManager {
       const halfSize = size / 2;
 
       // Convert hit point to CubeCoord to snap to voxel grid
-      const coord = worldToCube(geometryHitPoint.x, geometryHitPoint.y, geometryHitPoint.z, this.cursorDepth);
+      const coord = worldToCube(geometryHitPoint.x, geometryHitPoint.y, geometryHitPoint.z, this.getAbsoluteCursorDepth());
       const [voxelX, voxelY, voxelZ] = cubeToWorld(coord);
 
       // Calculate voxel center
@@ -1598,7 +1615,7 @@ export class SceneManager {
 
       if (isInBounds) {
         // Store cursor coordinate using cursor voxel position
-        this.currentCursorCoord = worldToCube(cursorVoxelX, cursorVoxelY, cursorVoxelZ, this.cursorDepth);
+        this.currentCursorCoord = worldToCube(cursorVoxelX, cursorVoxelY, cursorVoxelZ, this.getAbsoluteCursorDepth());
 
         // Position preview cube at voxel area center
         this.currentGridPosition.set(cursorX, cursorY, cursorZ);
@@ -1683,7 +1700,7 @@ export class SceneManager {
 
         if (isInBounds) {
           // Store current cursor coordinate (using corner position)
-          this.currentCursorCoord = worldToCube(voxelX, voxelY, voxelZ, this.cursorDepth);
+          this.currentCursorCoord = worldToCube(voxelX, voxelY, voxelZ, this.getAbsoluteCursorDepth());
 
           // Position preview cube at center of voxel (world space)
           this.currentGridPosition.set(voxelX + halfSize, voxelY + halfSize, voxelZ + halfSize);
@@ -1889,7 +1906,7 @@ export class SceneManager {
 
         if (isInBounds) {
           // Store current cursor coordinate
-          const newCoord = worldToCube(voxelX, voxelY, voxelZ, this.cursorDepth);
+          const newCoord = worldToCube(voxelX, voxelY, voxelZ, this.getAbsoluteCursorDepth());
 
           // Only log when coordinate changes
           if (!this.currentCursorCoord ||
@@ -1943,7 +1960,7 @@ export class SceneManager {
         const halfSize = size / 2;
 
         // Convert adjusted hit point to CubeCoord to snap to voxel grid
-        const coord = worldToCube(geometryHitPoint.x, geometryHitPoint.y, geometryHitPoint.z, this.cursorDepth);
+        const coord = worldToCube(geometryHitPoint.x, geometryHitPoint.y, geometryHitPoint.z, this.getAbsoluteCursorDepth());
         const [voxelX, voxelY, voxelZ] = cubeToWorld(coord);
 
         // Calculate voxel center
@@ -1978,7 +1995,7 @@ export class SceneManager {
 
         if (isInBounds) {
           // Store cursor coordinate using cursor voxel position
-          const newCoord = worldToCube(cursorVoxelX, cursorVoxelY, cursorVoxelZ, this.cursorDepth);
+          const newCoord = worldToCube(cursorVoxelX, cursorVoxelY, cursorVoxelZ, this.getAbsoluteCursorDepth());
 
           // Only log when coordinate changes
           if (!this.currentCursorCoord ||
@@ -2067,7 +2084,7 @@ export class SceneManager {
 
             if (isInBounds) {
               // Store current cursor coordinate
-              this.currentCursorCoord = worldToCube(voxelX, voxelY, voxelZ, this.cursorDepth);
+              this.currentCursorCoord = worldToCube(voxelX, voxelY, voxelZ, this.getAbsoluteCursorDepth());
 
               // Position preview cube at voxel area center
               this.currentGridPosition.set(cursorX, cursorY, cursorZ);
@@ -2119,7 +2136,7 @@ export class SceneManager {
 
             if (isInBounds) {
               // Store cursor coordinate
-              const newCoord = worldToCube(voxelX, voxelY, voxelZ, this.cursorDepth);
+              const newCoord = worldToCube(voxelX, voxelY, voxelZ, this.getAbsoluteCursorDepth());
 
               // Only log when coordinate changes
               if (!this.currentCursorCoord ||
