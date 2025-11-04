@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import type { CubeCoord } from '../types/cube-coord';
+import { getVoxelSize as getVoxelSizeFromGeometry } from '../constants/geometry';
+import { getMacroDepth, getMicroDepth } from '../config/depth-config';
 
 /**
  * Cursor manager for voxel editing
@@ -77,7 +79,9 @@ export class VoxelCursor {
    * Get cursor size based on depth
    */
   getCursorSize(): number {
-    return Math.pow(2, this.cursorDepth);
+    const macroDepth = getMacroDepth();
+    const microDepth = getMicroDepth();
+    return getVoxelSizeFromGeometry(this.cursorDepth, macroDepth, microDepth);
   }
 
   /**

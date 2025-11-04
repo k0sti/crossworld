@@ -29,6 +29,19 @@ export interface CubeCoord {
 
 /**
  * Convert world coordinates to octree cube coordinates.
+ *
+ * # Coordinate Spaces
+ * - World space: [-halfWorld, halfWorld] in world units (continuous)
+ * - Octree space at depth d: [0, 2^d - 1] (discrete voxel indices)
+ *
+ * # Voxel Size by Depth
+ * At macroDepth=3 (8×8×8 world units):
+ * - depth=0: voxelSize=8 units, coords [0,0] (entire world)
+ * - depth=1: voxelSize=4 units, coords [0,1] (2×2×2 voxels)
+ * - depth=2: voxelSize=2 units, coords [0,3] (4×4×4 voxels)
+ * - depth=3: voxelSize=1 unit,  coords [0,7] (8×8×8 voxels) ← macro depth
+ * - depth=4: voxelSize=0.5 units, coords [0,15] (16×16×16 voxels)
+ *
  * @param worldX World X coordinate [-halfWorld, halfWorld]
  * @param worldY World Y coordinate [-halfWorld, halfWorld]
  * @param worldZ World Z coordinate [-halfWorld, halfWorld]
@@ -50,16 +63,17 @@ export function worldToCube(
   let octreeX: number, octreeY: number, octreeZ: number;
 
   if (depth >= macroDepth) {
-    // Fine voxels: multiple octree voxels per world unit
+    // Fine voxels (depth >= macro): multiple octree voxels per world unit
     // voxelsPerWorldUnit = 2^(depth-macro)
+    // Example: depth=4, macro=3 → scale=2, so 2 voxels per world unit
     const scale = 1 << (depth - macroDepth);
     octreeX = Math.floor((worldX + halfWorld) * scale);
     octreeY = Math.floor((worldY + halfWorld) * scale);
     octreeZ = Math.floor((worldZ + halfWorld) * scale);
   } else {
-    // Coarse voxels: fractional octree voxels per world unit
-    // Each voxel covers multiple world units
+    // Coarse voxels (depth < macro): each voxel covers multiple world units
     // worldUnitsPerVoxel = 2^(macro-depth)
+    // Example: depth=1, macro=3 → scale=4, so each voxel is 4×4×4 world units
     const scale = 1 << (macroDepth - depth);
     octreeX = Math.floor((worldX + halfWorld) / scale);
     octreeY = Math.floor((worldY + halfWorld) / scale);

@@ -15,6 +15,7 @@ import {
   snapToGrid,
   getVoxelSize as getVoxelSizeFromCubeCoord
 } from '../types/cube-coord';
+// import { scaleCubeCoord } from '../types/raycast-utils'; // TODO: Fix cursor scaling logic before re-enabling
 import { getWorldSize } from '../constants/geometry';
 import { getMacroDepth, getTotalDepth } from '../config/depth-config';
 import { CheckerPlane } from './checker-plane';
@@ -409,14 +410,53 @@ export class SceneManager {
   }
 
   /**
+   * Convert a raycast hit to a cursor cube coordinate
+   * Properly scales the hit voxel coordinate to the current cursor depth
+   * and adjusts for near/far placement
+   *
+   * @param hitCubeCoord The cube coordinate from raycast (at hit depth)
+   * @param hitNormal The surface normal at hit point
+   * @param placeFar If true, place on far side (away from camera), otherwise near side
+   * @returns Cube coordinate at cursor depth, adjusted for placement side
+   *
+   * TODO: Fix cursor scaling logic - currently disabled due to positioning issues
+   */
+  // private hitToCursorCoord(
+  //   hitCubeCoord: CubeCoord,
+  //   hitNormal: THREE.Vector3,
+  //   placeFar: boolean
+  // ): CubeCoord {
+  //   // Scale the hit coordinate to cursor depth
+  //   let cursorCoord = scaleCubeCoord(hitCubeCoord, this.cursorDepth);
+  //
+  //   // If placing on far side (depth select mode 1), offset in normal direction
+  //   if (placeFar) {
+  //     const normalOffset = {
+  //       x: Math.round(hitNormal.x),
+  //       y: Math.round(hitNormal.y),
+  //       z: Math.round(hitNormal.z)
+  //     };
+  //
+  //     cursorCoord = {
+  //       x: cursorCoord.x + normalOffset.x,
+  //       y: cursorCoord.y + normalOffset.y,
+  //       z: cursorCoord.z + normalOffset.z,
+  //       depth: this.cursorDepth
+  //     };
+  //   }
+  //
+  //   return cursorCoord;
+  // }
+
+  /**
    * Perform raycast to geometry mesh
-   * Returns hit point and normal, or null if no hit
+   * Returns hit point, normal, and cube coordinate, or null if no hit
    *
    * Supports two methods:
    * - 'mesh': Uses Three.js mesh raycasting (faster, works without WASM cube)
    * - 'wasm': Uses WASM aether raycasting (slower, more accurate for octree)
    */
-  private raycastGeometry(): { point: THREE.Vector3; normal: THREE.Vector3 } | null {
+  private raycastGeometry(): { point: THREE.Vector3; normal: THREE.Vector3; cubeCoord: CubeCoord } | null {
     if (!this.geometryMesh) return null;
 
     const size = this.getCursorSize();
@@ -477,7 +517,15 @@ export class SceneManager {
         hitPoint.y += hitNormal.y * epsilon;
         hitPoint.z += hitNormal.z * epsilon;
 
-        return { point: hitPoint, normal: hitNormal };
+        // Get the cube coordinate from raycast result
+        const hitCubeCoord: CubeCoord = {
+          x: result.x,
+          y: result.y,
+          z: result.z,
+          depth: result.depth
+        };
+
+        return { point: hitPoint, normal: hitNormal, cubeCoord: hitCubeCoord };
       }
     } catch (error) {
       logger.error('renderer', `[Raycast] ${this.raycastMethod} raycast failed:`, error);
