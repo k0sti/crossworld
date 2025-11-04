@@ -19,6 +19,7 @@ import { getWorldSize } from '../constants/geometry';
 import { getMacroDepth, getTotalDepth } from '../config/depth-config';
 import { CheckerPlane } from './checker-plane';
 import { loadCubeFromCsm, raycastWasm } from '../utils/cubeWasm';
+import { raycastMesh, type MeshRaycastResult } from '../utils/meshRaycast';
 import { SunSystem } from './sun-system';
 import { PostProcessing } from './post-processing';
 import { profileCache } from '../services/profile-cache';
@@ -89,6 +90,9 @@ export class SceneManager {
 
   // World cube for WASM raycasting
   private worldCube: any | null = null;
+
+  // Raycast method: 'mesh' uses Three.js mesh raycasting, 'wasm' uses WASM aether raycasting
+  private raycastMethod: 'mesh' | 'wasm' = 'mesh';
 
   // Depth voxel select mode: 1 = near side (y=0), 2 = far side (y=-1)
   private depthSelectMode: 1 | 2 = 1;
@@ -340,37 +344,58 @@ export class SceneManager {
   }
 
   /**
-   * Perform raycast to geometry mesh using WASM raycasting
+   * Perform raycast to geometry mesh
    * Returns hit point and normal, or null if no hit
+   *
+   * Supports two methods:
+   * - 'mesh': Uses Three.js mesh raycasting (faster, works without WASM cube)
+   * - 'wasm': Uses WASM aether raycasting (slower, more accurate for octree)
    */
   private raycastGeometry(): { point: THREE.Vector3; normal: THREE.Vector3 } | null {
-    if (!this.geometryMesh || !this.worldCube) return null;
+    if (!this.geometryMesh) return null;
 
     const size = this.getCursorSize();
+    let result: MeshRaycastResult | null = null;
 
     try {
-      const worldSize = getWorldSize(getMacroDepth());
-      const halfWorld = worldSize / 2;
+      if (this.raycastMethod === 'mesh') {
+        // Use Three.js mesh raycasting
+        result = raycastMesh(
+          this.geometryMesh,
+          this.raycaster,
+          false, // far side = false (near side)
+          getMacroDepth()
+        );
+      } else {
+        // Use WASM raycasting
+        if (!this.worldCube) return null;
 
-      // Convert ray from world space to normalized [0, 1]
-      const normalizedOrigin = new THREE.Vector3(
-        (this.raycaster.ray.origin.x + halfWorld) / worldSize,
-        (this.raycaster.ray.origin.y + halfWorld) / worldSize,
-        (this.raycaster.ray.origin.z + halfWorld) / worldSize
-      );
+        const worldSize = getWorldSize(getMacroDepth());
+        const halfWorld = worldSize / 2;
 
-      const dir = this.raycaster.ray.direction;
+        // Convert ray from world space to normalized [0, 1]
+        const normalizedOrigin = new THREE.Vector3(
+          (this.raycaster.ray.origin.x + halfWorld) / worldSize,
+          (this.raycaster.ray.origin.y + halfWorld) / worldSize,
+          (this.raycaster.ray.origin.z + halfWorld) / worldSize
+        );
 
-      // Call WASM raycast
-      const result: any = raycastWasm(
-        this.worldCube,
-        normalizedOrigin.x, normalizedOrigin.y, normalizedOrigin.z,
-        dir.x, dir.y, dir.z,
-        false, // far side = false (near side)
-        getMacroDepth()
-      );
+        const dir = this.raycaster.ray.direction;
 
-      if (result && !result.error) {
+        // Call WASM raycast
+        result = raycastWasm(
+          this.worldCube,
+          normalizedOrigin.x, normalizedOrigin.y, normalizedOrigin.z,
+          dir.x, dir.y, dir.z,
+          false, // far side = false (near side)
+          getMacroDepth()
+        );
+      }
+
+      if (result) {
+        const worldSize = getWorldSize(getMacroDepth());
+        const halfWorld = worldSize / 2;
+
         // Convert hit position from normalized [0, 1] to world space
         const hitPoint = new THREE.Vector3(
           result.world_x * worldSize - halfWorld,
@@ -390,10 +415,26 @@ export class SceneManager {
         return { point: hitPoint, normal: hitNormal };
       }
     } catch (error) {
-      logger.error('renderer', '[Raycast] WASM raycast failed:', error);
+      logger.error('renderer', `[Raycast] ${this.raycastMethod} raycast failed:`, error);
     }
 
     return null;
+  }
+
+  /**
+   * Set the raycast method
+   * @param method - 'mesh' for Three.js mesh raycasting, 'wasm' for WASM aether raycasting
+   */
+  public setRaycastMethod(method: 'mesh' | 'wasm'): void {
+    this.raycastMethod = method;
+    logger.log('renderer', `[Raycast] Switched to ${method} raycast method`);
+  }
+
+  /**
+   * Get the current raycast method
+   */
+  public getRaycastMethod(): 'mesh' | 'wasm' {
+    return this.raycastMethod;
   }
 
   /**
