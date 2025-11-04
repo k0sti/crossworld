@@ -242,7 +242,12 @@ mod tests {
         let is_empty = |v: &i32| *v == 0;
 
         // Cast ray into empty cube
-        let hit = cube.raycast(Vec3::new(0.5, 0.5, 0.0), Vec3::new(0.0, 0.0, 1.0), 3, &is_empty);
+        let hit = cube.raycast(
+            Vec3::new(0.5, 0.5, 0.0),
+            Vec3::new(0.0, 0.0, 1.0),
+            3,
+            &is_empty,
+        );
         assert!(hit.is_none());
     }
 
@@ -417,6 +422,10 @@ mod tests {
         let normal_is_valid = hit.normal == Vec3::new(-1.0, 0.0, 0.0)
             || hit.normal == Vec3::new(0.0, -1.0, 0.0)
             || hit.normal == Vec3::new(0.0, 0.0, -1.0);
-        assert!(normal_is_valid, "Normal should be one of the corner face normals, got {:?}", hit.normal);
+        assert!(
+            normal_is_valid,
+            "Normal should be one of the corner face normals, got {:?}",
+            hit.normal
+        );
     }
 }

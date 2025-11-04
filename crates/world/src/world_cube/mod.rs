@@ -1,7 +1,9 @@
 mod builder;
 
 use crate::GeometryData;
-use crossworld_cube::{ColorMapper, Cube, CubeCoord, DefaultMeshBuilder, Octree, glam::IVec3, serialize_csm};
+use crossworld_cube::{
+    ColorMapper, Cube, CubeCoord, DefaultMeshBuilder, Octree, glam::IVec3, serialize_csm,
+};
 use noise::{Fbm, Perlin};
 
 pub struct WorldCube {
@@ -9,7 +11,6 @@ pub struct WorldCube {
     macro_depth: u32,   // World size = 2^macro_depth, terrain generation depth
     render_depth: u32,  // Maximum traversal depth for mesh generation
     _border_depth: u32, // Number of border cube layers (not yet implemented)
-    face_mesh_mode: bool,
 }
 
 impl WorldCube {
@@ -47,7 +48,6 @@ impl WorldCube {
             macro_depth,
             render_depth,
             _border_depth,
-            face_mesh_mode: true,
         }
     }
 
@@ -62,7 +62,7 @@ impl WorldCube {
             .update(CubeCoord::new(pos, depth), Cube::Solid(color_index))
             .simplified();
     }
-    
+
     /// Remove a voxel at world coordinates at specified depth
     pub fn remove_voxel_at_depth(&mut self, x: i32, y: i32, z: i32, depth: u32) {
         self.set_voxel_at_depth(x, y, z, depth, 0);
@@ -81,23 +81,13 @@ impl WorldCube {
         // Use render_depth for traversal to find all voxels (terrain + subdivisions)
         // The mesh generator will automatically calculate correct voxel sizes
         // for each depth level, ensuring subdivided voxels render at correct positions
-        if self.face_mesh_mode {
-            // Use face-based mesh generation with neighbor culling
-            crossworld_cube::generate_face_mesh(
-                &self.octree.root,
-                &mut builder,
-                |index| color_mapper.map(index),
-                self.render_depth,
-            );
-        } else {
-            // Use hierarchical mesh generation (all faces)
-            crossworld_cube::generate_mesh_hierarchical(
-                &self.octree,
-                &mut builder,
-                |index| color_mapper.map(index),
-                self.render_depth,
-            );
-        }
+        // Use face-based mesh generation with neighbor culling
+        crossworld_cube::generate_face_mesh(
+            &self.octree.root,
+            &mut builder,
+            |index| color_mapper.map(index),
+            self.render_depth,
+        );
 
         // Scale and offset vertices to match world coordinates
         // The mesh generator outputs vertices in [0,1] space where:

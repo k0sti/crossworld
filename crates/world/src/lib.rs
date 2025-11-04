@@ -2,9 +2,9 @@ mod avatar;
 mod world_cube;
 
 use avatar::AvatarManager;
-use world_cube::WorldCube as WorldCubeInternal;
 use std::cell::RefCell;
 use wasm_bindgen::prelude::*;
+use world_cube::WorldCube as WorldCubeInternal;
 
 #[wasm_bindgen(start)]
 pub fn init() {

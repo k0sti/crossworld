@@ -1,6 +1,5 @@
 import * as logger from './logger';
 import initWasm from '@workspace/wasm-cube';
-import * as cube from '@workspace/wasm-cube';
 
 let initialized = false;
 
@@ -20,7 +19,8 @@ export async function ensureCubeWasmInitialized(): Promise<void> {
  */
 export async function parseCsmToMesh(csmCode: string) {
   await ensureCubeWasmInitialized();
-  return cube.parse_csm_to_mesh(csmCode);
+  const wasmModule = await import('@workspace/wasm-cube');
+  return wasmModule.parse_csm_to_mesh(csmCode);
 }
 
 /**
@@ -28,51 +28,57 @@ export async function parseCsmToMesh(csmCode: string) {
  */
 export async function validateCsm(csmCode: string) {
   await ensureCubeWasmInitialized();
-  return cube.validate_csm(csmCode);
+  const wasmModule = await import('@workspace/wasm-cube');
+  return wasmModule.validate_csm(csmCode);
 }
 
 /**
- * Load a CSM model into Rust MODEL_STORAGE for raycasting
+ * Load a CSM model as a WasmCube for raycasting
  */
-export async function loadModelFromCsm(modelId: string, csmText: string, maxDepth: number) {
+export async function loadCubeFromCsm(csmText: string): Promise<any | null> {
   await ensureCubeWasmInitialized();
-  // @ts-expect-error - WASM exports not fully typed in generated .d.ts
-  return cube.load_model_from_csm(modelId, csmText, maxDepth);
-}
-
-/**
- * Raycast through octree using aether implementation (async, checks init)
- */
-export async function raycastAether(
-  modelId: string,
-  posX: number,
-  posY: number,
-  posZ: number,
-  dirX: number,
-  dirY: number,
-  dirZ: number
-) {
-  await ensureCubeWasmInitialized();
-  // @ts-expect-error - WASM exports not fully typed in generated .d.ts
-  return cube.raycast_aether(modelId, posX, posY, posZ, dirX, dirY, dirZ);
-}
-
-/**
- * Raycast through octree using aether implementation (synchronous, assumes WASM is initialized)
- */
-export function raycastAetherSync(
-  modelId: string,
-  posX: number,
-  posY: number,
-  posZ: number,
-  dirX: number,
-  dirY: number,
-  dirZ: number
-) {
-  if (!initialized) {
-    logger.error('common', '[CubeWasm] Attempted to call raycastAetherSync before WASM initialization');
+  try {
+    // Dynamic import to access WASM functions
+    // @ts-ignore - WASM module exports not fully typed
+    const wasmModule = await import('@workspace/wasm-cube');
+    // @ts-ignore - WASM loadCsm export
+    return wasmModule.loadCsm(csmText);
+  } catch (error) {
+    logger.error('common', '[CubeWasm] Failed to load CSM:', error);
     return null;
   }
-  // @ts-expect-error - WASM exports not fully typed in generated .d.ts
-  return cube.raycast_aether(modelId, posX, posY, posZ, dirX, dirY, dirZ);
+}
+
+/**
+ * Raycast through a WasmCube
+ *
+ * @param wasmCube - The WasmCube instance to raycast through
+ * @param posX, posY, posZ - Ray origin in normalized [0,1] space
+ * @param dirX, dirY, dirZ - Ray direction (should be normalized)
+ * @param far - If true, returns position on far side of contact plane
+ * @param maxDepth - Maximum octree depth to traverse
+ * @returns RaycastResult or null if no hit
+ */
+export function raycastWasm(
+  wasmCube: any,
+  posX: number,
+  posY: number,
+  posZ: number,
+  dirX: number,
+  dirY: number,
+  dirZ: number,
+  far: boolean,
+  maxDepth: number
+): any {
+  if (!initialized) {
+    logger.error('common', '[CubeWasm] Attempted to call raycastWasm before WASM initialization');
+    return null;
+  }
+
+  try {
+    return wasmCube.raycast(posX, posY, posZ, dirX, dirY, dirZ, far, maxDepth);
+  } catch (error) {
+    logger.error('common', '[CubeWasm] Raycast failed:', error);
+    return null;
+  }
 }

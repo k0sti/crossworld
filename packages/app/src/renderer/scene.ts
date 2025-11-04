@@ -18,7 +18,8 @@ import {
 import { getWorldSize } from '../constants/geometry';
 import { getMacroDepth, getTotalDepth } from '../config/depth-config';
 import { CheckerPlane } from './checker-plane';
-import { loadModelFromCsm, raycastAetherSync } from '../utils/cubeWasm';
+import { loadCubeFromCsm, raycastWasm } from '../utils/cubeWasm';
+import { raycastMesh, type MeshRaycastResult } from '../utils/meshRaycast';
 import { SunSystem } from './sun-system';
 import { PostProcessing } from './post-processing';
 import { profileCache } from '../services/profile-cache';
@@ -87,11 +88,11 @@ export class SceneManager {
   // Wireframe mode
   private wireframeMode: boolean = false;
 
-  // Raycast method: which raycast implementation to use
-  private raycastMethod: 'three.js' | 'aether' | 'vibed' = 'three.js';
+  // World cube for WASM raycasting
+  private worldCube: any | null = null;
 
-  // World CSM text for Rust raycasting
-  private worldCSM: string | null = null;
+  // Raycast method: 'mesh' uses Three.js mesh raycasting, 'wasm' uses WASM aether raycasting
+  private raycastMethod: 'mesh' | 'wasm' = 'mesh';
 
   // Depth voxel select mode: 1 = near side (y=0), 2 = far side (y=-1)
   private depthSelectMode: 1 | 2 = 1;
@@ -343,17 +344,32 @@ export class SceneManager {
   }
 
   /**
-   * Perform raycast to geometry mesh using the currently selected raycast method
+   * Perform raycast to geometry mesh
    * Returns hit point and normal, or null if no hit
+   *
+   * Supports two methods:
+   * - 'mesh': Uses Three.js mesh raycasting (faster, works without WASM cube)
+   * - 'wasm': Uses WASM aether raycasting (slower, more accurate for octree)
    */
   private raycastGeometry(): { point: THREE.Vector3; normal: THREE.Vector3 } | null {
     if (!this.geometryMesh) return null;
 
     const size = this.getCursorSize();
+    let result: MeshRaycastResult | null = null;
 
-    if (this.raycastMethod === 'aether' && this.worldCSM) {
-      // Use Rust aether raycast
-      try {
+    try {
+      if (this.raycastMethod === 'mesh') {
+        // Use Three.js mesh raycasting
+        result = raycastMesh(
+          this.geometryMesh,
+          this.raycaster,
+          false, // far side = false (near side)
+          getMacroDepth()
+        );
+      } else {
+        // Use WASM raycasting
+        if (!this.worldCube) return null;
+
         const worldSize = getWorldSize(getMacroDepth());
         const halfWorld = worldSize / 2;
 
@@ -366,57 +382,59 @@ export class SceneManager {
 
         const dir = this.raycaster.ray.direction;
 
-        // Call Rust raycast (synchronous)
-        const result: any = raycastAetherSync(
-          'world',
+        // Call WASM raycast
+        result = raycastWasm(
+          this.worldCube,
           normalizedOrigin.x, normalizedOrigin.y, normalizedOrigin.z,
-          dir.x, dir.y, dir.z
+          dir.x, dir.y, dir.z,
+          false, // far side = false (near side)
+          getMacroDepth()
+        );
+      }
+
+      if (result) {
+        const worldSize = getWorldSize(getMacroDepth());
+        const halfWorld = worldSize / 2;
+
+        // Convert hit position from normalized [0, 1] to world space
+        const hitPoint = new THREE.Vector3(
+          result.world_x * worldSize - halfWorld,
+          result.world_y * worldSize - halfWorld,
+          result.world_z * worldSize - halfWorld
         );
 
-        if (result && !result.error) {
-          // Convert hit position from normalized [0, 1] to world space
-          const hitPoint = new THREE.Vector3(
-            result.world_x * worldSize - halfWorld,
-            result.world_y * worldSize - halfWorld,
-            result.world_z * worldSize - halfWorld
-          );
+        // Normal is already in correct space
+        const hitNormal = new THREE.Vector3(result.normal_x, result.normal_y, result.normal_z);
 
-          // Normal is already in correct space
-          const hitNormal = new THREE.Vector3(result.normal_x, result.normal_y, result.normal_z);
+        // Apply epsilon adjustment
+        const epsilon = size * 1e-6;
+        hitPoint.x += hitNormal.x * epsilon;
+        hitPoint.y += hitNormal.y * epsilon;
+        hitPoint.z += hitNormal.z * epsilon;
 
-          // Apply epsilon adjustment
-          const epsilon = size * 1e-6;
-          hitPoint.x += hitNormal.x * epsilon;
-          hitPoint.y += hitNormal.y * epsilon;
-          hitPoint.z += hitNormal.z * epsilon;
-
-          return { point: hitPoint, normal: hitNormal };
-        }
-      } catch (error) {
-        logger.error('renderer', '[Raycast] Aether raycast failed:', error);
+        return { point: hitPoint, normal: hitNormal };
       }
-      return null;
-    } else {
-      // Use THREE.js raycast (default)
-      const meshIntersects = this.raycaster.intersectObject(this.geometryMesh, false);
-      if (meshIntersects.length > 0) {
-        const hit = meshIntersects[0];
-        if (hit.face && hit.point) {
-          // Transform normal from object space to world space
-          const worldNormal = hit.face.normal.clone().transformDirection(this.geometryMesh.matrixWorld).normalize();
-
-          // Apply small epsilon in direction of hit normal to prevent boundary flipping
-          const epsilon = size * 1e-6;
-          const adjustedPoint = hit.point.clone();
-          adjustedPoint.x += worldNormal.x * epsilon;
-          adjustedPoint.y += worldNormal.y * epsilon;
-          adjustedPoint.z += worldNormal.z * epsilon;
-
-          return { point: adjustedPoint, normal: worldNormal };
-        }
-      }
-      return null;
+    } catch (error) {
+      logger.error('renderer', `[Raycast] ${this.raycastMethod} raycast failed:`, error);
     }
+
+    return null;
+  }
+
+  /**
+   * Set the raycast method
+   * @param method - 'mesh' for Three.js mesh raycasting, 'wasm' for WASM aether raycasting
+   */
+  public setRaycastMethod(method: 'mesh' | 'wasm'): void {
+    this.raycastMethod = method;
+    logger.log('renderer', `[Raycast] Switched to ${method} raycast method`);
+  }
+
+  /**
+   * Get the current raycast method
+   */
+  public getRaycastMethod(): 'mesh' | 'wasm' {
+    return this.raycastMethod;
   }
 
   /**
@@ -2486,33 +2504,18 @@ export class SceneManager {
   }
 
   /**
-   * Set raycast method (three.js, aether, or vibed)
+   * Load world cube from CSM for WASM raycasting
    */
-  setRaycastMethod(method: 'three.js' | 'aether' | 'vibed'): void {
-    this.raycastMethod = method;
-    logger.log('renderer', `[Raycast] Method changed to: ${method}`);
-
-    // Load world octree into Rust if switching to aether or vibed
-    if ((method === 'aether' || method === 'vibed') && this.worldCSM) {
-      this.loadWorldOctree(this.worldCSM);
-    }
-  }
-
-  /**
-   * Load world octree into Rust MODEL_STORAGE for raycasting
-   */
-  async loadWorldOctree(csmText: string): Promise<void> {
-    this.worldCSM = csmText;
-
-    // Only load into Rust if using aether or vibed raycast
-    if (this.raycastMethod === 'aether' || this.raycastMethod === 'vibed') {
-      try {
-        const maxDepth = getMacroDepth();
-        await loadModelFromCsm('world', csmText, maxDepth);
-        logger.log('renderer', `[Raycast] World octree loaded into Rust (depth: ${maxDepth})`);
-      } catch (error) {
-        logger.error('renderer', '[Raycast] Failed to load world octree into Rust:', error);
+  async loadWorldCube(csmText: string): Promise<void> {
+    try {
+      this.worldCube = await loadCubeFromCsm(csmText);
+      if (this.worldCube) {
+        logger.log('renderer', '[Raycast] World cube loaded for WASM raycasting');
+      } else {
+        logger.error('renderer', '[Raycast] Failed to load world cube from CSM');
       }
+    } catch (error) {
+      logger.error('renderer', '[Raycast] Failed to load world cube:', error);
     }
   }
 
