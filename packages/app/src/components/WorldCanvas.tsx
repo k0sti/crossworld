@@ -73,6 +73,10 @@ export function WorldCanvas({
     const saved = localStorage.getItem('worldPanel.wireframeEnabled');
     return saved !== null ? JSON.parse(saved) : false;
   });
+  const [texturesEnabled, setTexturesEnabled] = useState(() => {
+    const saved = localStorage.getItem('worldPanel.texturesEnabled');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
   const [triangleCount, setTriangleCount] = useState<number | undefined>(undefined);
 
   // Save settings to localStorage when they change
@@ -91,6 +95,10 @@ export function WorldCanvas({
   useEffect(() => {
     localStorage.setItem('worldPanel.wireframeEnabled', JSON.stringify(wireframeEnabled));
   }, [wireframeEnabled]);
+
+  useEffect(() => {
+    localStorage.setItem('worldPanel.texturesEnabled', JSON.stringify(texturesEnabled));
+  }, [texturesEnabled]);
 
   // Use external speechEnabled if provided, otherwise use internal state
   const speechEnabled = externalSpeechEnabled ?? internalSpeechEnabled;
@@ -122,7 +130,9 @@ export function WorldCanvas({
             geometry.vertices,
             geometry.indices,
             geometry.normals,
-            geometry.colors
+            geometry.colors,
+            geometry.uvs,
+            geometry.materialIds
           );
         });
       }
@@ -193,7 +203,9 @@ export function WorldCanvas({
         geometry.vertices,
         geometry.indices,
         geometry.normals,
-        geometry.colors
+        geometry.colors,
+        geometry.uvs,
+        geometry.materialIds
       );
       // Update triangle count
       setTriangleCount(geometry.stats.triangles);
@@ -256,7 +268,9 @@ export function WorldCanvas({
             geometry.vertices,
             geometry.indices,
             geometry.normals,
-            geometry.colors
+            geometry.colors,
+            geometry.uvs,
+            geometry.materialIds
           );
           setTriangleCount(geometry.stats.triangles);
         }).catch((error) => {
@@ -351,6 +365,14 @@ export function WorldCanvas({
 
     sceneManager.setWireframe(wireframeEnabled);
   }, [wireframeEnabled]);
+
+  // Handle textures toggle
+  useEffect(() => {
+    const sceneManager = localSceneManagerRef.current;
+    if (!sceneManager) return;
+
+    sceneManager.setTextures(texturesEnabled);
+  }, [texturesEnabled]);
 
   // Handle avatar loading based on new unified avatar config
   useEffect(() => {
@@ -522,6 +544,8 @@ export function WorldCanvas({
           onFaceMeshEnabledChange={setFaceMeshEnabled}
           wireframeEnabled={wireframeEnabled}
           onWireframeEnabledChange={setWireframeEnabled}
+          texturesEnabled={texturesEnabled}
+          onTexturesEnabledChange={setTexturesEnabled}
           triangleCount={triangleCount}
           onPublishWorld={onPublishWorld}
           isLoggedIn={isLoggedIn}

@@ -25,6 +25,8 @@ import { PostProcessing } from './post-processing';
 import { profileCache } from '../services/profile-cache';
 import { DEFAULT_RELAYS } from '../config';
 import * as logger from '../utils/logger';
+import { MaterialsLoader } from './materials-loader';
+import { createTexturedVoxelMaterial, updateShaderLighting } from './textured-voxel-material';
 // import { VoxelCursor } from './cursor';
 // import { EditMode } from './edit-mode';
 import { PlacementMode } from './placement-mode';
@@ -142,6 +144,11 @@ export class SceneManager {
   private boundKeyUp?: (event: KeyboardEvent) => void;
   private boundPointerLockChange?: () => void;
 
+  // Materials and textures
+  private materialsLoader: MaterialsLoader = new MaterialsLoader();
+  private texturesLoaded: boolean = false;
+  private texturesEnabled: boolean = true;
+
   constructor() {
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(
@@ -170,7 +177,7 @@ export class SceneManager {
 
     // Set fixed camera position for isometric-like view (centered at origin)
     // For 128-unit world (depth 7), position camera to see the whole world
-    this.camera.position.set(100, 80, 100);
+    this.camera.position.set(10, 8, 10);
     this.camera.lookAt(0, 0, 0); // Look at origin (center of ground plane)
 
     // Dynamic sky color will be managed by sun system
@@ -195,6 +202,12 @@ export class SceneManager {
     this.setupCrosshair();
     this.setupCheckerPlane();
 
+    // Load materials and textures asynchronously
+    logger.log('renderer', '[Scene] Starting material and texture loading...');
+    this.loadMaterialsAndTextures().catch(error => {
+      logger.error('renderer', 'Failed to load materials/textures:', error);
+    });
+
     // Initialize cursor and mode system
     // this.voxelCursor = new VoxelCursor(this.scene, this.cursorDepth);
     // this.editMode = new EditMode(this.voxelCursor); // TODO: Use EditMode class instead of legacy edit mode
@@ -215,6 +228,58 @@ export class SceneManager {
     const checkerMesh = this.checkerPlane.getMesh();
     this.scene.add(checkerMesh);
     this.worldGridHelpers.push(checkerMesh);
+  }
+
+  /**
+   * Load materials.json and textures for textured voxels
+   */
+  private async loadMaterialsAndTextures(): Promise<void> {
+    try {
+      logger.log('renderer', 'Loading materials.json...');
+      await this.materialsLoader.loadMaterialsJson();
+
+      logger.log('renderer', 'Loading textures...');
+      await this.materialsLoader.loadTextures();
+
+      this.texturesLoaded = true;
+      logger.log('renderer', 'Materials and textures loaded successfully');
+
+      // Update geometry mesh with textures if it already exists
+      if (this.geometryMesh) {
+        logger.log('renderer', 'Updating existing geometry mesh with textures');
+        // Trigger a re-render with textures by updating the material
+        this.updateGeometryMaterial();
+      }
+    } catch (error) {
+      logger.error('renderer', 'Failed to load materials and textures:', error);
+      this.texturesLoaded = false;
+    }
+  }
+
+  /**
+   * Update the geometry mesh material to use textures
+   */
+  private updateGeometryMaterial(): void {
+    if (!this.geometryMesh || !this.texturesLoaded) return;
+
+    const oldMaterial = this.geometryMesh.material;
+
+    // Create new textured material
+    const textureArray = this.materialsLoader.getTextureArray();
+    const newMaterial = createTexturedVoxelMaterial(textureArray, this.texturesEnabled);
+
+    // Update shader lighting based on current scene lights
+    updateShaderLighting(newMaterial, this.scene);
+
+    // Replace material
+    this.geometryMesh.material = newMaterial;
+
+    // Dispose old material
+    if (oldMaterial instanceof THREE.Material) {
+      oldMaterial.dispose();
+    }
+
+    logger.log('renderer', 'Updated geometry material with textures');
   }
 
   private setupMouseListener(canvas: HTMLCanvasElement): void {
@@ -2063,7 +2128,7 @@ export class SceneManager {
     });
   }
 
-  updateGeometry(vertices: Float32Array, indices: Uint32Array, normals: Float32Array, colors?: Float32Array): void {
+  updateGeometry(vertices: Float32Array, indices: Uint32Array, normals: Float32Array, colors?: Float32Array, uvs?: Float32Array, materialIds?: Uint8Array): void {
     // Clean up old geometry mesh
     if (this.geometryMesh) {
       this.scene.remove(this.geometryMesh);
@@ -2091,18 +2156,40 @@ export class SceneManager {
       geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     }
 
+    // Add UV coordinates if provided
+    if (uvs && uvs.length > 0) {
+      geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+    }
+
+    // Add material IDs if provided (as a custom attribute)
+    if (materialIds && materialIds.length > 0) {
+      geometry.setAttribute('materialId', new THREE.BufferAttribute(materialIds, 1));
+    }
+
     geometry.setIndex(new THREE.BufferAttribute(indices, 1));
 
-    // Create solid mesh (always visible)
-    const material = new THREE.MeshPhongMaterial({
-      vertexColors: colors && colors.length > 0,
-      color: colors && colors.length > 0 ? 0xffffff : 0x44aa44,
-      specular: 0x333333,
-      shininess: 15,
-      wireframe: false,
-      side: THREE.FrontSide,
-      flatShading: false
-    });
+    // Create solid mesh with appropriate material
+    let material: THREE.Material;
+
+    if (this.texturesLoaded && materialIds && materialIds.length > 0) {
+      // Use custom shader material for textured voxels
+      const textureArray = this.materialsLoader.getTextureArray();
+      material = createTexturedVoxelMaterial(textureArray, this.texturesEnabled);
+      updateShaderLighting(material as THREE.ShaderMaterial, this.scene);
+      logger.log('renderer', 'Created geometry mesh with textured material');
+    } else {
+      // Fallback to simple vertex colors (no textures)
+      material = new THREE.MeshPhongMaterial({
+        vertexColors: colors && colors.length > 0,
+        color: colors && colors.length > 0 ? 0xffffff : 0x44aa44,
+        specular: 0x333333,
+        shininess: 15,
+        wireframe: false,
+        side: THREE.FrontSide,
+        flatShading: false
+      });
+      logger.log('renderer', 'Created geometry mesh with Phong material (textures not loaded)');
+    }
 
     this.geometryMesh = new THREE.Mesh(geometry, material);
     this.geometryMesh.castShadow = true;
@@ -2962,6 +3049,23 @@ export class SceneManager {
     if (this.wireframeMesh) {
       this.wireframeMesh.visible = enabled;
     }
+  }
+
+  /**
+   * Set texture rendering enabled/disabled for the ground geometry mesh
+   */
+  setTextures(enabled: boolean): void {
+    this.texturesEnabled = enabled;
+
+    // Update the material uniform if geometry mesh exists with shader material
+    if (this.geometryMesh && this.geometryMesh.material instanceof THREE.ShaderMaterial) {
+      const material = this.geometryMesh.material as THREE.ShaderMaterial;
+      if (material.uniforms.enableTextures) {
+        material.uniforms.enableTextures.value = enabled;
+      }
+    }
+
+    logger.log('renderer', `Textures ${enabled ? 'enabled' : 'disabled'}`);
   }
 
   /**

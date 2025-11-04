@@ -29,6 +29,8 @@ function copyAssetsPlugin() {
               res.setHeader('Content-Type', 'application/octet-stream')
             } else if (fullPath.endsWith('.glb')) {
               res.setHeader('Content-Type', 'model/gltf-binary')
+            } else if (fullPath.endsWith('.webp')) {
+              res.setHeader('Content-Type', 'image/webp')
             }
 
             res.end(content)
@@ -45,7 +47,7 @@ function copyAssetsPlugin() {
       // Create output directory
       mkdirSync(outDir, { recursive: true })
 
-      // Copy avatars.json and models.json
+      // Copy avatars.json, models.json, and materials.json
       copyFileSync(
         path.join(assetsRoot, 'avatars.json'),
         path.join(outDir, 'avatars.json')
@@ -54,12 +56,21 @@ function copyAssetsPlugin() {
         path.join(assetsRoot, 'models.json'),
         path.join(outDir, 'models.json')
       )
+      copyFileSync(
+        path.join(assetsRoot, 'materials.json'),
+        path.join(outDir, 'materials.json')
+      )
 
-      // Copy model directories
-      const modelTypes = ['vox', 'glb']
-      for (const type of modelTypes) {
-        const sourceDir = path.join(assetsRoot, 'models', type)
-        const targetDir = path.join(outDir, 'models', type)
+      // Copy model and texture directories
+      const assetTypes = [
+        { dir: 'models/vox', name: 'vox models' },
+        { dir: 'models/glb', name: 'glb models' },
+        { dir: 'textures5', name: 'textures5' }
+      ]
+
+      for (const assetType of assetTypes) {
+        const sourceDir = path.join(assetsRoot, assetType.dir)
+        const targetDir = path.join(outDir, assetType.dir)
         mkdirSync(targetDir, { recursive: true })
 
         // Copy all files

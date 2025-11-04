@@ -14,6 +14,23 @@ pub trait MeshBuilder {
     /// * `normal` - Normal vector for the face
     /// * `color` - RGB color for the face
     fn add_face(&mut self, vertices: [[f32; 3]; 4], normal: [f32; 3], color: [f32; 3]);
+
+    /// Add a single textured face to the mesh
+    ///
+    /// # Arguments
+    /// * `vertices` - Four vertices forming a quad (counter-clockwise)
+    /// * `normal` - Normal vector for the face
+    /// * `color` - RGB color for the face
+    /// * `uvs` - UV coordinates for each vertex
+    /// * `material_id` - Material index for texture lookup
+    fn add_textured_face(
+        &mut self,
+        vertices: [[f32; 3]; 4],
+        normal: [f32; 3],
+        color: [f32; 3],
+        uvs: [[f32; 2]; 4],
+        material_id: u8,
+    );
 }
 
 /// Default mesh builder that accumulates data into vectors
@@ -22,6 +39,8 @@ pub struct DefaultMeshBuilder {
     pub indices: Vec<u32>,
     pub normals: Vec<f32>,
     pub colors: Vec<f32>,
+    pub uvs: Vec<f32>,
+    pub material_ids: Vec<u8>,
     vertex_count: u32,
 }
 
@@ -32,6 +51,8 @@ impl DefaultMeshBuilder {
             indices: Vec::new(),
             normals: Vec::new(),
             colors: Vec::new(),
+            uvs: Vec::new(),
+            material_ids: Vec::new(),
             vertex_count: 0,
         }
     }
@@ -52,6 +73,41 @@ impl MeshBuilder for DefaultMeshBuilder {
             self.vertices.extend_from_slice(vertex);
             self.normals.extend_from_slice(&normal);
             self.colors.extend_from_slice(&color);
+            // Default UVs (not used for solid color materials)
+            self.uvs.extend_from_slice(&[0.0, 0.0]);
+            self.material_ids.push(0); // 0 = no texture
+        }
+
+        // Add indices for two triangles (0,1,2) and (0,2,3)
+        self.indices.extend_from_slice(&[
+            base_index,
+            base_index + 1,
+            base_index + 2,
+            base_index,
+            base_index + 2,
+            base_index + 3,
+        ]);
+
+        self.vertex_count += 4;
+    }
+
+    fn add_textured_face(
+        &mut self,
+        vertices: [[f32; 3]; 4],
+        normal: [f32; 3],
+        color: [f32; 3],
+        uvs: [[f32; 2]; 4],
+        material_id: u8,
+    ) {
+        let base_index = self.vertex_count;
+
+        // Add vertices with UVs and material ID
+        for (i, vertex) in vertices.iter().enumerate() {
+            self.vertices.extend_from_slice(vertex);
+            self.normals.extend_from_slice(&normal);
+            self.colors.extend_from_slice(&color);
+            self.uvs.extend_from_slice(&uvs[i]);
+            self.material_ids.push(material_id);
         }
 
         // Add indices for two triangles (0,1,2) and (0,2,3)
@@ -141,7 +197,16 @@ where
                     let vertices = face.vertices(nx, ny, nz, voxel_size);
                     let normal = face.normal();
                     let color = color_fn(neighbor_id);
-                    builder.add_face(vertices, normal, color);
+
+                    // Check if material needs texture (2-127 are textured materials)
+                    if neighbor_id >= 2 && neighbor_id <= 127 {
+                        // Generate UVs for textured face (0,0 to 1,1 mapping)
+                        let uvs = face.uvs();
+                        builder.add_textured_face(vertices, normal, color, uvs, neighbor_id as u8);
+                    } else {
+                        // Solid color material (0-1, 128-255)
+                        builder.add_face(vertices, normal, color);
+                    }
                     face_count += 1;
                 }
             }

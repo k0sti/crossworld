@@ -101,16 +101,39 @@ pub struct GeometryData {
     indices: Vec<u32>,
     normals: Vec<f32>,
     colors: Vec<f32>,
+    uvs: Vec<f32>,
+    material_ids: Vec<u8>,
 }
 
 #[wasm_bindgen]
 impl GeometryData {
     pub fn new(vertices: Vec<f32>, indices: Vec<u32>, normals: Vec<f32>, colors: Vec<f32>) -> Self {
+        let vertex_count = vertices.len() / 3;
         Self {
             vertices,
             indices,
             normals,
             colors,
+            uvs: vec![0.0; vertex_count * 2], // Default UVs
+            material_ids: vec![0; vertex_count], // Default to material 0
+        }
+    }
+
+    pub fn new_with_uvs(
+        vertices: Vec<f32>,
+        indices: Vec<u32>,
+        normals: Vec<f32>,
+        colors: Vec<f32>,
+        uvs: Vec<f32>,
+        material_ids: Vec<u8>,
+    ) -> Self {
+        Self {
+            vertices,
+            indices,
+            normals,
+            colors,
+            uvs,
+            material_ids,
         }
     }
 
@@ -132,6 +155,16 @@ impl GeometryData {
     #[wasm_bindgen(getter)]
     pub fn colors(&self) -> Vec<f32> {
         self.colors.clone()
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn uvs(&self) -> Vec<f32> {
+        self.uvs.clone()
+    }
+
+    #[wasm_bindgen(getter, js_name = materialIds)]
+    pub fn material_ids(&self) -> Vec<u8> {
+        self.material_ids.clone()
     }
 }
 

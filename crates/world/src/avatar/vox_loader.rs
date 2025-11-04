@@ -36,7 +36,12 @@ fn convert_dotvox_to_model(vox_data: &DotVoxData) -> Result<VoxelModel, String> 
     // So we swap Y and Z: MagicaVoxel (x, y, z) -> Our system (x, z, y)
     for voxel in &dot_vox_model.voxels {
         // MagicaVoxel uses 1-based indexing for colors, we use 0-based
-        let color_index = if voxel.i > 0 { voxel.i - 1 } else { 0 };
+        let palette_index = if voxel.i > 0 { voxel.i - 1 } else { 0 };
+
+        // Map vox colors to 128-255 range (solid colors)
+        // This reserves 0-127 for textured materials
+        // Map 0-255 palette range to 128-255 by dividing by 2
+        let color_index = 128 + (palette_index / 2);
 
         model.add_voxel(Voxel {
             x: voxel.x,

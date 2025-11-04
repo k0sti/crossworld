@@ -76,6 +76,52 @@ impl Face {
         }
     }
 
+    /// Get UV coordinates for this face
+    /// Returns 4 UV coords matching the vertex order (counter-clockwise from outside)
+    #[inline]
+    pub fn uvs(self) -> [[f32; 2]; 4] {
+        // Standard UV mapping: (0,0) bottom-left, (1,1) top-right
+        // UV coordinates map to texture space regardless of face orientation
+        match self {
+            Face::Top => [
+                [0.0, 0.0], // bottom-left in texture
+                [0.0, 1.0], // top-left
+                [1.0, 1.0], // top-right
+                [1.0, 0.0], // bottom-right
+            ],
+            Face::Bottom => [
+                [0.0, 0.0],
+                [1.0, 0.0],
+                [1.0, 1.0],
+                [0.0, 1.0],
+            ],
+            Face::Left => [
+                [0.0, 0.0],
+                [0.0, 1.0],
+                [1.0, 1.0],
+                [1.0, 0.0],
+            ],
+            Face::Right => [
+                [0.0, 0.0],
+                [0.0, 1.0],
+                [1.0, 1.0],
+                [1.0, 0.0],
+            ],
+            Face::Front => [
+                [0.0, 0.0],
+                [0.0, 1.0],
+                [1.0, 1.0],
+                [1.0, 0.0],
+            ],
+            Face::Back => [
+                [0.0, 0.0],
+                [0.0, 1.0],
+                [1.0, 1.0],
+                [1.0, 0.0],
+            ],
+        }
+    }
+
     /// Iterator over all faces
     #[inline]
     pub fn iter() -> impl Iterator<Item = Face> {

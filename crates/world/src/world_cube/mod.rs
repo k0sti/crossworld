@@ -108,11 +108,13 @@ impl WorldCube {
             })
             .collect();
 
-        GeometryData::new(
+        GeometryData::new_with_uvs(
             scaled_vertices,
             builder.indices,
             builder.normals,
             builder.colors,
+            builder.uvs,
+            builder.material_ids,
         )
     }
 
@@ -190,14 +192,58 @@ impl ColorMapper for DawnbringerColorMapper {
             return [0.0, 0.0, 0.0];
         }
 
+        if (2..=127).contains(&index) {
+            // Materials 2-127: textured materials from materials.json
+            // These get textures applied in rendering, but we provide fallback colors
+            // Use HSV-based placeholder colors for when textures aren't loaded
+            let hue = ((index * 23) % 360) as f32;
+            return hsv_to_rgb(hue, 0.7, 0.8);
+        }
+
+        if (128..=255).contains(&index) {
+            // Materials 128-255: solid colors (vox models, color palette)
+            // Generate RGB from 7-bit encoding: r:2, g:3, b:2
+            let bits = (index - 128) as u8;
+            let r_bits = (bits >> 5) & 0b11;
+            let g_bits = (bits >> 2) & 0b111;
+            let b_bits = bits & 0b11;
+
+            // Convert to RGB values
+            let r = match r_bits {
+                0 => 0.0,
+                1 => 0.286,  // 0x49/255
+                2 => 0.573,  // 0x92/255
+                3 => 0.859,  // 0xDB/255
+                _ => 0.0,
+            };
+            let g = match g_bits {
+                0 => 0.0,
+                1 => 0.141,  // 0x24/255
+                2 => 0.286,  // 0x49/255
+                3 => 0.427,  // 0x6D/255
+                4 => 0.573,  // 0x92/255
+                5 => 0.714,  // 0xB6/255
+                6 => 0.859,  // 0xDB/255
+                7 => 1.0,    // 0xFF/255
+                _ => 0.0,
+            };
+            let b = match b_bits {
+                0 => 0.0,
+                1 => 0.286,
+                2 => 0.573,
+                3 => 0.859,
+                _ => 0.0,
+            };
+            return [r, g, b];
+        }
+
+        // Values 1, 32-63: Legacy support for Dawnbringer palette
         if (32..=63).contains(&index) {
-            // Values 32-63 map to Dawnbringer palette indices 0-31
             let palette_idx = (index - 32) as usize;
             return self.palette[palette_idx];
         }
 
-        // Values 1-31: terrain colors (checkerboard, underground)
-        // Use simple HSV-based colors for terrain
+        // Value 1 or any other: terrain colors
         let hue = ((index * 37) % 360) as f32;
         hsv_to_rgb(hue, 0.6, 0.7)
     }

@@ -33,6 +33,9 @@ interface WorldPanelProps {
   wireframeEnabled: boolean;
   onWireframeEnabledChange: (enabled: boolean) => void;
   triangleCount?: number;
+  // Textures toggle
+  texturesEnabled: boolean;
+  onTexturesEnabledChange: (enabled: boolean) => void;
   // Publish world
   onPublishWorld?: () => void;
   isLoggedIn?: boolean;
@@ -50,6 +53,8 @@ export function WorldPanel({
   wireframeEnabled,
   onWireframeEnabledChange,
   triangleCount,
+  texturesEnabled,
+  onTexturesEnabledChange,
   onPublishWorld,
   isLoggedIn,
 }: WorldPanelProps) {
@@ -316,6 +321,17 @@ export function WorldPanel({
             onChange={(e) => onWireframeEnabledChange(e.target.checked)}
             size="sm"
             colorScheme="pink"
+          />
+        </HStack>
+
+        {/* Textures toggle */}
+        <HStack spacing={2} justify="space-between" pointerEvents="auto">
+          <Text color="teal.300">Textures</Text>
+          <Switch
+            isChecked={texturesEnabled}
+            onChange={(e) => onTexturesEnabledChange(e.target.checked)}
+            size="sm"
+            colorScheme="teal"
           />
         </HStack>
 
