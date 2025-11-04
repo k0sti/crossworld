@@ -307,15 +307,33 @@ impl<T: Clone> Cube<T> {
     }
 
     /// Update this cube with subcube at cube_coord
+    ///
+    /// # Depth and Position Scaling
+    /// - depth: Octree depth level (0 = replace entire cube, higher = finer subdivision)
+    /// - pos: Position at the CURRENT depth level, range [0, 2^depth - 1]
+    /// - When recursing, position must be adjusted for child's coordinate space
     pub fn update(&self, cube_coord: CubeCoord, cube: Cube<T>) -> Self {
         if cube_coord.depth == 0 {
+            // Depth 0: replace this entire cube
             cube
         } else {
+            // Recurse into child octant
             let d = cube_coord.depth - 1;
+
+            // Calculate which octant this position falls into at depth d
+            // index uses bit shift: (pos >> d) & 1 extracts the bit at depth d
             let index = Self::index(d, cube_coord.pos);
+
+            // Get the child cube (or expand if solid)
             let child = self.get_child_or_self(index);
+
+            // Recursively update the child with same position but decremented depth
+            // The position stays the same - the index function handles extracting
+            // the correct octant bit at each depth level
             let child_coord = CubeCoord::new(cube_coord.pos, d);
             let new_child = child.update(child_coord, cube);
+
+            // Replace the child in this cube's children array
             self.updated_index(index, new_child)
         }
     }
