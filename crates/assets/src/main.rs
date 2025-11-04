@@ -158,10 +158,7 @@ fn cmd_index() -> Result<(), Box<dyn std::error::Error>> {
         .map(|m| {
             [
                 m.name.clone(),
-                m.path
-                    .strip_prefix("vox/")
-                    .unwrap_or(&m.path)
-                    .to_string(),
+                m.path.strip_prefix("vox/").unwrap_or(&m.path).to_string(),
             ]
         })
         .collect();
@@ -202,7 +199,7 @@ fn cmd_vox_palette(calculate_minimal_palette: bool) -> Result<(), Box<dyn std::e
         let entry = entry?;
         let path = entry.path();
 
-        if path.is_file() && path.extension().map_or(false, |e| e == "vox") {
+        if path.is_file() && path.extension().is_some_and(|e| e == "vox") {
             total_count += 1;
             let name = path
                 .file_stem()
@@ -229,7 +226,7 @@ fn cmd_vox_palette(calculate_minimal_palette: bool) -> Result<(), Box<dyn std::e
 
                         palette_map
                             .entry(palette_bytes.clone())
-                            .or_insert_with(Vec::new)
+                            .or_default()
                             .push(name.clone());
 
                         // Collect actual color usage from voxels if calculating minimal palette
@@ -251,11 +248,12 @@ fn cmd_vox_palette(calculate_minimal_palette: bool) -> Result<(), Box<dyn std::e
                                     palette_bytes[color_index as usize * 3 + 2],
                                 ];
 
-                                let stats = color_stats_map.entry(rgb).or_insert_with(|| ColorStats {
-                                    rgb,
-                                    total_voxels: 0,
-                                    model_count: 0,
-                                });
+                                let stats =
+                                    color_stats_map.entry(rgb).or_insert_with(|| ColorStats {
+                                        rgb,
+                                        total_voxels: 0,
+                                        model_count: 0,
+                                    });
 
                                 stats.total_voxels += voxel_count;
                                 stats.model_count += 1;
@@ -279,7 +277,8 @@ fn cmd_vox_palette(calculate_minimal_palette: bool) -> Result<(), Box<dyn std::e
         // Sort colors by number of models using them (descending), then by total voxels
         let mut color_list: Vec<&ColorStats> = color_stats_map.values().collect();
         color_list.sort_by(|a, b| {
-            b.model_count.cmp(&a.model_count)
+            b.model_count
+                .cmp(&a.model_count)
                 .then(b.total_voxels.cmp(&a.total_voxels))
         });
 
@@ -295,10 +294,13 @@ fn cmd_vox_palette(calculate_minimal_palette: bool) -> Result<(), Box<dyn std::e
         // Print table rows
         for (idx, stats) in color_list.iter().enumerate() {
             // Convert RGB to hex
-            let hex_color = format!("#{:02x}{:02x}{:02x}",
-                stats.rgb[0], stats.rgb[1], stats.rgb[2]);
+            let hex_color = format!(
+                "#{:02x}{:02x}{:02x}",
+                stats.rgb[0], stats.rgb[1], stats.rgb[2]
+            );
 
-            println!("| {} | {} | {} | {} |",
+            println!(
+                "| {} | {} | {} | {} |",
                 idx + 1,
                 hex_color,
                 stats.model_count,
@@ -424,9 +426,9 @@ fn cmd_materials() -> Result<(), Box<dyn std::error::Error>> {
         let index = i as u8;
 
         // Extract RGB bits: r:2, g:3, b:2
-        let r_bits = (index >> 5) & 0b11;      // Top 2 bits
-        let g_bits = (index >> 2) & 0b111;     // Middle 3 bits
-        let b_bits = index & 0b11;              // Bottom 2 bits
+        let r_bits = (index >> 5) & 0b11; // Top 2 bits
+        let g_bits = (index >> 2) & 0b111; // Middle 3 bits
+        let b_bits = index & 0b11; // Bottom 2 bits
 
         // Convert to 8-bit RGB values
         // 2 bits: 0->0x00, 1->0x49, 2->0x92, 3->0xDB
@@ -462,7 +464,10 @@ fn cmd_materials() -> Result<(), Box<dyn std::error::Error>> {
 
         let color = format!("#FF{:02X}{:02X}{:02X}", r, g, b);
         let id = format!("color_{:03}", i);
-        let description = format!("Auto-generated color (r:{}, g:{}, b:{})", r_bits, g_bits, b_bits);
+        let description = format!(
+            "Auto-generated color (r:{}, g:{}, b:{})",
+            r_bits, g_bits, b_bits
+        );
 
         materials.push(Material {
             index,
@@ -560,13 +565,18 @@ async fn cmd_textures(model_name: String) -> Result<(), Box<dyn std::error::Erro
 
     // Create textures directory
     fs::create_dir_all(&textures_dir)?;
-    println!("Created/verified textures directory at {}", textures_dir.display());
+    println!(
+        "Created/verified textures directory at {}",
+        textures_dir.display()
+    );
 
     // Create HTTP client
     let client = reqwest::Client::new();
 
     // Process materials 1-127
-    let materials_to_process: Vec<_> = materials_data.materials.iter()
+    let materials_to_process: Vec<_> = materials_data
+        .materials
+        .iter()
         .filter(|m| m.index >= 1 && m.index <= 127)
         .collect();
 
@@ -574,24 +584,30 @@ async fn cmd_textures(model_name: String) -> Result<(), Box<dyn std::error::Erro
     let (version_id, model_type) = match model_name.as_str() {
         "seamless-texture" => (
             "9a59c0dce189bfe8a7fcb379c497713500ff959652c4e7874023f15983dec839",
-            "seamless-texture"
+            "seamless-texture",
         ),
         "sdxl" => (
             "7762fd07cf82c948538e41f63f77d685e02b063e37e496e96eefd46c929f9bdc",
-            "sdxl"
+            "sdxl",
         ),
         "flux-dev" => (
             "6e4a938f85952bdabcc15aa329178c4d681c52bf25a0342403287dc26944661d",
-            "flux-dev"
+            "flux-dev",
         ),
         _ => {
-            eprintln!("Unknown model: {}. Use: seamless-texture, sdxl, or flux-dev", model_name);
+            eprintln!(
+                "Unknown model: {}. Use: seamless-texture, sdxl, or flux-dev",
+                model_name
+            );
             std::process::exit(1);
         }
     };
 
     println!("Using model: {} ({})", model_type, version_id);
-    println!("\nGenerating textures for {} materials (1-127) in webp format...\n", materials_to_process.len());
+    println!(
+        "\nGenerating textures for {} materials (1-127) in webp format...\n",
+        materials_to_process.len()
+    );
 
     for material in materials_to_process {
         let texture_filename = format!("{}.webp", material.id);
@@ -599,11 +615,17 @@ async fn cmd_textures(model_name: String) -> Result<(), Box<dyn std::error::Erro
 
         // Skip if texture already exists
         if texture_path.exists() {
-            println!("[{}] {} - already exists, skipping", material.index, material.id);
+            println!(
+                "[{}] {} - already exists, skipping",
+                material.index, material.id
+            );
             continue;
         }
 
-        println!("[{}] {} - generating texture...", material.index, material.id);
+        println!(
+            "[{}] {} - generating texture...",
+            material.index, material.id
+        );
 
         // Create prompt optimized for albedo/diffuse texture maps
         // Use simple, concrete visual terms the AI model understands
@@ -617,16 +639,21 @@ async fn cmd_textures(model_name: String) -> Result<(), Box<dyn std::error::Erro
         // Configure parameters based on model type
         let (width, height, aspect_ratio, model_param, guidance, steps) = match model_type {
             "seamless-texture" => (
-                Some(256), Some(256), None,
-                Some("dev".to_string()), Some(3.5), Some(50)
+                Some(256),
+                Some(256),
+                None,
+                Some("dev".to_string()),
+                Some(3.5),
+                Some(50),
             ),
-            "sdxl" => (
-                Some(1024), Some(1024), None,
-                None, Some(7.5), Some(50)
-            ),
+            "sdxl" => (Some(1024), Some(1024), None, None, Some(7.5), Some(50)),
             "flux-dev" => (
-                None, None, Some("1:1".to_string()),
-                None, Some(3.5), Some(50)
+                None,
+                None,
+                Some("1:1".to_string()),
+                None,
+                Some(3.5),
+                Some(50),
             ),
             _ => (Some(256), Some(256), None, None, Some(3.5), Some(50)),
         };
@@ -672,18 +699,27 @@ async fn cmd_textures(model_name: String) -> Result<(), Box<dyn std::error::Erro
         let mut attempts = 0;
         const MAX_ATTEMPTS: u32 = 60; // 5 minutes at 5 second intervals
 
-        while prediction.status != "succeeded" && prediction.status != "failed" && attempts < MAX_ATTEMPTS {
+        while prediction.status != "succeeded"
+            && prediction.status != "failed"
+            && attempts < MAX_ATTEMPTS
+        {
             tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
             attempts += 1;
 
             let poll_response = client
-                .get(format!("https://api.replicate.com/v1/predictions/{}", prediction.id))
+                .get(format!(
+                    "https://api.replicate.com/v1/predictions/{}",
+                    prediction.id
+                ))
                 .header("Authorization", format!("Token {}", api_token))
                 .send()
                 .await?;
 
             prediction = poll_response.json().await?;
-            println!("  Status: {} (attempt {}/{})", prediction.status, attempts, MAX_ATTEMPTS);
+            println!(
+                "  Status: {} (attempt {}/{})",
+                prediction.status, attempts, MAX_ATTEMPTS
+            );
         }
 
         if prediction.status == "succeeded" {
@@ -705,7 +741,10 @@ async fn cmd_textures(model_name: String) -> Result<(), Box<dyn std::error::Erro
                 eprintln!("  Error: No output in response");
             }
         } else {
-            eprintln!("  Error: Texture generation failed with status: {}", prediction.status);
+            eprintln!(
+                "  Error: Texture generation failed with status: {}",
+                prediction.status
+            );
         }
 
         println!();

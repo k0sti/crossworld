@@ -8,9 +8,9 @@ use glam::Vec3;
 fn map_color_to_material(r: u8, g: u8, b: u8) -> u8 {
     // Extract top bits: red (2 bits), green (3 bits), blue (2 bits)
     // R2G3B2: rrrgggbb
-    let r_bits = (r >> 6) & 0b11;      // Top 2 bits of red
-    let g_bits = (g >> 5) & 0b111;     // Top 3 bits of green
-    let b_bits = (b >> 6) & 0b11;      // Top 2 bits of blue
+    let r_bits = (r >> 6) & 0b11; // Top 2 bits of red
+    let g_bits = (g >> 5) & 0b111; // Top 3 bits of green
+    let b_bits = (b >> 6) & 0b11; // Top 2 bits of blue
 
     // Combine into 7-bit index and add 128 offset
     128 + ((r_bits << 5) | (g_bits << 2) | b_bits)

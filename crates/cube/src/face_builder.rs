@@ -199,7 +199,7 @@ where
                     let color = color_fn(neighbor_id);
 
                     // Check if material needs texture (2-127 are textured materials)
-                    if neighbor_id >= 2 && neighbor_id <= 127 {
+                    if (2..=127).contains(&neighbor_id) {
                         // Generate UVs for textured face (0,0 to 1,1 mapping)
                         let uvs = face.uvs();
                         builder.add_textured_face(vertices, normal, color, uvs, neighbor_id as u8);
