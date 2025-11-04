@@ -16,3 +16,5 @@ test_output/
 .env
 .env.local
 
+# Asset work files
+assets/scratch/

@@ -24,6 +24,12 @@ enum Commands {
     },
     /// Generate materials.json from doc/materials.md
     Materials,
+    /// Generate seamless textures using Replicate API
+    Textures {
+        /// Model to use: seamless-texture, sdxl, flux-dev
+        #[arg(long, default_value = "sdxl")]
+        model: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -488,12 +494,235 @@ fn cmd_materials() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+#[derive(Debug, Serialize)]
+struct ReplicateInput {
+    prompt: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    width: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    height: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    aspect_ratio: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    output_format: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    output_quality: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    go_fast: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    model: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    guidance_scale: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    num_inference_steps: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    disable_safety_checker: Option<bool>,
+}
+
+#[derive(Debug, Serialize)]
+struct ReplicateRequest {
+    version: String,
+    input: ReplicateInput,
+}
+
+#[derive(Debug, Deserialize)]
+struct ReplicateResponse {
+    id: String,
+    status: String,
+    output: Option<Vec<String>>,
+}
+
+async fn cmd_textures(model_name: String) -> Result<(), Box<dyn std::error::Error>> {
+    // Load .env file from project root
+    let env_path = PathBuf::from(".env");
+    if env_path.exists() {
+        dotenv::from_path(&env_path).ok();
+        println!("Loaded environment from .env");
+    }
+
+    let materials_path = PathBuf::from("assets/materials.json");
+    let textures_dir = PathBuf::from("assets/textures");
+
+    // Read materials.json
+    if !materials_path.exists() {
+        eprintln!("Error: assets/materials.json not found");
+        eprintln!("Please run 'assets materials' first");
+        std::process::exit(1);
+    }
+
+    println!("Loading materials.json...");
+    let materials_content = fs::read_to_string(&materials_path)?;
+    let materials_data: MaterialsData = serde_json::from_str(&materials_content)?;
+
+    // Get API token from environment
+    let api_token = std::env::var("REPLICATE_API_TOKEN")
+        .map_err(|_| "REPLICATE_API_TOKEN not found in environment or .env file")?;
+
+    // Create textures directory
+    fs::create_dir_all(&textures_dir)?;
+    println!("Created/verified textures directory at {}", textures_dir.display());
+
+    // Create HTTP client
+    let client = reqwest::Client::new();
+
+    // Process materials 1-127
+    let materials_to_process: Vec<_> = materials_data.materials.iter()
+        .filter(|m| m.index >= 1 && m.index <= 127)
+        .collect();
+
+    // Select model version based on user choice
+    let (version_id, model_type) = match model_name.as_str() {
+        "seamless-texture" => (
+            "9a59c0dce189bfe8a7fcb379c497713500ff959652c4e7874023f15983dec839",
+            "seamless-texture"
+        ),
+        "sdxl" => (
+            "7762fd07cf82c948538e41f63f77d685e02b063e37e496e96eefd46c929f9bdc",
+            "sdxl"
+        ),
+        "flux-dev" => (
+            "6e4a938f85952bdabcc15aa329178c4d681c52bf25a0342403287dc26944661d",
+            "flux-dev"
+        ),
+        _ => {
+            eprintln!("Unknown model: {}. Use: seamless-texture, sdxl, or flux-dev", model_name);
+            std::process::exit(1);
+        }
+    };
+
+    println!("Using model: {} ({})", model_type, version_id);
+    println!("\nGenerating textures for {} materials (1-127) in webp format...\n", materials_to_process.len());
+
+    for material in materials_to_process {
+        let texture_filename = format!("{}.webp", material.id);
+        let texture_path = textures_dir.join(&texture_filename);
+
+        // Skip if texture already exists
+        if texture_path.exists() {
+            println!("[{}] {} - already exists, skipping", material.index, material.id);
+            continue;
+        }
+
+        println!("[{}] {} - generating texture...", material.index, material.id);
+
+        // Create prompt optimized for albedo/diffuse texture maps
+        // Use simple, concrete visual terms the AI model understands
+        let prompt = format!(
+            "flat top-down view of {} surface, seamless tileable pattern, \
+             uniform overcast lighting, no shadows, no shine, no glare, matte finish, \
+             covers 1 square meter area, ultra detailed, photographic quality",
+            material.description
+        );
+
+        // Configure parameters based on model type
+        let (width, height, aspect_ratio, model_param, guidance, steps) = match model_type {
+            "seamless-texture" => (
+                Some(256), Some(256), None,
+                Some("dev".to_string()), Some(3.5), Some(50)
+            ),
+            "sdxl" => (
+                Some(1024), Some(1024), None,
+                None, Some(7.5), Some(50)
+            ),
+            "flux-dev" => (
+                None, None, Some("1:1".to_string()),
+                None, Some(3.5), Some(50)
+            ),
+            _ => (Some(256), Some(256), None, None, Some(3.5), Some(50)),
+        };
+
+        // Create Replicate API request with quality settings
+        let request = ReplicateRequest {
+            version: version_id.to_string(),
+            input: ReplicateInput {
+                prompt: prompt.clone(),
+                width,
+                height,
+                aspect_ratio,
+                output_format: Some("webp".to_string()),
+                output_quality: Some(100),
+                go_fast: Some(true),
+                model: model_param,
+                guidance_scale: guidance,
+                num_inference_steps: steps,
+                disable_safety_checker: Some(true),
+            },
+        };
+
+        // Submit prediction
+        let response = client
+            .post("https://api.replicate.com/v1/predictions")
+            .header("Authorization", format!("Token {}", api_token))
+            .header("Content-Type", "application/json")
+            .json(&request)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response.text().await?;
+            eprintln!("  Error: API returned status {}: {}", status, error_text);
+            continue;
+        }
+
+        let mut prediction: ReplicateResponse = response.json().await?;
+        println!("  Prediction ID: {}", prediction.id);
+
+        // Poll for completion
+        let mut attempts = 0;
+        const MAX_ATTEMPTS: u32 = 60; // 5 minutes at 5 second intervals
+
+        while prediction.status != "succeeded" && prediction.status != "failed" && attempts < MAX_ATTEMPTS {
+            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+            attempts += 1;
+
+            let poll_response = client
+                .get(format!("https://api.replicate.com/v1/predictions/{}", prediction.id))
+                .header("Authorization", format!("Token {}", api_token))
+                .send()
+                .await?;
+
+            prediction = poll_response.json().await?;
+            println!("  Status: {} (attempt {}/{})", prediction.status, attempts, MAX_ATTEMPTS);
+        }
+
+        if prediction.status == "succeeded" {
+            if let Some(output_urls) = prediction.output {
+                if let Some(url) = output_urls.first() {
+                    println!("  Downloading texture from: {}", url);
+
+                    // Download the image
+                    let image_response = client.get(url).send().await?;
+                    let image_bytes = image_response.bytes().await?;
+
+                    // Save to file
+                    fs::write(&texture_path, image_bytes)?;
+                    println!("  Saved to: {}", texture_path.display());
+                } else {
+                    eprintln!("  Error: No output URL in response");
+                }
+            } else {
+                eprintln!("  Error: No output in response");
+            }
+        } else {
+            eprintln!("  Error: Texture generation failed with status: {}", prediction.status);
+        }
+
+        println!();
+    }
+
+    println!("Texture generation complete!");
+    Ok(())
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
     match cli.command {
         Commands::Index => cmd_index(),
         Commands::VoxPalette { palette } => cmd_vox_palette(palette),
         Commands::Materials => cmd_materials(),
+        Commands::Textures { model } => cmd_textures(model).await,
     }
 }
