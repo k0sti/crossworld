@@ -1,5 +1,5 @@
-use super::world_cube::WorldCube as WorldCubeInternal;
 use super::WorldCube;
+use super::world_cube::WorldCube as WorldCubeInternal;
 use crossworld_cube::Cube;
 
 #[test]
@@ -47,7 +47,7 @@ fn test_boundary_coordinates() {
 
     // Test at depth 5, max coord should be 31 (2^5 - 1)
     world_cube.set_voxel_at_depth(31, 31, 31, 5, 52); // Should work
-    world_cube.set_voxel_at_depth(0, 0, 0, 5, 52);    // Should work
+    world_cube.set_voxel_at_depth(0, 0, 0, 5, 52); // Should work
 
     let _geometry = world_cube.generate_mesh();
 }
@@ -102,7 +102,10 @@ fn test_border_layers() {
                 break;
             }
         }
-        assert!(has_subdivisions, "Border layer should contain subdivisions for centered world");
+        assert!(
+            has_subdivisions,
+            "Border layer should contain subdivisions for centered world"
+        );
     } else {
         panic!("Root should be Cubes variant with border layer");
     }
@@ -126,7 +129,10 @@ fn test_multiple_border_layers() {
             // The inner layer's octant 0 should contain the world
             match inner_octants[0].as_ref() {
                 Cube::Solid(color) => {
-                    assert!(*color != 1 && *color != 63, "Inner octant 0 should contain world");
+                    assert!(
+                        *color != 1 && *color != 63,
+                        "Inner octant 0 should contain world"
+                    );
                 }
                 _ => {
                     // Non-solid is good
@@ -156,7 +162,10 @@ fn test_no_border_layers() {
     if let Cube::Solid(color) = root {
         // If it happens to be solid (unlikely with terrain generation),
         // it shouldn't be our border colors
-        assert!(*color != 1 && *color != 63, "Root should be generated world, not border colors");
+        assert!(
+            *color != 1 && *color != 63,
+            "Root should be generated world, not border colors"
+        );
     }
 
     // Verify mesh can be generated

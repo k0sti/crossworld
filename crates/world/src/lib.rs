@@ -50,7 +50,11 @@ impl WorldCube {
         if x < 0 || x > max_coord || y < 0 || y > max_coord || z < 0 || z > max_coord {
             tracing::error!(
                 "Invalid coordinates ({}, {}, {}) for depth {}. Max coord: {}",
-                x, y, z, depth, max_coord
+                x,
+                y,
+                z,
+                depth,
+                max_coord
             );
             return;
         }
@@ -127,7 +131,7 @@ impl GeometryData {
             indices,
             normals,
             colors,
-            uvs: vec![0.0; vertex_count * 2], // Default UVs
+            uvs: vec![0.0; vertex_count * 2],    // Default UVs
             material_ids: vec![0; vertex_count], // Default to material 0
         }
     }
