@@ -8,9 +8,9 @@ use noise::{Fbm, Perlin};
 
 pub struct WorldCube {
     octree: Octree,
-    macro_depth: u32,   // World size = 2^macro_depth, terrain generation depth
-    render_depth: u32,  // Maximum traversal depth for mesh generation
-    _border_depth: u32, // Number of border cube layers (not yet implemented)
+    macro_depth: u32,  // World size = 2^macro_depth, terrain generation depth
+    render_depth: u32, // Maximum traversal depth for mesh generation
+    border_depth: u32, // Number of border cube layers
 }
 
 impl WorldCube {
@@ -19,18 +19,30 @@ impl WorldCube {
     /// # Arguments
     /// * `macro_depth` - World size depth (e.g., 3 = 8×8×8 world units)
     /// * `micro_depth` - Additional subdivision levels for user edits (0-3)
-    /// * `_border_depth` - Number of border cube layers (not yet implemented)
+    /// * `border_depth` - Number of border cube layers (0 = no border, 1+ = wrap in border octants)
     ///
     /// Architecture (macro_depth=3, micro_depth=3):
     /// - World size: 8×8×8 units (2^3)
     /// - Terrain generated at macro depth
     /// - User voxels can be placed up to macro+micro depth (depth 6)
     /// - Octree dynamically subdivides for finer edits
-    pub fn new(macro_depth: u32, micro_depth: u32, _border_depth: u32) -> Self {
+    ///
+    /// Border layers:
+    /// - Each border layer wraps the world in an octa (8 cubes)
+    /// - 4 bottom cubes + 4 top cubes surround the world
+    /// - Original world placed at octant 0 (bottom-front-left)
+    pub fn new(macro_depth: u32, micro_depth: u32, border_depth: u32) -> Self {
         // Generate a random seed for unique world generation each time
-        // Use JavaScript's Math.random() for WASM compatibility
-        let random_value = js_sys::Math::random();
-        let seed = (random_value * (u32::MAX as f64)) as u32;
+        #[cfg(not(test))]
+        let seed = {
+            // Use JavaScript's Math.random() for WASM compatibility
+            let random_value = js_sys::Math::random();
+            (random_value * (u32::MAX as f64)) as u32
+        };
+
+        // Use fixed seed for tests for reproducibility
+        #[cfg(test)]
+        let seed = 12345u32;
 
         let noise = Perlin::new(seed);
         let fbm = Fbm::new(seed);
@@ -39,16 +51,80 @@ impl WorldCube {
         // The octree automatically subdivides when voxels are placed at deeper levels
         let root = builder::build_ground_octree(&noise, &fbm, macro_depth);
 
+        // Apply border layers if requested
+        // Each border layer doubles the world size, so we need to account for this
+        let root_with_borders = if border_depth > 0 {
+            Self::add_border_layers(root, border_depth, 0, 32) // Default: top=stone(32), bottom=black(0)
+        } else {
+            root
+        };
+
         // Render depth must be deep enough to capture all possible voxel placements
-        // macro_depth for terrain + micro_depth for user edits
-        let render_depth = macro_depth + micro_depth;
+        // macro_depth for terrain + micro_depth for user edits + border_depth for border expansion
+        // Each border layer adds 1 to the effective depth (2^1 = doubles the size)
+        let render_depth = macro_depth + micro_depth + border_depth;
 
         Self {
-            octree: Octree::new(root),
+            octree: Octree::new(root_with_borders),
             macro_depth,
             render_depth,
-            _border_depth,
+            border_depth,
         }
+    }
+
+    /// Wrap a cube with border layers
+    ///
+    /// Each layer creates an octa (8 cubes) where:
+    /// - Octant 0 (bottom-front-left) contains the original world
+    /// - Bottom 4 octants (y=0) use `bottom_color`
+    /// - Top 4 octants (y=1) use `top_color`
+    /// - Octant 0 gets the world instead of bottom_color
+    ///
+    /// # Arguments
+    /// * `world` - The original world cube to wrap
+    /// * `layers` - Number of border layers to add
+    /// * `top_color` - Color index for top border cubes (octants 2,3,6,7)
+    /// * `bottom_color` - Color index for bottom border cubes (octants 1,4,5)
+    ///
+    /// # Example
+    /// With 1 border layer:
+    /// ```text
+    /// Octant layout (depth=1):
+    ///   0: world (bottom-front-left) - original world goes here
+    ///   1: bottom_color (bottom-back-left)
+    ///   2: top_color (top-front-left)
+    ///   3: top_color (top-back-left)
+    ///   4: bottom_color (bottom-front-right)
+    ///   5: bottom_color (bottom-back-right)
+    ///   6: top_color (top-front-right)
+    ///   7: top_color (top-back-right)
+    /// ```
+    fn add_border_layers(
+        world: Cube<i32>,
+        layers: u32,
+        top_color: i32,
+        bottom_color: i32,
+    ) -> Cube<i32> {
+        let mut result = world;
+
+        for _ in 0..layers {
+            // Create an octa with border colors
+            // Bottom 4 octants (y=0): bottom_color
+            // Top 4 octants (y=1): top_color
+            let border_octa = Cube::tabulate_vector(|pos| {
+                if pos.y == 0 {
+                    Cube::Solid(bottom_color)
+                } else {
+                    Cube::Solid(top_color)
+                }
+            });
+
+            // Place the world at the center (position 1,1,1 at depth 2)
+            // This centers the world within the border octa
+            result = border_octa.update_depth(2, IVec3::new(1, 1, 1), 1, result);
+        }
+
+        result
     }
 
     /// Set a voxel at octree coordinates
@@ -83,6 +159,12 @@ impl WorldCube {
         serialize_csm(&self.octree)
     }
 
+    /// Get a reference to the octree root (for testing)
+    #[cfg(test)]
+    pub fn get_root(&self) -> &Cube<i32> {
+        &self.octree.root
+    }
+
     pub fn generate_mesh(&self) -> GeometryData {
         // Generate mesh from octree using appropriate mesh builder
         let color_mapper = DawnbringerColorMapper::new();
@@ -103,8 +185,9 @@ impl WorldCube {
         // The mesh generator outputs vertices in [0,1] space where:
         // - Terrain voxels (at macro_depth) are correctly normalized
         // - Subdivided voxels (at macro+micro_depth) are correctly normalized
-        // We scale by world_size (2^macro_depth) to convert to world units
-        let world_size = (1 << self.macro_depth) as f32;
+        // - Border layers expand the world by 2^border_depth
+        // We scale by world_size (2^(macro_depth + border_depth)) to convert to world units
+        let world_size = (1 << (self.macro_depth + self.border_depth)) as f32;
         let half_size = world_size / 2.0;
 
         let scaled_vertices: Vec<f32> = builder
