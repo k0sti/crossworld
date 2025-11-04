@@ -1,0 +1,1542 @@
+{
+  "generated": "2025-11-04T09:47:48.861906798+00:00",
+  "count": 256,
+  "materials": [
+    {
+      "index": 0,
+      "id": "empty",
+      "color": "#00000000",
+      "description": "Empty / undefined space"
+    },
+    {
+      "index": 1,
+      "id": "set_empty",
+      "color": "#00000000",
+      "description": "When merging cubes this sets target cube empty"
+    },
+    {
+      "index": 2,
+      "id": "glass",
+      "color": "#80FFFFFF",
+      "description": "Transparent glass"
+    },
+    {
+      "index": 3,
+      "id": "ice",
+      "color": "#80D0FFFF",
+      "description": "Ice block"
+    },
+    {
+      "index": 4,
+      "id": "water_surface",
+      "color": "#80007FFF",
+      "description": "Water surface"
+    },
+    {
+      "index": 5,
+      "id": "slime",
+      "color": "#8000FF00",
+      "description": "Slime block"
+    },
+    {
+      "index": 6,
+      "id": "honey",
+      "color": "#80FFA500",
+      "description": "Honey block"
+    },
+    {
+      "index": 7,
+      "id": "crystal",
+      "color": "#80FF00FF",
+      "description": "Crystal material"
+    },
+    {
+      "index": 8,
+      "id": "force_field",
+      "color": "#8000FFFF",
+      "description": "Force field barrier"
+    },
+    {
+      "index": 9,
+      "id": "portal",
+      "color": "#80AA00FF",
+      "description": "Portal material"
+    },
+    {
+      "index": 10,
+      "id": "mist",
+      "color": "#40CCCCCC",
+      "description": "Mist/fog"
+    },
+    {
+      "index": 11,
+      "id": "stained_glass_red",
+      "color": "#80FF0000",
+      "description": "Red stained glass"
+    },
+    {
+      "index": 12,
+      "id": "stained_glass_green",
+      "color": "#8000FF00",
+      "description": "Green stained glass"
+    },
+    {
+      "index": 13,
+      "id": "stained_glass_blue",
+      "color": "#800000FF",
+      "description": "Blue stained glass"
+    },
+    {
+      "index": 14,
+      "id": "stained_glass_yellow",
+      "color": "#80FFFF00",
+      "description": "Yellow stained glass"
+    },
+    {
+      "index": 15,
+      "id": "transparent_15",
+      "color": "#80808080",
+      "description": "Reserved transparent slot"
+    },
+    {
+      "index": 16,
+      "id": "hard_ground",
+      "color": "#FF664433",
+      "description": "Hard ground/bedrock"
+    },
+    {
+      "index": 17,
+      "id": "water",
+      "color": "#8000509F",
+      "description": "Water block"
+    },
+    {
+      "index": 18,
+      "id": "dirt",
+      "color": "#FF8B4513",
+      "description": "Dirt"
+    },
+    {
+      "index": 19,
+      "id": "grass",
+      "color": "#FF3A7D3A",
+      "description": "Grass"
+    },
+    {
+      "index": 20,
+      "id": "stone",
+      "color": "#FF808080",
+      "description": "Stone"
+    },
+    {
+      "index": 21,
+      "id": "cobblestone",
+      "color": "#FF6E6E6E",
+      "description": "Cobblestone"
+    },
+    {
+      "index": 22,
+      "id": "sand",
+      "color": "#FFEDC9AF",
+      "description": "Sand"
+    },
+    {
+      "index": 23,
+      "id": "sandstone",
+      "color": "#FFC9A770",
+      "description": "Sandstone"
+    },
+    {
+      "index": 24,
+      "id": "gravel",
+      "color": "#FF888888",
+      "description": "Gravel"
+    },
+    {
+      "index": 25,
+      "id": "clay",
+      "color": "#FFA0A0A0",
+      "description": "Clay"
+    },
+    {
+      "index": 26,
+      "id": "snow",
+      "color": "#FFFFFFFF",
+      "description": "Snow"
+    },
+    {
+      "index": 27,
+      "id": "ice_solid",
+      "color": "#FFB0E0FF",
+      "description": "Solid ice"
+    },
+    {
+      "index": 28,
+      "id": "obsidian",
+      "color": "#FF1A0F2E",
+      "description": "Obsidian"
+    },
+    {
+      "index": 29,
+      "id": "netherrack",
+      "color": "#FF8B0000",
+      "description": "Netherrack"
+    },
+    {
+      "index": 30,
+      "id": "granite",
+      "color": "#FF9C5D3D",
+      "description": "Granite"
+    },
+    {
+      "index": 31,
+      "id": "diorite",
+      "color": "#FFBFBFBF",
+      "description": "Diorite"
+    },
+    {
+      "index": 32,
+      "id": "andesite",
+      "color": "#FF6D6D6D",
+      "description": "Andesite"
+    },
+    {
+      "index": 33,
+      "id": "marble",
+      "color": "#FFE8E8E8",
+      "description": "Marble"
+    },
+    {
+      "index": 34,
+      "id": "limestone",
+      "color": "#FFDAD0C0",
+      "description": "Limestone"
+    },
+    {
+      "index": 35,
+      "id": "basalt",
+      "color": "#FF2B2B2B",
+      "description": "Basalt"
+    },
+    {
+      "index": 36,
+      "id": "wood_oak",
+      "color": "#FFA0826D",
+      "description": "Oak wood"
+    },
+    {
+      "index": 37,
+      "id": "wood_spruce",
+      "color": "#FF6B5535",
+      "description": "Spruce wood"
+    },
+    {
+      "index": 38,
+      "id": "wood_birch",
+      "color": "#FFD7CB8D",
+      "description": "Birch wood"
+    },
+    {
+      "index": 39,
+      "id": "wood_jungle",
+      "color": "#FF8B6F47",
+      "description": "Jungle wood"
+    },
+    {
+      "index": 40,
+      "id": "wood_acacia",
+      "color": "#FFB8683E",
+      "description": "Acacia wood"
+    },
+    {
+      "index": 41,
+      "id": "wood_dark_oak",
+      "color": "#FF4A3829",
+      "description": "Dark oak wood"
+    },
+    {
+      "index": 42,
+      "id": "planks_oak",
+      "color": "#FFC4A672",
+      "description": "Oak planks"
+    },
+    {
+      "index": 43,
+      "id": "planks_spruce",
+      "color": "#FF7C5D3E",
+      "description": "Spruce planks"
+    },
+    {
+      "index": 44,
+      "id": "planks_birch",
+      "color": "#FFE3D9A8",
+      "description": "Birch planks"
+    },
+    {
+      "index": 45,
+      "id": "leaves",
+      "color": "#FF2D5016",
+      "description": "Leaves"
+    },
+    {
+      "index": 46,
+      "id": "leaves_birch",
+      "color": "#FF5D8F3A",
+      "description": "Birch leaves"
+    },
+    {
+      "index": 47,
+      "id": "leaves_spruce",
+      "color": "#FF3D6030",
+      "description": "Spruce leaves"
+    },
+    {
+      "index": 48,
+      "id": "coal",
+      "color": "#FF1A1A1A",
+      "description": "Coal"
+    },
+    {
+      "index": 49,
+      "id": "iron",
+      "color": "#FFD8D8D8",
+      "description": "Iron"
+    },
+    {
+      "index": 50,
+      "id": "gold",
+      "color": "#FFFFD700",
+      "description": "Gold"
+    },
+    {
+      "index": 51,
+      "id": "copper",
+      "color": "#FFB87333",
+      "description": "Copper"
+    },
+    {
+      "index": 52,
+      "id": "silver",
+      "color": "#FFC0C0C0",
+      "description": "Silver"
+    },
+    {
+      "index": 53,
+      "id": "bronze",
+      "color": "#FFCD7F32",
+      "description": "Bronze"
+    },
+    {
+      "index": 54,
+      "id": "steel",
+      "color": "#FF9090A0",
+      "description": "Steel"
+    },
+    {
+      "index": 55,
+      "id": "titanium",
+      "color": "#FF878681",
+      "description": "Titanium"
+    },
+    {
+      "index": 56,
+      "id": "brick",
+      "color": "#FF8B3A3A",
+      "description": "Brick"
+    },
+    {
+      "index": 57,
+      "id": "concrete",
+      "color": "#FF9E9E9E",
+      "description": "Concrete"
+    },
+    {
+      "index": 58,
+      "id": "concrete_white",
+      "color": "#FFEEEEEE",
+      "description": "White concrete"
+    },
+    {
+      "index": 59,
+      "id": "concrete_black",
+      "color": "#FF1E1E1E",
+      "description": "Black concrete"
+    },
+    {
+      "index": 60,
+      "id": "asphalt",
+      "color": "#FF333333",
+      "description": "Asphalt"
+    },
+    {
+      "index": 61,
+      "id": "rubber",
+      "color": "#FF2B2B2B",
+      "description": "Rubber"
+    },
+    {
+      "index": 62,
+      "id": "plastic",
+      "color": "#FFAAAAAA",
+      "description": "Plastic"
+    },
+    {
+      "index": 63,
+      "id": "ceramic",
+      "color": "#FFE0D0C0",
+      "description": "Ceramic"
+    },
+    {
+      "index": 64,
+      "id": "skin_light",
+      "color": "#FFFFD5B4",
+      "description": "Light skin tone"
+    },
+    {
+      "index": 65,
+      "id": "skin_medium",
+      "color": "#FFDFB08C",
+      "description": "Medium skin tone"
+    },
+    {
+      "index": 66,
+      "id": "skin_tan",
+      "color": "#FFC98250",
+      "description": "Tan skin tone"
+    },
+    {
+      "index": 67,
+      "id": "skin_brown",
+      "color": "#FF8B5A3C",
+      "description": "Brown skin tone"
+    },
+    {
+      "index": 68,
+      "id": "skin_dark",
+      "color": "#FF5D3A1A",
+      "description": "Dark skin tone"
+    },
+    {
+      "index": 69,
+      "id": "leather_brown",
+      "color": "#FF6F4E37",
+      "description": "Brown leather"
+    },
+    {
+      "index": 70,
+      "id": "leather_black",
+      "color": "#FF2E2620",
+      "description": "Black leather"
+    },
+    {
+      "index": 71,
+      "id": "leather_tan",
+      "color": "#FFBFA088",
+      "description": "Tan leather"
+    },
+    {
+      "index": 72,
+      "id": "fabric_white",
+      "color": "#FFF0F0F0",
+      "description": "White fabric"
+    },
+    {
+      "index": 73,
+      "id": "fabric_red",
+      "color": "#FFDC143C",
+      "description": "Red fabric"
+    },
+    {
+      "index": 74,
+      "id": "fabric_blue",
+      "color": "#FF1E90FF",
+      "description": "Blue fabric"
+    },
+    {
+      "index": 75,
+      "id": "fabric_green",
+      "color": "#FF228B22",
+      "description": "Green fabric"
+    },
+    {
+      "index": 76,
+      "id": "fabric_yellow",
+      "color": "#FFFFD700",
+      "description": "Yellow fabric"
+    },
+    {
+      "index": 77,
+      "id": "fabric_purple",
+      "color": "#FF8B008B",
+      "description": "Purple fabric"
+    },
+    {
+      "index": 78,
+      "id": "fabric_orange",
+      "color": "#FFFF8C00",
+      "description": "Orange fabric"
+    },
+    {
+      "index": 79,
+      "id": "fabric_pink",
+      "color": "#FFFF69B4",
+      "description": "Pink fabric"
+    },
+    {
+      "index": 80,
+      "id": "fabric_black",
+      "color": "#FF1C1C1C",
+      "description": "Black fabric"
+    },
+    {
+      "index": 81,
+      "id": "wool_white",
+      "color": "#FFE0E0E0",
+      "description": "White wool"
+    },
+    {
+      "index": 82,
+      "id": "wool_gray",
+      "color": "#FF808080",
+      "description": "Gray wool"
+    },
+    {
+      "index": 83,
+      "id": "wool_red",
+      "color": "#FFB3312C",
+      "description": "Red wool"
+    },
+    {
+      "index": 84,
+      "id": "wool_blue",
+      "color": "#FF3C44AA",
+      "description": "Blue wool"
+    },
+    {
+      "index": 85,
+      "id": "sponge",
+      "color": "#FFCCCC55",
+      "description": "Sponge"
+    },
+    {
+      "index": 86,
+      "id": "moss",
+      "color": "#FF597D35",
+      "description": "Moss"
+    },
+    {
+      "index": 87,
+      "id": "mushroom_red",
+      "color": "#FFFF0000",
+      "description": "Red mushroom"
+    },
+    {
+      "index": 88,
+      "id": "mushroom_brown",
+      "color": "#FF9B7653",
+      "description": "Brown mushroom"
+    },
+    {
+      "index": 89,
+      "id": "coral",
+      "color": "#FFFF7F50",
+      "description": "Coral"
+    },
+    {
+      "index": 90,
+      "id": "bamboo",
+      "color": "#FF8FBC8F",
+      "description": "Bamboo"
+    },
+    {
+      "index": 91,
+      "id": "cactus",
+      "color": "#FF587D3E",
+      "description": "Cactus"
+    },
+    {
+      "index": 92,
+      "id": "vine",
+      "color": "#FF3E6C25",
+      "description": "Vine"
+    },
+    {
+      "index": 93,
+      "id": "pumpkin",
+      "color": "#FFFF8000",
+      "description": "Pumpkin"
+    },
+    {
+      "index": 94,
+      "id": "melon",
+      "color": "#FF70B341",
+      "description": "Melon"
+    },
+    {
+      "index": 95,
+      "id": "hay",
+      "color": "#FFD4AF37",
+      "description": "Hay"
+    },
+    {
+      "index": 96,
+      "id": "bone",
+      "color": "#FFEDE6D6",
+      "description": "Bone"
+    },
+    {
+      "index": 97,
+      "id": "flesh",
+      "color": "#FFFF8080",
+      "description": "Flesh"
+    },
+    {
+      "index": 98,
+      "id": "slime_green",
+      "color": "#FF00FF00",
+      "description": "Green slime material"
+    },
+    {
+      "index": 99,
+      "id": "magma",
+      "color": "#FFFF4500",
+      "description": "Magma"
+    },
+    {
+      "index": 100,
+      "id": "lava_rock",
+      "color": "#FF8B0000",
+      "description": "Lava rock"
+    },
+    {
+      "index": 101,
+      "id": "ash",
+      "color": "#FF605050",
+      "description": "Ash"
+    },
+    {
+      "index": 102,
+      "id": "charcoal",
+      "color": "#FF2F2F2F",
+      "description": "Charcoal"
+    },
+    {
+      "index": 103,
+      "id": "sulfur",
+      "color": "#FFFFFF00",
+      "description": "Sulfur"
+    },
+    {
+      "index": 104,
+      "id": "salt",
+      "color": "#FFF0F0F0",
+      "description": "Salt"
+    },
+    {
+      "index": 105,
+      "id": "sugar",
+      "color": "#FFFFFFFF",
+      "description": "Sugar"
+    },
+    {
+      "index": 106,
+      "id": "paper",
+      "color": "#FFFAF0E6",
+      "description": "Paper"
+    },
+    {
+      "index": 107,
+      "id": "cardboard",
+      "color": "#FFAA8866",
+      "description": "Cardboard"
+    },
+    {
+      "index": 108,
+      "id": "wax",
+      "color": "#FFFFF3D0",
+      "description": "Wax"
+    },
+    {
+      "index": 109,
+      "id": "tar",
+      "color": "#FF0F0F0F",
+      "description": "Tar"
+    },
+    {
+      "index": 110,
+      "id": "oil",
+      "color": "#FF3C3020",
+      "description": "Oil"
+    },
+    {
+      "index": 111,
+      "id": "paint_red",
+      "color": "#FFFF0000",
+      "description": "Red paint"
+    },
+    {
+      "index": 112,
+      "id": "paint_green",
+      "color": "#FF00FF00",
+      "description": "Green paint"
+    },
+    {
+      "index": 113,
+      "id": "paint_blue",
+      "color": "#FF0000FF",
+      "description": "Blue paint"
+    },
+    {
+      "index": 114,
+      "id": "paint_white",
+      "color": "#FFFFFFFF",
+      "description": "White paint"
+    },
+    {
+      "index": 115,
+      "id": "paint_black",
+      "color": "#FF000000",
+      "description": "Black paint"
+    },
+    {
+      "index": 116,
+      "id": "glowstone",
+      "color": "#FFFFFFA0",
+      "description": "Glowstone"
+    },
+    {
+      "index": 117,
+      "id": "redstone",
+      "color": "#FFFF0000",
+      "description": "Redstone"
+    },
+    {
+      "index": 118,
+      "id": "emerald",
+      "color": "#FF50C878",
+      "description": "Emerald"
+    },
+    {
+      "index": 119,
+      "id": "diamond",
+      "color": "#FFB9F2FF",
+      "description": "Diamond"
+    },
+    {
+      "index": 120,
+      "id": "ruby",
+      "color": "#FFE0115F",
+      "description": "Ruby"
+    },
+    {
+      "index": 121,
+      "id": "sapphire",
+      "color": "#FF0F52BA",
+      "description": "Sapphire"
+    },
+    {
+      "index": 122,
+      "id": "amethyst",
+      "color": "#FF9966CC",
+      "description": "Amethyst"
+    },
+    {
+      "index": 123,
+      "id": "topaz",
+      "color": "#FFFFC87C",
+      "description": "Topaz"
+    },
+    {
+      "index": 124,
+      "id": "pearl",
+      "color": "#FFFFEFD5",
+      "description": "Pearl"
+    },
+    {
+      "index": 125,
+      "id": "quartz",
+      "color": "#FFFFFFFF",
+      "description": "Quartz"
+    },
+    {
+      "index": 126,
+      "id": "amber",
+      "color": "#FFFFBF00",
+      "description": "Amber"
+    },
+    {
+      "index": 127,
+      "id": "reserved_127",
+      "color": "#FF888888",
+      "description": "Reserved material slot"
+    },
+    {
+      "index": 128,
+      "id": "color_128",
+      "color": "#FF000000",
+      "description": "Auto-generated color (r:0, g:0, b:0)"
+    },
+    {
+      "index": 129,
+      "id": "color_129",
+      "color": "#FF000049",
+      "description": "Auto-generated color (r:0, g:0, b:1)"
+    },
+    {
+      "index": 130,
+      "id": "color_130",
+      "color": "#FF000092",
+      "description": "Auto-generated color (r:0, g:0, b:2)"
+    },
+    {
+      "index": 131,
+      "id": "color_131",
+      "color": "#FF0000DB",
+      "description": "Auto-generated color (r:0, g:0, b:3)"
+    },
+    {
+      "index": 132,
+      "id": "color_132",
+      "color": "#FF002400",
+      "description": "Auto-generated color (r:0, g:1, b:0)"
+    },
+    {
+      "index": 133,
+      "id": "color_133",
+      "color": "#FF002449",
+      "description": "Auto-generated color (r:0, g:1, b:1)"
+    },
+    {
+      "index": 134,
+      "id": "color_134",
+      "color": "#FF002492",
+      "description": "Auto-generated color (r:0, g:1, b:2)"
+    },
+    {
+      "index": 135,
+      "id": "color_135",
+      "color": "#FF0024DB",
+      "description": "Auto-generated color (r:0, g:1, b:3)"
+    },
+    {
+      "index": 136,
+      "id": "color_136",
+      "color": "#FF004900",
+      "description": "Auto-generated color (r:0, g:2, b:0)"
+    },
+    {
+      "index": 137,
+      "id": "color_137",
+      "color": "#FF004949",
+      "description": "Auto-generated color (r:0, g:2, b:1)"
+    },
+    {
+      "index": 138,
+      "id": "color_138",
+      "color": "#FF004992",
+      "description": "Auto-generated color (r:0, g:2, b:2)"
+    },
+    {
+      "index": 139,
+      "id": "color_139",
+      "color": "#FF0049DB",
+      "description": "Auto-generated color (r:0, g:2, b:3)"
+    },
+    {
+      "index": 140,
+      "id": "color_140",
+      "color": "#FF006D00",
+      "description": "Auto-generated color (r:0, g:3, b:0)"
+    },
+    {
+      "index": 141,
+      "id": "color_141",
+      "color": "#FF006D49",
+      "description": "Auto-generated color (r:0, g:3, b:1)"
+    },
+    {
+      "index": 142,
+      "id": "color_142",
+      "color": "#FF006D92",
+      "description": "Auto-generated color (r:0, g:3, b:2)"
+    },
+    {
+      "index": 143,
+      "id": "color_143",
+      "color": "#FF006DDB",
+      "description": "Auto-generated color (r:0, g:3, b:3)"
+    },
+    {
+      "index": 144,
+      "id": "color_144",
+      "color": "#FF009200",
+      "description": "Auto-generated color (r:0, g:4, b:0)"
+    },
+    {
+      "index": 145,
+      "id": "color_145",
+      "color": "#FF009249",
+      "description": "Auto-generated color (r:0, g:4, b:1)"
+    },
+    {
+      "index": 146,
+      "id": "color_146",
+      "color": "#FF009292",
+      "description": "Auto-generated color (r:0, g:4, b:2)"
+    },
+    {
+      "index": 147,
+      "id": "color_147",
+      "color": "#FF0092DB",
+      "description": "Auto-generated color (r:0, g:4, b:3)"
+    },
+    {
+      "index": 148,
+      "id": "color_148",
+      "color": "#FF00B600",
+      "description": "Auto-generated color (r:0, g:5, b:0)"
+    },
+    {
+      "index": 149,
+      "id": "color_149",
+      "color": "#FF00B649",
+      "description": "Auto-generated color (r:0, g:5, b:1)"
+    },
+    {
+      "index": 150,
+      "id": "color_150",
+      "color": "#FF00B692",
+      "description": "Auto-generated color (r:0, g:5, b:2)"
+    },
+    {
+      "index": 151,
+      "id": "color_151",
+      "color": "#FF00B6DB",
+      "description": "Auto-generated color (r:0, g:5, b:3)"
+    },
+    {
+      "index": 152,
+      "id": "color_152",
+      "color": "#FF00DB00",
+      "description": "Auto-generated color (r:0, g:6, b:0)"
+    },
+    {
+      "index": 153,
+      "id": "color_153",
+      "color": "#FF00DB49",
+      "description": "Auto-generated color (r:0, g:6, b:1)"
+    },
+    {
+      "index": 154,
+      "id": "color_154",
+      "color": "#FF00DB92",
+      "description": "Auto-generated color (r:0, g:6, b:2)"
+    },
+    {
+      "index": 155,
+      "id": "color_155",
+      "color": "#FF00DBDB",
+      "description": "Auto-generated color (r:0, g:6, b:3)"
+    },
+    {
+      "index": 156,
+      "id": "color_156",
+      "color": "#FF00FF00",
+      "description": "Auto-generated color (r:0, g:7, b:0)"
+    },
+    {
+      "index": 157,
+      "id": "color_157",
+      "color": "#FF00FF49",
+      "description": "Auto-generated color (r:0, g:7, b:1)"
+    },
+    {
+      "index": 158,
+      "id": "color_158",
+      "color": "#FF00FF92",
+      "description": "Auto-generated color (r:0, g:7, b:2)"
+    },
+    {
+      "index": 159,
+      "id": "color_159",
+      "color": "#FF00FFDB",
+      "description": "Auto-generated color (r:0, g:7, b:3)"
+    },
+    {
+      "index": 160,
+      "id": "color_160",
+      "color": "#FF490000",
+      "description": "Auto-generated color (r:1, g:0, b:0)"
+    },
+    {
+      "index": 161,
+      "id": "color_161",
+      "color": "#FF490049",
+      "description": "Auto-generated color (r:1, g:0, b:1)"
+    },
+    {
+      "index": 162,
+      "id": "color_162",
+      "color": "#FF490092",
+      "description": "Auto-generated color (r:1, g:0, b:2)"
+    },
+    {
+      "index": 163,
+      "id": "color_163",
+      "color": "#FF4900DB",
+      "description": "Auto-generated color (r:1, g:0, b:3)"
+    },
+    {
+      "index": 164,
+      "id": "color_164",
+      "color": "#FF492400",
+      "description": "Auto-generated color (r:1, g:1, b:0)"
+    },
+    {
+      "index": 165,
+      "id": "color_165",
+      "color": "#FF492449",
+      "description": "Auto-generated color (r:1, g:1, b:1)"
+    },
+    {
+      "index": 166,
+      "id": "color_166",
+      "color": "#FF492492",
+      "description": "Auto-generated color (r:1, g:1, b:2)"
+    },
+    {
+      "index": 167,
+      "id": "color_167",
+      "color": "#FF4924DB",
+      "description": "Auto-generated color (r:1, g:1, b:3)"
+    },
+    {
+      "index": 168,
+      "id": "color_168",
+      "color": "#FF494900",
+      "description": "Auto-generated color (r:1, g:2, b:0)"
+    },
+    {
+      "index": 169,
+      "id": "color_169",
+      "color": "#FF494949",
+      "description": "Auto-generated color (r:1, g:2, b:1)"
+    },
+    {
+      "index": 170,
+      "id": "color_170",
+      "color": "#FF494992",
+      "description": "Auto-generated color (r:1, g:2, b:2)"
+    },
+    {
+      "index": 171,
+      "id": "color_171",
+      "color": "#FF4949DB",
+      "description": "Auto-generated color (r:1, g:2, b:3)"
+    },
+    {
+      "index": 172,
+      "id": "color_172",
+      "color": "#FF496D00",
+      "description": "Auto-generated color (r:1, g:3, b:0)"
+    },
+    {
+      "index": 173,
+      "id": "color_173",
+      "color": "#FF496D49",
+      "description": "Auto-generated color (r:1, g:3, b:1)"
+    },
+    {
+      "index": 174,
+      "id": "color_174",
+      "color": "#FF496D92",
+      "description": "Auto-generated color (r:1, g:3, b:2)"
+    },
+    {
+      "index": 175,
+      "id": "color_175",
+      "color": "#FF496DDB",
+      "description": "Auto-generated color (r:1, g:3, b:3)"
+    },
+    {
+      "index": 176,
+      "id": "color_176",
+      "color": "#FF499200",
+      "description": "Auto-generated color (r:1, g:4, b:0)"
+    },
+    {
+      "index": 177,
+      "id": "color_177",
+      "color": "#FF499249",
+      "description": "Auto-generated color (r:1, g:4, b:1)"
+    },
+    {
+      "index": 178,
+      "id": "color_178",
+      "color": "#FF499292",
+      "description": "Auto-generated color (r:1, g:4, b:2)"
+    },
+    {
+      "index": 179,
+      "id": "color_179",
+      "color": "#FF4992DB",
+      "description": "Auto-generated color (r:1, g:4, b:3)"
+    },
+    {
+      "index": 180,
+      "id": "color_180",
+      "color": "#FF49B600",
+      "description": "Auto-generated color (r:1, g:5, b:0)"
+    },
+    {
+      "index": 181,
+      "id": "color_181",
+      "color": "#FF49B649",
+      "description": "Auto-generated color (r:1, g:5, b:1)"
+    },
+    {
+      "index": 182,
+      "id": "color_182",
+      "color": "#FF49B692",
+      "description": "Auto-generated color (r:1, g:5, b:2)"
+    },
+    {
+      "index": 183,
+      "id": "color_183",
+      "color": "#FF49B6DB",
+      "description": "Auto-generated color (r:1, g:5, b:3)"
+    },
+    {
+      "index": 184,
+      "id": "color_184",
+      "color": "#FF49DB00",
+      "description": "Auto-generated color (r:1, g:6, b:0)"
+    },
+    {
+      "index": 185,
+      "id": "color_185",
+      "color": "#FF49DB49",
+      "description": "Auto-generated color (r:1, g:6, b:1)"
+    },
+    {
+      "index": 186,
+      "id": "color_186",
+      "color": "#FF49DB92",
+      "description": "Auto-generated color (r:1, g:6, b:2)"
+    },
+    {
+      "index": 187,
+      "id": "color_187",
+      "color": "#FF49DBDB",
+      "description": "Auto-generated color (r:1, g:6, b:3)"
+    },
+    {
+      "index": 188,
+      "id": "color_188",
+      "color": "#FF49FF00",
+      "description": "Auto-generated color (r:1, g:7, b:0)"
+    },
+    {
+      "index": 189,
+      "id": "color_189",
+      "color": "#FF49FF49",
+      "description": "Auto-generated color (r:1, g:7, b:1)"
+    },
+    {
+      "index": 190,
+      "id": "color_190",
+      "color": "#FF49FF92",
+      "description": "Auto-generated color (r:1, g:7, b:2)"
+    },
+    {
+      "index": 191,
+      "id": "color_191",
+      "color": "#FF49FFDB",
+      "description": "Auto-generated color (r:1, g:7, b:3)"
+    },
+    {
+      "index": 192,
+      "id": "color_192",
+      "color": "#FF920000",
+      "description": "Auto-generated color (r:2, g:0, b:0)"
+    },
+    {
+      "index": 193,
+      "id": "color_193",
+      "color": "#FF920049",
+      "description": "Auto-generated color (r:2, g:0, b:1)"
+    },
+    {
+      "index": 194,
+      "id": "color_194",
+      "color": "#FF920092",
+      "description": "Auto-generated color (r:2, g:0, b:2)"
+    },
+    {
+      "index": 195,
+      "id": "color_195",
+      "color": "#FF9200DB",
+      "description": "Auto-generated color (r:2, g:0, b:3)"
+    },
+    {
+      "index": 196,
+      "id": "color_196",
+      "color": "#FF922400",
+      "description": "Auto-generated color (r:2, g:1, b:0)"
+    },
+    {
+      "index": 197,
+      "id": "color_197",
+      "color": "#FF922449",
+      "description": "Auto-generated color (r:2, g:1, b:1)"
+    },
+    {
+      "index": 198,
+      "id": "color_198",
+      "color": "#FF922492",
+      "description": "Auto-generated color (r:2, g:1, b:2)"
+    },
+    {
+      "index": 199,
+      "id": "color_199",
+      "color": "#FF9224DB",
+      "description": "Auto-generated color (r:2, g:1, b:3)"
+    },
+    {
+      "index": 200,
+      "id": "color_200",
+      "color": "#FF924900",
+      "description": "Auto-generated color (r:2, g:2, b:0)"
+    },
+    {
+      "index": 201,
+      "id": "color_201",
+      "color": "#FF924949",
+      "description": "Auto-generated color (r:2, g:2, b:1)"
+    },
+    {
+      "index": 202,
+      "id": "color_202",
+      "color": "#FF924992",
+      "description": "Auto-generated color (r:2, g:2, b:2)"
+    },
+    {
+      "index": 203,
+      "id": "color_203",
+      "color": "#FF9249DB",
+      "description": "Auto-generated color (r:2, g:2, b:3)"
+    },
+    {
+      "index": 204,
+      "id": "color_204",
+      "color": "#FF926D00",
+      "description": "Auto-generated color (r:2, g:3, b:0)"
+    },
+    {
+      "index": 205,
+      "id": "color_205",
+      "color": "#FF926D49",
+      "description": "Auto-generated color (r:2, g:3, b:1)"
+    },
+    {
+      "index": 206,
+      "id": "color_206",
+      "color": "#FF926D92",
+      "description": "Auto-generated color (r:2, g:3, b:2)"
+    },
+    {
+      "index": 207,
+      "id": "color_207",
+      "color": "#FF926DDB",
+      "description": "Auto-generated color (r:2, g:3, b:3)"
+    },
+    {
+      "index": 208,
+      "id": "color_208",
+      "color": "#FF929200",
+      "description": "Auto-generated color (r:2, g:4, b:0)"
+    },
+    {
+      "index": 209,
+      "id": "color_209",
+      "color": "#FF929249",
+      "description": "Auto-generated color (r:2, g:4, b:1)"
+    },
+    {
+      "index": 210,
+      "id": "color_210",
+      "color": "#FF929292",
+      "description": "Auto-generated color (r:2, g:4, b:2)"
+    },
+    {
+      "index": 211,
+      "id": "color_211",
+      "color": "#FF9292DB",
+      "description": "Auto-generated color (r:2, g:4, b:3)"
+    },
+    {
+      "index": 212,
+      "id": "color_212",
+      "color": "#FF92B600",
+      "description": "Auto-generated color (r:2, g:5, b:0)"
+    },
+    {
+      "index": 213,
+      "id": "color_213",
+      "color": "#FF92B649",
+      "description": "Auto-generated color (r:2, g:5, b:1)"
+    },
+    {
+      "index": 214,
+      "id": "color_214",
+      "color": "#FF92B692",
+      "description": "Auto-generated color (r:2, g:5, b:2)"
+    },
+    {
+      "index": 215,
+      "id": "color_215",
+      "color": "#FF92B6DB",
+      "description": "Auto-generated color (r:2, g:5, b:3)"
+    },
+    {
+      "index": 216,
+      "id": "color_216",
+      "color": "#FF92DB00",
+      "description": "Auto-generated color (r:2, g:6, b:0)"
+    },
+    {
+      "index": 217,
+      "id": "color_217",
+      "color": "#FF92DB49",
+      "description": "Auto-generated color (r:2, g:6, b:1)"
+    },
+    {
+      "index": 218,
+      "id": "color_218",
+      "color": "#FF92DB92",
+      "description": "Auto-generated color (r:2, g:6, b:2)"
+    },
+    {
+      "index": 219,
+      "id": "color_219",
+      "color": "#FF92DBDB",
+      "description": "Auto-generated color (r:2, g:6, b:3)"
+    },
+    {
+      "index": 220,
+      "id": "color_220",
+      "color": "#FF92FF00",
+      "description": "Auto-generated color (r:2, g:7, b:0)"
+    },
+    {
+      "index": 221,
+      "id": "color_221",
+      "color": "#FF92FF49",
+      "description": "Auto-generated color (r:2, g:7, b:1)"
+    },
+    {
+      "index": 222,
+      "id": "color_222",
+      "color": "#FF92FF92",
+      "description": "Auto-generated color (r:2, g:7, b:2)"
+    },
+    {
+      "index": 223,
+      "id": "color_223",
+      "color": "#FF92FFDB",
+      "description": "Auto-generated color (r:2, g:7, b:3)"
+    },
+    {
+      "index": 224,
+      "id": "color_224",
+      "color": "#FFDB0000",
+      "description": "Auto-generated color (r:3, g:0, b:0)"
+    },
+    {
+      "index": 225,
+      "id": "color_225",
+      "color": "#FFDB0049",
+      "description": "Auto-generated color (r:3, g:0, b:1)"
+    },
+    {
+      "index": 226,
+      "id": "color_226",
+      "color": "#FFDB0092",
+      "description": "Auto-generated color (r:3, g:0, b:2)"
+    },
+    {
+      "index": 227,
+      "id": "color_227",
+      "color": "#FFDB00DB",
+      "description": "Auto-generated color (r:3, g:0, b:3)"
+    },
+    {
+      "index": 228,
+      "id": "color_228",
+      "color": "#FFDB2400",
+      "description": "Auto-generated color (r:3, g:1, b:0)"
+    },
+    {
+      "index": 229,
+      "id": "color_229",
+      "color": "#FFDB2449",
+      "description": "Auto-generated color (r:3, g:1, b:1)"
+    },
+    {
+      "index": 230,
+      "id": "color_230",
+      "color": "#FFDB2492",
+      "description": "Auto-generated color (r:3, g:1, b:2)"
+    },
+    {
+      "index": 231,
+      "id": "color_231",
+      "color": "#FFDB24DB",
+      "description": "Auto-generated color (r:3, g:1, b:3)"
+    },
+    {
+      "index": 232,
+      "id": "color_232",
+      "color": "#FFDB4900",
+      "description": "Auto-generated color (r:3, g:2, b:0)"
+    },
+    {
+      "index": 233,
+      "id": "color_233",
+      "color": "#FFDB4949",
+      "description": "Auto-generated color (r:3, g:2, b:1)"
+    },
+    {
+      "index": 234,
+      "id": "color_234",
+      "color": "#FFDB4992",
+      "description": "Auto-generated color (r:3, g:2, b:2)"
+    },
+    {
+      "index": 235,
+      "id": "color_235",
+      "color": "#FFDB49DB",
+      "description": "Auto-generated color (r:3, g:2, b:3)"
+    },
+    {
+      "index": 236,
+      "id": "color_236",
+      "color": "#FFDB6D00",
+      "description": "Auto-generated color (r:3, g:3, b:0)"
+    },
+    {
+      "index": 237,
+      "id": "color_237",
+      "color": "#FFDB6D49",
+      "description": "Auto-generated color (r:3, g:3, b:1)"
+    },
+    {
+      "index": 238,
+      "id": "color_238",
+      "color": "#FFDB6D92",
+      "description": "Auto-generated color (r:3, g:3, b:2)"
+    },
+    {
+      "index": 239,
+      "id": "color_239",
+      "color": "#FFDB6DDB",
+      "description": "Auto-generated color (r:3, g:3, b:3)"
+    },
+    {
+      "index": 240,
+      "id": "color_240",
+      "color": "#FFDB9200",
+      "description": "Auto-generated color (r:3, g:4, b:0)"
+    },
+    {
+      "index": 241,
+      "id": "color_241",
+      "color": "#FFDB9249",
+      "description": "Auto-generated color (r:3, g:4, b:1)"
+    },
+    {
+      "index": 242,
+      "id": "color_242",
+      "color": "#FFDB9292",
+      "description": "Auto-generated color (r:3, g:4, b:2)"
+    },
+    {
+      "index": 243,
+      "id": "color_243",
+      "color": "#FFDB92DB",
+      "description": "Auto-generated color (r:3, g:4, b:3)"
+    },
+    {
+      "index": 244,
+      "id": "color_244",
+      "color": "#FFDBB600",
+      "description": "Auto-generated color (r:3, g:5, b:0)"
+    },
+    {
+      "index": 245,
+      "id": "color_245",
+      "color": "#FFDBB649",
+      "description": "Auto-generated color (r:3, g:5, b:1)"
+    },
+    {
+      "index": 246,
+      "id": "color_246",
+      "color": "#FFDBB692",
+      "description": "Auto-generated color (r:3, g:5, b:2)"
+    },
+    {
+      "index": 247,
+      "id": "color_247",
+      "color": "#FFDBB6DB",
+      "description": "Auto-generated color (r:3, g:5, b:3)"
+    },
+    {
+      "index": 248,
+      "id": "color_248",
+      "color": "#FFDBDB00",
+      "description": "Auto-generated color (r:3, g:6, b:0)"
+    },
+    {
+      "index": 249,
+      "id": "color_249",
+      "color": "#FFDBDB49",
+      "description": "Auto-generated color (r:3, g:6, b:1)"
+    },
+    {
+      "index": 250,
+      "id": "color_250",
+      "color": "#FFDBDB92",
+      "description": "Auto-generated color (r:3, g:6, b:2)"
+    },
+    {
+      "index": 251,
+      "id": "color_251",
+      "color": "#FFDBDBDB",
+      "description": "Auto-generated color (r:3, g:6, b:3)"
+    },
+    {
+      "index": 252,
+      "id": "color_252",
+      "color": "#FFDBFF00",
+      "description": "Auto-generated color (r:3, g:7, b:0)"
+    },
+    {
+      "index": 253,
+      "id": "color_253",
+      "color": "#FFDBFF49",
+      "description": "Auto-generated color (r:3, g:7, b:1)"
+    },
+    {
+      "index": 254,
+      "id": "color_254",
+      "color": "#FFDBFF92",
+      "description": "Auto-generated color (r:3, g:7, b:2)"
+    },
+    {
+      "index": 255,
+      "id": "color_255",
+      "color": "#FFDBFFDB",
+      "description": "Auto-generated color (r:3, g:7, b:3)"
+    }
+  ]
+}

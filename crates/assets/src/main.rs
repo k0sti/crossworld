@@ -22,6 +22,8 @@ enum Commands {
         #[arg(long)]
         palette: bool,
     },
+    /// Generate materials.json from doc/materials.md
+    Materials,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -43,6 +45,21 @@ struct ModelsIndex {
 #[derive(Debug, Serialize, Deserialize)]
 struct AvatarsIndex {
     vox: Vec<[String; 2]>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct Material {
+    index: u8,
+    id: String,
+    color: String,
+    description: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct MaterialsData {
+    generated: String,
+    count: usize,
+    materials: Vec<Material>,
 }
 
 fn traverse_directory(
@@ -329,11 +346,154 @@ fn cmd_vox_palette(calculate_minimal_palette: bool) -> Result<(), Box<dyn std::e
     Ok(())
 }
 
+fn cmd_materials() -> Result<(), Box<dyn std::error::Error>> {
+    let doc_path = PathBuf::from("doc/materials.md");
+    let output_path = PathBuf::from("assets/materials.json");
+
+    if !doc_path.exists() {
+        eprintln!("Error: doc/materials.md not found");
+        std::process::exit(1);
+    }
+
+    println!("Reading doc/materials.md...");
+
+    let content = fs::read_to_string(&doc_path)?;
+    let mut materials = Vec::new();
+    let mut in_table = false;
+
+    for line in content.lines() {
+        let line = line.trim();
+
+        // Skip empty lines
+        if line.is_empty() {
+            continue;
+        }
+
+        // Detect table start (header line with pipes)
+        if line.starts_with("| Index") {
+            in_table = true;
+            continue;
+        }
+
+        // Skip separator line
+        if line.starts_with("|---") {
+            continue;
+        }
+
+        // Parse table rows
+        if in_table && line.starts_with('|') {
+            let parts: Vec<&str> = line
+                .split('|')
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty())
+                .collect();
+
+            if parts.len() >= 4 {
+                // Parse index
+                if let Ok(index) = parts[0].parse::<u8>() {
+                    materials.push(Material {
+                        index,
+                        id: parts[1].to_string(),
+                        color: parts[2].to_string(),
+                        description: parts[3].to_string(),
+                    });
+                }
+            }
+        }
+
+        // Stop when we hit a non-table line after being in table
+        if in_table && !line.starts_with('|') {
+            break;
+        }
+    }
+
+    println!("Found {} materials from markdown", materials.len());
+
+    // Sort by index
+    materials.sort_by_key(|m| m.index);
+
+    // Auto-generate materials 128-255 (7-bit RGB: r:2, g:3, b:2)
+    println!("Generating colored blocks 128-255...");
+    for i in 128..=255 {
+        let index = i as u8;
+
+        // Extract RGB bits: r:2, g:3, b:2
+        let r_bits = (index >> 5) & 0b11;      // Top 2 bits
+        let g_bits = (index >> 2) & 0b111;     // Middle 3 bits
+        let b_bits = index & 0b11;              // Bottom 2 bits
+
+        // Convert to 8-bit RGB values
+        // 2 bits: 0->0x00, 1->0x49, 2->0x92, 3->0xDB
+        let r = match r_bits {
+            0 => 0x00,
+            1 => 0x49,
+            2 => 0x92,
+            3 => 0xDB,
+            _ => 0x00,
+        };
+
+        // 3 bits: 0->0x00, 1->0x24, 2->0x49, 3->0x6D, 4->0x92, 5->0xB6, 6->0xDB, 7->0xFF
+        let g = match g_bits {
+            0 => 0x00,
+            1 => 0x24,
+            2 => 0x49,
+            3 => 0x6D,
+            4 => 0x92,
+            5 => 0xB6,
+            6 => 0xDB,
+            7 => 0xFF,
+            _ => 0x00,
+        };
+
+        // 2 bits: 0->0x00, 1->0x49, 2->0x92, 3->0xDB
+        let b = match b_bits {
+            0 => 0x00,
+            1 => 0x49,
+            2 => 0x92,
+            3 => 0xDB,
+            _ => 0x00,
+        };
+
+        let color = format!("#FF{:02X}{:02X}{:02X}", r, g, b);
+        let id = format!("color_{:03}", i);
+        let description = format!("Auto-generated color (r:{}, g:{}, b:{})", r_bits, g_bits, b_bits);
+
+        materials.push(Material {
+            index,
+            id,
+            color,
+            description,
+        });
+    }
+
+    println!("Total materials: {}", materials.len());
+
+    // Generate materials.json
+    let materials_data = MaterialsData {
+        generated: chrono::Utc::now().to_rfc3339(),
+        count: materials.len(),
+        materials,
+    };
+
+    let json = serde_json::to_string_pretty(&materials_data)?;
+
+    // Ensure assets directory exists
+    if let Some(parent) = output_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    fs::write(&output_path, json)?;
+    println!("\nGenerated {}", output_path.display());
+
+    Ok(())
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
     match cli.command {
         Commands::Index => cmd_index(),
         Commands::VoxPalette { palette } => cmd_vox_palette(palette),
+        Commands::Materials => cmd_materials(),
     }
 }
