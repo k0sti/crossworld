@@ -26,12 +26,12 @@ pub struct WorldCube {
 #[wasm_bindgen]
 impl WorldCube {
     #[wasm_bindgen(constructor)]
-    pub fn new(macro_depth: u32, micro_depth: u32, _border_depth: u32) -> Self {
+    pub fn new(macro_depth: u32, micro_depth: u32, border_depth: u32) -> Self {
         Self {
             inner: RefCell::new(WorldCubeInternal::new(
                 macro_depth,
                 micro_depth,
-                _border_depth,
+                border_depth,
             )),
         }
     }
