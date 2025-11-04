@@ -39,10 +39,13 @@ export class GeometryData {
   free(): void;
   [Symbol.dispose](): void;
   static new(vertices: Float32Array, indices: Uint32Array, normals: Float32Array, colors: Float32Array): GeometryData;
+  static new_with_uvs(vertices: Float32Array, indices: Uint32Array, normals: Float32Array, colors: Float32Array, uvs: Float32Array, material_ids: Uint8Array): GeometryData;
   readonly vertices: Float32Array;
   readonly indices: Uint32Array;
   readonly normals: Float32Array;
   readonly colors: Float32Array;
+  readonly uvs: Float32Array;
+  readonly materialIds: Uint8Array;
 }
 export class NetworkClient {
   free(): void;
@@ -60,7 +63,7 @@ export class NetworkClient {
 export class WorldCube {
   free(): void;
   [Symbol.dispose](): void;
-  constructor(macro_depth: number, micro_depth: number, _border_depth: number);
+  constructor(macro_depth: number, micro_depth: number, border_depth: number);
   generateFrame(): GeometryData;
   /**
    * Set voxel in world cube at specified depth
@@ -92,70 +95,3 @@ export class WorldCube {
    */
   setRoot(csm_code: string): void;
 }
-
-export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
-
-export interface InitOutput {
-  readonly memory: WebAssembly.Memory;
-  readonly __wbg_worldcube_free: (a: number, b: number) => void;
-  readonly worldcube_new: (a: number, b: number, c: number) => number;
-  readonly worldcube_generateFrame: (a: number) => number;
-  readonly worldcube_setVoxelAtDepth: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
-  readonly worldcube_removeVoxelAtDepth: (a: number, b: number, c: number, d: number, e: number) => void;
-  readonly worldcube_exportToCSM: (a: number) => [number, number];
-  readonly worldcube_root: (a: number) => [number, number];
-  readonly worldcube_setRoot: (a: number, b: number, c: number) => [number, number];
-  readonly __wbg_geometrydata_free: (a: number, b: number) => void;
-  readonly geometrydata_new: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => number;
-  readonly geometrydata_vertices: (a: number) => [number, number];
-  readonly geometrydata_indices: (a: number) => [number, number];
-  readonly geometrydata_normals: (a: number) => [number, number];
-  readonly geometrydata_colors: (a: number) => [number, number];
-  readonly __wbg_networkclient_free: (a: number, b: number) => void;
-  readonly networkclient_connect: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => any;
-  readonly networkclient_send_position: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => void;
-  readonly networkclient_send_chat: (a: number, b: number, c: number) => any;
-  readonly __wbg_avatarengine_free: (a: number, b: number) => void;
-  readonly avatarengine_new: () => number;
-  readonly avatarengine_generate_avatar: (a: number, b: number, c: number) => number;
-  readonly avatarengine_clear_cache: (a: number) => void;
-  readonly avatarengine_cache_size: (a: number) => number;
-  readonly avatarengine_set_voxel: (a: number, b: number, c: number, d: number, e: number) => void;
-  readonly avatarengine_remove_voxel: (a: number, b: number, c: number, d: number) => void;
-  readonly load_vox_from_bytes: (a: number, b: number, c: number, d: number) => [number, number, number];
-  readonly init: () => void;
-  readonly avatarengine_regenerate_mesh: (a: number, b: number, c: number) => number;
-  readonly networkclient_new: () => number;
-  readonly __wbindgen_exn_store: (a: number) => void;
-  readonly __externref_table_alloc: () => number;
-  readonly __wbindgen_export_2: WebAssembly.Table;
-  readonly __wbindgen_free: (a: number, b: number, c: number) => void;
-  readonly __wbindgen_malloc: (a: number, b: number) => number;
-  readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
-  readonly __wbindgen_export_6: WebAssembly.Table;
-  readonly __externref_table_dealloc: (a: number) => void;
-  readonly closure25_externref_shim: (a: number, b: number, c: any) => void;
-  readonly closure110_externref_shim: (a: number, b: number, c: any, d: any) => void;
-  readonly __wbindgen_start: () => void;
-}
-
-export type SyncInitInput = BufferSource | WebAssembly.Module;
-/**
-* Instantiates the given `module`, which can either be bytes or
-* a precompiled `WebAssembly.Module`.
-*
-* @param {{ module: SyncInitInput }} module - Passing `SyncInitInput` directly is deprecated.
-*
-* @returns {InitOutput}
-*/
-export function initSync(module: { module: SyncInitInput } | SyncInitInput): InitOutput;
-
-/**
-* If `module_or_path` is {RequestInfo} or {URL}, makes a request and
-* for everything else, calls `WebAssembly.instantiate` directly.
-*
-* @param {{ module_or_path: InitInput | Promise<InitInput> }} module_or_path - Passing `InitInput` directly is deprecated.
-*
-* @returns {Promise<InitOutput>}
-*/
-export default function __wbg_init (module_or_path?: { module_or_path: InitInput | Promise<InitInput> } | InitInput | Promise<InitInput>): Promise<InitOutput>;
