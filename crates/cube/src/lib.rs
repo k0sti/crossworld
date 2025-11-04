@@ -7,6 +7,7 @@ mod parser;
 mod raycast_aether;
 mod render;
 mod serializer;
+mod vox_loader;
 
 // Only compile WASM bindings when "wasm" feature is enabled
 #[cfg(feature = "wasm")]
@@ -29,6 +30,7 @@ pub use render::{
     ViewDirection,
 };
 pub use serializer::serialize_csm;
+pub use vox_loader::load_vox_to_cube;
 
 // Re-export glam for convenience
 pub use glam;
