@@ -1,5 +1,5 @@
 [package]
-name = "assets-indexer"
+name = "assets"
 version = "0.1.0"
 edition = "2021"
 
@@ -11,3 +11,5 @@ path = "src/main.rs"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 chrono = "0.4"
+clap = { version = "4.5", features = ["derive"] }
+dot_vox = "5.1"
