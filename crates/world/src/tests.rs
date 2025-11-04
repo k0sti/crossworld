@@ -1,5 +1,6 @@
 use super::world_cube::WorldCube as WorldCubeInternal;
 use super::WorldCube;
+use crossworld_cube::Cube;
 
 #[test]
 fn test_basic_voxel_operations() {
@@ -74,4 +75,90 @@ fn test_refcell_borrow_conflict() {
     // while set_voxel_at_depth is still executing
     let _borrow1 = world_cube.inner.borrow();
     let _borrow2 = world_cube.inner.borrow_mut(); // This should panic
+}
+
+#[test]
+fn test_border_layers() {
+    // Create WorldCube with 1 border layer
+    let world_cube = WorldCubeInternal::new(3, 2, 1);
+
+    // The root should be a Cubes variant (octa) with border colors
+    let root = world_cube.get_root();
+
+    // Verify root is an octa (Cubes variant with 8 children)
+    if let Cube::Cubes(octants) = root {
+        // Verify we have 8 octants
+        assert_eq!(octants.len(), 8);
+
+        // With centered world at position (1,1,1) depth=2, all 8 octants at depth=1
+        // will contain subdivisions (Cubes) that have the world and borders
+        // So we can't simply check for Solid colors at depth=1
+
+        // Instead, verify that the structure is subdivided (not all solid)
+        let mut has_subdivisions = false;
+        for octant in octants.iter() {
+            if matches!(octant.as_ref(), Cube::Cubes(_)) {
+                has_subdivisions = true;
+                break;
+            }
+        }
+        assert!(has_subdivisions, "Border layer should contain subdivisions for centered world");
+    } else {
+        panic!("Root should be Cubes variant with border layer");
+    }
+
+    // Verify mesh can be generated without panic
+    let _geometry = world_cube.generate_mesh();
+}
+
+#[test]
+fn test_multiple_border_layers() {
+    // Create WorldCube with 2 border layers
+    let world_cube = WorldCubeInternal::new(3, 2, 2);
+
+    // With 2 layers, the outer layer wraps the inner layer which wraps the world
+    let root = world_cube.get_root();
+
+    // Root should be an octa
+    if let Cube::Cubes(outer_octants) = root {
+        // Octant 0 of outer layer should contain another octa (the inner border layer)
+        if let Cube::Cubes(inner_octants) = outer_octants[0].as_ref() {
+            // The inner layer's octant 0 should contain the world
+            match inner_octants[0].as_ref() {
+                Cube::Solid(color) => {
+                    assert!(*color != 1 && *color != 63, "Inner octant 0 should contain world");
+                }
+                _ => {
+                    // Non-solid is good
+                }
+            }
+        } else {
+            panic!("Outer octant 0 should contain inner border layer (Cubes variant)");
+        }
+    } else {
+        panic!("Root should be Cubes variant with border layers");
+    }
+
+    // Verify mesh can be generated
+    let _geometry = world_cube.generate_mesh();
+}
+
+#[test]
+fn test_no_border_layers() {
+    // Create WorldCube with 0 border layers (original behavior)
+    let world_cube = WorldCubeInternal::new(3, 2, 0);
+
+    // Root should be the original world structure, not wrapped in an octa
+    // It will be subdivided terrain, not a simple octa of solid colors
+    let root = world_cube.get_root();
+
+    // The root shouldn't be a simple solid border color
+    if let Cube::Solid(color) = root {
+        // If it happens to be solid (unlikely with terrain generation),
+        // it shouldn't be our border colors
+        assert!(*color != 1 && *color != 63, "Root should be generated world, not border colors");
+    }
+
+    // Verify mesh can be generated
+    let _geometry = world_cube.generate_mesh();
 }
