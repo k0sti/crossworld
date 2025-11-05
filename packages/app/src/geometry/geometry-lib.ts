@@ -32,7 +32,7 @@ export class GeometryGenerator {
 
   async initialize(): Promise<void> {
     await initializeWasm();
-    this.manager.initialize();
+    await this.manager.initialize();
     logger.log('geometry', 'GeometryGenerator initialized');
   }
 

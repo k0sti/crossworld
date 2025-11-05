@@ -41,10 +41,54 @@ export class CubeManager {
   /**
    * Initialize the world cube
    */
-  initialize(): void {
+  async initialize(): Promise<void> {
     logger.log('geometry', `Initializing WorldCube: macro=${this.macroDepth}, micro=${this.microDepth}, border=${this.borderDepth}`);
     this.worldCube = new WorldCube(this.macroDepth, this.microDepth, this.borderDepth);
+
+    // Load material colors from materials.json
+    await this.loadMaterialColors();
+
     logger.log('geometry', 'WorldCube initialized');
+  }
+
+  /**
+   * Load material colors from materials.json and set them in the WorldCube
+   */
+  private async loadMaterialColors(): Promise<void> {
+    try {
+      const response = await fetch('/crossworld/assets/materials.json');
+      if (!response.ok) {
+        logger.warn('geometry', `Failed to load materials.json: ${response.statusText}`);
+        return;
+      }
+
+      const data = await response.json();
+
+      // Convert materials to flat RGB array
+      const colors: number[] = [];
+      for (let i = 0; i < 128; i++) {
+        const material = data.materials.find((m: any) => m.index === i);
+        if (material) {
+          // Parse hex color #RRGGBBAA or #RRGGBB
+          const hex = material.color.startsWith('#') ? material.color.substring(1) : material.color;
+          const a = parseInt(hex.substring(0, 2), 16) / 255;
+          const r = parseInt(hex.substring(2, 4), 16) / 255;
+          const g = parseInt(hex.substring(4, 6), 16) / 255;
+          const b = parseInt(hex.substring(6, 8), 16) / 255;
+          colors.push(r, g, b);
+        } else {
+          // Default to black if material not found
+          colors.push(0, 0, 0);
+        }
+      }
+
+      if (this.worldCube) {
+        this.worldCube.setMaterialColors(new Float32Array(colors));
+        logger.log('geometry', `Loaded ${data.materials.length} material colors`);
+      }
+    } catch (error) {
+      logger.error('geometry', 'Failed to load material colors:', error);
+    }
   }
 
   /**

@@ -5,13 +5,13 @@ import * as logger from '../utils/logger';
  */
 
 /** Current macro depth - octree subdivision levels */
-let currentMacroDepth = 3;
+let currentMacroDepth = 4;
 
 /** Current micro depth - rendering scale depth */
 let currentMicroDepth = 0;
 
 /** Current border depth - number of border cube layers */
-let currentBorderDepth = 0;
+let currentBorderDepth = 4;
 
 /** Callbacks to notify when depth changes */
 const depthChangeListeners: Array<(macroDepth: number, microDepth: number, borderDepth: number) => void> = [];
