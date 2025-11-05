@@ -105,6 +105,13 @@ export class Transform {
   }
 
   /**
+   * Set Y coordinate (vertical/height)
+   */
+  setY(y: number): void {
+    this.position.y = y;
+  }
+
+  /**
    * Get Y rotation angle in radians (rotation around vertical axis)
    */
   getAngle(): number {
