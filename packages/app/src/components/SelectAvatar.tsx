@@ -21,7 +21,6 @@ import {
 import { FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import { useState, useRef, useEffect } from 'react';
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { ReadyPlayerMeService } from '../services/ready-player-me';
 import type { TeleportAnimationType } from '../renderer/teleport-animation';
 import { ENABLE_AVATAR_COLOR_SELECTION } from '../constants/features';
