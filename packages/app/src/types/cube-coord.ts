@@ -193,10 +193,21 @@ export function clampToWorldBounds(x: number, z: number): [number, number] {
  * @param size Voxel size in world units
  * @returns Snapped center coordinate (voxel corners align with multiples of size at origin)
  */
-export function snapToGrid(worldCoord: number, size: number): number {
-  // Snap to voxel centers where corners align with 0, size, 2*size, etc.
-  // Centers are at size/2, size*1.5, size*2.5, etc.
-  return Math.floor(worldCoord / size) * size + size / 2;
+export function snapToGrid(worldCoord: number, size: number): number;
+export function snapToGrid(worldCoord: { x: number; y: number; z: number }, size: number): { x: number; y: number; z: number };
+export function snapToGrid(worldCoord: number | { x: number; y: number; z: number }, size: number): number | { x: number; y: number; z: number } {
+  if (typeof worldCoord === 'number') {
+    // Snap to voxel centers where corners align with 0, size, 2*size, etc.
+    // Centers are at size/2, size*1.5, size*2.5, etc.
+    return Math.floor(worldCoord / size) * size + size / 2;
+  } else {
+    // Snap Vector3-like object
+    return {
+      x: Math.floor(worldCoord.x / size) * size + size / 2,
+      y: Math.floor(worldCoord.y / size) * size + size / 2,
+      z: Math.floor(worldCoord.z / size) * size + size / 2
+    };
+  }
 }
 
 /**
