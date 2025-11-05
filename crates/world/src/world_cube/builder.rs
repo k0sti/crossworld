@@ -159,9 +159,7 @@ fn get_biome(height: f64, temperature: f64, moisture: f64) -> Biome {
     }
 
     // Temperature-moisture based classification
-    if temperature < -0.5 {
-        Biome::Tundra
-    } else if temperature < 0.0 && moisture < -0.3 {
+    if temperature < 0.0 && moisture < -0.3 {
         Biome::Tundra
     } else if temperature > 0.3 && moisture < -0.2 {
         Biome::Desert
