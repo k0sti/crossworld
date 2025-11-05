@@ -226,7 +226,7 @@ fn get_voxel_value(x: i32, y: i32, z: i32, max_depth: u32, noise: &Perlin, fbm: 
     // Surface layer material based on biome
     if depth_below < 1.0 {
         return match biome {
-            Biome::Ocean => WATER,
+            Biome::Ocean => SAND,
             Biome::Beach => SAND,
             Biome::Desert => SAND,
             Biome::Plains => GRASS,

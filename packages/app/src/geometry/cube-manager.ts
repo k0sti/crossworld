@@ -69,9 +69,8 @@ export class CubeManager {
       for (let i = 0; i < 128; i++) {
         const material = data.materials.find((m: any) => m.index === i);
         if (material) {
-          // Parse hex color #RRGGBBAA or #RRGGBB
+          // Parse hex color #AARRGGBB format (skip alpha channel)
           const hex = material.color.startsWith('#') ? material.color.substring(1) : material.color;
-          const a = parseInt(hex.substring(0, 2), 16) / 255;
           const r = parseInt(hex.substring(2, 4), 16) / 255;
           const g = parseInt(hex.substring(4, 6), 16) / 255;
           const b = parseInt(hex.substring(6, 8), 16) / 255;
@@ -85,6 +84,7 @@ export class CubeManager {
       if (this.worldCube) {
         this.worldCube.setMaterialColors(new Float32Array(colors));
         logger.log('geometry', `Loaded ${data.materials.length} material colors`);
+        logger.log('geometry', `Sample colors - water(17): [${colors[17*3]}, ${colors[17*3+1]}, ${colors[17*3+2]}]`);
       }
     } catch (error) {
       logger.error('geometry', 'Failed to load material colors:', error);
