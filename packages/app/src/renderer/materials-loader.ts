@@ -118,6 +118,8 @@ export class MaterialsLoader {
    * Get all loaded textures as an array
    */
   getTextureArray(): THREE.Texture[] {
+    const validTextures = this.textureArray.filter(t => t !== undefined && t !== null);
+    logger.log('renderer', `getTextureArray: ${validTextures.length} valid textures out of ${this.textureArray.length} slots`);
     return this.textureArray;
   }
 
