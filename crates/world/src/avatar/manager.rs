@@ -1,10 +1,12 @@
 use crossworld_cube::{glam::Vec3, Cube};
 
 /// Manages avatar loading from .vox files
+#[allow(dead_code)]
 pub struct AvatarManager {
     base_model: Cube<i32>,
 }
 
+#[allow(dead_code)]
 impl AvatarManager {
     /// Create a new avatar manager with an empty cube
     pub fn new() -> Self {
