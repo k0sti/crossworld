@@ -15,7 +15,7 @@ mod cube_wasm; // Unified Cube-centric interface
 
 pub use face::Face;
 pub use face_builder::{generate_face_mesh, DefaultMeshBuilder, MeshBuilder};
-pub use mesh::{ColorMapper, HsvColorMapper, PaletteColorMapper};
+pub use mesh::{ColorMapper, HsvColorMapper, PaletteColorMapper, VoxColorMapper};
 pub use neighbor_traversal::{
     traverse_with_neighbors, CubeCoord, NeighborGrid, NeighborView, TraversalVisitor, OFFSET_BACK,
     OFFSET_DOWN, OFFSET_FRONT, OFFSET_LEFT, OFFSET_RIGHT, OFFSET_UP,
