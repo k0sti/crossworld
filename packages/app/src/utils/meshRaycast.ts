@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { worldToCube, type CubeCoord } from '../types/cube-coord';
-import { getMacroDepth } from '../config/depth-config';
+import { getMacroDepth, getBorderDepth } from '../config/depth-config';
 import { getWorldSize } from '../constants/geometry';
 
 /**
@@ -158,7 +158,7 @@ export function raycastMesh(
   }
 
   // Convert hit point to normalized [0,1] space for consistency with WASM
-  const worldSize = getWorldSize(macroDepth);
+  const worldSize = getWorldSize(macroDepth, getBorderDepth());
   const halfWorld = worldSize / 2;
 
   const normalizedPoint = new THREE.Vector3(

@@ -642,6 +642,7 @@ name = "crossworld-cube"
 version = "0.0.1"
 dependencies = [
  "dot_vox",
+ "getrandom 0.3.3",
  "glam",
  "image",
  "nom",

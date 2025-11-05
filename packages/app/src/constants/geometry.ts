@@ -26,19 +26,21 @@ export function getMaxVoxelsPerSide(totalDepth: number): number {
 }
 
 /**
- * Calculate world size in units (only depends on macro depth)
+ * Calculate world size in units (depends on macro depth and border depth)
  * @param macroDepth Macro depth
+ * @param borderDepth Border depth (defaults to 0)
  */
-export function getWorldSize(macroDepth: number): number {
-  return 1 << macroDepth;
+export function getWorldSize(macroDepth: number, borderDepth: number = 0): number {
+  return 1 << (macroDepth + borderDepth);
 }
 
 /**
  * Calculate half world size (used for centering coordinates)
  * @param macroDepth Macro depth
+ * @param borderDepth Border depth (defaults to 0)
  */
-export function getHalfWorld(macroDepth: number): number {
-  return getWorldSize(macroDepth) / 2;
+export function getHalfWorld(macroDepth: number, borderDepth: number = 0): number {
+  return getWorldSize(macroDepth, borderDepth) / 2;
 }
 
 /**
@@ -59,20 +61,33 @@ export function getDefaultCursorDepth(macroDepth: number): number {
 
 /**
  * Calculate voxel size in world units for a given depth level
- * @param targetDepth Target octree depth level
- * @param macroDepth Macro depth
+ * @param targetDepth Target octree depth level (absolute depth in the octree)
+ * @param macroDepth Macro depth (determines world size)
  * @param _microDepth Micro depth (unused, reserved for future use)
+ * @param borderDepth Border depth (number of border cube layers, defaults to 0)
+ *
+ * Note: When borderDepth > 0, the "base depth" (where voxels are 1 unit) is macro + border.
+ * The targetDepth parameter should be an absolute octree depth, and this function
+ * calculates the voxel size considering that unit cubes exist at depth (macro + border).
+ *
+ * Examples with macro=3, border=1 (base=4):
+ * - targetDepth=3: voxelSize=2 (one level below base)
+ * - targetDepth=4: voxelSize=1 (unit cubes at base depth)
+ * - targetDepth=5: voxelSize=0.5 (subdivisions beyond base)
  */
-export function getVoxelSize(targetDepth: number, macroDepth: number, _microDepth: number): number {
-  // At depth 0: voxel size = 2^macro world units (entire world)
-  // At macro depth: voxel size = 1 world unit
-  // At macro+micro depth: voxel size = 1/(2^micro) world units
-  if (targetDepth <= macroDepth) {
+export function getVoxelSize(targetDepth: number, macroDepth: number, _microDepth: number, borderDepth: number = 0): number {
+  // Base depth is where voxels are 1 unit in size
+  const baseDepth = macroDepth + borderDepth;
+
+  // At depth 0: voxel size = 2^base world units (entire world at base scale)
+  // At base depth: voxel size = 1 world unit
+  // Beyond base depth: voxel size = 1/(2^(depth-base)) world units
+  if (targetDepth <= baseDepth) {
     // Coarse levels: voxel size >= 1 world unit
-    return 1 << (macroDepth - targetDepth);
+    return 1 << (baseDepth - targetDepth);
   } else {
     // Fine levels: voxel size < 1 world unit
-    return 1.0 / (1 << (targetDepth - macroDepth));
+    return 1.0 / (1 << (targetDepth - baseDepth));
   }
 }
 

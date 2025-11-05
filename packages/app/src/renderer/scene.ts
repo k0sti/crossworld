@@ -19,7 +19,7 @@ import {
 import { getWorldSize } from '../constants/geometry';
 import {
   getMacroDepth,
-
+  getBorderDepth,
   cursorDepthToAbsolute,
   getMinCursorDepth,
   getMaxCursorDepth
@@ -232,8 +232,8 @@ export class SceneManager {
   }
 
   private setupCheckerPlane(): void {
-    // Create checker plane (2^macroDepth × 2^macroDepth centered at origin)
-    const checkerSize = 1 << getMacroDepth();
+    // Create checker plane (2^(macroDepth+borderDepth) × 2^(macroDepth+borderDepth) centered at origin)
+    const checkerSize = 1 << (getMacroDepth() + getBorderDepth());
     this.checkerPlane = new CheckerPlane(checkerSize, checkerSize, 0.02);
     const checkerMesh = this.checkerPlane.getMesh();
     this.scene.add(checkerMesh);
@@ -484,7 +484,7 @@ export class SceneManager {
         // Use WASM raycasting
         if (!this.worldCube) return null;
 
-        const worldSize = getWorldSize(getMacroDepth());
+        const worldSize = getWorldSize(getMacroDepth(), getBorderDepth());
         const halfWorld = worldSize / 2;
 
         // Convert ray from world space to normalized [0, 1]
@@ -507,7 +507,7 @@ export class SceneManager {
       }
 
       if (result) {
-        const worldSize = getWorldSize(getMacroDepth());
+        const worldSize = getWorldSize(getMacroDepth(), getBorderDepth());
         const halfWorld = worldSize / 2;
 
         // Convert hit position from normalized [0, 1] to world space
@@ -623,7 +623,7 @@ export class SceneManager {
     }
 
     // Create grid helper for visualization
-    const worldSize = getWorldSize(getMacroDepth());
+    const worldSize = getWorldSize(getMacroDepth(), getBorderDepth());
     const gridSize = worldSize; // Grid covers world size
     const divisions = worldSize / size; // Grid divisions match voxel size
 
@@ -835,7 +835,7 @@ export class SceneManager {
     logger.log('renderer', '[Voxel Pos]', { voxelX, voxelY, voxelZ, size });
 
     // Check if within world bounds (all axes)
-    const halfWorld = getWorldSize(getMacroDepth()) / 2;
+    const halfWorld = getWorldSize(getMacroDepth(), getBorderDepth()) / 2;
     const isInBounds =
       voxelX >= -halfWorld && voxelX + size <= halfWorld &&
       voxelY >= -halfWorld && voxelY + size <= halfWorld &&
@@ -1170,7 +1170,7 @@ export class SceneManager {
 
     // Create world bounds wireframe box
     // World is worldSize×worldSize×worldSize centered at origin
-    const worldSize = getWorldSize(getMacroDepth());
+    const worldSize = getWorldSize(getMacroDepth(), getBorderDepth());
     const worldBoxGeometry = new THREE.BoxGeometry(worldSize, worldSize, worldSize);
     const worldBoxEdges = new THREE.EdgesGeometry(worldBoxGeometry);
     const worldBoxLineMaterial = new THREE.LineBasicMaterial({
@@ -1329,7 +1329,7 @@ export class SceneManager {
       const voxelZ = cursorZ - halfSize;
 
       // Check if within world bounds
-      const halfWorld = getWorldSize(getMacroDepth()) / 2;
+      const halfWorld = getWorldSize(getMacroDepth(), getBorderDepth()) / 2;
       const isInBounds =
         voxelX >= -halfWorld && voxelX + size <= halfWorld &&
         voxelY >= -halfWorld && voxelY + size <= halfWorld &&
@@ -1413,7 +1413,7 @@ export class SceneManager {
       const voxelZ = cursorZ - halfSize;
 
       // Check if within world bounds
-      const halfWorld = getWorldSize(getMacroDepth()) / 2;
+      const halfWorld = getWorldSize(getMacroDepth(), getBorderDepth()) / 2;
       const isInBounds =
         voxelX >= -halfWorld && voxelX + size <= halfWorld &&
         voxelY >= -halfWorld && voxelY + size <= halfWorld &&
@@ -1535,7 +1535,7 @@ export class SceneManager {
       const voxelZ = cursorZ - halfSize;
 
       // Check if within world bounds
-      const halfWorld = getWorldSize(getMacroDepth()) / 2;
+      const halfWorld = getWorldSize(getMacroDepth(), getBorderDepth()) / 2;
       const isInBounds =
         voxelX >= -halfWorld && voxelX + size <= halfWorld &&
         voxelY >= -halfWorld && voxelY + size <= halfWorld &&
@@ -1607,7 +1607,7 @@ export class SceneManager {
       const cursorVoxelZ = cursorZ - halfSize;
 
       // Check if within world bounds
-      const halfWorld = getWorldSize(getMacroDepth()) / 2;
+      const halfWorld = getWorldSize(getMacroDepth(), getBorderDepth()) / 2;
       const isInBounds =
         cursorVoxelX >= -halfWorld && cursorVoxelX + size <= halfWorld &&
         cursorVoxelY >= -halfWorld && cursorVoxelY + size <= halfWorld &&
@@ -1692,7 +1692,7 @@ export class SceneManager {
         }
 
         // Check if within world bounds (all axes)
-        const halfWorld = getWorldSize(getMacroDepth()) / 2;
+        const halfWorld = getWorldSize(getMacroDepth(), getBorderDepth()) / 2;
         const isInBounds =
           voxelX >= -halfWorld && voxelX + size <= halfWorld &&
           voxelY >= -halfWorld && voxelY + size <= halfWorld &&
@@ -1898,7 +1898,7 @@ export class SceneManager {
         const voxelZ = cursorZ - halfSize;
 
         // Check if within world bounds
-        const halfWorld = getWorldSize(getMacroDepth()) / 2;
+        const halfWorld = getWorldSize(getMacroDepth(), getBorderDepth()) / 2;
         const isInBounds =
           voxelX >= -halfWorld && voxelX + size <= halfWorld &&
           voxelY >= -halfWorld && voxelY + size <= halfWorld &&
@@ -1987,7 +1987,7 @@ export class SceneManager {
         const cursorVoxelZ = cursorZ - halfSize;
 
         // Check if within world bounds
-        const halfWorld = getWorldSize(getMacroDepth()) / 2;
+        const halfWorld = getWorldSize(getMacroDepth(), getBorderDepth()) / 2;
         const isInBounds =
           cursorVoxelX >= -halfWorld && cursorVoxelX + size <= halfWorld &&
           cursorVoxelY >= -halfWorld && cursorVoxelY + size <= halfWorld &&
@@ -2076,7 +2076,7 @@ export class SceneManager {
             const voxelZ = cursorZ - halfSize;
 
             // Check if within world bounds
-            const halfWorld = getWorldSize(getMacroDepth()) / 2;
+            const halfWorld = getWorldSize(getMacroDepth(), getBorderDepth()) / 2;
             const isInBounds =
               voxelX >= -halfWorld && voxelX + size <= halfWorld &&
               voxelY >= -halfWorld && voxelY + size <= halfWorld &&
@@ -2128,7 +2128,7 @@ export class SceneManager {
             const voxelY = this.depthSelectMode === 1 ? 0 : -size;
 
             // Check if within world bounds (all axes)
-            const halfWorld = getWorldSize(getMacroDepth()) / 2;
+            const halfWorld = getWorldSize(getMacroDepth(), getBorderDepth()) / 2;
             const isInBounds =
               voxelX >= -halfWorld && voxelX + size <= halfWorld &&
               voxelY >= -halfWorld && voxelY + size <= halfWorld &&
@@ -3041,7 +3041,7 @@ export class SceneManager {
     const cursorSize = this.getCursorSize();
     const avatarPos = this.currentAvatar?.getPosition();
 
-    const worldSize = getWorldSize(getMacroDepth());
+    const worldSize = getWorldSize(getMacroDepth(), getBorderDepth());
 
     return {
       cursorWorld: this.currentCursorCoord
