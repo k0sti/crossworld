@@ -302,17 +302,7 @@ export class SceneManager {
       if (!this.currentAvatar) return;
 
       // Calculate mouse position in normalized device coordinates (-1 to +1)
-      // In mouse rotate mode (mode 2), use center crosshair position instead of mouse pointer
-      if (this.mouseMode === 2) {
-        // Center of screen
-        this.mouse.x = 0;
-        this.mouse.y = 0;
-      } else {
-        // Use actual mouse click position
-        const rect = canvas.getBoundingClientRect();
-        this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-        this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-      }
+      this.calculateMousePosition(event, canvas);
 
       // Update raycaster
       this.raycaster.setFromCamera(this.mouse, this.camera);
@@ -562,16 +552,7 @@ export class SceneManager {
    */
   private detectAndSetEditPlane(event: MouseEvent, canvas: HTMLCanvasElement): void {
     // Calculate mouse position
-    if (this.mouseMode === 2) {
-      // Center of screen in shift mode
-      this.mouse.x = 0;
-      this.mouse.y = 0;
-    } else {
-      // Mouse position
-      const rect = canvas.getBoundingClientRect();
-      this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-      this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-    }
+    this.calculateMousePosition(event, canvas);
 
     // Update raycaster
     this.raycaster.setFromCamera(this.mouse, this.camera);
@@ -742,18 +723,7 @@ export class SceneManager {
     logger.log('renderer', '[Edit Click]', { isLeftClick, mouseMode: this.mouseMode, cursorDepth: this.cursorDepth });
 
     // Calculate mouse position
-    // In mode 2 (shift rotate), raycast from center of screen
-    // In mode 1 (free pointer), raycast from mouse position
-    if (this.mouseMode === 2) {
-      // Center of screen
-      this.mouse.x = 0;
-      this.mouse.y = 0;
-    } else {
-      // Mouse position
-      const rect = canvas.getBoundingClientRect();
-      this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-      this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-    }
+    this.calculateMousePosition(event, canvas);
 
     // Update raycaster
     this.raycaster.setFromCamera(this.mouse, this.camera);
@@ -779,27 +749,23 @@ export class SceneManager {
       const [hitVoxelX, hitVoxelY, hitVoxelZ] = cubeToWorld(coord);
 
       // Calculate voxel center of the hit voxel
-      const voxelCenterX = hitVoxelX + halfSize;
-      const voxelCenterY = hitVoxelY + halfSize;
-      const voxelCenterZ = hitVoxelZ + halfSize;
+      const hitVoxelCorner = new THREE.Vector3(hitVoxelX, hitVoxelY, hitVoxelZ);
+      const voxelCenter = this.calculateVoxelCenter(hitVoxelCorner, halfSize);
 
       // Calculate face center
-      const faceCenterX = voxelCenterX + hit.normal.x * halfSize - hit.normal.x;
-      const faceCenterY = voxelCenterY + hit.normal.y * halfSize - hit.normal.y;
-      const faceCenterZ = voxelCenterZ + hit.normal.z * halfSize - hit.normal.z;
+      const faceCenter = this.calculateFaceCenter(voxelCenter, hit.normal, halfSize);
 
       // Move from face center to voxel area center based on depth select mode
       // Mode 1: voxel on positive normal side (outward from face)
       // Mode 2: voxel on negative normal side (inward from face)
       const normalOffset = this.depthSelectMode === 1 ? halfSize : -halfSize;
-      const cursorX = faceCenterX + hit.normal.x * normalOffset;
-      const cursorY = faceCenterY + hit.normal.y * normalOffset;
-      const cursorZ = faceCenterZ + hit.normal.z * normalOffset;
+      const cursorCenter = faceCenter.clone().addScaledVector(hit.normal, normalOffset);
 
-      // Calculate corner position for the cursor voxel
-      voxelX = cursorX - halfSize;
-      voxelY = cursorY - halfSize;
-      voxelZ = cursorZ - halfSize;
+      // Calculate corner position for the cursor voxel (as Vector3)
+      const voxelCorner = cursorCenter.clone().subScalar(halfSize);
+      voxelX = voxelCorner.x;
+      voxelY = voxelCorner.y;
+      voxelZ = voxelCorner.z;
 
       hasGeometryHit = true;
     }
@@ -830,16 +796,11 @@ export class SceneManager {
         : (this.depthSelectMode === 1 ? 0 : -size);
     }
 
-    logger.log('renderer', '[Voxel Pos]', { voxelX, voxelY, voxelZ, size });
+    const voxelCorner = new THREE.Vector3(voxelX, voxelY, voxelZ);
+    logger.log('renderer', '[Voxel Pos]', { voxelCorner, size });
 
     // Check if within world bounds (all axes)
-    const halfWorld = getWorldSize(getMacroDepth(), getBorderDepth()) / 2;
-    const isInBounds =
-      voxelX >= -halfWorld && voxelX + size <= halfWorld &&
-      voxelY >= -halfWorld && voxelY + size <= halfWorld &&
-      voxelZ >= -halfWorld && voxelZ + size <= halfWorld;
-
-    if (isInBounds) {
+    if (this.isVoxelInBounds(voxelCorner, size)) {
       logger.log('renderer', '[Voxel Action]', isLeftClick ? 'paint' : 'erase');
       if (isLeftClick) {
         // Left click: use current color/erase mode
@@ -974,16 +935,7 @@ export class SceneManager {
           logger.log('renderer', '[Mouse Mode] Switched to mode 2 (first-person camera rotation)');
         } else if (this.mouseMode === 2) {
           // Exit camera rotation mode
-          this.mouseMode = 1;
-          document.exitPointerLock();
-          if (this.crosshair) {
-            this.crosshair.style.display = 'none';
-          }
-          // Reset paint state (only relevant in edit mode, but safe to always reset)
-          this.isLeftMousePressed = false;
-          this.isRightMousePressed = false;
-          this.lastPaintedVoxel = null;
-          this.clearActiveEditPlane();
+          this.resetMouseMode();
           logger.log('renderer', '[Mouse Mode] Switched to mode 1 (paint/erase)');
         }
         return;
@@ -1001,48 +953,12 @@ export class SceneManager {
       // Cursor depth/scale control with Arrow Up/Down (works in edit and placement modes)
       if (event.code === 'ArrowUp') {
         event.preventDefault();
-
-        // Placement mode: increase model scale
-        if (this.currentMode === 'placement' && this.placementMode) {
-          const currentScale = this.placementMode.getScale();
-          this.placementMode.setScale(currentScale + 1);
-          logger.log('renderer', `[Placement Scale] Increased to ${currentScale + 1}`);
-        }
-        // Edit mode: increase cursor depth
-        else if (this.isEditMode) {
-          this.cursorDepth = Math.min(getMaxCursorDepth(), this.cursorDepth + 1);
-          this.updateCursorSize();
-          logger.log('renderer', `[Cursor Depth] Increased to ${this.cursorDepth} (size=${this.getCursorSize()})`);
-          // Update cursor position immediately
-          if (this.mouseMode === 2) {
-            this.updateVoxelCursorAtCenter();
-          } else {
-            this.updateCursorVisualization();
-          }
-        }
+        this.adjustCursorDepth(1);
       }
 
       if (event.code === 'ArrowDown') {
         event.preventDefault();
-
-        // Placement mode: decrease model scale
-        if (this.currentMode === 'placement' && this.placementMode) {
-          const currentScale = this.placementMode.getScale();
-          this.placementMode.setScale(Math.max(0, currentScale - 1));
-          logger.log('renderer', `[Placement Scale] Decreased to ${Math.max(0, currentScale - 1)}`);
-        }
-        // Edit mode: decrease cursor depth
-        else if (this.isEditMode) {
-          this.cursorDepth = Math.max(getMinCursorDepth(), this.cursorDepth - 1);
-          this.updateCursorSize();
-          logger.log('renderer', `[Cursor Depth] Decreased to ${this.cursorDepth} (size=${this.getCursorSize()})`);
-          // Update cursor position immediately
-          if (this.mouseMode === 2) {
-            this.updateVoxelCursorAtCenter();
-          } else {
-            this.updateCursorVisualization();
-          }
-        }
+        this.adjustCursorDepth(-1);
       }
 
       // Edit mode specific controls
@@ -1088,14 +1004,7 @@ export class SceneManager {
     this.boundPointerLockChange = () => {
       if (!document.pointerLockElement && this.mouseMode === 2) {
         // Pointer lock was exited externally (e.g., Escape key), sync mode back to 1
-        this.mouseMode = 1;
-        if (this.crosshair) {
-          this.crosshair.style.display = 'none';
-        }
-        this.isLeftMousePressed = false;
-        this.isRightMousePressed = false;
-        this.lastPaintedVoxel = null;
-        this.clearActiveEditPlane();
+        this.resetMouseMode();
         logger.log('renderer', '[Mouse Mode] Pointer lock exited (Escape), switched to mode 1');
       }
     };
@@ -1242,7 +1151,7 @@ export class SceneManager {
    */
   private updateCursorVisualization(mouseX?: number, mouseY?: number): void {
     // Edit mode only
-    if (!this.isEditMode || !this.previewCube) {
+    if (!this.isEditMode) {
       this.hideFaceHighlight();
       return;
     }
@@ -1252,488 +1161,19 @@ export class SceneManager {
       this.mouse.x = mouseX;
       this.mouse.y = mouseY;
     }
-    // Otherwise use this.mouse.x and this.mouse.y which are already set
 
-    // Update raycaster
+    // Update raycaster and perform unified cursor update
     this.raycaster.setFromCamera(this.mouse, this.camera);
-
-    const size = this.getCursorSize();
-    const halfSize = size / 2;
-
-    // When draw plane is active, prioritize raycasting to the plane
-    // Otherwise raycast to geometry mesh
-    let hasPlaneHit = false;
-    let planeHitPoint: THREE.Vector3 | null = null;
-    let hasGeometryHit = false;
-    let geometryHitPoint: THREE.Vector3 | null = null;
-    let geometryHitNormal: THREE.Vector3 | null = null;
-
-    if (this.activeEditPlane && this.activeEditPlaneNormal) {
-      // Draw plane is active - always raycast to the plane (even during draw mode)
-      const intersectPoint = new THREE.Vector3();
-      const didIntersect = this.raycaster.ray.intersectPlane(this.activeEditPlane, intersectPoint);
-
-      if (didIntersect) {
-        hasPlaneHit = true;
-        planeHitPoint = intersectPoint;
-
-        // Show face highlight on the plane using the plane's normal
-        this.updateFaceHighlight(intersectPoint, this.activeEditPlaneNormal, size);
-      } else {
-        this.hideFaceHighlight();
-      }
-    } else if (this.geometryMesh && !this.isLeftMousePressed && !this.isRightMousePressed) {
-      // No draw plane active and not drawing - raycast to geometry mesh using shared method
-      const hit = this.raycastGeometry();
-      if (hit) {
-        this.updateFaceHighlight(hit.point, hit.normal, size);
-
-        // Store hit info for voxel cursor positioning
-        hasGeometryHit = true;
-        geometryHitPoint = hit.point;
-        geometryHitNormal = hit.normal;
-      } else {
-        this.hideFaceHighlight();
-      }
-    } else {
-      this.hideFaceHighlight();
-    }
-
-    // Position voxel cursor
-    if (hasPlaneHit && planeHitPoint && this.activeEditPlaneNormal) {
-      // Draw plane hit - position cursor on plane with SPACE mode
-      // Snap intersection point to grid
-      const snappedCenter = new THREE.Vector3(
-        snapToGrid(planeHitPoint.x, size),
-        snapToGrid(planeHitPoint.y, size),
-        snapToGrid(planeHitPoint.z, size)
-      );
-
-      // Project snapped point back onto the plane
-      const distanceToPlane = this.activeEditPlane!.distanceToPoint(snappedCenter);
-      const projectedCenter = snappedCenter.clone().sub(
-        this.activeEditPlaneNormal.clone().multiplyScalar(distanceToPlane)
-      );
-
-      // Apply SPACE mode offset
-      const normalOffset = this.depthSelectMode === 1 ? halfSize : -halfSize;
-      const cursorX = projectedCenter.x + this.activeEditPlaneNormal.x * normalOffset;
-      const cursorY = projectedCenter.y + this.activeEditPlaneNormal.y * normalOffset;
-      const cursorZ = projectedCenter.z + this.activeEditPlaneNormal.z * normalOffset;
-
-      // Calculate corner position for the cursor voxel
-      const voxelX = cursorX - halfSize;
-      const voxelY = cursorY - halfSize;
-      const voxelZ = cursorZ - halfSize;
-
-      // Check if within world bounds
-      const halfWorld = getWorldSize(getMacroDepth(), getBorderDepth()) / 2;
-      const isInBounds =
-        voxelX >= -halfWorld && voxelX + size <= halfWorld &&
-        voxelY >= -halfWorld && voxelY + size <= halfWorld &&
-        voxelZ >= -halfWorld && voxelZ + size <= halfWorld;
-
-      if (isInBounds) {
-        // Store current cursor coordinate
-        const newCoord = worldToCube(voxelX, voxelY, voxelZ, this.getAbsoluteCursorDepth());
-
-        // Only log when coordinate changes
-        if (!this.currentCursorCoord ||
-            this.currentCursorCoord.x !== newCoord.x ||
-            this.currentCursorCoord.y !== newCoord.y ||
-            this.currentCursorCoord.z !== newCoord.z) {
-          console.log('[MOUSEMOVE CURSOR] DrawPlane CHANGED:', {
-            oldCoord: this.currentCursorCoord,
-            newCoord,
-            planeHitPoint,
-            snappedCenter: { x: snappedCenter.x, y: snappedCenter.y, z: snappedCenter.z },
-            projectedCenter: { x: projectedCenter.x, y: projectedCenter.y, z: projectedCenter.z },
-            cursorCenter: { x: cursorX, y: cursorY, z: cursorZ },
-            voxelCorner: { x: voxelX, y: voxelY, z: voxelZ }
-          });
-        }
-
-        this.currentCursorCoord = newCoord;
-
-        // Position preview cube at voxel area center
-        this.currentGridPosition.set(cursorX, cursorY, cursorZ);
-        this.previewCube.position.copy(this.currentGridPosition);
-        this.previewCube.visible = true;
-
-        // Continuous paint: if mouse button is pressed, paint/erase voxel at new position
-        if (this.isLeftMousePressed || this.isRightMousePressed) {
-          // Check if this is a new voxel position (different from last painted)
-          const isNewPosition = !this.lastPaintedVoxel ||
-            this.lastPaintedVoxel.x !== voxelX ||
-            this.lastPaintedVoxel.y !== voxelY ||
-            this.lastPaintedVoxel.z !== voxelZ;
-
-          if (isNewPosition) {
-            if (this.isLeftMousePressed) {
-              // Left mouse: draw with selected color
-              this.paintVoxelWithSize(voxelX, voxelY, voxelZ, size);
-            } else if (this.isRightMousePressed) {
-              // Right mouse: erase
-              this.eraseVoxelWithSize(voxelX, voxelY, voxelZ, size);
-            }
-            this.lastPaintedVoxel = { x: voxelX, y: voxelY, z: voxelZ };
-          }
-        }
-      } else {
-        this.previewCube.visible = false;
-        this.currentCursorCoord = null;
-      }
-    } else if (hasGeometryHit && geometryHitPoint && geometryHitNormal) {
-      // Geometry hit - position cursor using SPACE mode
-      // Convert hit point to CubeCoord to snap to voxel grid
-      const coord = worldToCube(geometryHitPoint.x, geometryHitPoint.y, geometryHitPoint.z, this.getAbsoluteCursorDepth());
-      const [hitVoxelX, hitVoxelY, hitVoxelZ] = cubeToWorld(coord);
-
-      // Calculate voxel center of the hit voxel
-      const voxelCenterX = hitVoxelX + halfSize;
-      const voxelCenterY = hitVoxelY + halfSize;
-      const voxelCenterZ = hitVoxelZ + halfSize;
-
-      // Calculate face center
-      const faceCenterX = voxelCenterX + geometryHitNormal.x * halfSize - geometryHitNormal.x;
-      const faceCenterY = voxelCenterY + geometryHitNormal.y * halfSize - geometryHitNormal.y;
-      const faceCenterZ = voxelCenterZ + geometryHitNormal.z * halfSize - geometryHitNormal.z;
-
-      // Move from face center to voxel area center based on depth select mode
-      const normalOffset = this.depthSelectMode === 1 ? halfSize : -halfSize;
-      const cursorX = faceCenterX + geometryHitNormal.x * normalOffset;
-      const cursorY = faceCenterY + geometryHitNormal.y * normalOffset;
-      const cursorZ = faceCenterZ + geometryHitNormal.z * normalOffset;
-
-      // Calculate corner position for the cursor voxel
-      const voxelX = cursorX - halfSize;
-      const voxelY = cursorY - halfSize;
-      const voxelZ = cursorZ - halfSize;
-
-      // Check if within world bounds
-      const halfWorld = getWorldSize(getMacroDepth(), getBorderDepth()) / 2;
-      const isInBounds =
-        voxelX >= -halfWorld && voxelX + size <= halfWorld &&
-        voxelY >= -halfWorld && voxelY + size <= halfWorld &&
-        voxelZ >= -halfWorld && voxelZ + size <= halfWorld;
-
-      if (isInBounds) {
-        // Store current cursor coordinate
-        const newCoord = worldToCube(voxelX, voxelY, voxelZ, this.getAbsoluteCursorDepth());
-
-        // Only log when coordinate changes
-        if (!this.currentCursorCoord ||
-            this.currentCursorCoord.x !== newCoord.x ||
-            this.currentCursorCoord.y !== newCoord.y ||
-            this.currentCursorCoord.z !== newCoord.z) {
-          console.log('[MOUSEMOVE CURSOR] GeometryHit CHANGED:', {
-            oldCoord: this.currentCursorCoord,
-            newCoord,
-            hitPoint: geometryHitPoint,
-            hitNormal: geometryHitNormal,
-            voxelCenter: { x: voxelCenterX, y: voxelCenterY, z: voxelCenterZ },
-            faceCenter: { x: faceCenterX, y: faceCenterY, z: faceCenterZ },
-            cursorCenter: { x: cursorX, y: cursorY, z: cursorZ },
-            voxelCorner: { x: voxelX, y: voxelY, z: voxelZ }
-          });
-        }
-
-        this.currentCursorCoord = newCoord;
-
-        // Position preview cube at voxel area center
-        this.currentGridPosition.set(cursorX, cursorY, cursorZ);
-        this.previewCube.position.copy(this.currentGridPosition);
-        this.previewCube.visible = true;
-      } else {
-        this.previewCube.visible = false;
-        this.currentCursorCoord = null;
-      }
-    } else {
-      this.previewCube.visible = false;
-      this.currentCursorCoord = null;
-    }
+    this.raycastAndUpdateCursor();
   }
 
 
   private updateVoxelCursorAtCenter(): void {
-    if (!this.previewCube) return;
-
     // Raycast from center of screen
     this.mouse.x = 0;
     this.mouse.y = 0;
     this.raycaster.setFromCamera(this.mouse, this.camera);
-
-    const size = this.getCursorSize();
-    const halfSize = size / 2;
-
-    // When draw plane is active, prioritize raycasting to the plane
-    // Otherwise raycast to geometry mesh
-    let hasPlaneHit = false;
-    let planeHitPoint: THREE.Vector3 | null = null;
-    let hasGeometryHit = false;
-    let geometryHitPoint: THREE.Vector3 | null = null;
-    let geometryHitNormal: THREE.Vector3 | null = null;
-
-    if (this.activeEditPlane && this.activeEditPlaneNormal && this.isEditMode) {
-      // Draw plane is active - always raycast to the plane (even during draw mode)
-      const intersectPoint = new THREE.Vector3();
-      const didIntersect = this.raycaster.ray.intersectPlane(this.activeEditPlane, intersectPoint);
-
-      if (didIntersect) {
-        hasPlaneHit = true;
-        planeHitPoint = intersectPoint;
-
-        // Show face highlight on the plane using the plane's normal
-        this.updateFaceHighlight(intersectPoint, this.activeEditPlaneNormal, size);
-      } else {
-        this.hideFaceHighlight();
-      }
-    } else if (this.geometryMesh && this.isEditMode && !this.isLeftMousePressed && !this.isRightMousePressed) {
-      // No draw plane active and not drawing - raycast to geometry mesh (shift-rotate mode)
-      const hit = this.raycastGeometry();
-      if (hit) {
-        this.updateFaceHighlight(hit.point, hit.normal, size);
-
-        // Store hit info for voxel cursor positioning
-        hasGeometryHit = true;
-        geometryHitPoint = hit.point;
-        geometryHitNormal = hit.normal;
-      } else {
-        this.hideFaceHighlight();
-      }
-    } else {
-      this.hideFaceHighlight();
-    }
-
-    // Position voxel cursor
-    if (hasPlaneHit && planeHitPoint && this.activeEditPlaneNormal) {
-      // Draw plane hit - position cursor on plane with SPACE mode
-      // Snap intersection point to grid
-      const snappedCenter = new THREE.Vector3(
-        snapToGrid(planeHitPoint.x, size),
-        snapToGrid(planeHitPoint.y, size),
-        snapToGrid(planeHitPoint.z, size)
-      );
-
-      // Project snapped point back onto the plane
-      const distanceToPlane = this.activeEditPlane!.distanceToPoint(snappedCenter);
-      const projectedCenter = snappedCenter.clone().sub(
-        this.activeEditPlaneNormal.clone().multiplyScalar(distanceToPlane)
-      );
-
-      // Apply SPACE mode offset
-      const normalOffset = this.depthSelectMode === 1 ? halfSize : -halfSize;
-      const cursorX = projectedCenter.x + this.activeEditPlaneNormal.x * normalOffset;
-      const cursorY = projectedCenter.y + this.activeEditPlaneNormal.y * normalOffset;
-      const cursorZ = projectedCenter.z + this.activeEditPlaneNormal.z * normalOffset;
-
-      // Calculate corner position for the cursor voxel
-      const voxelX = cursorX - halfSize;
-      const voxelY = cursorY - halfSize;
-      const voxelZ = cursorZ - halfSize;
-
-      // Check if within world bounds
-      const halfWorld = getWorldSize(getMacroDepth(), getBorderDepth()) / 2;
-      const isInBounds =
-        voxelX >= -halfWorld && voxelX + size <= halfWorld &&
-        voxelY >= -halfWorld && voxelY + size <= halfWorld &&
-        voxelZ >= -halfWorld && voxelZ + size <= halfWorld;
-
-      if (isInBounds) {
-        // Store current cursor coordinate
-        this.currentCursorCoord = worldToCube(voxelX, voxelY, voxelZ, this.getAbsoluteCursorDepth());
-
-        // Position preview cube at voxel area center
-        this.currentGridPosition.set(cursorX, cursorY, cursorZ);
-        this.previewCube.position.copy(this.currentGridPosition);
-        this.previewCube.visible = true;
-
-        // Continuous paint in shift mode: if mouse button is pressed, paint/erase voxel at new position
-        if (this.isLeftMousePressed || this.isRightMousePressed) {
-          // Check if this is a new voxel position (different from last painted)
-          const isNewPosition = !this.lastPaintedVoxel ||
-            this.lastPaintedVoxel.x !== voxelX ||
-            this.lastPaintedVoxel.y !== voxelY ||
-            this.lastPaintedVoxel.z !== voxelZ;
-
-          if (isNewPosition) {
-            if (this.isLeftMousePressed) {
-              // Left mouse: draw with selected color
-              this.paintVoxelWithSize(voxelX, voxelY, voxelZ, size);
-            } else if (this.isRightMousePressed) {
-              // Right mouse: erase
-              this.eraseVoxelWithSize(voxelX, voxelY, voxelZ, size);
-            }
-            this.lastPaintedVoxel = { x: voxelX, y: voxelY, z: voxelZ };
-          }
-        }
-      } else {
-        // Outside bounds - hide cursor
-        this.previewCube.visible = false;
-        this.currentCursorCoord = null;
-      }
-    } else if (hasGeometryHit && geometryHitPoint && geometryHitNormal) {
-      // Position cursor at the voxel area (not face center)
-      const size = this.getCursorSize();
-      const halfSize = size / 2;
-
-      // Convert hit point to CubeCoord to snap to voxel grid
-      const coord = worldToCube(geometryHitPoint.x, geometryHitPoint.y, geometryHitPoint.z, this.getAbsoluteCursorDepth());
-      const [voxelX, voxelY, voxelZ] = cubeToWorld(coord);
-
-      // Calculate voxel center
-      const voxelCenterX = voxelX + halfSize;
-      const voxelCenterY = voxelY + halfSize;
-      const voxelCenterZ = voxelZ + halfSize;
-
-      // Calculate face center (same as face highlight)
-      const faceCenterX = voxelCenterX + geometryHitNormal.x * halfSize - geometryHitNormal.x;
-      const faceCenterY = voxelCenterY + geometryHitNormal.y * halfSize - geometryHitNormal.y;
-      const faceCenterZ = voxelCenterZ + geometryHitNormal.z * halfSize - geometryHitNormal.z;
-
-      // Move from face center to voxel area center based on depth select mode
-      // Mode 1: voxel on positive normal side (outward from face)
-      // Mode 2: voxel on negative normal side (inward from face)
-      const normalOffset = this.depthSelectMode === 1 ? halfSize : -halfSize;
-      const cursorX = faceCenterX + geometryHitNormal.x * normalOffset;
-      const cursorY = faceCenterY + geometryHitNormal.y * normalOffset;
-      const cursorZ = faceCenterZ + geometryHitNormal.z * normalOffset;
-
-      // Calculate corner position for the cursor voxel
-      const cursorVoxelX = cursorX - halfSize;
-      const cursorVoxelY = cursorY - halfSize;
-      const cursorVoxelZ = cursorZ - halfSize;
-
-      // Check if within world bounds
-      const halfWorld = getWorldSize(getMacroDepth(), getBorderDepth()) / 2;
-      const isInBounds =
-        cursorVoxelX >= -halfWorld && cursorVoxelX + size <= halfWorld &&
-        cursorVoxelY >= -halfWorld && cursorVoxelY + size <= halfWorld &&
-        cursorVoxelZ >= -halfWorld && cursorVoxelZ + size <= halfWorld;
-
-      if (isInBounds) {
-        // Store cursor coordinate using cursor voxel position
-        this.currentCursorCoord = worldToCube(cursorVoxelX, cursorVoxelY, cursorVoxelZ, this.getAbsoluteCursorDepth());
-
-        // Position preview cube at voxel area center
-        this.currentGridPosition.set(cursorX, cursorY, cursorZ);
-        this.previewCube.position.copy(this.currentGridPosition);
-        this.previewCube.visible = true;
-
-        // Continuous paint in shift mode: if mouse button is pressed, paint/erase voxel at new position
-        if (this.isLeftMousePressed || this.isRightMousePressed) {
-          // Check if this is a new voxel position (different from last painted)
-          const isNewPosition = !this.lastPaintedVoxel ||
-            this.lastPaintedVoxel.x !== cursorVoxelX ||
-            this.lastPaintedVoxel.y !== cursorVoxelY ||
-            this.lastPaintedVoxel.z !== cursorVoxelZ;
-
-          if (isNewPosition) {
-            if (this.isLeftMousePressed) {
-              // Left mouse: draw with selected color
-              this.paintVoxelWithSize(cursorVoxelX, cursorVoxelY, cursorVoxelZ, size);
-            } else if (this.isRightMousePressed) {
-              // Right mouse: erase
-              this.eraseVoxelWithSize(cursorVoxelX, cursorVoxelY, cursorVoxelZ, size);
-            }
-            this.lastPaintedVoxel = { x: cursorVoxelX, y: cursorVoxelY, z: cursorVoxelZ };
-          }
-        }
-      } else {
-        // Outside bounds - hide cursor
-        this.previewCube.visible = false;
-        this.currentCursorCoord = null;
-      }
-    } else {
-      // Use active edit plane if available, otherwise ground plane
-      const targetPlane = this.activeEditPlane || this.groundPlane;
-      const intersectPoint = new THREE.Vector3();
-      const didIntersect = this.raycaster.ray.intersectPlane(targetPlane, intersectPoint);
-
-      if (didIntersect) {
-        const size = this.getCursorSize();
-        const halfSize = size / 2;
-
-        // Snap all three axes to grid centered on the intersection point
-        const snappedCenter = new THREE.Vector3(
-          snapToGrid(intersectPoint.x, size),
-          snapToGrid(intersectPoint.y, size),
-          snapToGrid(intersectPoint.z, size)
-        );
-
-        // For active edit plane, project back onto plane and apply SPACE mode
-        // For ground plane, use ground plane normal (Y-up)
-        let voxelX: number, voxelY: number, voxelZ: number;
-
-        if (this.activeEditPlane && this.activeEditPlaneNormal) {
-          // Project snapped point back onto the plane
-          const distanceToPlane = this.activeEditPlane.distanceToPoint(snappedCenter);
-          const projectedCenter = snappedCenter.clone().sub(
-            this.activeEditPlaneNormal.clone().multiplyScalar(distanceToPlane)
-          );
-
-          // Apply SPACE mode offset
-          const normalOffset = this.depthSelectMode === 1 ? halfSize : -halfSize;
-          const cursorX = projectedCenter.x + this.activeEditPlaneNormal.x * normalOffset;
-          const cursorY = projectedCenter.y + this.activeEditPlaneNormal.y * normalOffset;
-          const cursorZ = projectedCenter.z + this.activeEditPlaneNormal.z * normalOffset;
-
-          // Calculate corner position
-          voxelX = cursorX - halfSize;
-          voxelY = cursorY - halfSize;
-          voxelZ = cursorZ - halfSize;
-        } else {
-          // Ground plane mode: use depth select mode
-          voxelX = snappedCenter.x - halfSize;
-          voxelZ = snappedCenter.z - halfSize;
-          voxelY = this.depthSelectMode === 1 ? 0 : -size;
-        }
-
-        // Check if within world bounds (all axes)
-        const halfWorld = getWorldSize(getMacroDepth(), getBorderDepth()) / 2;
-        const isInBounds =
-          voxelX >= -halfWorld && voxelX + size <= halfWorld &&
-          voxelY >= -halfWorld && voxelY + size <= halfWorld &&
-          voxelZ >= -halfWorld && voxelZ + size <= halfWorld;
-
-        if (isInBounds) {
-          // Store current cursor coordinate (using corner position)
-          this.currentCursorCoord = worldToCube(voxelX, voxelY, voxelZ, this.getAbsoluteCursorDepth());
-
-          // Position preview cube at center of voxel (world space)
-          this.currentGridPosition.set(voxelX + halfSize, voxelY + halfSize, voxelZ + halfSize);
-          this.previewCube.position.copy(this.currentGridPosition);
-          this.previewCube.visible = true;
-
-          // Continuous paint in shift mode: if mouse button is pressed, paint/erase voxel at new position
-          if (this.isLeftMousePressed || this.isRightMousePressed) {
-            // Check if this is a new voxel position (different from last painted)
-            const isNewPosition = !this.lastPaintedVoxel ||
-              this.lastPaintedVoxel.x !== voxelX ||
-              this.lastPaintedVoxel.y !== voxelY ||
-              this.lastPaintedVoxel.z !== voxelZ;
-
-            if (isNewPosition) {
-              if (this.isLeftMousePressed) {
-                // Left mouse: draw with selected color
-                this.paintVoxelWithSize(voxelX, voxelY, voxelZ, size);
-              } else if (this.isRightMousePressed) {
-                // Right mouse: erase
-                this.eraseVoxelWithSize(voxelX, voxelY, voxelZ, size);
-              }
-              this.lastPaintedVoxel = { x: voxelX, y: voxelY, z: voxelZ };
-            }
-          }
-        } else {
-          // Outside bounds - hide cursor
-          this.previewCube.visible = false;
-          this.currentCursorCoord = null;
-        }
-      } else {
-        this.previewCube.visible = false;
-        this.currentCursorCoord = null;
-      }
-    }
+    this.raycastAndUpdateCursor();
   }
 
   private setupMouseMoveListener(canvas: HTMLCanvasElement): void {
@@ -1886,68 +1326,25 @@ export class SceneManager {
 
         // Apply SPACE mode offset
         const normalOffset = this.depthSelectMode === 1 ? halfSize : -halfSize;
-        const cursorX = projectedCenter.x + this.activeEditPlaneNormal.x * normalOffset;
-        const cursorY = projectedCenter.y + this.activeEditPlaneNormal.y * normalOffset;
-        const cursorZ = projectedCenter.z + this.activeEditPlaneNormal.z * normalOffset;
+        const cursorCenter = projectedCenter.clone().addScaledVector(this.activeEditPlaneNormal, normalOffset);
 
         // Calculate corner position for the cursor voxel
-        const voxelX = cursorX - halfSize;
-        const voxelY = cursorY - halfSize;
-        const voxelZ = cursorZ - halfSize;
+        const voxelCorner = cursorCenter.clone().subScalar(halfSize);
 
         // Check if within world bounds
-        const halfWorld = getWorldSize(getMacroDepth(), getBorderDepth()) / 2;
-        const isInBounds =
-          voxelX >= -halfWorld && voxelX + size <= halfWorld &&
-          voxelY >= -halfWorld && voxelY + size <= halfWorld &&
-          voxelZ >= -halfWorld && voxelZ + size <= halfWorld;
-
-        if (isInBounds) {
+        if (this.isVoxelInBounds(voxelCorner, size)) {
           // Store current cursor coordinate
-          const newCoord = worldToCube(voxelX, voxelY, voxelZ, this.getAbsoluteCursorDepth());
-
-          // Only log when coordinate changes
-          if (!this.currentCursorCoord ||
-              this.currentCursorCoord.x !== newCoord.x ||
-              this.currentCursorCoord.y !== newCoord.y ||
-              this.currentCursorCoord.z !== newCoord.z) {
-            console.log('[MOUSEMOVE CURSOR] DrawPlane CHANGED:', {
-              oldCoord: this.currentCursorCoord,
-              newCoord,
-              planeHitPoint,
-              snappedCenter: { x: snappedCenter.x, y: snappedCenter.y, z: snappedCenter.z },
-              projectedCenter: { x: projectedCenter.x, y: projectedCenter.y, z: projectedCenter.z },
-              cursorCenter: { x: cursorX, y: cursorY, z: cursorZ },
-              voxelCorner: { x: voxelX, y: voxelY, z: voxelZ }
-            });
-          }
+          const newCoord = worldToCube(voxelCorner.x, voxelCorner.y, voxelCorner.z, this.getAbsoluteCursorDepth());
 
           this.currentCursorCoord = newCoord;
 
           // Position preview cube at voxel area center
-          this.currentGridPosition.set(cursorX, cursorY, cursorZ);
+          this.currentGridPosition.copy(cursorCenter);
           this.previewCube.position.copy(this.currentGridPosition);
           this.previewCube.visible = true;
 
           // Continuous paint: if mouse button is pressed, paint/erase voxel at new position
-          if (this.isLeftMousePressed || this.isRightMousePressed) {
-            // Check if this is a new voxel position (different from last painted)
-            const isNewPosition = !this.lastPaintedVoxel ||
-              this.lastPaintedVoxel.x !== voxelX ||
-              this.lastPaintedVoxel.y !== voxelY ||
-              this.lastPaintedVoxel.z !== voxelZ;
-
-            if (isNewPosition) {
-              if (this.isLeftMousePressed) {
-                // Left mouse: draw with selected color
-                this.paintVoxelWithSize(voxelX, voxelY, voxelZ, size);
-              } else if (this.isRightMousePressed) {
-                // Right mouse: erase
-                this.eraseVoxelWithSize(voxelX, voxelY, voxelZ, size);
-              }
-              this.lastPaintedVoxel = { x: voxelX, y: voxelY, z: voxelZ };
-            }
-          }
+          this.handleContinuousPaint(voxelCorner, size);
         } else {
           this.previewCube.visible = false;
           this.currentCursorCoord = null;
@@ -1962,80 +1359,42 @@ export class SceneManager {
         const [voxelX, voxelY, voxelZ] = cubeToWorld(coord);
 
         // Calculate voxel center
-        const voxelCenterX = voxelX + halfSize;
-        const voxelCenterY = voxelY + halfSize;
-        const voxelCenterZ = voxelZ + halfSize;
+        const voxelCorner = new THREE.Vector3(voxelX, voxelY, voxelZ);
+        const voxelCenter = this.calculateVoxelCenter(voxelCorner, halfSize);
 
         // Calculate face center (same as face highlight)
-        const faceCenterX = voxelCenterX + geometryHitNormal.x * halfSize - geometryHitNormal.x;
-        const faceCenterY = voxelCenterY + geometryHitNormal.y * halfSize - geometryHitNormal.y;
-        const faceCenterZ = voxelCenterZ + geometryHitNormal.z * halfSize - geometryHitNormal.z;
+        const faceCenter = this.calculateFaceCenter(voxelCenter, geometryHitNormal, halfSize);
 
         // Move from face center to voxel area center based on depth select mode
         // Mode 1: voxel on positive normal side (outward from face)
         // Mode 2: voxel on negative normal side (inward from face)
         const normalOffset = this.depthSelectMode === 1 ? halfSize : -halfSize;
-        const cursorX = faceCenterX + geometryHitNormal.x * normalOffset;
-        const cursorY = faceCenterY + geometryHitNormal.y * normalOffset;
-        const cursorZ = faceCenterZ + geometryHitNormal.z * normalOffset;
+        const cursorCenter = faceCenter.clone().addScaledVector(geometryHitNormal, normalOffset);
 
         // Calculate corner position for the cursor voxel
-        const cursorVoxelX = cursorX - halfSize;
-        const cursorVoxelY = cursorY - halfSize;
-        const cursorVoxelZ = cursorZ - halfSize;
+        const cursorVoxelCorner = cursorCenter.clone().subScalar(halfSize);
 
         // Check if within world bounds
-        const halfWorld = getWorldSize(getMacroDepth(), getBorderDepth()) / 2;
-        const isInBounds =
-          cursorVoxelX >= -halfWorld && cursorVoxelX + size <= halfWorld &&
-          cursorVoxelY >= -halfWorld && cursorVoxelY + size <= halfWorld &&
-          cursorVoxelZ >= -halfWorld && cursorVoxelZ + size <= halfWorld;
-
-        if (isInBounds) {
+        if (this.isVoxelInBounds(cursorVoxelCorner, size)) {
           // Store cursor coordinate using cursor voxel position
-          const newCoord = worldToCube(cursorVoxelX, cursorVoxelY, cursorVoxelZ, this.getAbsoluteCursorDepth());
+          const newCoord = worldToCube(cursorVoxelCorner.x, cursorVoxelCorner.y, cursorVoxelCorner.z, this.getAbsoluteCursorDepth());
 
           // Only log when coordinate changes
           if (!this.currentCursorCoord ||
               this.currentCursorCoord.x !== newCoord.x ||
               this.currentCursorCoord.y !== newCoord.y ||
               this.currentCursorCoord.z !== newCoord.z) {
-            console.log('[MOUSEMOVE CURSOR] GeometryHit CHANGED:', {
-              oldCoord: this.currentCursorCoord,
-              newCoord,
-              hitPoint: geometryHitPoint,
-              hitNormal: geometryHitNormal,
-              cursorCenter: { x: cursorX, y: cursorY, z: cursorZ },
-              voxelCorner: { x: cursorVoxelX, y: cursorVoxelY, z: cursorVoxelZ }
-            });
           }
 
           this.currentCursorCoord = newCoord;
 
           // Position preview cube at voxel area center
-          this.currentGridPosition.set(cursorX, cursorY, cursorZ);
+          this.currentGridPosition.copy(cursorCenter);
           this.previewCube.position.copy(this.currentGridPosition);
           this.previewCube.visible = true;
 
           // Continuous paint: if mouse button is pressed, paint/erase voxel at new position
-          if (this.isLeftMousePressed || this.isRightMousePressed) {
-            // Check if this is a new voxel position (different from last painted)
-            const isNewPosition = !this.lastPaintedVoxel ||
-              this.lastPaintedVoxel.x !== cursorVoxelX ||
-              this.lastPaintedVoxel.y !== cursorVoxelY ||
-              this.lastPaintedVoxel.z !== cursorVoxelZ;
-
-            if (isNewPosition) {
-              if (this.isLeftMousePressed) {
-                // Left mouse: draw with selected color
-                this.paintVoxelWithSize(cursorVoxelX, cursorVoxelY, cursorVoxelZ, size);
-              } else if (this.isRightMousePressed) {
-                // Right mouse: erase
-                this.eraseVoxelWithSize(cursorVoxelX, cursorVoxelY, cursorVoxelZ, size);
-              }
-              this.lastPaintedVoxel = { x: cursorVoxelX, y: cursorVoxelY, z: cursorVoxelZ };
-            }
-          }
+          this.handleContinuousPaint(cursorVoxelCorner, size);
         } else {
           this.previewCube.visible = false;
           this.currentCursorCoord = null;
@@ -2053,61 +1412,31 @@ export class SceneManager {
           // If we have an active edit plane with a normal, apply SPACE mode
           if (this.activeEditPlane && this.activeEditPlaneNormal) {
             // Snap intersection point to grid
-            const voxelCenterX = snapToGrid(intersectPoint.x, size);
-            const voxelCenterY = snapToGrid(intersectPoint.y, size);
-            const voxelCenterZ = snapToGrid(intersectPoint.z, size);
-
-            // Calculate face position on the plane
-            const faceCenterX = voxelCenterX;
-            const faceCenterY = voxelCenterY;
-            const faceCenterZ = voxelCenterZ;
+            const faceCenter = new THREE.Vector3(
+              snapToGrid(intersectPoint.x, size),
+              snapToGrid(intersectPoint.y, size),
+              snapToGrid(intersectPoint.z, size)
+            );
 
             // Apply SPACE mode offset
             const normalOffset = this.depthSelectMode === 1 ? halfSize : -halfSize;
-            const cursorX = faceCenterX + this.activeEditPlaneNormal.x * normalOffset;
-            const cursorY = faceCenterY + this.activeEditPlaneNormal.y * normalOffset;
-            const cursorZ = faceCenterZ + this.activeEditPlaneNormal.z * normalOffset;
+            const cursorCenter = faceCenter.clone().addScaledVector(this.activeEditPlaneNormal, normalOffset);
 
             // Calculate corner position for the cursor voxel
-            const voxelX = cursorX - halfSize;
-            const voxelY = cursorY - halfSize;
-            const voxelZ = cursorZ - halfSize;
+            const voxelCorner = cursorCenter.clone().subScalar(halfSize);
 
             // Check if within world bounds
-            const halfWorld = getWorldSize(getMacroDepth(), getBorderDepth()) / 2;
-            const isInBounds =
-              voxelX >= -halfWorld && voxelX + size <= halfWorld &&
-              voxelY >= -halfWorld && voxelY + size <= halfWorld &&
-              voxelZ >= -halfWorld && voxelZ + size <= halfWorld;
-
-            if (isInBounds) {
+            if (this.isVoxelInBounds(voxelCorner, size)) {
               // Store current cursor coordinate
-              this.currentCursorCoord = worldToCube(voxelX, voxelY, voxelZ, this.getAbsoluteCursorDepth());
+              this.currentCursorCoord = worldToCube(voxelCorner.x, voxelCorner.y, voxelCorner.z, this.getAbsoluteCursorDepth());
 
               // Position preview cube at voxel area center
-              this.currentGridPosition.set(cursorX, cursorY, cursorZ);
+              this.currentGridPosition.copy(cursorCenter);
               this.previewCube.position.copy(this.currentGridPosition);
               this.previewCube.visible = true;
 
               // Continuous paint: if mouse button is pressed, paint/erase voxel at new position
-              if (this.isLeftMousePressed || this.isRightMousePressed) {
-                // Check if this is a new voxel position (different from last painted)
-                const isNewPosition = !this.lastPaintedVoxel ||
-                  this.lastPaintedVoxel.x !== voxelX ||
-                  this.lastPaintedVoxel.y !== voxelY ||
-                  this.lastPaintedVoxel.z !== voxelZ;
-
-                if (isNewPosition) {
-                  if (this.isLeftMousePressed) {
-                    // Left mouse: draw with selected color
-                    this.paintVoxelWithSize(voxelX, voxelY, voxelZ, size);
-                  } else if (this.isRightMousePressed) {
-                    // Right mouse: erase
-                    this.eraseVoxelWithSize(voxelX, voxelY, voxelZ, size);
-                  }
-                  this.lastPaintedVoxel = { x: voxelX, y: voxelY, z: voxelZ };
-                }
-              }
+              this.handleContinuousPaint(voxelCorner, size);
             } else {
               // Outside bounds - hide cursor
               this.previewCube.visible = false;
@@ -2120,35 +1449,24 @@ export class SceneManager {
             const voxelCenterZ = snapToGrid(intersectPoint.z, size);
 
             // Calculate corner position (world space)
-            const voxelX = voxelCenterX - halfSize;
-            const voxelZ = voxelCenterZ - halfSize;
             // Y position based on depth select mode (not snapped to grid for ground plane)
             const voxelY = this.depthSelectMode === 1 ? 0 : -size;
+            const voxelCorner = new THREE.Vector3(
+              voxelCenterX - halfSize,
+              voxelY,
+              voxelCenterZ - halfSize
+            );
 
             // Check if within world bounds (all axes)
-            const halfWorld = getWorldSize(getMacroDepth(), getBorderDepth()) / 2;
-            const isInBounds =
-              voxelX >= -halfWorld && voxelX + size <= halfWorld &&
-              voxelY >= -halfWorld && voxelY + size <= halfWorld &&
-              voxelZ >= -halfWorld && voxelZ + size <= halfWorld;
-
-            if (isInBounds) {
+            if (this.isVoxelInBounds(voxelCorner, size)) {
               // Store cursor coordinate
-              const newCoord = worldToCube(voxelX, voxelY, voxelZ, this.getAbsoluteCursorDepth());
+              const newCoord = worldToCube(voxelCorner.x, voxelCorner.y, voxelCorner.z, this.getAbsoluteCursorDepth());
 
               // Only log when coordinate changes
               if (!this.currentCursorCoord ||
                   this.currentCursorCoord.x !== newCoord.x ||
                   this.currentCursorCoord.y !== newCoord.y ||
                   this.currentCursorCoord.z !== newCoord.z) {
-                console.log('[MOUSEMOVE CURSOR] GroundPlane CHANGED:', {
-                  oldCoord: this.currentCursorCoord,
-                  newCoord,
-                  intersectPoint,
-                  voxelCenter: { x: voxelCenterX, z: voxelCenterZ },
-                  voxelCorner: { x: voxelX, y: voxelY, z: voxelZ },
-                  depthSelectMode: this.depthSelectMode
-                });
               }
 
               this.currentCursorCoord = newCoord;
@@ -2159,24 +1477,7 @@ export class SceneManager {
               this.previewCube.visible = true;
 
               // Continuous paint: if mouse button is pressed, paint/erase voxel at new position
-              if (this.isLeftMousePressed || this.isRightMousePressed) {
-                // Check if this is a new voxel position (different from last painted)
-                const isNewPosition = !this.lastPaintedVoxel ||
-                  this.lastPaintedVoxel.x !== voxelX ||
-                  this.lastPaintedVoxel.y !== voxelY ||
-                  this.lastPaintedVoxel.z !== voxelZ;
-
-                if (isNewPosition) {
-                  if (this.isLeftMousePressed) {
-                    // Left mouse: draw with selected color
-                    this.paintVoxelWithSize(voxelX, voxelY, voxelZ, size);
-                  } else if (this.isRightMousePressed) {
-                    // Right mouse: erase
-                    this.eraseVoxelWithSize(voxelX, voxelY, voxelZ, size);
-                  }
-                  this.lastPaintedVoxel = { x: voxelX, y: voxelY, z: voxelZ };
-                }
-              }
+              this.handleContinuousPaint(voxelCorner, size);
             } else {
               // Outside bounds - hide cursor
               this.previewCube.visible = false;
@@ -2415,9 +1716,7 @@ export class SceneManager {
     this.scene.add(this.currentAvatar.getObject3D());
 
     // Fetch and apply profile picture for current user
-    if (this.currentUserPubkey) {
-      this.fetchAndApplyProfilePicture(this.currentUserPubkey, this.currentAvatar);
-    }
+    this.applyCurrentUserProfile(this.currentAvatar);
   }
 
   removeAvatar(): void {
@@ -2487,9 +1786,8 @@ export class SceneManager {
 
       // Fetch and apply profile picture for current user
       logger.log('renderer', `[Scene] After avatar creation, currentUserPubkey: ${this.currentUserPubkey}`);
-      if (this.currentUserPubkey) {
-        this.fetchAndApplyProfilePicture(this.currentUserPubkey, this.currentAvatar);
-      } else {
+      this.applyCurrentUserProfile(this.currentAvatar);
+      if (!this.currentUserPubkey) {
         logger.log('renderer', `[Scene] No currentUserPubkey set, skipping profile fetch`);
       }
 
@@ -2532,9 +1830,7 @@ export class SceneManager {
     this.currentAvatar = voxelAvatar;
 
     // Fetch and apply profile picture for current user
-    if (this.currentUserPubkey) {
-      this.fetchAndApplyProfilePicture(this.currentUserPubkey, this.currentAvatar);
-    }
+    this.applyCurrentUserProfile(this.currentAvatar);
 
     logger.log('renderer', 'Created CSM avatar');
   }
@@ -2991,6 +2287,268 @@ export class SceneManager {
     }
 
     logger.log('renderer', `Textures ${enabled ? 'enabled' : 'disabled'}`);
+  }
+
+  // ============================================================================
+  // Helper Methods - Extracted to reduce code duplication
+  // ============================================================================
+
+  /**
+   * Calculate and update mouse position in normalized device coordinates
+   * In mouse rotate mode (mode 2), uses center crosshair position instead of mouse pointer
+   */
+  private calculateMousePosition(event: MouseEvent, canvas: HTMLCanvasElement): void {
+    if (this.mouseMode === 2) {
+      this.mouse.x = 0;
+      this.mouse.y = 0;
+    } else {
+      const rect = canvas.getBoundingClientRect();
+      this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    }
+  }
+
+  /**
+   * Check if a voxel at the given position and size is within world bounds
+   */
+  private isVoxelInBounds(voxelCorner: THREE.Vector3, size: number): boolean {
+    const halfWorld = getWorldSize(getMacroDepth(), getBorderDepth()) / 2;
+    return voxelCorner.x >= -halfWorld && voxelCorner.x + size <= halfWorld &&
+           voxelCorner.y >= -halfWorld && voxelCorner.y + size <= halfWorld &&
+           voxelCorner.z >= -halfWorld && voxelCorner.z + size <= halfWorld;
+  }
+
+  /**
+   * Handle continuous paint/erase at cursor position
+   * Only paints/erases if the position has changed since last operation
+   */
+  private handleContinuousPaint(voxelCorner: THREE.Vector3, size: number): void {
+    if (!this.isLeftMousePressed && !this.isRightMousePressed) return;
+
+    const isNewPosition = !this.lastPaintedVoxel ||
+      this.lastPaintedVoxel.x !== voxelCorner.x ||
+      this.lastPaintedVoxel.y !== voxelCorner.y ||
+      this.lastPaintedVoxel.z !== voxelCorner.z;
+
+    if (isNewPosition) {
+      if (this.isLeftMousePressed) {
+        this.paintVoxelWithSize(voxelCorner.x, voxelCorner.y, voxelCorner.z, size);
+      } else if (this.isRightMousePressed) {
+        this.eraseVoxelWithSize(voxelCorner.x, voxelCorner.y, voxelCorner.z, size);
+      }
+      this.lastPaintedVoxel = { x: voxelCorner.x, y: voxelCorner.y, z: voxelCorner.z };
+    }
+  }
+
+  /**
+   * Unified function that performs raycast and updates both face highlight and voxel cursor
+   * Returns true if cursor was positioned, false otherwise
+   */
+  private raycastAndUpdateCursor(): boolean {
+    if (!this.previewCube) return false;
+
+    const size = this.getCursorSize();
+    const halfSize = size / 2;
+    const absoluteDepth = this.getAbsoluteCursorDepth();
+    const normalOffset = this.depthSelectMode === 1 ? halfSize : -halfSize;
+
+    let cursorPositioned = false;
+
+    // Try draw plane first (if active)
+    if (this.activeEditPlane && this.activeEditPlaneNormal) {
+      const planeHit = new THREE.Vector3();
+      if (this.raycaster.ray.intersectPlane(this.activeEditPlane, planeHit)) {
+        // Show face highlight only when not pressing mouse buttons
+        if (!this.isLeftMousePressed && !this.isRightMousePressed) {
+          this.updateFaceHighlight(planeHit, this.activeEditPlaneNormal, size);
+        }
+
+        // Position cursor: snap to grid, project to plane, apply offset
+        const snapped = snapToGrid(planeHit, size) as { x: number; y: number; z: number };
+        const snappedVec = new THREE.Vector3(snapped.x, snapped.y, snapped.z);
+        const distanceToPlane = this.activeEditPlane.distanceToPoint(snappedVec);
+        const projectedCenter = snappedVec.clone().sub(
+          this.activeEditPlaneNormal.clone().multiplyScalar(distanceToPlane)
+        );
+        const cursorCenter = projectedCenter.clone().addScaledVector(this.activeEditPlaneNormal, normalOffset);
+        const voxelCorner = cursorCenter.clone().subScalar(halfSize);
+
+        if (this.isVoxelInBounds(voxelCorner, size)) {
+          const newCoord = worldToCube(voxelCorner.x, voxelCorner.y, voxelCorner.z, absoluteDepth);
+
+          // Only log when coordinate changes
+          if (!this.currentCursorCoord ||
+              this.currentCursorCoord.x !== newCoord.x ||
+              this.currentCursorCoord.y !== newCoord.y ||
+              this.currentCursorCoord.z !== newCoord.z) {
+            console.log('[CURSOR] DrawPlane:', { oldCoord: this.currentCursorCoord, newCoord });
+          }
+
+          this.currentCursorCoord = newCoord;
+          this.currentGridPosition.copy(cursorCenter);
+          this.previewCube.position.copy(this.currentGridPosition);
+          this.previewCube.visible = true;
+          this.handleContinuousPaint(voxelCorner, size);
+          cursorPositioned = true;
+        }
+      }
+    }
+
+    // Try geometry raycast (if no plane hit and geometry exists)
+    if (!cursorPositioned && this.geometryMesh) {
+      const hit = this.raycastGeometry();
+      if (hit) {
+        // Show face highlight only when not pressing mouse buttons
+        if (!this.isLeftMousePressed && !this.isRightMousePressed) {
+          this.updateFaceHighlight(hit.point, hit.normal, size);
+        }
+
+        // Position cursor: snap to voxel grid, calculate face center, apply offset
+        const coord = worldToCube(hit.point.x, hit.point.y, hit.point.z, absoluteDepth);
+        const [voxelX, voxelY, voxelZ] = cubeToWorld(coord);
+        const voxelCorner = new THREE.Vector3(voxelX, voxelY, voxelZ);
+        const voxelCenter = this.calculateVoxelCenter(voxelCorner, halfSize);
+        const faceCenter = this.calculateFaceCenter(voxelCenter, hit.normal, halfSize);
+        const cursorCenter = faceCenter.clone().addScaledVector(hit.normal, normalOffset);
+        const cursorVoxelCorner = cursorCenter.clone().subScalar(halfSize);
+
+        if (this.isVoxelInBounds(cursorVoxelCorner, size)) {
+          const newCoord = worldToCube(cursorVoxelCorner.x, cursorVoxelCorner.y, cursorVoxelCorner.z, absoluteDepth);
+
+          // Only log when coordinate changes
+          if (!this.currentCursorCoord ||
+              this.currentCursorCoord.x !== newCoord.x ||
+              this.currentCursorCoord.y !== newCoord.y ||
+              this.currentCursorCoord.z !== newCoord.z) {
+            console.log('[CURSOR] GeometryHit:', { oldCoord: this.currentCursorCoord, newCoord });
+          }
+
+          this.currentCursorCoord = newCoord;
+          this.currentGridPosition.copy(cursorCenter);
+          this.previewCube.position.copy(this.currentGridPosition);
+          this.previewCube.visible = true;
+          this.handleContinuousPaint(cursorVoxelCorner, size);
+          cursorPositioned = true;
+        }
+      }
+    }
+
+    // Fallback to plane intersection (ground or active edit plane)
+    if (!cursorPositioned) {
+      const targetPlane = this.activeEditPlane || this.groundPlane;
+      const intersectPoint = new THREE.Vector3();
+      if (this.raycaster.ray.intersectPlane(targetPlane, intersectPoint)) {
+        if (this.activeEditPlane && this.activeEditPlaneNormal) {
+          // Active edit plane with normal - apply SPACE mode
+          const snapped = snapToGrid(intersectPoint, size) as { x: number; y: number; z: number };
+          const faceCenter = new THREE.Vector3(snapped.x, snapped.y, snapped.z);
+          const cursorCenter = faceCenter.clone().addScaledVector(this.activeEditPlaneNormal, normalOffset);
+          const voxelCorner = cursorCenter.clone().subScalar(halfSize);
+
+          if (this.isVoxelInBounds(voxelCorner, size)) {
+            this.currentCursorCoord = worldToCube(voxelCorner.x, voxelCorner.y, voxelCorner.z, absoluteDepth);
+            this.currentGridPosition.copy(cursorCenter);
+            this.previewCube.position.copy(this.currentGridPosition);
+            this.previewCube.visible = true;
+            this.handleContinuousPaint(voxelCorner, size);
+            cursorPositioned = true;
+          }
+        } else {
+          // Ground plane mode - snap X and Z
+          const voxelCenterX = snapToGrid(intersectPoint.x, size) as number;
+          const voxelCenterZ = snapToGrid(intersectPoint.z, size) as number;
+          const voxelY = this.depthSelectMode === 1 ? 0 : -size;
+          const voxelCorner = new THREE.Vector3(voxelCenterX - halfSize, voxelY, voxelCenterZ - halfSize);
+
+          if (this.isVoxelInBounds(voxelCorner, size)) {
+            this.currentCursorCoord = worldToCube(voxelCorner.x, voxelCorner.y, voxelCorner.z, absoluteDepth);
+            this.currentGridPosition.set(voxelCenterX, voxelY + halfSize, voxelCenterZ);
+            this.previewCube.position.copy(this.currentGridPosition);
+            this.previewCube.visible = true;
+            this.handleContinuousPaint(voxelCorner, size);
+            cursorPositioned = true;
+          }
+        }
+      }
+    }
+
+    // Hide cursor and face highlight if no valid position found
+    if (!cursorPositioned) {
+      this.previewCube.visible = false;
+      this.currentCursorCoord = null;
+      this.hideFaceHighlight();
+    }
+
+    return cursorPositioned;
+  }
+
+  /**
+   * Calculate face center position from voxel center, normal, and half size
+   */
+  private calculateFaceCenter(
+    voxelCenter: THREE.Vector3,
+    normal: THREE.Vector3,
+    halfSize: number
+  ): THREE.Vector3 {
+    // Face center = voxelCenter + normal * (halfSize - 1)
+    return voxelCenter.clone().addScaledVector(normal, halfSize - 1);
+  }
+
+  /**
+   * Calculate voxel center from corner position
+   */
+  private calculateVoxelCenter(voxelCorner: THREE.Vector3, halfSize: number): THREE.Vector3 {
+    return voxelCorner.clone().addScalar(halfSize);
+  }
+
+  /**
+   * Adjust cursor depth by delta and update cursor visualization
+   * Used for arrow up/down keys
+   */
+  private adjustCursorDepth(delta: 1 | -1): void {
+    if (this.currentMode === 'placement' && this.placementMode) {
+      const currentScale = this.placementMode.getScale();
+      this.placementMode.setScale(delta > 0 ? currentScale + 1 : Math.max(0, currentScale - 1));
+    } else if (this.isEditMode) {
+      this.cursorDepth = delta > 0
+        ? Math.min(getMaxCursorDepth(), this.cursorDepth + 1)
+        : Math.max(getMinCursorDepth(), this.cursorDepth - 1);
+      this.updateCursorSize();
+      logger.log('renderer', `[Cursor Depth] Changed to ${this.cursorDepth}, absolute depth: ${this.getAbsoluteCursorDepth()}, size: ${this.getCursorSize()}`);
+
+      if (this.mouseMode === 2) {
+        this.updateVoxelCursorAtCenter();
+      } else {
+        this.updateCursorVisualization();
+      }
+    }
+  }
+
+  /**
+   * Reset mouse mode and clear edit state
+   * Exits pointer lock, clears paint state, and clears active edit plane
+   */
+  private resetMouseMode(): void {
+    if (this.mouseMode === 2) {
+      this.mouseMode = 1;
+      document.exitPointerLock();
+      if (this.crosshair) {
+        this.crosshair.style.display = 'none';
+      }
+    }
+    this.isLeftMousePressed = false;
+    this.isRightMousePressed = false;
+    this.lastPaintedVoxel = null;
+    this.clearActiveEditPlane();
+  }
+
+  /**
+   * Apply current user's profile picture to an avatar
+   */
+  private applyCurrentUserProfile(avatar: IAvatar): void {
+    if (this.currentUserPubkey) {
+      this.fetchAndApplyProfilePicture(this.currentUserPubkey, avatar);
+    }
   }
 
   /**
