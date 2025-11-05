@@ -236,4 +236,3 @@ impl Default for NetworkClient {
         Self::new()
     }
 }
-

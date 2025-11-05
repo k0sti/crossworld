@@ -5,8 +5,8 @@ use wasm_bindgen::prelude::*;
 use crate::{
     generate_face_mesh,
     glam::{IVec3, Vec3},
-    parse_csm, serialize_csm, ColorMapper, Cube, CubeCoord, DefaultMeshBuilder,
-    Octree, PaletteColorMapper, VoxColorMapper,
+    parse_csm, serialize_csm, ColorMapper, Cube, CubeCoord, DefaultMeshBuilder, Octree,
+    PaletteColorMapper, VoxColorMapper,
 };
 
 // ============================================================================
@@ -367,7 +367,12 @@ pub fn validate_csm(cubescript: &str) -> JsValue {
 /// # Errors
 /// Throws JS error if loading fails
 #[wasm_bindgen(js_name = loadVox)]
-pub fn load_vox(bytes: &[u8], align_x: f32, align_y: f32, align_z: f32) -> Result<WasmCube, JsValue> {
+pub fn load_vox(
+    bytes: &[u8],
+    align_x: f32,
+    align_y: f32,
+    align_z: f32,
+) -> Result<WasmCube, JsValue> {
     let align = Vec3::new(align_x, align_y, align_z);
     match crate::load_vox_to_cube(bytes, align) {
         Ok(cube) => Ok(WasmCube {
