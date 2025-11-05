@@ -32,6 +32,7 @@ export interface IAvatar {
   update(deltaTime_s: number): void;
   dispose(): void;
   setScene(scene: THREE.Scene): void;
+  setRaycastMesh(mesh: THREE.Mesh): void;
 }
 
 /**
@@ -59,6 +60,8 @@ export abstract class BaseAvatar implements IAvatar {
   protected teleportAnimation: TeleportAnimation | null = null;
   protected scene: THREE.Scene | null = null;
   protected profileIcon: ProfileIcon | null = null;
+  protected raycaster: THREE.Raycaster = new THREE.Raycaster();
+  protected raycastMesh: THREE.Mesh | null = null;
 
   // Avatar pivot point for placement in world
   public static readonly PIVOT = AVATAR_PIVOT;
@@ -67,9 +70,9 @@ export abstract class BaseAvatar implements IAvatar {
   protected velocity: THREE.Vector2 = new THREE.Vector2(0, 0);
   protected currentDirection: number = 0; // Current facing angle in radians
   protected targetDirection: number = 0; // Target facing angle in radians
-  protected turnSpeed: number = 5.0; // Radians per second
-  protected velocityAcceleration: number = 10.0; // Acceleration constant
-  protected velocityDamping: number = 0.95; // Damping factor (0.5 = half previous velocity)
+  protected turnSpeed: number = 15.0; // Radians per second
+  protected velocityAcceleration: number = 40.0; // Acceleration constant
+  protected velocityDamping: number = 0.90; // Damping factor (0.5 = half previous velocity)
 
   protected get moveSpeed(): number {
     return this.baseMoveSpeed * (this.isRunning ? 2.0 : 1.0);
@@ -138,6 +141,10 @@ export abstract class BaseAvatar implements IAvatar {
     this.scene = scene;
   }
 
+  setRaycastMesh(mesh: THREE.Mesh): void {
+    this.raycastMesh = mesh;
+  }
+
   async setProfilePicture(pictureUrl: string | null): Promise<void> {
     if (!this.profileIcon) return;
 
@@ -183,6 +190,11 @@ export abstract class BaseAvatar implements IAvatar {
     this.targetDirection = targetAngle;
     this.targetTransform.setXZ(x, z);
     this.targetTransform.setAngle(targetAngle);
+
+    // Raycast down to place avatar on ground
+    const groundY = this.getGroundHeight(x, z, this.transform.getY());
+    this.transform.setY(groundY);
+
     this.group.position.set(this.transform.getX(), this.transform.getY(), this.transform.getZ());
     this.group.quaternion.copy(this.transform.getRotation());
   }
@@ -224,6 +236,11 @@ export abstract class BaseAvatar implements IAvatar {
     this.targetDirection = targetAngle;
     this.targetTransform.setXZ(x, z);
     this.targetTransform.setAngle(targetAngle);
+
+    // Raycast down to place avatar on ground
+    const groundY = this.getGroundHeight(x, z, this.transform.getY());
+    this.transform.setY(groundY);
+
     this.group.position.set(this.transform.getX(), this.transform.getY(), this.transform.getZ());
     this.group.quaternion.copy(this.transform.getRotation());
   }
@@ -240,6 +257,30 @@ export abstract class BaseAvatar implements IAvatar {
     return diff;
   }
 
+  /**
+   * Raycast down from position to find ground height
+   * Returns Y position or current Y if no intersection
+   */
+  private getGroundHeight(x: number, z: number, currentY: number): number {
+    if (!this.raycastMesh) {
+      return currentY;
+    }
+
+    // Raycast from high above down to find ground
+    const rayOrigin = new THREE.Vector3(x, 100, z);
+    const rayDirection = new THREE.Vector3(0, -1, 0);
+
+    this.raycaster.set(rayOrigin, rayDirection);
+    const intersects = this.raycaster.intersectObject(this.raycastMesh, false);
+
+    if (intersects.length > 0) {
+      // Return the intersection point's Y coordinate
+      return intersects[0].point.y;
+    }
+
+    return currentY;
+  }
+
   update(deltaTime_s: number): void {
     // Update teleport animation if active
     if (this.teleportAnimation?.isActive()) {
@@ -247,13 +288,17 @@ export abstract class BaseAvatar implements IAvatar {
       return;
     }
 
-
-    const distance = this.transform.distanceTo2D(this.targetTransform);
-
     if (!this.isMoving) {
       return;
-    } else if (distance < 0.01) {
-      // Reached target
+    }
+
+    // Calculate direction to target
+    const dx = this.targetTransform.getX() - this.transform.getX();
+    const dz = this.targetTransform.getZ() - this.transform.getZ();
+    const distance = Math.sqrt(dx * dx + dz * dz);
+
+    // Check if reached target
+    if (distance < 0.01) {
       this.transform.setXZ(this.targetTransform.getX(), this.targetTransform.getZ());
       this.group.position.set(this.transform.getX(), this.transform.getY(), this.transform.getZ());
       this.velocity.set(0, 0);
@@ -262,9 +307,7 @@ export abstract class BaseAvatar implements IAvatar {
       return;
     }
 
-    // Calculate target direction continuously based on current position
-    const dx = this.targetTransform.getX() - this.transform.getX();
-    const dz = this.targetTransform.getZ() - this.transform.getZ();
+    // Calculate target direction for rotation
     this.targetDirection = Math.atan2(dx, dz) + this.getRotationOffset();
 
     // Smooth rotation towards target direction
@@ -272,10 +315,8 @@ export abstract class BaseAvatar implements IAvatar {
     const turnAmount = this.turnSpeed * deltaTime_s;
 
     if (Math.abs(angleDiff) < turnAmount) {
-      // Close enough, snap to target
       this.currentDirection = this.targetDirection;
     } else {
-      // Turn towards target (shortest path)
       this.currentDirection += Math.sign(angleDiff) * turnAmount;
     }
 
@@ -287,31 +328,31 @@ export abstract class BaseAvatar implements IAvatar {
     this.transform.setAngle(this.currentDirection);
     this.group.quaternion.copy(this.transform.getRotation());
 
-    // Calculate direction to target (reusing dx, dz from above)
-    const targetOffset = new THREE.Vector2(dx, dz);
-    const targetDir = targetOffset.normalize();
+    // Move directly toward target (no angle-based acceleration)
+    const targetDir = new THREE.Vector2(dx / distance, dz / distance);
 
-    // Current direction vector (without rotation offset for velocity calculation)
-    const currentDirNoOffset = this.currentDirection - this.getRotationOffset();
-    const currentDir = new THREE.Vector2(Math.sin(currentDirNoOffset), Math.cos(currentDirNoOffset));
-
-    // Calculate dot product (alignment with target)
-    const alignment = Math.max(0, 0.5+targetDir.dot(currentDir));
-
-    // Update velocity: velocity = damping * lastVelocity + alignment * acceleration * currentDir
+    // Apply acceleration directly toward target
     this.velocity.multiplyScalar(this.velocityDamping);
-    
-    // brake when close
-    // if (targetOffset.length()<1) this.velocity.multiplyScalar(0.8);
+    const speedMultiplier = this.isRunning ? 2.0 : 1.0;
+    const accelerationForce = this.velocityAcceleration * speedMultiplier * deltaTime_s;
+    this.velocity.add(targetDir.clone().multiplyScalar(accelerationForce));
 
-    const accelerationForce = alignment * this.velocityAcceleration * deltaTime_s;
-    this.velocity.add(currentDir.clone().multiplyScalar(accelerationForce));
+    // Cap velocity at moveSpeed
+    const currentSpeed = this.velocity.length();
+    if (currentSpeed > this.moveSpeed) {
+      this.velocity.normalize().multiplyScalar(this.moveSpeed);
+    }
 
     // Update position
     const newX = this.transform.getX() + this.velocity.x * deltaTime_s;
     const newZ = this.transform.getZ() + this.velocity.y * deltaTime_s;
 
     this.transform.setXZ(newX, newZ);
+
+    // Raycast down to place avatar on ground
+    const groundY = this.getGroundHeight(newX, newZ, this.transform.getY());
+    this.transform.setY(groundY);
+
     this.group.position.set(this.transform.getX(), this.transform.getY(), this.transform.getZ());
   }
 

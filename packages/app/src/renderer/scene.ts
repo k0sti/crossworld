@@ -6,6 +6,7 @@ import type { AvatarState } from '../services/avatar-state';
 import { Transform } from './transform';
 import type { TeleportAnimationType } from './teleport-animation';
 import { CameraController } from './camera-controller';
+import { GamepadController } from './gamepad-controller';
 import {
   worldToCube,
   cubeToWorld,
@@ -140,12 +141,8 @@ export class SceneManager {
   private activeEditPlaneNormal: THREE.Vector3 | null = null;
   private editPlaneGridHelper: THREE.GridHelper | null = null;
 
-  // WASD movement state for avatar (when camera movement is not active)
-  private avatarMoveForward = false;
-  private avatarMoveBackward = false;
-  private avatarMoveLeft = false;
-  private avatarMoveRight = false;
-  private avatarMoveSpeed = 5.0; // units per second
+  // Gamepad controller for avatar movement
+  private gamepadController: GamepadController | null = null;
 
   // Event listener references for cleanup
   private boundKeyDown?: (event: KeyboardEvent) => void;
@@ -206,6 +203,9 @@ export class SceneManager {
     this.setupKeyboardListener(canvas);
     this.setupEditModeHelpers();
     this.setupFaceHighlight();
+
+    // Initialize gamepad controller for avatar movement
+    this.gamepadController = new GamepadController();
     this.setupOriginHelpers();
     this.setupCrosshair();
     this.setupCheckerPlane();
@@ -896,23 +896,7 @@ export class SceneManager {
 
   private setupKeyboardListener(canvas: HTMLCanvasElement): void {
     this.boundKeyDown = (event: KeyboardEvent) => {
-      // WASD movement for avatar (only when camera movement is not active)
-      if (this.mouseMode === 1 && !this.isEditMode) {
-        switch (event.key.toLowerCase()) {
-          case 'w':
-            this.avatarMoveForward = true;
-            return;
-          case 's':
-            this.avatarMoveBackward = true;
-            return;
-          case 'a':
-            this.avatarMoveLeft = true;
-            return;
-          case 'd':
-            this.avatarMoveRight = true;
-            return;
-        }
-      }
+      // WASD movement removed - use gamepad left stick instead
 
       // Toggle mouse mode with Shift key (works in both walk and edit modes)
       // Only toggle once per key press, not on repeated keydown events
@@ -984,21 +968,7 @@ export class SceneManager {
         this.shiftKeyPressed = false;
       }
 
-      // Reset WASD movement state
-      switch (event.key.toLowerCase()) {
-        case 'w':
-          this.avatarMoveForward = false;
-          break;
-        case 's':
-          this.avatarMoveBackward = false;
-          break;
-        case 'a':
-          this.avatarMoveLeft = false;
-          break;
-        case 'd':
-          this.avatarMoveRight = false;
-          break;
-      }
+      // WASD movement removed - use gamepad left stick instead
     };
 
     this.boundPointerLockChange = () => {
@@ -1016,10 +986,7 @@ export class SceneManager {
   }
 
   private resetAvatarMovementState(): void {
-    this.avatarMoveForward = false;
-    this.avatarMoveBackward = false;
-    this.avatarMoveLeft = false;
-    this.avatarMoveRight = false;
+    // WASD movement removed - gamepad state is managed by GamepadController
   }
 
   // Removed: setupLights() - now using SunSystem for dynamic lighting
@@ -1561,6 +1528,11 @@ export class SceneManager {
     this.geometryMesh.renderOrder = 0; // Render world cube first
     this.scene.add(this.geometryMesh);
 
+    // Update raycast mesh for avatar ground detection
+    if (this.currentAvatar) {
+      this.currentAvatar.setRaycastMesh(this.geometryMesh);
+    }
+
     // Create wireframe overlay mesh
     const wireframeGeometry = new THREE.WireframeGeometry(geometry);
     const wireframeMaterial = new THREE.LineBasicMaterial({
@@ -1614,11 +1586,16 @@ export class SceneManager {
       }
     }
 
-    // WASD keyboard movement for avatar (only when camera movement is not active)
-    if (this.currentAvatar && this.mouseMode === 1 && !this.isEditMode) {
-      const isMoving = this.avatarMoveForward || this.avatarMoveBackward || this.avatarMoveLeft || this.avatarMoveRight;
+    // Gamepad movement for avatar (left stick controls direction)
+    if (this.currentAvatar && this.gamepadController && !this.isEditMode) {
+      // Update gamepad state
+      this.gamepadController.update();
 
-      if (isMoving) {
+      // Get movement input from left stick
+      const moveInput = this.gamepadController.getMoveDirection();
+      const hasMovement = moveInput.length() > 0;
+
+      if (hasMovement) {
         // Get camera's forward direction (projected on XZ plane)
         const cameraDirection = new THREE.Vector3();
         this.camera.getWorldDirection(cameraDirection);
@@ -1627,26 +1604,21 @@ export class SceneManager {
         // Get right direction (perpendicular to forward)
         const right = new THREE.Vector3(-forward.z, 0, forward.x).normalize();
 
-        // Calculate movement direction based on WASD input
+        // Calculate movement direction based on gamepad stick input
+        // X axis: left/right, Y axis: forward/backward
         const moveDirection = new THREE.Vector3(0, 0, 0);
-
-        if (this.avatarMoveForward) {
-          moveDirection.add(forward);
-        }
-        if (this.avatarMoveBackward) {
-          moveDirection.sub(forward);
-        }
-        if (this.avatarMoveRight) {
-          moveDirection.add(right);
-        }
-        if (this.avatarMoveLeft) {
-          moveDirection.sub(right);
-        }
+        moveDirection.add(forward.multiplyScalar(moveInput.y)); // Forward/backward
+        moveDirection.add(right.multiplyScalar(moveInput.x)); // Left/right
 
         // Normalize and scale by speed
         if (moveDirection.length() > 0) {
           moveDirection.normalize();
-          const distance = this.avatarMoveSpeed * deltaTime_s;
+
+          // Check if running (RT trigger pressed)
+          const isRunning = this.gamepadController.isRunPressed();
+          const baseSpeed = 5.0; // units per second
+          const speed = isRunning ? baseSpeed * 2.0 : baseSpeed;
+          const distance = speed * deltaTime_s;
 
           // Get current avatar position
           const currentPos = this.currentAvatar.getPosition();
@@ -1658,14 +1630,20 @@ export class SceneManager {
           // Check if within world bounds
           if (isWithinWorldBounds(newX, newZ, 0)) {
             // Move avatar to new position
-            this.currentAvatar.setRunSpeed(false);
+            this.currentAvatar.setRunSpeed(isRunning);
             this.currentAvatar.setTargetPosition(newX, newZ);
-            this.currentMoveStyle = 'walk';
+            this.currentMoveStyle = isRunning ? 'run' : 'walk';
 
             // Publish position update
             this.publishPlayerPositionAt(newX, newZ, this.currentMoveStyle);
           }
         }
+      }
+
+      // Handle jump button (A button)
+      if (this.gamepadController.wasJumpPressed()) {
+        // TODO: Implement jump functionality
+        console.log('[Scene] Jump button pressed!');
       }
     }
 
@@ -1714,6 +1692,11 @@ export class SceneManager {
     // Create new GLB avatar
     this.currentAvatar = new Avatar(transform, { modelUrl, scale, renderScaleDepth }, this.scene);
     this.scene.add(this.currentAvatar.getObject3D());
+
+    // Set raycast mesh for ground detection
+    if (this.geometryMesh) {
+      this.currentAvatar.setRaycastMesh(this.geometryMesh);
+    }
 
     // Fetch and apply profile picture for current user
     this.applyCurrentUserProfile(this.currentAvatar);
@@ -2591,6 +2574,12 @@ export class SceneManager {
         this.faceHighlightMesh.material.dispose();
       }
       this.faceHighlightMesh = null;
+    }
+
+    // Clean up gamepad controller
+    if (this.gamepadController) {
+      this.gamepadController.dispose();
+      this.gamepadController = null;
     }
 
     logger.log('renderer', '[SceneManager] Disposed');

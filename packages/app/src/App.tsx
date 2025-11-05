@@ -15,6 +15,7 @@ import { PublishWorldModal } from './components/PublishWorldModal'
 import { ColorPalette } from './components/ColorPalette'
 import { ModelSelector } from './components/ModelSelector'
 import { ScriptPanel } from './components/ScriptPanel'
+import { GameControllerPanel } from './components/GameControllerPanel'
 import { AvatarStateService, type AvatarConfig, type AvatarState } from './services/avatar-state'
 import { useVoice } from './hooks/useVoice'
 import type { TeleportAnimationType } from './renderer/teleport-animation'
@@ -642,6 +643,36 @@ function App() {
               teleportAnimationType,
             }}
           />
+        )}
+
+        {/* Game Controller Panel */}
+        {activePanelType === 'controller' && (
+          <Box
+            position="fixed"
+            top="60px"
+            right="20px"
+            zIndex={1000}
+            bg="rgba(0, 0, 0, 0.8)"
+            backdropFilter="blur(10px)"
+            borderRadius="lg"
+            p={4}
+            boxShadow="lg"
+          >
+            <Box mb={2} display="flex" justifyContent="space-between" alignItems="center">
+              <Text color="white" fontWeight="bold" fontSize="sm">Game Controller</Text>
+              <Box
+                as="button"
+                onClick={() => setActivePanelType(null)}
+                color="white"
+                fontSize="lg"
+                _hover={{ color: 'gray.400' }}
+                cursor="pointer"
+              >
+                ×
+              </Box>
+            </Box>
+            <GameControllerPanel width={400} height={300} />
+          </Box>
         )}
 
         {/* Chat Panel */}

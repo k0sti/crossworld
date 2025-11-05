@@ -179,6 +179,10 @@ export function ConfigPanel({
             label="Info"
             onClick={() => handleOpenPanel('info')}
           />
+          <ConfigButton
+            label="Controller"
+            onClick={() => handleOpenPanel('controller')}
+          />
         </VStack>
 
         {/* Time of day controls */}
