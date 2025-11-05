@@ -1,6 +1,5 @@
 declare module '@workspace/wasm' {
   export function init(): void;
-  export function load_vox_from_bytes(bytes: Uint8Array, user_npub?: string | null): GeometryData;
 
   export class GeometryEngine {
     free(): void;
@@ -13,17 +12,6 @@ declare module '@workspace/wasm' {
     exportToCSM(): string;
     root(): string;
     setRoot(csm_code: string): void;
-  }
-
-  export class AvatarEngine {
-    free(): void;
-    constructor();
-    generate_avatar(user_npub: string): GeometryData;
-    clear_cache(): void;
-    cache_size(): number;
-    set_voxel(x: number, y: number, z: number, color_index: number): void;
-    remove_voxel(x: number, y: number, z: number): void;
-    regenerate_mesh(user_npub: string): GeometryData;
   }
 
   export class GeometryData {

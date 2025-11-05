@@ -273,78 +273,6 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
     const loadPreview = async () => {
       if (!previewSceneRef.current) return;
 
-      // Handle CSM models first (they don't use URLs)
-      if (avatarType === 'csm') {
-        try {
-          const { parseCsmToMesh } = await import('../utils/cubeWasm');
-          const result = await parseCsmToMesh(csmCode);
-
-          if (!previewSceneRef.current) return; // Component unmounted
-
-          // Check if result contains an error
-          if ('error' in result) {
-            logger.error('ui', '[SelectAvatar] CSM parse error:', result.error);
-            throw new Error(result.error);
-          }
-
-          // Create geometry from CSM data
-          const geometry = new THREE.BufferGeometry();
-          geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(result.vertices), 3));
-          geometry.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(result.normals), 3));
-          geometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(result.colors), 3));
-          geometry.setIndex(new THREE.BufferAttribute(new Uint32Array(result.indices), 1));
-
-          // CENTER THE GEOMETRY so rotation happens around geometric center
-          geometry.computeBoundingBox();
-          const geoCenter = new THREE.Vector3();
-          geometry.boundingBox!.getCenter(geoCenter);
-          geometry.translate(-geoCenter.x, 0, -geoCenter.z); // Only center horizontally
-
-          const material = new THREE.MeshPhongMaterial({
-            vertexColors: true,
-            specular: 0x111111,
-            shininess: 30,
-            side: THREE.DoubleSide,
-          });
-
-          const mesh = new THREE.Mesh(geometry, material);
-
-          // Calculate bounding box for sizing and positioning
-          geometry.computeBoundingBox();
-          const box = geometry.boundingBox!;
-          const size = box.getSize(new THREE.Vector3());
-
-          // Lift mesh so bottom is at y=0 (geometry is already centered in X/Z)
-          mesh.position.y = -box.min.y;
-
-          // Scale to fit in view
-          const maxDim = Math.max(size.x, size.y, size.z);
-          const scale = 1.5 / maxDim;
-          mesh.scale.setScalar(scale);
-
-          // Add directly to scene
-          mesh.rotation.y = Math.PI; // Rotate 180 degrees to show front
-          scene.add(mesh);
-          previewSceneRef.current.mesh = mesh;
-          logger.log('ui', '[SelectAvatar] CSM model loaded successfully');
-          return;
-        } catch (error) {
-          logger.error('ui', '[SelectAvatar] Failed to load CSM model:', error);
-          // Show error placeholder (wrapped in group for consistent rotation)
-          const geometry = new THREE.BoxGeometry(0.5, 1, 0.5);
-          const material = new THREE.MeshStandardMaterial({ color: 0xff0000 });
-          const mesh = new THREE.Mesh(geometry, material);
-          mesh.position.y = 0.5;
-
-          const group = new THREE.Group();
-          group.add(mesh);
-          group.rotation.y = Math.PI; // Rotate 180 degrees to show front
-          scene.add(group);
-          previewSceneRef.current.mesh = group;
-          return;
-        }
-      }
-
       let modelUrl: string | undefined;
 
       // Determine the model URL based on selection
@@ -380,51 +308,7 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
       }
 
       // Load based on type
-      if (avatarType === 'glb' || modelUrl.endsWith('.glb')) {
-        // Load GLB model
-        const loader = new GLTFLoader();
-        try {
-          const gltf = await loader.loadAsync(modelUrl);
-          if (!previewSceneRef.current) return; // Component unmounted
-
-          const model = gltf.scene;
-
-          // Calculate bounding box for the model
-          const box = new THREE.Box3().setFromObject(model);
-          const center = box.getCenter(new THREE.Vector3());
-          const size = box.getSize(new THREE.Vector3());
-
-          // Create a wrapper group at origin for centered rotation
-          const wrapper = new THREE.Group();
-
-          // Position model inside wrapper so its geometric center is at wrapper origin
-          // Keep bottom at y=0 of the wrapper
-          model.position.set(-center.x, -box.min.y, -center.z);
-
-          // Scale to fit in view
-          const maxDim = Math.max(size.x, size.y, size.z);
-          const scale = 1.5 / maxDim;
-          model.scale.setScalar(scale);
-
-          wrapper.add(model);
-          wrapper.rotation.y = Math.PI; // Rotate 180 degrees to show front
-          scene.add(wrapper);
-          previewSceneRef.current.mesh = wrapper;
-        } catch (error) {
-          logger.error('ui', '[SelectAvatar] Failed to load GLB model:', error);
-          // Show error placeholder (wrapped in group for consistent rotation)
-          const geometry = new THREE.BoxGeometry(0.5, 1, 0.5);
-          const material = new THREE.MeshStandardMaterial({ color: 0xff0000 });
-          const mesh = new THREE.Mesh(geometry, material);
-          mesh.position.y = 0.5;
-
-          const group = new THREE.Group();
-          group.add(mesh);
-          group.rotation.y = Math.PI; // Rotate 180 degrees to show front
-          scene.add(group);
-          previewSceneRef.current.mesh = group;
-        }
-      } else if (avatarType === 'vox' || modelUrl.endsWith('.vox')) {
+      if (avatarType === 'vox' || modelUrl.endsWith('.vox')) {
         // Load VOX file
         try {
           const { loadVoxFromUrl } = await import('../utils/voxLoader');

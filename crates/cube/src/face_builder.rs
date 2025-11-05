@@ -134,13 +134,19 @@ impl MeshBuilder for DefaultMeshBuilder {
 /// * `builder` - MeshBuilder to receive the faces
 /// * `color_fn` - Function to map voxel values to colors
 /// * `max_depth` - Maximum depth of the octree
-pub fn generate_face_mesh<B, F>(root: &Cube<i32>, builder: &mut B, color_fn: F, max_depth: u32)
-where
+/// * `border_materials` - Array of 4 material IDs for border voxels at each Y layer [y0, y1, y2, y3]
+pub fn generate_face_mesh<B, F>(
+    root: &Cube<i32>,
+    builder: &mut B,
+    color_fn: F,
+    max_depth: u32,
+    border_materials: [i32; 4],
+) where
     B: MeshBuilder,
     F: Fn(i32) -> [f32; 3] + Copy,
 {
     // Create initial neighbor grid and traverse
-    let grid = NeighborGrid::new(root, 33, 0);
+    let grid = NeighborGrid::new(root, border_materials);
     let mut face_count = 0;
     traverse_with_neighbors(
         &grid,
@@ -243,8 +249,9 @@ mod tests {
         // A single solid cube should have all 6 faces rendered from surrounding empty space
         let root = Cube::Solid(1);
         let mut builder = DefaultMeshBuilder::new();
+        let border_materials = [0, 0, 0, 0]; // All empty borders
 
-        generate_face_mesh(&root, &mut builder, simple_color_mapper, 0);
+        generate_face_mesh(&root, &mut builder, simple_color_mapper, 0, border_materials);
 
         // Should have no faces because there are no empty voxels in a solid cube
         // The traversal only processes the octants, and a solid cube has no subdivision
@@ -266,7 +273,8 @@ mod tests {
         ]);
 
         let mut builder = DefaultMeshBuilder::new();
-        generate_face_mesh(&root, &mut builder, simple_color_mapper, 1);
+        let border_materials = [0, 0, 0, 0]; // All empty borders
+        generate_face_mesh(&root, &mut builder, simple_color_mapper, 1, border_materials);
 
         // Empty voxels should have faces where they touch solid voxels
         // 4 empty voxels, each can have multiple solid neighbors
@@ -288,7 +296,8 @@ mod tests {
         ]);
 
         let mut builder = DefaultMeshBuilder::new();
-        generate_face_mesh(&root, &mut builder, simple_color_mapper, 1);
+        let border_materials = [33, 33, 0, 0]; // Ground at bottom, air at top
+        generate_face_mesh(&root, &mut builder, simple_color_mapper, 1, border_materials);
 
         // Empty voxels at the border will see ground (33) below them and generate upward faces
         // This is expected behavior for terrain rendering
@@ -313,7 +322,8 @@ mod tests {
         ]);
 
         let mut builder = DefaultMeshBuilder::new();
-        generate_face_mesh(&root, &mut builder, simple_color_mapper, 1);
+        let border_materials = [0, 0, 0, 0]; // All empty borders
+        generate_face_mesh(&root, &mut builder, simple_color_mapper, 1, border_materials);
 
         // Empty neighbors of the solid voxel should render faces towards it
         // Expect at least some faces
@@ -338,7 +348,8 @@ mod tests {
         ]);
 
         let mut builder = DefaultMeshBuilder::new();
-        generate_face_mesh(&root, &mut builder, simple_color_mapper, 1);
+        let border_materials = [0, 0, 0, 0]; // All empty borders
+        generate_face_mesh(&root, &mut builder, simple_color_mapper, 1, border_materials);
 
         // No empty voxels means no faces are rendered (we only render from empty voxels)
         assert_eq!(

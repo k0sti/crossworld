@@ -190,6 +190,11 @@ impl WorldCube {
         let color_mapper = DawnbringerColorMapper::new(self.material_colors.as_ref());
         let mut builder = DefaultMeshBuilder::new();
 
+        // Border materials for world at each Y layer [y0, y1, y2, y3]
+        // y=0,1 (bottom): bedrock/stone (32)
+        // y=2,3 (top): air (0)
+        let border_materials = [32, 32, 0, 0];
+
         // Use render_depth for traversal to find all voxels (terrain + subdivisions)
         // The mesh generator will automatically calculate correct voxel sizes
         // for each depth level, ensuring subdivided voxels render at correct positions
@@ -199,6 +204,7 @@ impl WorldCube {
             &mut builder,
             |index| color_mapper.map(index),
             self.render_depth,
+            border_materials,
         );
 
         // Scale and offset vertices to match world coordinates

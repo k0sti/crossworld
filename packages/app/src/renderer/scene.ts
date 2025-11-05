@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import { Avatar } from './avatar';
 import { VoxelAvatar } from './voxel-avatar';
 import type { IAvatar } from './base-avatar';
-import type { AvatarEngine } from '@workspace/wasm';
 import type { AvatarState } from '../services/avatar-state';
 import { Transform } from './transform';
 import type { TeleportAnimationType } from './teleport-animation';
@@ -62,7 +61,6 @@ export class SceneManager {
   private checkerPlane: CheckerPlane | null = null;
   private groundPlane: THREE.Plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0); // Plane at y=0
   private currentAvatar: IAvatar | null = null;
-  private avatarEngine: AvatarEngine | null = null;
   private raycaster: THREE.Raycaster;
   private mouse: THREE.Vector2;
   private lastTime: number = 0;
@@ -2443,13 +2441,6 @@ export class SceneManager {
   }
 
   /**
-   * Initialize the avatar engine for voxel avatars
-   */
-  setAvatarEngine(engine: AvatarEngine): void {
-    this.avatarEngine = engine;
-  }
-
-  /**
    * Set callback for position updates
    */
   setPositionUpdateCallback(callback: (x: number, y: number, z: number, quaternion: [number, number, number, number], moveStyle?: string) => void): void {
@@ -2458,41 +2449,10 @@ export class SceneManager {
 
   /**
    * Create a voxel avatar for a user
+   * NOTE: Procedural avatar generation removed. Use .vox files instead.
    */
-  createVoxelAvatar(userNpub: string, scale: number = 1.0, transform?: Transform): void {
-    if (!this.avatarEngine) {
-      logger.error('renderer', 'Avatar engine not initialized');
-      return;
-    }
-
-    // Remove existing avatar
-    if (this.currentAvatar) {
-      this.scene.remove(this.currentAvatar.getObject3D());
-      this.currentAvatar.dispose();
-    }
-
-    // Create new voxel avatar
-    const voxelAvatar = new VoxelAvatar({
-      userNpub: userNpub || '',
-      scale,
-    }, transform, this.scene);
-
-    // Generate geometry from Rust
-    const geometryData = this.avatarEngine.generate_avatar(userNpub);
-
-    // Apply geometry to avatar
-    voxelAvatar.applyGeometry(geometryData);
-
-    // Add to scene
-    this.scene.add(voxelAvatar.getObject3D());
-    this.currentAvatar = voxelAvatar;
-
-    // Fetch and apply profile picture for current user
-    if (this.currentUserPubkey) {
-      this.fetchAndApplyProfilePicture(this.currentUserPubkey, this.currentAvatar);
-    }
-
-    logger.log('renderer', `Created voxel avatar for ${userNpub}`);
+  createVoxelAvatar(_userNpub: string, _scale: number = 1.0, _transform?: Transform): void {
+    logger.warn('renderer', 'Procedural avatar generation removed. Use .vox files instead.');
   }
 
   /**
@@ -2745,7 +2705,6 @@ export class SceneManager {
    * Update remote avatars based on avatar states from other users
    */
   updateRemoteAvatars(states: Map<string, AvatarState>): void {
-    if (!this.avatarEngine) return;
 
     // Get list of pubkeys that should have avatars
     const activePubkeys = new Set<string>();
@@ -2811,7 +2770,6 @@ export class SceneManager {
    * Create a remote avatar for another user
    */
   private createRemoteAvatar(pubkey: string, state: AvatarState): void {
-    if (!this.avatarEngine) return;
 
     const { position, avatarType, avatarId, avatarUrl, avatarData, npub } = state;
 
@@ -2835,9 +2793,7 @@ export class SceneManager {
           const voxUrl = getModelUrl(avatarId, 'vox');
 
           if (!voxUrl) {
-            logger.warn('renderer', `No model found for avatarId: ${avatarId}, using generated`);
-            const geometryData = this.avatarEngine!.generate_avatar(npub);
-            voxelAvatar.applyGeometry(geometryData);
+            logger.warn('renderer', `No model found for avatarId: ${avatarId}, procedural generation removed`);
             return;
           }
 
@@ -2847,17 +2803,12 @@ export class SceneManager {
               voxelAvatar.applyGeometry(geometryData);
             }).catch(error => {
               logger.error('renderer', 'Failed to load .vox avatar for remote user:', error);
-              // Fallback to generated
-              const geometryData = this.avatarEngine!.generate_avatar(npub);
-              voxelAvatar.applyGeometry(geometryData);
             });
           }).catch(err => logger.error('renderer', err));
         }).catch(err => logger.error('renderer', err));
       } else {
-        // Use procedurally generated model
-        logger.log('renderer', `[Scene] No avatarId for ${npub}, using procedurally generated avatar`);
-        const geometryData = this.avatarEngine.generate_avatar(npub);
-        voxelAvatar.applyGeometry(geometryData);
+        // Procedural avatar generation removed
+        logger.warn('renderer', `[Scene] No avatarId for ${npub}, procedural generation removed`);
       }
 
       // Add to scene
@@ -2869,97 +2820,6 @@ export class SceneManager {
       this.fetchAndApplyProfilePicture(pubkey, voxelAvatar, npub);
 
       logger.log('renderer', `Created remote voxel avatar for ${npub}`);
-    } else if (avatarType === 'csm') {
-      // Create CSM avatar
-      if (avatarData) {
-        logger.log('renderer', `Creating remote CSM avatar for ${npub}`);
-
-        // Parse CSM code to mesh
-        import('../utils/cubeWasm').then(({ parseCsmToMesh }) => {
-          parseCsmToMesh(avatarData).then((result) => {
-            if ('error' in result) {
-              logger.error('renderer', `Failed to parse CSM for remote avatar ${npub}:`, result.error);
-              // Fallback to generated avatar
-              const geometryData = this.avatarEngine!.generate_avatar(npub);
-              const voxelAvatar = new VoxelAvatar({
-                userNpub: npub,
-                scale: 1.0,
-              }, transform, this.scene);
-              voxelAvatar.applyGeometry(geometryData);
-              this.scene.add(voxelAvatar.getObject3D());
-              this.remoteAvatars.set(pubkey, voxelAvatar);
-              this.remoteAvatarConfigs.set(pubkey, { avatarType, avatarId, avatarData });
-
-              // Fetch and apply profile picture
-              this.fetchAndApplyProfilePicture(pubkey, voxelAvatar, npub);
-
-              return;
-            }
-
-            // Create voxel avatar with CSM mesh
-            const voxelAvatar = new VoxelAvatar({
-              userNpub: npub,
-              scale: 1.0,
-            }, transform, this.scene);
-
-            // Convert mesh data to typed arrays
-            const geometryData = {
-              vertices: new Float32Array(result.vertices),
-              indices: new Uint32Array(result.indices),
-              normals: new Float32Array(result.normals),
-              colors: new Float32Array(result.colors),
-            };
-
-            voxelAvatar.applyGeometry(geometryData);
-            this.scene.add(voxelAvatar.getObject3D());
-            this.remoteAvatars.set(pubkey, voxelAvatar);
-            this.remoteAvatarConfigs.set(pubkey, { avatarType, avatarId, avatarData });
-
-            // Fetch and apply profile picture
-            this.fetchAndApplyProfilePicture(pubkey, voxelAvatar, npub);
-
-            logger.log('renderer', `Created remote CSM avatar for ${npub}`);
-          }).catch(error => {
-            logger.error('renderer', `Failed to load CSM avatar for remote user ${npub}:`, error);
-            // Fallback to generated avatar
-            const geometryData = this.avatarEngine!.generate_avatar(npub);
-            const voxelAvatar = new VoxelAvatar({
-              userNpub: npub,
-              scale: 1.0,
-            }, transform, this.scene);
-            voxelAvatar.applyGeometry(geometryData);
-            this.scene.add(voxelAvatar.getObject3D());
-            this.remoteAvatars.set(pubkey, voxelAvatar);
-            this.remoteAvatarConfigs.set(pubkey, { avatarType, avatarId, avatarData });
-          });
-        }).catch(err => logger.error('renderer', err));
-      } else {
-        logger.warn('renderer', `No avatarData provided for remote CSM avatar ${npub}, using generated`);
-        // Fallback to generated avatar
-        const geometryData = this.avatarEngine.generate_avatar(npub);
-        const voxelAvatar = new VoxelAvatar({
-          userNpub: npub,
-          scale: 1.0,
-        }, transform, this.scene);
-        voxelAvatar.applyGeometry(geometryData);
-        this.scene.add(voxelAvatar.getObject3D());
-        this.remoteAvatars.set(pubkey, voxelAvatar);
-        this.remoteAvatarConfigs.set(pubkey, { avatarType, avatarId, avatarData });
-      }
-    } else {
-      // Create GLB avatar
-      const glbAvatar = new Avatar(transform, {
-        modelUrl: avatarUrl,
-        scale: 1.0,
-      }, this.scene);
-      this.scene.add(glbAvatar.getObject3D());
-      this.remoteAvatars.set(pubkey, glbAvatar);
-      this.remoteAvatarConfigs.set(pubkey, { avatarType, avatarId, avatarData });
-
-      // Fetch and apply profile picture
-      this.fetchAndApplyProfilePicture(pubkey, glbAvatar, npub);
-
-      logger.log('renderer', `Created remote GLB avatar for ${npub}`);
     }
   }
 

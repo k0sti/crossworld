@@ -1,15 +1,17 @@
 import * as logger from './logger';
-import init, { load_vox_from_bytes, type GeometryData } from '@workspace/wasm'
+import type { GeometryData } from '@workspace/wasm'
+import cubeInit from '@workspace/wasm-cube'
+import * as cubeWasm from '@workspace/wasm-cube'
 
 /**
  * Load a .vox file from a URL and generate Three.js geometry
  * @param url URL to the .vox file
- * @param userNpub Optional user npub for color customization
+ * @param _userNpub Optional user npub for color customization (not used - kept for API compatibility)
  * @returns GeometryData with vertices, indices, normals, and colors
  */
-export async function loadVoxFromUrl(url: string, userNpub?: string): Promise<GeometryData> {
+export async function loadVoxFromUrl(url: string, _userNpub?: string): Promise<GeometryData> {
   // Ensure WASM is initialized
-  await init()
+  await cubeInit()
 
   // Fetch the .vox file
   const response = await fetch(url)
@@ -20,28 +22,56 @@ export async function loadVoxFromUrl(url: string, userNpub?: string): Promise<Ge
   const arrayBuffer = await response.arrayBuffer()
   const bytes = new Uint8Array(arrayBuffer)
 
-  // Load and parse the .vox file
-  const geometryData = load_vox_from_bytes(bytes, userNpub)
-  return geometryData
+  // Load .vox file into WasmCube (centered alignment)
+  // @ts-ignore - WASM module exports loadVox
+  const wasmCube = cubeWasm.loadVox(bytes, 0.5, 0.5, 0.5)
+
+  // Generate mesh from the cube (maxDepth=3 for 8x8x8 avatars, null palette = HSV colors)
+  const result = wasmCube.generateMesh(null, 3)
+
+  if ('error' in result) {
+    throw new Error(`Failed to parse VOX file: ${result.error}`)
+  }
+
+  return {
+    vertices: new Float32Array(result.vertices),
+    indices: new Uint32Array(result.indices),
+    normals: new Float32Array(result.normals),
+    colors: new Float32Array(result.colors),
+  } as GeometryData
 }
 
 /**
  * Load a .vox file from a File object (e.g., from file input)
  * @param file File object containing .vox data
- * @param userNpub Optional user npub for color customization
+ * @param _userNpub Optional user npub for color customization (not used - kept for API compatibility)
  * @returns GeometryData with vertices, indices, normals, and colors
  */
-export async function loadVoxFromFile(file: File, userNpub?: string): Promise<GeometryData> {
+export async function loadVoxFromFile(file: File, _userNpub?: string): Promise<GeometryData> {
   // Ensure WASM is initialized
-  await init()
+  await cubeInit()
 
   // Read file as ArrayBuffer
   const arrayBuffer = await file.arrayBuffer()
   const bytes = new Uint8Array(arrayBuffer)
 
-  // Load and parse the .vox file
-  const geometryData = load_vox_from_bytes(bytes, userNpub)
-  return geometryData
+  // Load .vox file into WasmCube (centered alignment)
+  // @ts-ignore - WASM module exports loadVox
+  const wasmCube = cubeWasm.loadVox(bytes, 0.5, 0.5, 0.5)
+
+  // Generate mesh from the cube (maxDepth=3 for 8x8x8 avatars, null palette = HSV colors)
+  const result = wasmCube.generateMesh(null, 3)
+
+  if ('error' in result) {
+    throw new Error(`Failed to parse VOX file: ${result.error}`)
+  }
+
+  return {
+    vertices: new Float32Array(result.vertices),
+    indices: new Uint32Array(result.indices),
+    normals: new Float32Array(result.normals),
+    colors: new Float32Array(result.colors),
+  } as GeometryData
 }
 
 /**

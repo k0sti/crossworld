@@ -4,7 +4,6 @@ mod world_cube;
 #[cfg(test)]
 mod tests;
 
-use avatar::AvatarManager;
 use std::cell::RefCell;
 use wasm_bindgen::prelude::*;
 use world_cube::WorldCube as WorldCubeInternal;
@@ -238,85 +237,3 @@ impl Default for NetworkClient {
     }
 }
 
-#[wasm_bindgen]
-pub struct AvatarEngine {
-    manager: AvatarManager,
-}
-
-#[wasm_bindgen]
-impl AvatarEngine {
-    #[wasm_bindgen(constructor)]
-    pub fn new() -> Self {
-        Self {
-            manager: AvatarManager::new(),
-        }
-    }
-
-    /// Generate avatar geometry for a specific user
-    #[wasm_bindgen]
-    pub fn generate_avatar(&mut self, user_npub: String) -> GeometryData {
-        self.manager.generate_avatar_geometry(&user_npub)
-    }
-
-    /// Clear the avatar cache
-    #[wasm_bindgen]
-    pub fn clear_cache(&mut self) {
-        self.manager.clear_cache();
-    }
-}
-
-impl Default for AvatarEngine {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-#[wasm_bindgen]
-impl AvatarEngine {
-    /// Get the number of cached avatars
-    #[wasm_bindgen]
-    pub fn cache_size(&self) -> usize {
-        self.manager.cache_size()
-    }
-
-    /// Set voxel in the base avatar model
-    #[wasm_bindgen]
-    pub fn set_voxel(&mut self, x: u8, y: u8, z: u8, color_index: u8) {
-        self.manager.set_voxel(x, y, z, color_index);
-    }
-
-    /// Remove voxel from the base avatar model
-    #[wasm_bindgen]
-    pub fn remove_voxel(&mut self, x: u8, y: u8, z: u8) {
-        self.manager.remove_voxel(x, y, z);
-    }
-
-    /// Regenerate mesh for a user (after modifications)
-    #[wasm_bindgen]
-    pub fn regenerate_mesh(&mut self, user_npub: String) -> GeometryData {
-        self.generate_avatar(user_npub)
-    }
-}
-
-/// Load a .vox file from bytes and generate geometry
-#[wasm_bindgen]
-pub fn load_vox_from_bytes(
-    bytes: &[u8],
-    user_npub: Option<String>,
-) -> Result<GeometryData, JsValue> {
-    let voxel_model = avatar::load_vox_from_bytes(bytes)
-        .map_err(|e| JsValue::from_str(&format!("Failed to load .vox file: {}", e)))?;
-
-    // Apply user-specific color customization if npub provided
-    let customized_palette = if let Some(npub) = user_npub {
-        voxel_model.palette.customize_for_user(&npub)
-    } else {
-        voxel_model.palette.clone()
-    };
-
-    // Generate mesh from voxel model
-    let mesher = avatar::VoxelMesher::new(&voxel_model);
-    let (vertices, indices, normals, colors) = mesher.generate_mesh(&customized_palette);
-
-    Ok(GeometryData::new(vertices, indices, normals, colors))
-}
