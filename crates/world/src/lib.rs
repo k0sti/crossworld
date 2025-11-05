@@ -104,6 +104,15 @@ impl WorldCube {
             Err(e) => Err(JsValue::from_str(&format!("Parse error: {}", e))),
         }
     }
+
+    /// Set material colors from materials.json
+    ///
+    /// # Arguments
+    /// * `colors` - Flat array of RGB colors [r1,g1,b1, r2,g2,b2, ...] for materials 0-127
+    #[wasm_bindgen(js_name = setMaterialColors)]
+    pub fn set_material_colors(&self, colors: Vec<f32>) {
+        self.inner.borrow_mut().set_material_colors(colors);
+    }
 }
 
 impl Default for WorldCube {

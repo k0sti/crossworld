@@ -11,6 +11,7 @@ pub struct WorldCube {
     macro_depth: u32,  // World size = 2^macro_depth, terrain generation depth
     render_depth: u32, // Maximum traversal depth for mesh generation
     border_depth: u32, // Number of border cube layers
+    material_colors: Option<Vec<[f32; 3]>>, // Material colors loaded from materials.json
 }
 
 impl WorldCube {
@@ -54,7 +55,7 @@ impl WorldCube {
         // Apply border layers if requested
         // Each border layer doubles the world size, so we need to account for this
         let root_with_borders = if border_depth > 0 {
-            Self::add_border_layers(root, border_depth, 0, 32) // Default: top=stone(32), bottom=black(0)
+            Self::add_border_layers(root, border_depth)
         } else {
             root
         };
@@ -69,59 +70,56 @@ impl WorldCube {
             macro_depth,
             render_depth,
             border_depth,
+            material_colors: None,
         }
     }
 
-    /// Wrap a cube with border layers
+    /// Wrap a cube with border layers using 4 vertical levels
     ///
-    /// Each layer creates an octa (8 cubes) where:
-    /// - Octant 0 (bottom-front-left) contains the original world
-    /// - Bottom 4 octants (y=0) use `bottom_color`
-    /// - Top 4 octants (y=1) use `top_color`
-    /// - Octant 0 gets the world instead of bottom_color
+    /// Each layer divides depth into 4 levels (y=0,1,2,3):
+    /// - Level 0 (bottom): hard_ground (16)
+    /// - Level 1: water (17)
+    /// - Level 2: air (0)
+    /// - Level 3 (top): air (0)
+    /// - Original world placed at depth level where it fits centered
     ///
     /// # Arguments
     /// * `world` - The original world cube to wrap
-    /// * `layers` - Number of border layers to add
-    /// * `top_color` - Color index for top border cubes (octants 2,3,6,7)
-    /// * `bottom_color` - Color index for bottom border cubes (octants 1,4,5)
+    /// * `layers` - Number of border layers to add (each layer doubles world size)
     ///
     /// # Example
-    /// With 1 border layer:
-    /// ```text
-    /// Octant layout (depth=1):
-    ///   0: world (bottom-front-left) - original world goes here
-    ///   1: bottom_color (bottom-back-left)
-    ///   2: top_color (top-front-left)
-    ///   3: top_color (top-back-left)
-    ///   4: bottom_color (bottom-front-right)
-    ///   5: bottom_color (bottom-back-right)
-    ///   6: top_color (top-front-right)
-    ///   7: top_color (top-back-right)
-    /// ```
-    fn add_border_layers(
-        world: Cube<i32>,
-        layers: u32,
-        top_color: i32,
-        bottom_color: i32,
-    ) -> Cube<i32> {
+    /// With 1 border layer, the world is subdivided vertically into 4 levels.
+    /// At each XZ position, we have 4 vertical slices from bottom to top.
+    fn add_border_layers(world: Cube<i32>, layers: u32) -> Cube<i32> {
+        const HARD_GROUND: i32 = 16;
+        const WATER: i32 = 17;
+        const AIR: i32 = 0;
+
         let mut result = world;
 
         for _ in 0..layers {
-            // Create an octa with border colors
-            // Bottom 4 octants (y=0): bottom_color
-            // Top 4 octants (y=1): top_color
-            let border_octa = Cube::tabulate_vector(|pos| {
-                if pos.y == 0 {
-                    Cube::Solid(bottom_color)
-                } else {
-                    Cube::Solid(top_color)
-                }
+            // Create border structure with 4 vertical divisions (depth 2)
+            // First level: create 8 octants
+            let level1 = Cube::tabulate_vector(|pos1| {
+                // Second level: subdivide each octant
+                Cube::tabulate_vector(|pos2| {
+                    // Calculate absolute Y position at depth 2 (0-3 range)
+                    let y_pos = pos1.y * 2 + pos2.y;
+
+                    // Assign materials based on Y level
+                    match y_pos {
+                        0 => Cube::Solid(HARD_GROUND), // Bottom: hard ground
+                        1 => Cube::Solid(WATER),        // Lower middle: water
+                        2 => Cube::Solid(AIR),          // Upper middle: air
+                        3 => Cube::Solid(AIR),          // Top: air
+                        _ => Cube::Solid(AIR),
+                    }
+                })
             });
 
-            // Place the world at the center (position 1,1,1 at depth 2)
-            // This centers the world within the border octa
-            result = border_octa.update_depth(2, IVec3::new(1, 1, 1), 1, result);
+            // Place the world in the center (position 1,1,1 at depth 2)
+            // This means the world occupies a 2x2x2 region in the middle of the 4x4x4 grid
+            result = level1.update_depth(2, IVec3::new(1, 1, 1), 1, result);
         }
 
         result
@@ -165,9 +163,31 @@ impl WorldCube {
         &self.octree.root
     }
 
+    /// Set material colors from materials.json
+    ///
+    /// # Arguments
+    /// * `colors` - Flat array of RGB colors [r1,g1,b1, r2,g2,b2, ...] for materials 0-127
+    pub fn set_material_colors(&mut self, colors: Vec<f32>) {
+        if colors.len() < 128 * 3 {
+            tracing::warn!("Material colors array too short, expected at least 384 values (128 materials × 3 RGB)");
+            return;
+        }
+
+        let mut material_colors = Vec::with_capacity(128);
+        for i in 0..128 {
+            let idx = i * 3;
+            material_colors.push([
+                colors[idx],
+                colors[idx + 1],
+                colors[idx + 2],
+            ]);
+        }
+        self.material_colors = Some(material_colors);
+    }
+
     pub fn generate_mesh(&self) -> GeometryData {
         // Generate mesh from octree using appropriate mesh builder
-        let color_mapper = DawnbringerColorMapper::new();
+        let color_mapper = DawnbringerColorMapper::new(self.material_colors.as_ref());
         let mut builder = DefaultMeshBuilder::new();
 
         // Use render_depth for traversal to find all voxels (terrain + subdivisions)
@@ -227,18 +247,94 @@ impl WorldCube {
 
 impl Default for WorldCube {
     fn default() -> Self {
-        Self::new(3, 0, 0) // Default: macro depth 3, micro depth 0, no borders
+        Self::new(4, 0, 4) // Default: macro depth 4, micro depth 0, border depth 4
     }
 }
 
-/// Color mapper for cube ground that uses Dawnbringer palette for user-placed voxels
+/// Color mapper for cube ground that uses proper material colors
 struct DawnbringerColorMapper {
-    // Dawnbringer 32 palette RGB values
+    // Dawnbringer 32 palette RGB values (for indices 32-63)
     palette: [[f32; 3]; 32],
+    // Material colors from materials.json (indices 0-127)
+    materials: [[f32; 3]; 128],
 }
 
 impl DawnbringerColorMapper {
-    fn new() -> Self {
+    fn new(material_colors: Option<&Vec<[f32; 3]>>) -> Self {
+        let materials = if let Some(colors) = material_colors {
+            // Use colors from materials.json passed from JavaScript
+            let mut arr = [[0.0f32; 3]; 128];
+            for (i, color) in colors.iter().take(128).enumerate() {
+                arr[i] = *color;
+            }
+            arr
+        } else {
+            // Fallback to default colors if not set
+            let mut materials = [[0.0f32; 3]; 128];
+
+            // Initialize materials array with colors from materials.json
+            // These match the exact colors defined in assets/materials.json
+            materials[0] = [0.0, 0.0, 0.0];           // 0: empty
+            materials[1] = [0.0, 0.0, 0.0];           // 1: set_empty
+            materials[2] = [1.0, 1.0, 1.0];           // 2: glass
+            materials[3] = [0.816, 1.0, 1.0];         // 3: ice
+            materials[4] = [0.0, 0.498, 1.0];         // 4: water_surface
+            materials[5] = [0.0, 1.0, 0.0];           // 5: slime
+            materials[6] = [1.0, 0.647, 0.0];         // 6: honey
+            materials[7] = [1.0, 0.0, 1.0];           // 7: crystal
+            materials[8] = [0.0, 1.0, 1.0];           // 8: force_field
+            materials[9] = [0.667, 0.0, 1.0];         // 9: portal
+            materials[10] = [0.8, 0.8, 0.8];          // 10: mist
+            materials[11] = [1.0, 0.0, 0.0];          // 11: stained_glass_red
+            materials[12] = [0.0, 1.0, 0.0];          // 12: stained_glass_green
+            materials[13] = [0.0, 0.0, 1.0];          // 13: stained_glass_blue
+            materials[14] = [1.0, 1.0, 0.0];          // 14: stained_glass_yellow
+            materials[15] = [0.502, 0.502, 0.502];    // 15: transparent_15
+            materials[16] = [0.4, 0.267, 0.2];        // 16: hard_ground
+            materials[17] = [0.0, 0.314, 0.624];      // 17: water
+            materials[18] = [0.545, 0.271, 0.075];    // 18: dirt
+            materials[19] = [0.227, 0.490, 0.227];    // 19: grass
+            materials[20] = [0.502, 0.502, 0.502];    // 20: stone
+            materials[21] = [0.431, 0.431, 0.431];    // 21: cobblestone
+            materials[22] = [0.929, 0.788, 0.686];    // 22: sand
+            materials[23] = [0.788, 0.655, 0.439];    // 23: sandstone
+            materials[24] = [0.533, 0.533, 0.533];    // 24: gravel
+            materials[25] = [0.627, 0.627, 0.627];    // 25: clay
+            materials[26] = [1.0, 1.0, 1.0];          // 26: snow
+            materials[27] = [0.690, 0.878, 1.0];      // 27: ice_solid
+            materials[28] = [0.102, 0.059, 0.180];    // 28: obsidian
+            materials[29] = [0.545, 0.0, 0.0];        // 29: netherrack
+            materials[30] = [0.612, 0.365, 0.239];    // 30: granite
+            materials[31] = [0.749, 0.749, 0.749];    // 31: diorite
+            materials[32] = [0.427, 0.427, 0.427];    // 32: andesite
+            materials[33] = [0.910, 0.910, 0.910];    // 33: marble
+            materials[34] = [0.855, 0.816, 0.753];    // 34: limestone
+            materials[35] = [0.169, 0.169, 0.169];    // 35: basalt
+            materials[36] = [0.627, 0.510, 0.427];    // 36: wood_oak
+            materials[37] = [0.420, 0.333, 0.208];    // 37: wood_spruce
+            materials[38] = [0.843, 0.796, 0.553];    // 38: wood_birch
+            materials[39] = [0.545, 0.435, 0.278];    // 39: wood_jungle
+            materials[40] = [0.722, 0.408, 0.243];    // 40: wood_acacia
+            materials[41] = [0.290, 0.220, 0.161];    // 41: wood_dark_oak
+            materials[42] = [0.769, 0.651, 0.447];    // 42: planks_oak
+            materials[43] = [0.486, 0.365, 0.243];    // 43: planks_spruce
+            materials[44] = [0.890, 0.851, 0.659];    // 44: planks_birch
+            materials[45] = [0.176, 0.314, 0.086];    // 45: leaves
+            materials[46] = [0.365, 0.561, 0.227];    // 46: leaves_birch
+            materials[47] = [0.239, 0.376, 0.188];    // 47: leaves_spruce
+            materials[48] = [0.102, 0.102, 0.102];    // 48: coal
+            materials[49] = [0.847, 0.847, 0.847];    // 49: iron
+            materials[50] = [1.0, 0.843, 0.0];        // 50: gold
+            materials[51] = [0.722, 0.451, 0.2];      // 51: copper
+            materials[52] = [0.753, 0.753, 0.753];    // 52: silver
+            materials[53] = [0.804, 0.498, 0.196];    // 53: bronze
+            materials[54] = [0.565, 0.565, 0.627];    // 54: steel
+            materials[55] = [0.529, 0.525, 0.506];    // 55: titanium
+            materials[56] = [0.545, 0.227, 0.227];    // 56: brick
+            materials[57] = [0.620, 0.620, 0.620];    // 57: concrete
+            materials
+        };
+
         Self {
             palette: [
                 [0.0, 0.0, 0.0],       // 0: #000000
@@ -274,6 +370,7 @@ impl DawnbringerColorMapper {
                 [0.561, 0.596, 0.29],  // 30: #8f974a
                 [0.541, 0.435, 0.188], // 31: #8a6f30
             ],
+            materials,
         }
     }
 }
@@ -285,12 +382,9 @@ impl ColorMapper for DawnbringerColorMapper {
             return [0.0, 0.0, 0.0];
         }
 
-        if (2..=127).contains(&index) {
-            // Materials 2-127: textured materials from materials.json
-            // These get textures applied in rendering, but we provide fallback colors
-            // Use HSV-based placeholder colors for when textures aren't loaded
-            let hue = ((index * 23) % 360) as f32;
-            return hsv_to_rgb(hue, 0.7, 0.8);
+        if (0..128).contains(&index) {
+            // Materials 0-127: Use actual colors from materials.json
+            return self.materials[index as usize];
         }
 
         if (128..=255).contains(&index) {

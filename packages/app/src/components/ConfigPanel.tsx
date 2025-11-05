@@ -1,7 +1,9 @@
-import { Box, Text, VStack, HStack, Slider, SliderTrack, SliderFilledTrack, SliderThumb, Switch, Popover, PopoverTrigger, PopoverContent, PopoverBody } from '@chakra-ui/react'
-import { useState, useEffect } from 'react'
+import { Box, Text, VStack, HStack, Slider, SliderTrack, SliderFilledTrack, SliderThumb, Switch, Popover, PopoverTrigger, PopoverContent, PopoverBody, Button, useToast, AlertDialog, AlertDialogBody, AlertDialogFooter, AlertDialogHeader, AlertDialogContent, AlertDialogOverlay } from '@chakra-ui/react'
+import { useState, useEffect, useRef } from 'react'
 import type { ConfigPanelType } from '@crossworld/common'
 import { type LogTag, isLogEnabled, setLogEnabled, subscribeToLogConfig, isMasterLogEnabled, setMasterLogEnabled } from '../utils/logger'
+import { LoginSettingsService } from '../services/login-settings'
+import { profileCache } from '../services/profile-cache'
 
 export type { ConfigPanelType } from '@crossworld/common'
 
@@ -74,6 +76,9 @@ export function ConfigPanel({
 }: ConfigPanelProps) {
   const [enabledTags, setEnabledTags] = useState<Set<LogTag>>(new Set())
   const [masterEnabled, setMasterEnabled] = useState(isMasterLogEnabled())
+  const [isResetDialogOpen, setIsResetDialogOpen] = useState(false)
+  const cancelRef = useRef<HTMLButtonElement>(null)
+  const toast = useToast()
 
   // Subscribe to log config changes
   useEffect(() => {
@@ -113,6 +118,35 @@ export function ConfigPanel({
     if (time < 0.65) return 'Day';
     if (time < 0.75) return 'Dusk';
     return 'Night';
+  };
+
+  const handleResetAllData = () => {
+    // Clear all localStorage
+    LoginSettingsService.clear()
+    LoginSettingsService.clearGuestAccount()
+    localStorage.removeItem('crossworld_relays')
+    localStorage.removeItem('crossworld:log-config')
+    localStorage.removeItem('cameraControllerState')
+
+    // Clear in-memory caches
+    profileCache.clearCache()
+
+    // Close dialog
+    setIsResetDialogOpen(false)
+
+    // Show toast
+    toast({
+      title: 'All data cleared',
+      description: 'Page will reload in 2 seconds...',
+      status: 'success',
+      duration: 2000,
+      isClosable: true,
+    })
+
+    // Reload page after short delay
+    setTimeout(() => {
+      window.location.reload()
+    }, 2000)
   };
 
   return (
@@ -264,6 +298,58 @@ export function ConfigPanel({
             </PopoverBody>
           </PopoverContent>
         </Popover>
+
+        {/* Reset All Data Button */}
+        <Button
+          onClick={() => setIsResetDialogOpen(true)}
+          colorScheme="red"
+          variant="outline"
+          size="sm"
+          w="100%"
+          _hover={{
+            bg: 'rgba(255, 0, 0, 0.1)',
+          }}
+        >
+          Reset All Data
+        </Button>
+
+        {/* Confirmation Dialog */}
+        <AlertDialog
+          isOpen={isResetDialogOpen}
+          leastDestructiveRef={cancelRef}
+          onClose={() => setIsResetDialogOpen(false)}
+        >
+          <AlertDialogOverlay>
+            <AlertDialogContent bg="gray.800" borderColor="red.500" borderWidth={2}>
+              <AlertDialogHeader fontSize="lg" fontWeight="bold" color="white">
+                Reset All Data
+              </AlertDialogHeader>
+
+              <AlertDialogBody color="white">
+                This will clear all cached data including:
+                <VStack align="start" mt={2} spacing={1} fontSize="sm" color="gray.300">
+                  <Text>• Login settings and guest accounts</Text>
+                  <Text>• Network relay configurations</Text>
+                  <Text>• Camera position</Text>
+                  <Text>• Logging preferences</Text>
+                  <Text>• Profile cache</Text>
+                </VStack>
+                <Text mt={3} fontWeight="bold" color="red.300">
+                  The page will reload after clearing data.
+                </Text>
+              </AlertDialogBody>
+
+              <AlertDialogFooter>
+                <Button ref={cancelRef} onClick={() => setIsResetDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button colorScheme="red" onClick={handleResetAllData} ml={3}>
+                  Reset Everything
+                </Button>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialogOverlay>
+        </AlertDialog>
       </VStack>
     </Box>
   )
