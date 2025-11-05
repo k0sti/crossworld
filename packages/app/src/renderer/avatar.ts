@@ -7,6 +7,7 @@ import { BaseAvatar } from './base-avatar';
 export interface AvatarConfig {
   modelUrl?: string;
   scale?: number;
+  renderScaleDepth?: number; // Scale = 1 / 2^renderScaleDepth (default: 0.0 = no scaling)
 }
 
 /**
@@ -65,19 +66,22 @@ export class Avatar extends BaseAvatar {
           }
         });
 
-        // Scale model to reasonable size
-        const scale = this.config.scale || 1.0;
-        this.model.scale.set(scale, scale, scale);
+        // Scale model with renderScaleDepth
+        // If renderScaleDepth is specified, scale = baseScale / 2^renderScaleDepth
+        const baseScale = this.config.scale || 1.0;
+        const renderScaleDepth = this.config.renderScaleDepth ?? 0.0; // Default to 0.0 (no scaling)
+        const finalScale = baseScale / Math.pow(2, renderScaleDepth);
+        this.model.scale.set(finalScale, finalScale, finalScale);
 
-        // Position model with feet at y=0 (ground level)
+        // Position model according to AVATAR_PIVOT (0.5, 0, 0.5)
         const box = new THREE.Box3().setFromObject(this.model);
         const size = box.getSize(new THREE.Vector3());
-        const center = box.getCenter(new THREE.Vector3());
 
-        // Center horizontally (x,z) but keep bottom at y=0
-        this.model.position.x = -center.x;
-        this.model.position.z = -center.z;
-        this.model.position.y = -box.min.y; // Lift model so bottom is at y=0
+        // Position based on pivot point
+        // Formula: position = -(min + size * pivot)
+        this.model.position.x = -(box.min.x + size.x * BaseAvatar.PIVOT.x);
+        this.model.position.z = -(box.min.z + size.z * BaseAvatar.PIVOT.z);
+        this.model.position.y = -(box.min.y + size.y * BaseAvatar.PIVOT.y); // Feet at y=0
 
         this.group.add(this.model);
 

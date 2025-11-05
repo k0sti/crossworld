@@ -35,6 +35,15 @@ export interface IAvatar {
 }
 
 /**
+ * Avatar pivot/alignment point in normalized coordinates (0-1)
+ * (0.5, 0, 0.5) means:
+ * - X: centered (0.5 = middle of width)
+ * - Y: bottom (0 = feet on ground)
+ * - Z: centered (0.5 = middle of depth)
+ */
+export const AVATAR_PIVOT = new THREE.Vector3(0.5, 0, 0.5);
+
+/**
  * Base class implementing common avatar behavior
  *
  * This extracts the 287 lines of duplicated movement/teleport logic
@@ -50,6 +59,9 @@ export abstract class BaseAvatar implements IAvatar {
   protected teleportAnimation: TeleportAnimation | null = null;
   protected scene: THREE.Scene | null = null;
   protected profileIcon: ProfileIcon | null = null;
+
+  // Avatar pivot point for placement in world
+  public static readonly PIVOT = AVATAR_PIVOT;
 
   // Smooth movement properties
   protected velocity: THREE.Vector2 = new THREE.Vector2(0, 0);
