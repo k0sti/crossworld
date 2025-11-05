@@ -187,7 +187,7 @@ impl WorldCube {
 
     pub fn generate_mesh(&self) -> GeometryData {
         // Generate mesh from octree using appropriate mesh builder
-        let color_mapper = DawnbringerColorMapper::new(self.material_colors.as_ref());
+        let color_mapper = MaterialColorMapper::new(self.material_colors.as_ref());
         let mut builder = DefaultMeshBuilder::new();
 
         // Border materials for world at each Y layer [y0, y1, y2, y3]
@@ -258,14 +258,14 @@ impl Default for WorldCube {
 }
 
 /// Color mapper for cube ground that uses proper material colors
-struct DawnbringerColorMapper {
+struct MaterialColorMapper {
     // Dawnbringer 32 palette RGB values (for indices 32-63)
     palette: [[f32; 3]; 32],
     // Material colors from materials.json (indices 0-127)
     materials: [[f32; 3]; 128],
 }
 
-impl DawnbringerColorMapper {
+impl MaterialColorMapper {
     fn new(material_colors: Option<&Vec<[f32; 3]>>) -> Self {
         let materials = if let Some(colors) = material_colors {
             // Use colors from materials.json passed from JavaScript
@@ -381,7 +381,7 @@ impl DawnbringerColorMapper {
     }
 }
 
-impl ColorMapper for DawnbringerColorMapper {
+impl ColorMapper for MaterialColorMapper {
     fn map(&self, index: i32) -> [f32; 3] {
         if index <= 0 {
             // 0 or negative: transparent/black

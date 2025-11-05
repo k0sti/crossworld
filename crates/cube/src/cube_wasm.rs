@@ -5,8 +5,8 @@ use wasm_bindgen::prelude::*;
 use crate::{
     generate_face_mesh,
     glam::{IVec3, Vec3},
-    parse_csm, serialize_csm, ColorMapper, Cube, CubeCoord, DefaultMeshBuilder, HsvColorMapper,
-    Octree, PaletteColorMapper,
+    parse_csm, serialize_csm, ColorMapper, Cube, CubeCoord, DefaultMeshBuilder,
+    Octree, PaletteColorMapper, VoxColorMapper,
 };
 
 // ============================================================================
@@ -228,9 +228,9 @@ impl WasmCube {
         // Border materials for avatars: all empty (0)
         let border_materials = [0, 0, 0, 0];
 
-        // Parse palette if provided, otherwise use HSV
+        // Parse palette if provided, otherwise use VoxColorMapper for R2G3B2 decoding
         if palette.is_null() || palette.is_undefined() {
-            let mapper = HsvColorMapper::new();
+            let mapper = VoxColorMapper::new();
             generate_face_mesh(
                 &octree.root,
                 &mut builder,
