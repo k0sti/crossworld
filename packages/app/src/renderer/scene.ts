@@ -1704,7 +1704,7 @@ export class SceneManager {
     return this.scene;
   }
 
-  createAvatar(modelUrl?: string, scale?: number, transform?: Transform): void {
+  createAvatar(modelUrl?: string, scale?: number, transform?: Transform, renderScaleDepth?: number): void {
     // Remove existing avatar
     if (this.currentAvatar) {
       this.scene.remove(this.currentAvatar.getObject3D());
@@ -1712,7 +1712,7 @@ export class SceneManager {
     }
 
     // Create new GLB avatar
-    this.currentAvatar = new Avatar(transform, { modelUrl, scale }, this.scene);
+    this.currentAvatar = new Avatar(transform, { modelUrl, scale, renderScaleDepth }, this.scene);
     this.scene.add(this.currentAvatar.getObject3D());
 
     // Fetch and apply profile picture for current user
@@ -1757,7 +1757,7 @@ export class SceneManager {
   /**
    * Create a voxel avatar from a .vox file
    */
-  async createVoxelAvatarFromVoxFile(voxUrl: string, userNpub: string | undefined = undefined, scale: number = 1.0, transform?: Transform): Promise<void> {
+  async createVoxelAvatarFromVoxFile(voxUrl: string, userNpub: string | undefined = undefined, scale: number = 1.0, transform?: Transform, renderScaleDepth?: number): Promise<void> {
     // Import the loadVoxFromUrl function
     const { loadVoxFromUrl } = await import('../utils/voxLoader');
 
@@ -1775,6 +1775,7 @@ export class SceneManager {
       const voxelAvatar = new VoxelAvatar({
         userNpub: userNpub ?? '',
         scale,
+        renderScaleDepth,
       }, transform, this.scene);
 
       // Apply geometry from .vox file
@@ -1801,7 +1802,7 @@ export class SceneManager {
   /**
    * Create a CSM avatar from parsed mesh data
    */
-  createCsmAvatar(meshData: { vertices: number[]; indices: number[]; normals: number[]; colors: number[] }, userNpub: string | undefined = undefined, scale: number = 1.0, transform?: Transform): void {
+  createCsmAvatar(meshData: { vertices: number[]; indices: number[]; normals: number[]; colors: number[] }, userNpub: string | undefined = undefined, scale: number = 1.0, transform?: Transform, renderScaleDepth?: number): void {
     // Remove existing avatar
     if (this.currentAvatar) {
       this.scene.remove(this.currentAvatar.getObject3D());
@@ -1812,6 +1813,7 @@ export class SceneManager {
     const voxelAvatar = new VoxelAvatar({
       userNpub: userNpub ?? '',
       scale,
+      renderScaleDepth,
     }, transform, this.scene);
 
     // Convert mesh data to the format VoxelAvatar expects
@@ -2075,10 +2077,11 @@ export class SceneManager {
     const transform = Transform.fromEventData(position);
 
     if (avatarType === 'vox') {
-      // Create voxel avatar
+      // Create voxel avatar (renderScaleDepth defaults to 0.0 = no scaling)
       const voxelAvatar = new VoxelAvatar({
         userNpub: npub,
         scale: 1.0,
+        // renderScaleDepth defaults to 0.0 in VoxelAvatar
       }, transform, this.scene);
 
       // Generate or load geometry (use undefined for npub to preserve original colors)

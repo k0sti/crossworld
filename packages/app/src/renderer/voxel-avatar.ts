@@ -6,6 +6,7 @@ import { BaseAvatar } from './base-avatar';
 
 export interface VoxelAvatarConfig {
   scale?: number;
+  renderScaleDepth?: number; // Scale = 1 / 2^renderScaleDepth (default: 0.0 = no scaling)
   userNpub: string;
 }
 
@@ -90,26 +91,25 @@ export class VoxelAvatar extends BaseAvatar {
     this.mesh.castShadow = true;
     this.mesh.receiveShadow = true;
 
-    // Apply scale
-    const scale = this.config.scale || 1.0;
-    this.mesh.scale.set(scale, scale, scale);
+    // Apply scale with renderScaleDepth FIRST
+    const baseScale = this.config.scale || 1.0;
+    const renderScaleDepth = this.config.renderScaleDepth ?? 2.0;
+    const finalScale = baseScale / Math.pow(2, renderScaleDepth);
+    this.mesh.scale.set(finalScale, finalScale, finalScale);
 
-    // Calculate geometry bounds before adding to group
-    geometry.computeBoundingBox();
-    const bbox = geometry.boundingBox!;
-
-    // Center the mesh horizontally and place feet at y=0
-    // The voxel model is generated with (0,0,0) at one corner
-    // We need to offset so the model is centered at (0, 0, 0) in local space
-    // with feet touching y=0
-    this.mesh.position.x = -(bbox.min.x + bbox.max.x) / 2;
-    this.mesh.position.z = -(bbox.min.z + bbox.max.z) / 2;
-    this.mesh.position.y = -bbox.min.y; // Move up so bottom is at y=0
-
-    this.group.add(this.mesh);
-
+    // Calculate bounds AFTER scaling (like GLB avatar does)
+    const bbox = new THREE.Box3().setFromObject(this.mesh);
     const size = new THREE.Vector3();
     bbox.getSize(size);
+
+    // Position mesh according to AVATAR_PIVOT (0.5, 0, 0.5)
+    // PIVOT (0.5, 0, 0.5) means: centered horizontally, feet on ground
+    // Formula: position = -(min + size * pivot)
+    this.mesh.position.x = -(bbox.min.x + size.x * BaseAvatar.PIVOT.x);
+    this.mesh.position.z = -(bbox.min.z + size.z * BaseAvatar.PIVOT.z);
+    this.mesh.position.y = -(bbox.min.y + size.y * BaseAvatar.PIVOT.y); // PIVOT.y = 0, so feet at y=0
+
+    this.group.add(this.mesh);
 
     logger.log('renderer', `VoxelAvatar created for ${this.config.userNpub}:`, {
       vertices: vertices.length / 3,
