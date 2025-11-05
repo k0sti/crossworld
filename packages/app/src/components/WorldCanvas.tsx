@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Box } from '@chakra-ui/react';
 import { SceneManager } from '../renderer/scene';
 import { GeometryController } from '../geometry/geometry-controller';
-import init, { AvatarEngine } from '@workspace/wasm';
+import init from '@workspace/wasm';
 import type { AvatarStateService, AvatarConfig } from '../services/avatar-state';
 import type { TeleportAnimationType } from '../renderer/teleport-animation';
 import { DebugPanel, type DebugInfo } from './WorldPanel';
@@ -52,7 +52,6 @@ export function WorldCanvas({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const localSceneManagerRef = useRef<SceneManager | null>(null);
   const localGeometryControllerRef = useRef<GeometryController | null>(null);
-  const avatarEngineRef = useRef<AvatarEngine | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const [debugInfo, setDebugInfo] = useState<DebugInfo>({});
 
@@ -188,13 +187,9 @@ export function WorldCanvas({
       }
     });
 
-    // Initialize WASM and avatar engine
-    init().then(() => {
-      const avatarEngine = new AvatarEngine();
-      avatarEngineRef.current = avatarEngine;
-      sceneManager.setAvatarEngine(avatarEngine);
-    }).catch((error: unknown) => {
-      logger.error('renderer', 'Failed to initialize WASM/Avatar engine:', error);
+    // Initialize WASM
+    init().catch((error: unknown) => {
+      logger.error('renderer', 'Failed to initialize WASM:', error);
     });
 
     // Initialize geometry controller

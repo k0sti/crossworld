@@ -225,10 +225,19 @@ impl WasmCube {
         let octree = Octree::new((*self.inner).clone());
         let mut builder = DefaultMeshBuilder::new();
 
+        // Border materials for avatars: all empty (0)
+        let border_materials = [0, 0, 0, 0];
+
         // Parse palette if provided, otherwise use HSV
         if palette.is_null() || palette.is_undefined() {
             let mapper = HsvColorMapper::new();
-            generate_face_mesh(&octree.root, &mut builder, |v| mapper.map(v), max_depth);
+            generate_face_mesh(
+                &octree.root,
+                &mut builder,
+                |v| mapper.map(v),
+                max_depth,
+                border_materials,
+            );
         } else {
             // Try to deserialize palette
             match serde_wasm_bindgen::from_value::<Vec<Color>>(palette) {
@@ -236,7 +245,13 @@ impl WasmCube {
                     let palette_colors: Vec<[f32; 3]> =
                         colors.iter().map(|c| [c.r, c.g, c.b]).collect();
                     let mapper = PaletteColorMapper::new(palette_colors);
-                    generate_face_mesh(&octree.root, &mut builder, |v| mapper.map(v), max_depth);
+                    generate_face_mesh(
+                        &octree.root,
+                        &mut builder,
+                        |v| mapper.map(v),
+                        max_depth,
+                        border_materials,
+                    );
                 }
                 Err(e) => {
                     let error = ParseError {
@@ -334,6 +349,35 @@ pub fn validate_csm(cubescript: &str) -> JsValue {
                 error: format!("{}", e),
             };
             serde_wasm_bindgen::to_value(&error).unwrap()
+        }
+    }
+}
+
+/// Load a .vox file from bytes into a WasmCube
+///
+/// # Arguments
+/// * `bytes` - .vox file bytes
+/// * `align_x` - X alignment (0.0-1.0, typically 0.5 for center)
+/// * `align_y` - Y alignment (0.0-1.0, typically 0.5 for center)
+/// * `align_z` - Z alignment (0.0-1.0, typically 0.5 for center)
+///
+/// # Returns
+/// WasmCube on success
+///
+/// # Errors
+/// Throws JS error if loading fails
+#[wasm_bindgen(js_name = loadVox)]
+pub fn load_vox(bytes: &[u8], align_x: f32, align_y: f32, align_z: f32) -> Result<WasmCube, JsValue> {
+    let align = Vec3::new(align_x, align_y, align_z);
+    match crate::load_vox_to_cube(bytes, align) {
+        Ok(cube) => Ok(WasmCube {
+            inner: Rc::new(cube),
+        }),
+        Err(e) => {
+            let error = ParseError {
+                error: format!("Failed to load .vox file: {}", e),
+            };
+            Err(serde_wasm_bindgen::to_value(&error).unwrap())
         }
     }
 }

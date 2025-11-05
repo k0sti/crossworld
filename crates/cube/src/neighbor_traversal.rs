@@ -37,9 +37,10 @@ impl NeighborGrid {
     ///
     /// # Arguments
     /// * `root` - The root octree cube whose 8 children will be placed in the center 2x2x2
-    /// * `ground_value` - Material ID for ground voxels (default: 33)
-    /// * `sky_value` - Material ID for sky voxels (default: 0)
-    pub fn new(root: &Cube<i32>, ground_value: i32, sky_value: i32) -> Self {
+    /// * `border_materials` - Array of 4 material IDs for border voxels at each Y layer [y0, y1, y2, y3]
+    ///   - For world: [hard_rock, water, air, air] or similar
+    ///   - For avatars: [0, 0, 0, 0] for empty borders
+    pub fn new(root: &Cube<i32>, border_materials: [i32; 4]) -> Self {
         let mut voxels: [Rc<Cube<i32>>; 64] = std::array::from_fn(|i| {
             let (x, y, z) = Self::index_to_xyz(i);
 
@@ -47,16 +48,12 @@ impl NeighborGrid {
             let is_border = x == 0 || x == 3 || y == 0 || y == 3 || z == 0 || z == 3;
 
             if is_border {
-                // Border voxels: ground below center plane, sky above/at center
-                // Center plane is at y=1,2 (the middle two layers)
-                if y < 2 {
-                    Rc::new(Cube::Solid(ground_value))
-                } else {
-                    Rc::new(Cube::Solid(sky_value))
-                }
+                // Border voxels use material from corresponding Y layer
+                Rc::new(Cube::Solid(border_materials[y as usize]))
             } else {
                 // Non-border: placeholder, will be filled next
-                Rc::new(Cube::Solid(sky_value))
+                // Use top layer material as default
+                Rc::new(Cube::Solid(border_materials[3]))
             }
         });
 
@@ -254,7 +251,8 @@ pub type TraversalVisitor<'a> = &'a mut dyn FnMut(NeighborView, CubeCoord, bool)
 /// use crossworld_cube::{Cube, NeighborGrid, traverse_with_neighbors, OFFSET_LEFT};
 ///
 /// let root = Cube::Solid(33);
-/// let grid = NeighborGrid::new(&root, 33, 0);
+/// let border_materials = [33, 33, 0, 0]; // Ground at bottom, sky at top
+/// let grid = NeighborGrid::new(&root, border_materials);
 ///
 /// traverse_with_neighbors(&grid, &mut |view, coord, subleaf| {
 ///     if let Some(left) = view.get(OFFSET_LEFT) {
@@ -369,7 +367,8 @@ mod tests {
     #[test]
     fn test_neighbor_grid_init() {
         let root = Cube::Solid(42);
-        let grid = NeighborGrid::new(&root, 33, 0);
+        let border_materials = [33, 33, 0, 0]; // Ground at bottom, sky at top
+        let grid = NeighborGrid::new(&root, border_materials);
 
         // Check center voxels are from root
         for octant_idx in 0..8 {
@@ -389,7 +388,8 @@ mod tests {
     #[test]
     fn test_neighbor_view() {
         let root = Cube::tabulate(|i| Cube::Solid(i as i32));
-        let grid = NeighborGrid::new(&root, 33, 0);
+        let border_materials = [33, 33, 0, 0]; // Ground at bottom, sky at top
+        let grid = NeighborGrid::new(&root, border_materials);
 
         // Center voxel (octant 0 is at grid position 1,1,1)
         let center_idx = NeighborGrid::xyz_to_index(1, 1, 1);

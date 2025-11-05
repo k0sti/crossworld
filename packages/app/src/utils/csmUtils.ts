@@ -53,7 +53,8 @@ export async function loadModelFromCSM(
   await ensureWasmInitialized()
   try {
     // Validate CSM syntax using the new API
-    const error = cubeWasm.validate_csm(csmText)
+    // @ts-ignore - WASM module exports validateCsm
+    const error = cubeWasm.validateCsm(csmText)
     if (error) {
       throw new Error(error.error)
     }
@@ -150,55 +151,20 @@ export interface RaycastResult {
 
 /**
  * Cast a ray through the octree and find the first non-empty voxel
+ *
+ * DEPRECATED: This function used the old global octree API.
+ * Use raycastWasm() from cubeWasm.ts with a WasmCube instance instead.
+ *
  * @param modelId Model identifier
  * @param pos Ray origin in normalized [0, 1] cube space {x, y, z}
  * @param dir Ray direction (will be normalized) {x, y, z}
  * @returns RaycastResult if hit, null otherwise
  */
 export async function raycastOctree(
-  modelId: string,
-  pos: Vec3,
-  dir: Vec3
+  _modelId: string,
+  _pos: Vec3,
+  _dir: Vec3
 ): Promise<RaycastResult | null> {
-  await ensureWasmInitialized()
-  try {
-    const result = (cubeWasm as any).raycast_octree(
-      modelId,
-      pos.x,
-      pos.y,
-      pos.z,
-      dir.x,
-      dir.y,
-      dir.z
-    )
-
-    // Check if result is null (no hit) or an error
-    if (!result) return null
-    if (typeof result === 'object' && 'error' in result) {
-      throw new Error((result as any).error)
-    }
-
-    // Transform flat WASM result into structured result
-    return {
-      coord: {
-        x: result.x,
-        y: result.y,
-        z: result.z,
-        depth: result.depth
-      },
-      position: {
-        x: result.world_x,
-        y: result.world_y,
-        z: result.world_z
-      },
-      normal: {
-        x: result.normal_x,
-        y: result.normal_y,
-        z: result.normal_z
-      }
-    }
-  } catch (error) {
-    logger.error('common', '[Raycast] Error:', error)
-    throw error
-  }
+  logger.warn('common', '[Raycast] raycastOctree is deprecated - use raycastWasm with WasmCube instance')
+  return null
 }
