@@ -45,6 +45,55 @@ export function getTotalDepth(): number {
 }
 
 /**
+ * Get the base depth (macro + border)
+ * This is the depth where voxels are 1 unit in size
+ */
+export function getBaseDepth(): number {
+  return currentMacroDepth + currentBorderDepth;
+}
+
+/**
+ * Convert cursor depth (relative to base) to absolute octree depth
+ *
+ * Cursor depth interpretation:
+ * - cursorDepth = 0: unit cubes at base depth (macro + border)
+ * - cursorDepth < 0: larger voxels (e.g., -1 = 2x2x2 unit cubes)
+ * - cursorDepth > 0: smaller voxels (subdivisions, up to micro_depth)
+ *
+ * @param cursorDepth Relative cursor depth
+ * @returns Absolute octree depth
+ */
+export function cursorDepthToAbsolute(cursorDepth: number): number {
+  return getBaseDepth() + cursorDepth;
+}
+
+/**
+ * Convert absolute octree depth to cursor depth (relative to base)
+ *
+ * @param absoluteDepth Absolute octree depth
+ * @returns Relative cursor depth
+ */
+export function absoluteDepthToCursor(absoluteDepth: number): number {
+  return absoluteDepth - getBaseDepth();
+}
+
+/**
+ * Get minimum cursor depth (largest voxels)
+ * This is -(macro + border) to allow scaling down to depth 0 (entire world)
+ */
+export function getMinCursorDepth(): number {
+  return -(currentMacroDepth + currentBorderDepth);
+}
+
+/**
+ * Get maximum cursor depth (smallest voxels)
+ * This is micro_depth (subdivisions beyond base depth)
+ */
+export function getMaxCursorDepth(): number {
+  return currentMicroDepth;
+}
+
+/**
  * Set macro depth and notify listeners
  */
 export function setMacroDepth(depth: number): void {

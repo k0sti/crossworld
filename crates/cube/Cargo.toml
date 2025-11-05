@@ -34,7 +34,8 @@ glam = { version = "0.29", features = ["serde"] }
 # Voxel model loading
 dot_vox = "5.1"
 
-# WASM support for getrandom
+# Fix for WASM builds - getrandom is a transitive dependency that needs this feature
+[target.'cfg(target_arch = "wasm32")'.dependencies]
 getrandom = { version = "0.3", features = ["wasm_js"] }
 
 [dev-dependencies]
