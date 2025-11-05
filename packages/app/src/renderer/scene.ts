@@ -58,6 +58,8 @@ export class SceneManager {
   private camera: THREE.PerspectiveCamera;
   private renderer: THREE.WebGLRenderer;
   private geometryMesh: THREE.Mesh | null = null;
+  private texturedMesh: THREE.Mesh | null = null;
+  private solidColorMesh: THREE.Mesh | null = null;
   private wireframeMesh: THREE.LineSegments | null = null;
   private checkerPlane: CheckerPlane | null = null;
   private groundPlane: THREE.Plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0); // Plane at y=0
@@ -168,10 +170,19 @@ export class SceneManager {
   }
 
   initialize(canvas: HTMLCanvasElement): void {
+    // Request WebGL 2.0 context for texture array support
+    const gl = canvas.getContext('webgl2');
+    if (!gl) {
+      logger.warn('renderer', 'WebGL 2.0 not available, falling back to WebGL 1.0');
+    } else {
+      logger.log('renderer', 'Using WebGL 2.0 context');
+    }
+
     this.renderer = new THREE.WebGLRenderer({
       canvas,
       antialias: true,
-      alpha: true
+      alpha: true,
+      context: gl || undefined
     });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(window.devicePixelRatio);
@@ -1460,13 +1471,39 @@ export class SceneManager {
   }
 
   updateGeometry(vertices: Float32Array, indices: Uint32Array, normals: Float32Array, colors?: Float32Array, uvs?: Float32Array, materialIds?: Uint8Array): void {
-    // Clean up old geometry mesh
+    logger.log('renderer', '=== updateGeometry called ===');
+    logger.log('renderer', `Vertices: ${vertices.length}, Indices: ${indices.length}, Normals: ${normals.length}`);
+    logger.log('renderer', `Colors: ${colors?.length || 0}, UVs: ${uvs?.length || 0}, MaterialIds: ${materialIds?.length || 0}`);
+    logger.log('renderer', `Textures loaded: ${this.texturesLoaded}`);
+
+    // Clean up old geometry mesh (legacy - kept for backwards compatibility)
     if (this.geometryMesh) {
       this.scene.remove(this.geometryMesh);
       this.geometryMesh.geometry.dispose();
       if (this.geometryMesh.material instanceof THREE.Material) {
         this.geometryMesh.material.dispose();
       }
+      this.geometryMesh = null;
+    }
+
+    // Clean up old textured mesh
+    if (this.texturedMesh) {
+      this.scene.remove(this.texturedMesh);
+      this.texturedMesh.geometry.dispose();
+      if (this.texturedMesh.material instanceof THREE.Material) {
+        this.texturedMesh.material.dispose();
+      }
+      this.texturedMesh = null;
+    }
+
+    // Clean up old solid color mesh
+    if (this.solidColorMesh) {
+      this.scene.remove(this.solidColorMesh);
+      this.solidColorMesh.geometry.dispose();
+      if (this.solidColorMesh.material instanceof THREE.Material) {
+        this.solidColorMesh.material.dispose();
+      }
+      this.solidColorMesh = null;
     }
 
     // Clean up old wireframe mesh
@@ -1476,41 +1513,99 @@ export class SceneManager {
       if (this.wireframeMesh.material instanceof THREE.Material) {
         this.wireframeMesh.material.dispose();
       }
+      this.wireframeMesh = null;
     }
 
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
-    geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+    // Split indices into textured (2-127) and solid color (0-1, 128-255) materials
+    const texturedIndices: number[] = [];
+    const solidIndices: number[] = [];
+    const materialIdStats = new Map<number, number>(); // Track material ID distribution
 
-    // Add vertex colors if provided
-    if (colors && colors.length > 0) {
-      geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-    }
-
-    // Add UV coordinates if provided
-    if (uvs && uvs.length > 0) {
-      geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
-    }
-
-    // Add material IDs if provided (as a custom attribute)
     if (materialIds && materialIds.length > 0) {
-      geometry.setAttribute('materialId', new THREE.BufferAttribute(materialIds, 1));
+      // Process each triangle (3 indices at a time)
+      for (let i = 0; i < indices.length; i += 3) {
+        const idx0 = indices[i];
+        const idx1 = indices[i + 1];
+        const idx2 = indices[i + 2];
+
+        // Check material ID of first vertex of the triangle
+        const matId = materialIds[idx0];
+
+        // Track material ID usage
+        materialIdStats.set(matId, (materialIdStats.get(matId) || 0) + 1);
+
+        if (matId >= 2 && matId <= 127) {
+          // Textured material
+          texturedIndices.push(idx0, idx1, idx2);
+        } else {
+          // Solid color material (0-1, 128-255)
+          solidIndices.push(idx0, idx1, idx2);
+        }
+      }
+
+      logger.log('renderer', `Material ID distribution: ${JSON.stringify(Array.from(materialIdStats.entries()).slice(0, 10))}`);
+    } else {
+      // No material IDs, treat all as solid color
+      solidIndices.push(...indices);
+      logger.log('renderer', 'No materialIds provided, treating all as solid color');
     }
 
-    geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+    logger.log('renderer', `Split results: ${texturedIndices.length / 3} textured triangles, ${solidIndices.length / 3} solid triangles`);
 
-    // Create solid mesh with appropriate material
-    let material: THREE.Material;
+    // Create textured mesh if there are textured triangles
+    if (texturedIndices.length > 0 && this.texturesLoaded) {
+      const texturedGeometry = new THREE.BufferGeometry();
+      texturedGeometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+      texturedGeometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
 
-    if (this.texturesLoaded && materialIds && materialIds.length > 0) {
-      // Use custom shader material for textured voxels
+      if (colors && colors.length > 0) {
+        texturedGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      }
+
+      if (uvs && uvs.length > 0) {
+        texturedGeometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+      }
+
+      if (materialIds && materialIds.length > 0) {
+        texturedGeometry.setAttribute('materialId', new THREE.BufferAttribute(materialIds, 1));
+      }
+
+      texturedGeometry.setIndex(new THREE.BufferAttribute(new Uint32Array(texturedIndices), 1));
+
       const textureArray = this.materialsLoader.getTextureArray();
-      material = createTexturedVoxelMaterial(textureArray, this.texturesEnabled);
-      updateShaderLighting(material as THREE.ShaderMaterial, this.scene);
-      logger.log('renderer', 'Created geometry mesh with textured material');
-    } else {
-      // Fallback to simple vertex colors (no textures)
-      material = new THREE.MeshPhongMaterial({
+      logger.log('renderer', `Texture array length: ${textureArray.length}`);
+
+      const texturedMaterial = createTexturedVoxelMaterial(textureArray, this.texturesEnabled, this.renderer);
+      updateShaderLighting(texturedMaterial as THREE.ShaderMaterial, this.scene);
+
+      // Debug shader uniforms
+      if (texturedMaterial instanceof THREE.ShaderMaterial) {
+        logger.log('renderer', `Shader uniforms: enableTextures=${texturedMaterial.uniforms.enableTextures?.value}`);
+        logger.log('renderer', `Texture uniforms: texture2=${!!texturedMaterial.uniforms.texture2}, texture3=${!!texturedMaterial.uniforms.texture3}`);
+      }
+
+      this.texturedMesh = new THREE.Mesh(texturedGeometry, texturedMaterial);
+      this.texturedMesh.castShadow = true;
+      this.texturedMesh.receiveShadow = true;
+      this.texturedMesh.renderOrder = 0;
+      this.scene.add(this.texturedMesh);
+
+      logger.log('renderer', `Created textured mesh with ${texturedIndices.length / 3} triangles`);
+    }
+
+    // Create solid color mesh if there are solid color triangles
+    if (solidIndices.length > 0) {
+      const solidGeometry = new THREE.BufferGeometry();
+      solidGeometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+      solidGeometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+
+      if (colors && colors.length > 0) {
+        solidGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      }
+
+      solidGeometry.setIndex(new THREE.BufferAttribute(new Uint32Array(solidIndices), 1));
+
+      const solidMaterial = new THREE.MeshPhongMaterial({
         vertexColors: colors && colors.length > 0,
         color: colors && colors.length > 0 ? 0xffffff : 0x44aa44,
         specular: 0x333333,
@@ -1519,33 +1614,39 @@ export class SceneManager {
         side: THREE.FrontSide,
         flatShading: false
       });
-      logger.log('renderer', 'Created geometry mesh with Phong material (textures not loaded)');
+
+      this.solidColorMesh = new THREE.Mesh(solidGeometry, solidMaterial);
+      this.solidColorMesh.castShadow = true;
+      this.solidColorMesh.receiveShadow = true;
+      this.solidColorMesh.renderOrder = 0;
+      this.scene.add(this.solidColorMesh);
+
+      logger.log('renderer', `Created solid color mesh with ${solidIndices.length / 3} triangles`);
     }
 
-    this.geometryMesh = new THREE.Mesh(geometry, material);
-    this.geometryMesh.castShadow = true;
-    this.geometryMesh.receiveShadow = true;
-    this.geometryMesh.renderOrder = 0; // Render world cube first
-    this.scene.add(this.geometryMesh);
+    // For backwards compatibility, set geometryMesh to the primary mesh (prefer textured if available)
+    this.geometryMesh = this.texturedMesh || this.solidColorMesh;
 
     // Update raycast mesh for avatar ground detection
-    if (this.currentAvatar) {
+    if (this.currentAvatar && this.geometryMesh) {
       this.currentAvatar.setRaycastMesh(this.geometryMesh);
     }
 
-    // Create wireframe overlay mesh
-    const wireframeGeometry = new THREE.WireframeGeometry(geometry);
-    const wireframeMaterial = new THREE.LineBasicMaterial({
-      color: 0x000000,
-      linewidth: 1,
-      depthTest: true,
-      depthWrite: false
-    });
+    // Create wireframe overlay mesh from the combined geometry
+    if (this.geometryMesh) {
+      const wireframeGeometry = new THREE.WireframeGeometry(this.geometryMesh.geometry);
+      const wireframeMaterial = new THREE.LineBasicMaterial({
+        color: 0x000000,
+        linewidth: 1,
+        depthTest: true,
+        depthWrite: false
+      });
 
-    this.wireframeMesh = new THREE.LineSegments(wireframeGeometry, wireframeMaterial);
-    this.wireframeMesh.renderOrder = 1; // Render wireframe on top
-    this.wireframeMesh.visible = this.wireframeMode;
-    this.scene.add(this.wireframeMesh);
+      this.wireframeMesh = new THREE.LineSegments(wireframeGeometry, wireframeMaterial);
+      this.wireframeMesh.renderOrder = 1; // Render wireframe on top
+      this.wireframeMesh.visible = this.wireframeMode;
+      this.scene.add(this.wireframeMesh);
+    }
   }
 
   render(): void {
@@ -2264,9 +2365,9 @@ export class SceneManager {
   setTextures(enabled: boolean): void {
     this.texturesEnabled = enabled;
 
-    // Update the material uniform if geometry mesh exists with shader material
-    if (this.geometryMesh && this.geometryMesh.material instanceof THREE.ShaderMaterial) {
-      const material = this.geometryMesh.material as THREE.ShaderMaterial;
+    // Update the material uniform if textured mesh exists with shader material
+    if (this.texturedMesh && this.texturedMesh.material instanceof THREE.ShaderMaterial) {
+      const material = this.texturedMesh.material as THREE.ShaderMaterial;
       if (material.uniforms.enableTextures) {
         material.uniforms.enableTextures.value = enabled;
       }

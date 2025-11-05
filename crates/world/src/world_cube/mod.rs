@@ -109,9 +109,9 @@ impl WorldCube {
                     // Assign materials based on Y level
                     match y_pos {
                         0 => Cube::Solid(HARD_GROUND), // Bottom: hard ground
-                        1 => Cube::Solid(WATER),        // Lower middle: water
-                        2 => Cube::Solid(AIR),          // Upper middle: air
-                        3 => Cube::Solid(AIR),          // Top: air
+                        1 => Cube::Solid(WATER),       // Lower middle: water
+                        2 => Cube::Solid(AIR),         // Upper middle: air
+                        3 => Cube::Solid(AIR),         // Top: air
                         _ => Cube::Solid(AIR),
                     }
                 })
@@ -169,18 +169,16 @@ impl WorldCube {
     /// * `colors` - Flat array of RGB colors [r1,g1,b1, r2,g2,b2, ...] for materials 0-127
     pub fn set_material_colors(&mut self, colors: Vec<f32>) {
         if colors.len() < 128 * 3 {
-            tracing::warn!("Material colors array too short, expected at least 384 values (128 materials × 3 RGB)");
+            tracing::warn!(
+                "Material colors array too short, expected at least 384 values (128 materials × 3 RGB)"
+            );
             return;
         }
 
         let mut material_colors = Vec::with_capacity(128);
         for i in 0..128 {
             let idx = i * 3;
-            material_colors.push([
-                colors[idx],
-                colors[idx + 1],
-                colors[idx + 2],
-            ]);
+            material_colors.push([colors[idx], colors[idx + 1], colors[idx + 2]]);
         }
         self.material_colors = Some(material_colors);
     }
@@ -280,64 +278,64 @@ impl MaterialColorMapper {
 
             // Initialize materials array with colors from materials.json
             // These match the exact colors defined in assets/materials.json
-            materials[0] = [0.0, 0.0, 0.0];           // 0: empty
-            materials[1] = [0.0, 0.0, 0.0];           // 1: set_empty
-            materials[2] = [1.0, 1.0, 1.0];           // 2: glass
-            materials[3] = [0.816, 1.0, 1.0];         // 3: ice
-            materials[4] = [0.0, 0.498, 1.0];         // 4: water_surface
-            materials[5] = [0.0, 1.0, 0.0];           // 5: slime
-            materials[6] = [1.0, 0.647, 0.0];         // 6: honey
-            materials[7] = [1.0, 0.0, 1.0];           // 7: crystal
-            materials[8] = [0.0, 1.0, 1.0];           // 8: force_field
-            materials[9] = [0.667, 0.0, 1.0];         // 9: portal
-            materials[10] = [0.8, 0.8, 0.8];          // 10: mist
-            materials[11] = [1.0, 0.0, 0.0];          // 11: stained_glass_red
-            materials[12] = [0.0, 1.0, 0.0];          // 12: stained_glass_green
-            materials[13] = [0.0, 0.0, 1.0];          // 13: stained_glass_blue
-            materials[14] = [1.0, 1.0, 0.0];          // 14: stained_glass_yellow
-            materials[15] = [0.502, 0.502, 0.502];    // 15: transparent_15
-            materials[16] = [0.4, 0.267, 0.2];        // 16: hard_ground
-            materials[17] = [0.0, 0.314, 0.624];      // 17: water
-            materials[18] = [0.545, 0.271, 0.075];    // 18: dirt
-            materials[19] = [0.227, 0.490, 0.227];    // 19: grass
-            materials[20] = [0.502, 0.502, 0.502];    // 20: stone
-            materials[21] = [0.431, 0.431, 0.431];    // 21: cobblestone
-            materials[22] = [0.929, 0.788, 0.686];    // 22: sand
-            materials[23] = [0.788, 0.655, 0.439];    // 23: sandstone
-            materials[24] = [0.533, 0.533, 0.533];    // 24: gravel
-            materials[25] = [0.627, 0.627, 0.627];    // 25: clay
-            materials[26] = [1.0, 1.0, 1.0];          // 26: snow
-            materials[27] = [0.690, 0.878, 1.0];      // 27: ice_solid
-            materials[28] = [0.102, 0.059, 0.180];    // 28: obsidian
-            materials[29] = [0.545, 0.0, 0.0];        // 29: netherrack
-            materials[30] = [0.612, 0.365, 0.239];    // 30: granite
-            materials[31] = [0.749, 0.749, 0.749];    // 31: diorite
-            materials[32] = [0.427, 0.427, 0.427];    // 32: andesite
-            materials[33] = [0.910, 0.910, 0.910];    // 33: marble
-            materials[34] = [0.855, 0.816, 0.753];    // 34: limestone
-            materials[35] = [0.169, 0.169, 0.169];    // 35: basalt
-            materials[36] = [0.627, 0.510, 0.427];    // 36: wood_oak
-            materials[37] = [0.420, 0.333, 0.208];    // 37: wood_spruce
-            materials[38] = [0.843, 0.796, 0.553];    // 38: wood_birch
-            materials[39] = [0.545, 0.435, 0.278];    // 39: wood_jungle
-            materials[40] = [0.722, 0.408, 0.243];    // 40: wood_acacia
-            materials[41] = [0.290, 0.220, 0.161];    // 41: wood_dark_oak
-            materials[42] = [0.769, 0.651, 0.447];    // 42: planks_oak
-            materials[43] = [0.486, 0.365, 0.243];    // 43: planks_spruce
-            materials[44] = [0.890, 0.851, 0.659];    // 44: planks_birch
-            materials[45] = [0.176, 0.314, 0.086];    // 45: leaves
-            materials[46] = [0.365, 0.561, 0.227];    // 46: leaves_birch
-            materials[47] = [0.239, 0.376, 0.188];    // 47: leaves_spruce
-            materials[48] = [0.102, 0.102, 0.102];    // 48: coal
-            materials[49] = [0.847, 0.847, 0.847];    // 49: iron
-            materials[50] = [1.0, 0.843, 0.0];        // 50: gold
-            materials[51] = [0.722, 0.451, 0.2];      // 51: copper
-            materials[52] = [0.753, 0.753, 0.753];    // 52: silver
-            materials[53] = [0.804, 0.498, 0.196];    // 53: bronze
-            materials[54] = [0.565, 0.565, 0.627];    // 54: steel
-            materials[55] = [0.529, 0.525, 0.506];    // 55: titanium
-            materials[56] = [0.545, 0.227, 0.227];    // 56: brick
-            materials[57] = [0.620, 0.620, 0.620];    // 57: concrete
+            materials[0] = [0.0, 0.0, 0.0]; // 0: empty
+            materials[1] = [0.0, 0.0, 0.0]; // 1: set_empty
+            materials[2] = [1.0, 1.0, 1.0]; // 2: glass
+            materials[3] = [0.816, 1.0, 1.0]; // 3: ice
+            materials[4] = [0.0, 0.498, 1.0]; // 4: water_surface
+            materials[5] = [0.0, 1.0, 0.0]; // 5: slime
+            materials[6] = [1.0, 0.647, 0.0]; // 6: honey
+            materials[7] = [1.0, 0.0, 1.0]; // 7: crystal
+            materials[8] = [0.0, 1.0, 1.0]; // 8: force_field
+            materials[9] = [0.667, 0.0, 1.0]; // 9: portal
+            materials[10] = [0.8, 0.8, 0.8]; // 10: mist
+            materials[11] = [1.0, 0.0, 0.0]; // 11: stained_glass_red
+            materials[12] = [0.0, 1.0, 0.0]; // 12: stained_glass_green
+            materials[13] = [0.0, 0.0, 1.0]; // 13: stained_glass_blue
+            materials[14] = [1.0, 1.0, 0.0]; // 14: stained_glass_yellow
+            materials[15] = [0.502, 0.502, 0.502]; // 15: transparent_15
+            materials[16] = [0.4, 0.267, 0.2]; // 16: hard_ground
+            materials[17] = [0.0, 0.314, 0.624]; // 17: water
+            materials[18] = [0.545, 0.271, 0.075]; // 18: dirt
+            materials[19] = [0.227, 0.490, 0.227]; // 19: grass
+            materials[20] = [0.502, 0.502, 0.502]; // 20: stone
+            materials[21] = [0.431, 0.431, 0.431]; // 21: cobblestone
+            materials[22] = [0.929, 0.788, 0.686]; // 22: sand
+            materials[23] = [0.788, 0.655, 0.439]; // 23: sandstone
+            materials[24] = [0.533, 0.533, 0.533]; // 24: gravel
+            materials[25] = [0.627, 0.627, 0.627]; // 25: clay
+            materials[26] = [1.0, 1.0, 1.0]; // 26: snow
+            materials[27] = [0.690, 0.878, 1.0]; // 27: ice_solid
+            materials[28] = [0.102, 0.059, 0.180]; // 28: obsidian
+            materials[29] = [0.545, 0.0, 0.0]; // 29: netherrack
+            materials[30] = [0.612, 0.365, 0.239]; // 30: granite
+            materials[31] = [0.749, 0.749, 0.749]; // 31: diorite
+            materials[32] = [0.427, 0.427, 0.427]; // 32: andesite
+            materials[33] = [0.910, 0.910, 0.910]; // 33: marble
+            materials[34] = [0.855, 0.816, 0.753]; // 34: limestone
+            materials[35] = [0.169, 0.169, 0.169]; // 35: basalt
+            materials[36] = [0.627, 0.510, 0.427]; // 36: wood_oak
+            materials[37] = [0.420, 0.333, 0.208]; // 37: wood_spruce
+            materials[38] = [0.843, 0.796, 0.553]; // 38: wood_birch
+            materials[39] = [0.545, 0.435, 0.278]; // 39: wood_jungle
+            materials[40] = [0.722, 0.408, 0.243]; // 40: wood_acacia
+            materials[41] = [0.290, 0.220, 0.161]; // 41: wood_dark_oak
+            materials[42] = [0.769, 0.651, 0.447]; // 42: planks_oak
+            materials[43] = [0.486, 0.365, 0.243]; // 43: planks_spruce
+            materials[44] = [0.890, 0.851, 0.659]; // 44: planks_birch
+            materials[45] = [0.176, 0.314, 0.086]; // 45: leaves
+            materials[46] = [0.365, 0.561, 0.227]; // 46: leaves_birch
+            materials[47] = [0.239, 0.376, 0.188]; // 47: leaves_spruce
+            materials[48] = [0.102, 0.102, 0.102]; // 48: coal
+            materials[49] = [0.847, 0.847, 0.847]; // 49: iron
+            materials[50] = [1.0, 0.843, 0.0]; // 50: gold
+            materials[51] = [0.722, 0.451, 0.2]; // 51: copper
+            materials[52] = [0.753, 0.753, 0.753]; // 52: silver
+            materials[53] = [0.804, 0.498, 0.196]; // 53: bronze
+            materials[54] = [0.565, 0.565, 0.627]; // 54: steel
+            materials[55] = [0.529, 0.525, 0.506]; // 55: titanium
+            materials[56] = [0.545, 0.227, 0.227]; // 56: brick
+            materials[57] = [0.620, 0.620, 0.620]; // 57: concrete
             materials
         };
 

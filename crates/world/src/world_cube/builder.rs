@@ -3,25 +3,25 @@ use noise::{Fbm, NoiseFn, Perlin};
 use std::rc::Rc;
 
 // Material indices from materials.json
-const HARD_GROUND: i32 = 16;  // Bedrock
-const STONE: i32 = 20;        // Primary underground
-const DIRT: i32 = 18;         // Underground and surface
-const GRASS: i32 = 19;        // Surface vegetation
-const WATER: i32 = 17;        // Water bodies
-const SAND: i32 = 22;         // Beaches and deserts
-const SANDSTONE: i32 = 23;    // Desert underground
-const GRAVEL: i32 = 24;       // River beds
-const CLAY: i32 = 25;         // Underground pockets
-const SNOW: i32 = 26;         // Mountain peaks
-const ICE_SOLID: i32 = 27;    // Frozen biomes
-const GRANITE: i32 = 30;      // Mountain core
-const ANDESITE: i32 = 32;     // Mountain variation
-const LIMESTONE: i32 = 34;    // Underground caves
-const BASALT: i32 = 35;       // Volcanic areas
-const COAL: i32 = 48;         // Ore veins
-const IRON: i32 = 49;         // Ore veins
-const NETHERRACK: i32 = 29;   // Deep underground
-const COBBLESTONE: i32 = 21;  // Stone variation
+const HARD_GROUND: i32 = 16; // Bedrock
+const STONE: i32 = 20; // Primary underground
+const DIRT: i32 = 18; // Underground and surface
+const GRASS: i32 = 19; // Surface vegetation
+const WATER: i32 = 17; // Water bodies
+const SAND: i32 = 22; // Beaches and deserts
+const SANDSTONE: i32 = 23; // Desert underground
+const GRAVEL: i32 = 24; // River beds
+const CLAY: i32 = 25; // Underground pockets
+const SNOW: i32 = 26; // Mountain peaks
+const ICE_SOLID: i32 = 27; // Frozen biomes
+const GRANITE: i32 = 30; // Mountain core
+const ANDESITE: i32 = 32; // Mountain variation
+const LIMESTONE: i32 = 34; // Underground caves
+const BASALT: i32 = 35; // Volcanic areas
+const COAL: i32 = 48; // Ore veins
+const IRON: i32 = 49; // Ore veins
+const NETHERRACK: i32 = 29; // Deep underground
+const COBBLESTONE: i32 = 21; // Stone variation
 
 /// Biome type determined by temperature and moisture
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -103,10 +103,10 @@ fn get_terrain_height(x: i32, z: i32, _max_depth: u32, noise: &Perlin, fbm: &Fbm
     let wz = z as f64 * scale;
 
     // Multi-octave terrain height with reduced amplitudes
-    let octave1 = fbm.get([wx, wz]) * 8.0;            // Large features
-    let octave2 = noise.get([wx * 2.0, wz * 2.0]) * 3.0;   // Medium features
-    let octave3 = noise.get([wx * 4.0, wz * 4.0]) * 1.0;   // Small features
-    let octave4 = noise.get([wx * 8.0, wz * 8.0]) * 0.5;   // Fine detail
+    let octave1 = fbm.get([wx, wz]) * 8.0; // Large features
+    let octave2 = noise.get([wx * 2.0, wz * 2.0]) * 3.0; // Medium features
+    let octave3 = noise.get([wx * 4.0, wz * 4.0]) * 1.0; // Small features
+    let octave4 = noise.get([wx * 8.0, wz * 8.0]) * 0.5; // Fine detail
 
     // Apply gentler power function for smoother terrain
     let raw_height = octave1 + octave2 + octave3 + octave4;
@@ -171,7 +171,14 @@ fn get_biome(height: f64, temperature: f64, moisture: f64) -> Biome {
 }
 
 /// Get voxel material at given coordinates
-fn get_voxel_value(x: i32, y: i32, z: i32, max_depth: u32, noise: &Perlin, fbm: &Fbm<Perlin>) -> i32 {
+fn get_voxel_value(
+    x: i32,
+    y: i32,
+    z: i32,
+    max_depth: u32,
+    noise: &Perlin,
+    fbm: &Fbm<Perlin>,
+) -> i32 {
     let height = get_terrain_height(x, z, max_depth, noise, fbm);
     let depth_below = height - y as f64;
 
@@ -229,7 +236,13 @@ fn get_voxel_value(x: i32, y: i32, z: i32, max_depth: u32, noise: &Perlin, fbm: 
             Biome::Desert => SAND,
             Biome::Plains => GRASS,
             Biome::Forest => GRASS,
-            Biome::Mountains => if height > 21.0 { SNOW } else { STONE },
+            Biome::Mountains => {
+                if height > 21.0 {
+                    SNOW
+                } else {
+                    STONE
+                }
+            }
             Biome::Tundra => SNOW,
             Biome::IceCap => ICE_SOLID,
         };

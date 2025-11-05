@@ -166,18 +166,12 @@ impl ColorMapper for VoxColorMapper {
         // All materials should be in range 128-255 for vox models
         // Decode RGB from 7-bit R2G3B2 encoding
         // This reverses the encoding done in vox_loader.rs:map_color_to_material
-        let clamped_index = if index < 128 {
-            128 // Ensure minimum is 128
-        } else if index > 255 {
-            255 // Ensure maximum is 255
-        } else {
-            index
-        };
+        let clamped_index = index.clamp(128, 255);
 
         let bits = (clamped_index - 128) as u8;
-        let r_bits = (bits >> 5) & 0b11;      // Extract top 2 bits
-        let g_bits = (bits >> 2) & 0b111;     // Extract middle 3 bits
-        let b_bits = bits & 0b11;              // Extract bottom 2 bits
+        let r_bits = (bits >> 5) & 0b11; // Extract top 2 bits
+        let g_bits = (bits >> 2) & 0b111; // Extract middle 3 bits
+        let b_bits = bits & 0b11; // Extract bottom 2 bits
 
         // Expand bits back to full 8-bit values by replicating bits
         // For 2-bit values (r, b): replicate to fill 8 bits (xx -> xxxxxxxx)

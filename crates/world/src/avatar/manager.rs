@@ -1,4 +1,4 @@
-use crossworld_cube::{glam::Vec3, Cube};
+use crossworld_cube::{Cube, glam::Vec3};
 
 /// Manages avatar loading from .vox files
 #[allow(dead_code)]
