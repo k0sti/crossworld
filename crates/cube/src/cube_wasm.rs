@@ -229,6 +229,7 @@ impl WasmCube {
         let border_materials = [0, 0, 0, 0];
 
         // Parse palette if provided, otherwise use VoxColorMapper for R2G3B2 decoding
+        // For avatars, use max_depth as base_depth (all textures at full scale)
         if palette.is_null() || palette.is_undefined() {
             let mapper = VoxColorMapper::new();
             generate_face_mesh(
@@ -237,6 +238,7 @@ impl WasmCube {
                 |v| mapper.map(v),
                 max_depth,
                 border_materials,
+                max_depth, // base_depth = max_depth for avatars
             );
         } else {
             // Try to deserialize palette
@@ -251,6 +253,7 @@ impl WasmCube {
                         |v| mapper.map(v),
                         max_depth,
                         border_materials,
+                        max_depth, // base_depth = max_depth for avatars
                     );
                 }
                 Err(e) => {
