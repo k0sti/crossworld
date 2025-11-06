@@ -259,11 +259,12 @@ export abstract class BaseAvatar implements IAvatar {
 
   /**
    * Raycast down from position to find ground height
-   * Returns Y position or current Y if no intersection
+   * Returns Y position, or 0 if no mesh exists, or currentY if no intersection found
    */
   private getGroundHeight(x: number, z: number, currentY: number): number {
     if (!this.raycastMesh) {
-      return currentY;
+      // No geometry mesh available - default to ground plane at y=0
+      return 0;
     }
 
     // Raycast from high above down to find ground
@@ -278,6 +279,7 @@ export abstract class BaseAvatar implements IAvatar {
       return intersects[0].point.y;
     }
 
+    // No intersection found - keep current Y position (avatar might be on a platform or in mid-air)
     return currentY;
   }
 
