@@ -135,12 +135,14 @@ impl MeshBuilder for DefaultMeshBuilder {
 /// * `color_fn` - Function to map voxel values to colors
 /// * `max_depth` - Maximum depth of the octree
 /// * `border_materials` - Array of 4 material IDs for border voxels at each Y layer [y0, y1, y2, y3]
+/// * `base_depth` - The depth at which voxels are 1 unit in size (for UV scaling)
 pub fn generate_face_mesh<B, F>(
     root: &Cube<i32>,
     builder: &mut B,
     color_fn: F,
     max_depth: u32,
     border_materials: [i32; 4],
+    base_depth: u32,
 ) where
     B: MeshBuilder,
     F: Fn(i32) -> [f32; 3] + Copy,
@@ -206,8 +208,13 @@ pub fn generate_face_mesh<B, F>(
 
                     // Check if material needs texture (2-127 are textured materials)
                     if (2..=127).contains(&neighbor_id) {
-                        // Generate UVs for textured face (0,0 to 1,1 mapping)
-                        let uvs = face.uvs();
+                        // Use a constant UV scale across all depths
+                        // Scale by 2^base_depth for proper tiling
+                        let uv_scale = (1 << base_depth) as f32;
+
+                        // Generate UVs with world position for seamless tiling
+                        // Pass the actual voxel_size separately for UV bounds calculation
+                        let uvs = face.uvs(nx, ny, nz, voxel_size, uv_scale);
                         builder.add_textured_face(vertices, normal, color, uvs, neighbor_id as u8);
                     } else {
                         // Solid color material (0-1, 128-255)
@@ -257,6 +264,7 @@ mod tests {
             simple_color_mapper,
             0,
             border_materials,
+            0, // base_depth
         );
 
         // Should have no faces because there are no empty voxels in a solid cube
@@ -286,6 +294,7 @@ mod tests {
             simple_color_mapper,
             1,
             border_materials,
+            1, // base_depth
         );
 
         // Empty voxels should have faces where they touch solid voxels
@@ -315,6 +324,7 @@ mod tests {
             simple_color_mapper,
             1,
             border_materials,
+            1, // base_depth
         );
 
         // Empty voxels at the border will see ground (33) below them and generate upward faces
@@ -347,6 +357,7 @@ mod tests {
             simple_color_mapper,
             1,
             border_materials,
+            1, // base_depth
         );
 
         // Empty neighbors of the solid voxel should render faces towards it
@@ -379,6 +390,7 @@ mod tests {
             simple_color_mapper,
             1,
             border_materials,
+            1, // base_depth
         );
 
         // No empty voxels means no faces are rendered (we only render from empty voxels)
