@@ -197,12 +197,15 @@ impl WorldCube {
         // The mesh generator will automatically calculate correct voxel sizes
         // for each depth level, ensuring subdivided voxels render at correct positions
         // Use face-based mesh generation with neighbor culling
+        // Base depth is where voxels are 1 unit in size (macro_depth + border_depth)
+        let base_depth = self.macro_depth + self.border_depth;
         crossworld_cube::generate_face_mesh(
             &self.octree.root,
             &mut builder,
             |index| color_mapper.map(index),
             self.render_depth,
             border_materials,
+            base_depth,
         );
 
         // Scale and offset vertices to match world coordinates
