@@ -27,6 +27,7 @@ import {
 import { CheckerPlane } from './checker-plane';
 import { loadCubeFromCsm, raycastWasm } from '../utils/cubeWasm';
 import { raycastMesh, type MeshRaycastResult } from '../utils/meshRaycast';
+import { raycastWorld, calculateAvatarPlacement } from '../utils/worldRaycast';
 import { SunSystem } from './sun-system';
 import { PostProcessing } from './post-processing';
 import { profileCache } from '../services/profile-cache';
@@ -318,39 +319,48 @@ export class SceneManager {
       // Update raycaster
       this.raycaster.setFromCamera(this.mouse, this.camera);
 
-      // Raycast to ground plane at y=0 (same as edit mode)
-      const intersectPoint = new THREE.Vector3();
-      const didIntersect = this.raycaster.ray.intersectPlane(this.groundPlane, intersectPoint);
+      // Check modifiers: CTRL for teleport, SHIFT for run
+      const useTeleport = event.ctrlKey;
+      const useRun = event.shiftKey && !useTeleport;
 
-      if (didIntersect) {
-        // Use exact raycast coordinates or snap to grid based on flag
-        let targetX: number;
-        let targetZ: number;
+      let targetX: number;
+      let targetZ: number;
 
-        if (this.snapToGridInWalkMode) {
-          // Snap to grid centered on the intersection point (same as edit mode)
-          const size = 1;
-          targetX = snapToGrid(intersectPoint.x, size);
-          targetZ = snapToGrid(intersectPoint.z, size);
-        } else {
-          // Use exact raycast coordinates for precise movement
-          targetX = intersectPoint.x;
-          targetZ = intersectPoint.z;
+      // For teleport, use world raycast to find voxel face
+      if (useTeleport && this.geometryMesh) {
+        const worldHit = raycastWorld(this.geometryMesh, this.raycaster);
+
+        if (worldHit) {
+          // Calculate avatar placement on the voxel face
+          const placement = calculateAvatarPlacement(worldHit);
+          targetX = placement.x;
+          targetZ = placement.z;
+
+          this.currentAvatar.teleportTo(targetX, targetZ, this.teleportAnimationType);
+          this.currentMoveStyle = `teleport:${this.teleportAnimationType}`;
+          // Publish TARGET position with move style
+          this.publishPlayerPositionAt(targetX, targetZ, this.currentMoveStyle);
         }
+      } else {
+        // For walk/run, use ground plane raycast
+        const intersectPoint = new THREE.Vector3();
+        const didIntersect = this.raycaster.ray.intersectPlane(this.groundPlane, intersectPoint);
 
-        // Check if within valid world bounds (size=0 for point position, not voxel)
-        if (isWithinWorldBounds(targetX, targetZ, 0)) {
-          // Check modifiers: CTRL for teleport, SHIFT for run
-          const useTeleport = event.ctrlKey;
-          const useRun = event.shiftKey && !useTeleport;
+        if (didIntersect) {
+          // Use exact raycast coordinates or snap to grid based on flag
+          if (this.snapToGridInWalkMode) {
+            // Snap to grid centered on the intersection point (same as edit mode)
+            const size = 1;
+            targetX = snapToGrid(intersectPoint.x, size);
+            targetZ = snapToGrid(intersectPoint.z, size);
+          } else {
+            // Use exact raycast coordinates for precise movement
+            targetX = intersectPoint.x;
+            targetZ = intersectPoint.z;
+          }
 
           // Move avatar
-          if (useTeleport) {
-            this.currentAvatar.teleportTo(targetX, targetZ, this.teleportAnimationType);
-            this.currentMoveStyle = `teleport:${this.teleportAnimationType}`;
-            // Publish TARGET position with move style
-            this.publishPlayerPositionAt(targetX, targetZ, this.currentMoveStyle);
-          } else if (useRun) {
+          if (useRun) {
             this.currentAvatar.setRunSpeed(true);
             this.currentAvatar.setTargetPosition(targetX, targetZ);
             this.currentMoveStyle = 'run';
