@@ -1,3 +1,6 @@
+use crate::traversal::{OFFSET_LEFT, OFFSET_RIGHT, OFFSET_DOWN, OFFSET_UP, OFFSET_BACK, OFFSET_FRONT};
+use glam::Vec3;
+
 /// Face direction for cube faces
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Face {
@@ -18,6 +21,19 @@ impl Face {
         Face::Right,
         Face::Front,
         Face::Back,
+    ];
+
+    /// Face directions with their corresponding neighbor offsets and direction vectors
+    ///
+    /// Each entry is (Face to render, Neighbor offset to check, Direction vector from viewer to face)
+    /// The face is rendered when looking from an empty voxel toward a solid neighbor.
+    pub const DIRECTIONS: [(Face, i32, Vec3); 6] = [
+        (Face::Right, OFFSET_LEFT, Vec3::new(-1.0, 0.0, 0.0)),   // Left neighbor: render RIGHT face
+        (Face::Left, OFFSET_RIGHT, Vec3::new(1.0, 0.0, 0.0)),    // Right neighbor: render LEFT face
+        (Face::Top, OFFSET_DOWN, Vec3::new(0.0, -1.0, 0.0)),     // Down neighbor: render TOP face
+        (Face::Bottom, OFFSET_UP, Vec3::new(0.0, 1.0, 0.0)),     // Up neighbor: render BOTTOM face
+        (Face::Front, OFFSET_BACK, Vec3::new(0.0, 0.0, -1.0)),   // Back neighbor: render FRONT face
+        (Face::Back, OFFSET_FRONT, Vec3::new(0.0, 0.0, 1.0)),    // Front neighbor: render BACK face
     ];
 
     /// Get the normal vector for this face
