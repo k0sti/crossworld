@@ -1,5 +1,5 @@
-use crate::CubeCoord;
 use crate::core::Cube;
+use crate::CubeCoord;
 use dot_vox::DotVoxData;
 use glam::{IVec3, Vec3};
 
@@ -92,7 +92,13 @@ fn convert_dotvox_to_cube(vox_data: &DotVoxData, align: Vec3) -> Result<Cube<i32
 
         // Set voxel in cube using immutable set_voxel
         let depth = depth as u32;
-        cube = cube.update(CubeCoord { pos: IVec3{x, y, z}, depth }, Cube::solid(material as i32));
+        cube = cube.update(
+            CubeCoord {
+                pos: IVec3 { x, y, z },
+                depth,
+            },
+            Cube::solid(material as i32),
+        );
     }
 
     Ok(cube)

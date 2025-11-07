@@ -1,8 +1,8 @@
 use crate::world::PhysicsWorld;
 use crossworld_cube::Cube;
 use glam::{Quat, Vec3};
-use rapier3d::prelude::*;
 use nalgebra::{Quaternion, UnitQuaternion};
+use rapier3d::prelude::*;
 use std::rc::Rc;
 
 /// Represents a physics object with a rigid body, collider, and voxel cube
@@ -146,10 +146,7 @@ impl CubeObject {
     pub fn set_rotation(&self, world: &mut PhysicsWorld, rotation: Quat) {
         if let Some(body) = world.get_rigid_body_mut(self.body_handle) {
             let rot = UnitQuaternion::new_normalize(Quaternion::new(
-                rotation.w,
-                rotation.x,
-                rotation.y,
-                rotation.z,
+                rotation.w, rotation.x, rotation.y, rotation.z,
             ));
             body.set_rotation(rot, true);
         }

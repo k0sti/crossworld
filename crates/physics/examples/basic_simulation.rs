@@ -1,5 +1,5 @@
 use crossworld_physics::{
-    create_box_collider, glam::Vec3, rapier3d::prelude::*, PhysicsWorld, CubeObject,
+    create_box_collider, glam::Vec3, rapier3d::prelude::*, CubeObject, PhysicsWorld,
 };
 
 fn main() {
@@ -26,7 +26,10 @@ fn main() {
     let total_time = 3.0;
     let steps = (total_time / dt) as usize;
 
-    println!("Simulating for {} seconds ({} steps)...\n", total_time, steps);
+    println!(
+        "Simulating for {} seconds ({} steps)...\n",
+        total_time, steps
+    );
 
     for i in 0..steps {
         world.step(dt);
@@ -44,7 +47,10 @@ fn main() {
     }
 
     let final_pos = falling_box.position(&world);
-    println!("\nFinal position: ({:.3}, {:.3}, {:.3})", final_pos.x, final_pos.y, final_pos.z);
+    println!(
+        "\nFinal position: ({:.3}, {:.3}, {:.3})",
+        final_pos.x, final_pos.y, final_pos.z
+    );
 
     if final_pos.y > 0.0 && final_pos.y < 1.0 {
         println!("✓ Box landed on ground successfully!");

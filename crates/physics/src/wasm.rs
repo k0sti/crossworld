@@ -1,10 +1,12 @@
 use crate::{
-    collider::{create_box_collider, create_capsule_collider, create_sphere_collider, VoxelColliderBuilder},
+    collider::{
+        create_box_collider, create_capsule_collider, create_sphere_collider, VoxelColliderBuilder,
+    },
     world::PhysicsWorld,
 };
 use glam::Vec3;
-use rapier3d::prelude::*;
 use nalgebra::{Quaternion, UnitQuaternion};
+use rapier3d::prelude::*;
 use std::cell::RefCell;
 use wasm_bindgen::prelude::*;
 
@@ -22,7 +24,9 @@ impl WasmPhysicsWorld {
     #[wasm_bindgen(constructor)]
     pub fn new(gravity_x: f32, gravity_y: f32, gravity_z: f32) -> Self {
         Self {
-            inner: RefCell::new(PhysicsWorld::new(Vec3::new(gravity_x, gravity_y, gravity_z))),
+            inner: RefCell::new(PhysicsWorld::new(Vec3::new(
+                gravity_x, gravity_y, gravity_z,
+            ))),
         }
     }
 
@@ -398,19 +402,13 @@ impl WasmPhysicsWorld {
     /// * `object_id` - Object ID
     /// * `quat_x`, `quat_y`, `quat_z`, `quat_w` - Quaternion components
     #[wasm_bindgen(js_name = setRotation)]
-    pub fn set_rotation(
-        &self,
-        object_id: u32,
-        quat_x: f32,
-        quat_y: f32,
-        quat_z: f32,
-        quat_w: f32,
-    ) {
+    pub fn set_rotation(&self, object_id: u32, quat_x: f32, quat_y: f32, quat_z: f32, quat_w: f32) {
         let mut world = self.inner.borrow_mut();
         let handle = RigidBodyHandle::from_raw_parts(object_id, 0);
 
         if let Some(body) = world.get_rigid_body_mut(handle) {
-            let rot = UnitQuaternion::new_normalize(Quaternion::new(quat_w, quat_x, quat_y, quat_z));
+            let rot =
+                UnitQuaternion::new_normalize(Quaternion::new(quat_w, quat_x, quat_y, quat_z));
             body.set_rotation(rot, true);
         }
     }

@@ -1,5 +1,5 @@
 use crossworld_physics::{
-    create_sphere_collider, glam::Vec3, rapier3d::prelude::*, PhysicsWorld, CubeObject,
+    create_sphere_collider, glam::Vec3, rapier3d::prelude::*, CubeObject, PhysicsWorld,
     VoxelColliderBuilder,
 };
 use std::rc::Rc;
@@ -19,8 +19,7 @@ fn main() {
     println!("Generated collision geometry for voxel cube");
 
     // Create static rigid body for voxel terrain
-    let mut voxel_body =
-        CubeObject::new_static(&mut world, Vec3::new(0.0, 0.0, 0.0));
+    let mut voxel_body = CubeObject::new_static(&mut world, Vec3::new(0.0, 0.0, 0.0));
     voxel_body.attach_collider(&mut world, voxel_collider);
     println!("Added voxel terrain as static body\n");
 
@@ -54,7 +53,10 @@ fn main() {
     }
 
     let final_pos = sphere.position(&world);
-    println!("\nFinal sphere position: ({:.3}, {:.3}, {:.3})", final_pos.x, final_pos.y, final_pos.z);
+    println!(
+        "\nFinal sphere position: ({:.3}, {:.3}, {:.3})",
+        final_pos.x, final_pos.y, final_pos.z
+    );
 
     // Top of voxel cube is at y=0.25, sphere radius is 0.05, so expect y around 0.30-0.35
     if final_pos.y > 0.28 && final_pos.y < 0.38 {

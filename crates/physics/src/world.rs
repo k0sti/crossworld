@@ -99,12 +99,9 @@ impl PhysicsWorld {
     ///
     /// # Returns
     /// Handle to the added collider
-    pub fn add_collider(
-        &mut self,
-        collider: Collider,
-        parent: RigidBodyHandle,
-    ) -> ColliderHandle {
-        self.collider_set.insert_with_parent(collider, parent, &mut self.rigid_body_set)
+    pub fn add_collider(&mut self, collider: Collider, parent: RigidBodyHandle) -> ColliderHandle {
+        self.collider_set
+            .insert_with_parent(collider, parent, &mut self.rigid_body_set)
     }
 
     /// Get a reference to a rigid body

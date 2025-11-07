@@ -1,5 +1,5 @@
-use crate::traversal::visit_faces;
 use crate::core::Cube;
+use crate::traversal::visit_faces;
 
 /// Builder interface for constructing meshes
 pub trait MeshBuilder {
@@ -144,30 +144,45 @@ pub fn generate_face_mesh<B, F>(
     F: Fn(i32) -> [f32; 3] + Copy,
 {
     // Use visit_faces to iterate through all visible faces
-    visit_faces(root, |face_info| {
-        // Extract face position and size
-        let position = face_info.position;
-        let size = face_info.size;
+    visit_faces(
+        root,
+        |face_info| {
+            // Extract face position and size
+            let position = face_info.position;
+            let size = face_info.size;
 
-        // Generate vertices for this face
-        let vertices = face_info.face.vertices(position.x, position.y, position.z, size);
-        let normal = face_info.face.normal();
-        let color = color_fn(face_info.material_id);
+            // Generate vertices for this face
+            let vertices = face_info
+                .face
+                .vertices(position.x, position.y, position.z, size);
+            let normal = face_info.face.normal();
+            let color = color_fn(face_info.material_id);
 
-        // Check if material needs texture (2-127 are textured materials)
-        if (2..=127).contains(&face_info.material_id) {
-            // Use a constant UV scale across all depths
-            // Scale by 2^base_depth for proper tiling
-            let uv_scale = (1 << base_depth) as f32;
+            // Check if material needs texture (2-127 are textured materials)
+            if (2..=127).contains(&face_info.material_id) {
+                // Use a constant UV scale across all depths
+                // Scale by 2^base_depth for proper tiling
+                let uv_scale = (1 << base_depth) as f32;
 
-            // Generate UVs with world position for seamless tiling
-            let uvs = face_info.face.uvs(position.x, position.y, position.z, size, uv_scale);
-            builder.add_textured_face(vertices, normal, color, uvs, face_info.material_id as u8);
-        } else {
-            // Solid color material (0-1, 128-255)
-            builder.add_face(vertices, normal, color);
-        }
-    }, max_depth, border_materials);
+                // Generate UVs with world position for seamless tiling
+                let uvs = face_info
+                    .face
+                    .uvs(position.x, position.y, position.z, size, uv_scale);
+                builder.add_textured_face(
+                    vertices,
+                    normal,
+                    color,
+                    uvs,
+                    face_info.material_id as u8,
+                );
+            } else {
+                // Solid color material (0-1, 128-255)
+                builder.add_face(vertices, normal, color);
+            }
+        },
+        max_depth,
+        border_materials,
+    );
 }
 
 #[cfg(test)]

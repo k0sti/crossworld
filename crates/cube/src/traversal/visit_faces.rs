@@ -45,53 +45,53 @@ pub struct FaceInfo {
 ///         face_info.face, face_info.position, face_info.material_id);
 /// }, 3, [0, 0, 0, 0]);
 /// ```
-pub fn visit_faces<F>(
-    root: &Cube<i32>,
-    mut visitor: F,
-    max_depth: u32,
-    border_materials: [i32; 4],
-) where
+pub fn visit_faces<F>(root: &Cube<i32>, mut visitor: F, max_depth: u32, border_materials: [i32; 4])
+where
     F: FnMut(&FaceInfo),
 {
     let grid = NeighborGrid::new(root, border_materials);
 
-    traverse_octree(&grid, &mut |view, coord, _subleaf| {
-        // Only process empty voxels
-        if view.center().id() != 0 {
-            return false;
-        }
-
-        let voxel_size = 1.0 / (1 << (max_depth - coord.depth + 1)) as f32;
-        let base_pos = coord.pos.as_vec3() * voxel_size;
-
-        let mut should_subdivide = false;
-
-        // Check all 6 directions using Face::DIRECTIONS
-        for (face, dir_offset, offset_vec) in Face::DIRECTIONS {
-            if let Some(neighbor_cube) = view.get(dir_offset) {
-                // Check if neighbor is subdivided
-                if !neighbor_cube.is_leaf() {
-                    should_subdivide = true;
-                    continue;
-                }
-
-                let neighbor_id = neighbor_cube.id();
-                if neighbor_id == 0 {
-                    continue; // Skip empty neighbors
-                }
-
-                // Found a visible face!
-                let face_position = base_pos + offset_vec * voxel_size;
-                visitor(&FaceInfo {
-                    face,
-                    position: face_position,
-                    size: voxel_size,
-                    material_id: neighbor_id,
-                    viewer_coord: coord,
-                });
+    traverse_octree(
+        &grid,
+        &mut |view, coord, _subleaf| {
+            // Only process empty voxels
+            if view.center().id() != 0 {
+                return false;
             }
-        }
 
-        should_subdivide
-    }, max_depth);
+            let voxel_size = 1.0 / (1 << (max_depth - coord.depth + 1)) as f32;
+            let base_pos = coord.pos.as_vec3() * voxel_size;
+
+            let mut should_subdivide = false;
+
+            // Check all 6 directions using Face::DIRECTIONS
+            for (face, dir_offset, offset_vec) in Face::DIRECTIONS {
+                if let Some(neighbor_cube) = view.get(dir_offset) {
+                    // Check if neighbor is subdivided
+                    if !neighbor_cube.is_leaf() {
+                        should_subdivide = true;
+                        continue;
+                    }
+
+                    let neighbor_id = neighbor_cube.id();
+                    if neighbor_id == 0 {
+                        continue; // Skip empty neighbors
+                    }
+
+                    // Found a visible face!
+                    let face_position = base_pos + offset_vec * voxel_size;
+                    visitor(&FaceInfo {
+                        face,
+                        position: face_position,
+                        size: voxel_size,
+                        material_id: neighbor_id,
+                        viewer_coord: coord,
+                    });
+                }
+            }
+
+            should_subdivide
+        },
+        max_depth,
+    );
 }
