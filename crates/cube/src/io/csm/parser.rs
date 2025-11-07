@@ -1,4 +1,4 @@
-use crate::octree::{octant_char_to_index, Axis, Cube, Octree};
+use crate::core::{octant_char_to_index, Axis, Cube, Octree};
 use nom::{
     branch::alt,
     bytes::complete::take_while,
@@ -307,14 +307,14 @@ mod tests {
         let csm = ">a 42";
         let tree = parse_csm(csm).unwrap();
         // Just verify it parses without error - detailed mesh generation tested elsewhere
-        assert!(matches!(tree.root, crate::octree::Cube::Cubes(_)));
+        assert!(matches!(tree.root, crate::core::Cube::Cubes(_)));
     }
 
     #[test]
     fn test_parse_array() {
         let csm = ">a [1 2 3 4 5 6 7 8]";
         let tree = parse_csm(csm).unwrap();
-        assert!(matches!(tree.root, crate::octree::Cube::Cubes(_)));
+        assert!(matches!(tree.root, crate::core::Cube::Cubes(_)));
     }
 
     #[test]
@@ -324,7 +324,7 @@ mod tests {
             >aa [10 11 12 13 14 15 16 17]
         "#;
         let tree = parse_csm(csm).unwrap();
-        assert!(matches!(tree.root, crate::octree::Cube::Cubes(_)));
+        assert!(matches!(tree.root, crate::core::Cube::Cubes(_)));
     }
 
     #[test]
@@ -334,7 +334,7 @@ mod tests {
             | >b <a
         "#;
         let tree = parse_csm(csm).unwrap();
-        assert!(matches!(tree.root, crate::octree::Cube::Cubes(_)));
+        assert!(matches!(tree.root, crate::core::Cube::Cubes(_)));
     }
 
     #[test]
@@ -343,7 +343,7 @@ mod tests {
             | >b ^x <a
         "#;
         let tree = parse_csm(csm).unwrap();
-        assert!(matches!(tree.root, crate::octree::Cube::Cubes(_)));
+        assert!(matches!(tree.root, crate::core::Cube::Cubes(_)));
     }
 
     #[test]
@@ -353,6 +353,6 @@ mod tests {
             | >b /x <a
         "#;
         let tree = parse_csm(csm).unwrap();
-        assert!(matches!(tree.root, crate::octree::Cube::Cubes(_)));
+        assert!(matches!(tree.root, crate::core::Cube::Cubes(_)));
     }
 }

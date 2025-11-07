@@ -1,4 +1,4 @@
-use crate::octree::{octant_index_to_char, Cube, Octree};
+use crate::core::{octant_index_to_char, Cube, Octree};
 use std::fmt::Write as FmtWrite;
 
 /// Serialize an Octree to CSM text format
@@ -71,7 +71,7 @@ fn write_statement(path: &[usize], value: &str, output: &mut String) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parser::parse_csm;
+    use crate::io::csm::parser::parse_csm;
     use std::rc::Rc;
 
     #[test]
