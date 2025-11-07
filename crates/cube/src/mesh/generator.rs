@@ -1,6 +1,6 @@
 use crate::mesh::face::Face;
 use crate::traversal::{
-    traverse_octree, traverse_with_neighbors, CubeCoord, NeighborGrid, OFFSET_BACK, OFFSET_DOWN,
+    traverse_octree, CubeCoord, NeighborGrid, OFFSET_BACK, OFFSET_DOWN,
     OFFSET_FRONT, OFFSET_LEFT, OFFSET_RIGHT, OFFSET_UP,
 };
 use crate::core::Cube;
@@ -253,7 +253,7 @@ pub fn generate_face_mesh<B, F>(
     // Create initial neighbor grid and traverse
     let grid = NeighborGrid::new(root, border_materials);
     let mut face_count = 0;
-    traverse_with_neighbors(
+    traverse_octree(
         &grid,
         &mut |view, coord, _subleaf| {
             // Calculate voxel size based on actual depth of this voxel

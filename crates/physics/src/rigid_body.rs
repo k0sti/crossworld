@@ -1,19 +1,24 @@
 use crate::world::PhysicsWorld;
+use crossworld_cube::Cube;
 use glam::{Quat, Vec3};
 use rapier3d::prelude::*;
 use nalgebra::{Quaternion, UnitQuaternion};
+use std::rc::Rc;
 
-/// Represents a physics object with a rigid body and collider
+/// Represents a physics object with a rigid body, collider, and voxel cube
 ///
-/// This is a convenience wrapper that combines a rigid body handle
-/// and its primary collider handle.
-#[derive(Debug, Clone, Copy)]
-pub struct RigidBodyObject {
+/// This is a convenience wrapper that combines a rigid body handle,
+/// its primary collider handle, and a reference to the voxel cube used
+/// for collision geometry.
+#[derive(Debug, Clone)]
+pub struct CubeObject {
     pub(crate) body_handle: RigidBodyHandle,
     pub(crate) collider_handle: Option<ColliderHandle>,
+    /// The voxel cube used for collision geometry (optional)
+    pub cube: Option<Rc<Cube<i32>>>,
 }
 
-impl RigidBodyObject {
+impl CubeObject {
     /// Create a new dynamic rigid body
     ///
     /// Dynamic bodies are affected by forces and gravity.
@@ -24,7 +29,7 @@ impl RigidBodyObject {
     /// * `mass` - Mass of the object (affects inertia)
     ///
     /// # Returns
-    /// New RigidBodyObject (without collider - add one separately)
+    /// New CubeObject (without collider - add one separately)
     pub fn new_dynamic(world: &mut PhysicsWorld, position: Vec3, mass: f32) -> Self {
         let body = RigidBodyBuilder::dynamic()
             .translation(vector![position.x, position.y, position.z])
@@ -36,6 +41,7 @@ impl RigidBodyObject {
         Self {
             body_handle,
             collider_handle: None,
+            cube: None,
         }
     }
 
@@ -57,6 +63,7 @@ impl RigidBodyObject {
         Self {
             body_handle,
             collider_handle: None,
+            cube: None,
         }
     }
 
@@ -78,6 +85,7 @@ impl RigidBodyObject {
         Self {
             body_handle,
             collider_handle: None,
+            cube: None,
         }
     }
 
@@ -89,6 +97,19 @@ impl RigidBodyObject {
     pub fn attach_collider(&mut self, world: &mut PhysicsWorld, collider: Collider) {
         let handle = world.add_collider(collider, self.body_handle);
         self.collider_handle = Some(handle);
+    }
+
+    /// Set the cube reference for this object
+    ///
+    /// # Arguments
+    /// * `cube` - Reference to the voxel cube used for collision
+    pub fn set_cube(&mut self, cube: Rc<Cube<i32>>) {
+        self.cube = Some(cube);
+    }
+
+    /// Get the cube reference if it exists
+    pub fn cube(&self) -> Option<&Rc<Cube<i32>>> {
+        self.cube.as_ref()
     }
 
     /// Get the current position of the rigid body
@@ -240,7 +261,7 @@ mod tests {
     #[test]
     fn test_dynamic_body_creation() {
         let mut world = PhysicsWorld::new(Vec3::new(0.0, -9.81, 0.0));
-        let body = RigidBodyObject::new_dynamic(&mut world, Vec3::new(0.0, 10.0, 0.0), 1.0);
+        let body = CubeObject::new_dynamic(&mut world, Vec3::new(0.0, 10.0, 0.0), 1.0);
 
         assert_eq!(body.position(&world), Vec3::new(0.0, 10.0, 0.0));
         assert!(body.is_valid(&world));
@@ -249,7 +270,7 @@ mod tests {
     #[test]
     fn test_velocity_setting() {
         let mut world = PhysicsWorld::new(Vec3::new(0.0, -9.81, 0.0));
-        let body = RigidBodyObject::new_dynamic(&mut world, Vec3::ZERO, 1.0);
+        let body = CubeObject::new_dynamic(&mut world, Vec3::ZERO, 1.0);
 
         body.set_velocity(&mut world, Vec3::new(1.0, 2.0, 3.0));
         let vel = body.velocity(&world);
@@ -260,7 +281,7 @@ mod tests {
     #[test]
     fn test_force_application() {
         let mut world = PhysicsWorld::new(Vec3::new(0.0, -9.81, 0.0));
-        let mut body = RigidBodyObject::new_dynamic(&mut world, Vec3::ZERO, 1.0);
+        let mut body = CubeObject::new_dynamic(&mut world, Vec3::ZERO, 1.0);
 
         let collider = ColliderBuilder::ball(0.5).build();
         body.attach_collider(&mut world, collider);

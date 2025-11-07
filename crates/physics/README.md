@@ -16,19 +16,19 @@ Physics simulation system for Crossworld, integrating [Rapier](https://rapier.rs
 ### Basic Example
 
 ```rust
-use crossworld_physics::{PhysicsWorld, RigidBodyObject, create_box_collider};
+use crossworld_physics::{PhysicsWorld, CubeObject, create_box_collider};
 use glam::Vec3;
 
 // Create physics world with gravity
 let mut world = PhysicsWorld::new(Vec3::new(0.0, -9.81, 0.0));
 
 // Create static ground
-let mut ground = RigidBodyObject::new_static(&mut world, Vec3::new(0.0, -0.5, 0.0));
+let mut ground = CubeObject::new_static(&mut world, Vec3::new(0.0, -0.5, 0.0));
 let ground_collider = create_box_collider(Vec3::new(10.0, 0.5, 10.0));
 ground.attach_collider(&mut world, ground_collider);
 
 // Create dynamic falling box
-let mut falling_box = RigidBodyObject::new_dynamic(&mut world, Vec3::new(0.0, 10.0, 0.0), 1.0);
+let mut falling_box = CubeObject::new_dynamic(&mut world, Vec3::new(0.0, 10.0, 0.0), 1.0);
 let box_collider = create_box_collider(Vec3::new(0.5, 0.5, 0.5));
 falling_box.attach_collider(&mut world, box_collider);
 
@@ -45,7 +45,7 @@ println!("Final position: {:?}", pos);
 ### Voxel Collision
 
 ```rust
-use crossworld_physics::{PhysicsWorld, RigidBodyObject, VoxelColliderBuilder};
+use crossworld_physics::{PhysicsWorld, CubeObject, VoxelColliderBuilder};
 use std::rc::Rc;
 
 let mut world = PhysicsWorld::new(Vec3::new(0.0, -9.81, 0.0));
@@ -57,7 +57,7 @@ let cube = Rc::new(crossworld_cube::Cube::Solid(1));
 let voxel_collider = VoxelColliderBuilder::from_cube(&cube, 3);
 
 // Create static terrain body
-let mut terrain = RigidBodyObject::new_static(&mut world, Vec3::ZERO);
+let mut terrain = CubeObject::new_static(&mut world, Vec3::ZERO);
 terrain.attach_collider(&mut world, voxel_collider);
 ```
 
@@ -114,7 +114,7 @@ wasm-pack build --target web --features wasm
 ### Components
 
 - **PhysicsWorld** - Main simulation container managing Rapier's physics pipeline
-- **RigidBodyObject** - Wrapper for rigid bodies with position, velocity, rotation
+- **CubeObject** - Wrapper for rigid bodies with position, velocity, rotation, and optional voxel cube reference
 - **VoxelColliderBuilder** - Generates collision geometry from octree voxels
 - **WasmPhysicsWorld** - JavaScript-accessible WASM interface
 
@@ -138,11 +138,14 @@ This approach provides accurate collision detection while maintaining good perfo
 - `add_rigid_body(body: RigidBody)` - Add rigid body
 - `remove_rigid_body(handle: RigidBodyHandle)` - Remove rigid body
 
-### RigidBodyObject
+### CubeObject
 
 - `new_dynamic(world, position, mass)` - Create dynamic body
 - `new_kinematic(world, position)` - Create kinematic body
 - `new_static(world, position)` - Create static body
+- `attach_collider(&mut self, world, collider)` - Attach collider to body
+- `set_cube(&mut self, cube)` - Set cube reference used for collision
+- `cube(&self)` - Get cube reference if it exists
 - `position(&self, world)` - Get position
 - `set_position(&self, world, position)` - Set position
 - `velocity(&self, world)` - Get velocity
