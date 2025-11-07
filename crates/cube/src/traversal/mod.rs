@@ -8,8 +8,8 @@ pub mod visit_faces;
 
 // Re-export main types and functions from submodules
 pub use neighbor_grid::{
-    CubeCoord, NeighborGrid, NeighborView,
-    OFFSET_BACK, OFFSET_DOWN, OFFSET_FRONT, OFFSET_LEFT, OFFSET_RIGHT, OFFSET_UP,
+    CubeCoord, NeighborGrid, NeighborView, OFFSET_BACK, OFFSET_DOWN, OFFSET_FRONT, OFFSET_LEFT,
+    OFFSET_RIGHT, OFFSET_UP,
 };
 pub use visit_faces::{visit_faces, FaceInfo};
 

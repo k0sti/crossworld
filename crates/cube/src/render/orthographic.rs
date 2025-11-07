@@ -1,5 +1,5 @@
-use crate::mesh::ColorMapper;
 use crate::core::{Cube, Octree};
+use crate::mesh::ColorMapper;
 use glam::IVec3;
 
 /// Type alias for voxel data: (position, size, color)
@@ -535,8 +535,8 @@ fn octant_offset(index: usize) -> (f32, f32, f32) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mesh::HsvColorMapper;
     use crate::io::csm::parser::parse_csm;
+    use crate::mesh::HsvColorMapper;
 
     #[test]
     fn test_render_simple_cube() {

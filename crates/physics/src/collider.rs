@@ -1,6 +1,6 @@
 use crossworld_cube::{
-    traverse_octree, Cube, CubeCoord, Face, NeighborGrid, NeighborView, OFFSET_BACK,
-    OFFSET_DOWN, OFFSET_FRONT, OFFSET_LEFT, OFFSET_RIGHT, OFFSET_UP,
+    traverse_octree, Cube, CubeCoord, Face, NeighborGrid, NeighborView, OFFSET_BACK, OFFSET_DOWN,
+    OFFSET_FRONT, OFFSET_LEFT, OFFSET_RIGHT, OFFSET_UP,
 };
 use glam::{Quat, Vec3};
 use rapier3d::prelude::*;

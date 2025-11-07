@@ -694,7 +694,13 @@ impl Octree {
     /// A new Octree with the voxel set
     pub fn set_voxel(&self, x: i32, y: i32, z: i32, depth: u32, value: i32) -> Self {
         Octree {
-            root: self.root.update(CubeCoord { pos: IVec3{x, y, z}, depth }, Cube::solid(value)),
+            root: self.root.update(
+                CubeCoord {
+                    pos: IVec3 { x, y, z },
+                    depth,
+                },
+                Cube::solid(value),
+            ),
         }
     }
 }

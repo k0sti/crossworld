@@ -2,11 +2,11 @@
 
 // New module structure
 pub mod core;
-pub mod traversal;
+pub mod io;
 pub mod mesh;
 pub mod raycast;
-pub mod io;
 pub mod render;
+pub mod traversal;
 
 #[cfg(feature = "wasm")]
 pub mod wasm;
@@ -25,15 +25,15 @@ pub use traversal::{
 
 // Re-export mesh types
 pub use mesh::{
-    generate_face_mesh, ColorMapper, DefaultMeshBuilder, Face,
-    HsvColorMapper, MeshBuilder, PaletteColorMapper, VoxColorMapper,
+    generate_face_mesh, ColorMapper, DefaultMeshBuilder, Face, HsvColorMapper, MeshBuilder,
+    PaletteColorMapper, VoxColorMapper,
 };
 
 // Re-export raycast types
 pub use raycast::RaycastHit;
 
 // Re-export IO types
-pub use io::{parse_csm, serialize_csm, load_vox_to_cube, CsmError};
+pub use io::{load_vox_to_cube, parse_csm, serialize_csm, CsmError};
 
 // Re-export render types
 pub use render::{

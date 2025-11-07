@@ -1,4 +1,6 @@
-use crate::traversal::{OFFSET_LEFT, OFFSET_RIGHT, OFFSET_DOWN, OFFSET_UP, OFFSET_BACK, OFFSET_FRONT};
+use crate::traversal::{
+    OFFSET_BACK, OFFSET_DOWN, OFFSET_FRONT, OFFSET_LEFT, OFFSET_RIGHT, OFFSET_UP,
+};
 use glam::Vec3;
 
 /// Face direction for cube faces
@@ -28,12 +30,12 @@ impl Face {
     /// Each entry is (Face to render, Neighbor offset to check, Direction vector from viewer to face)
     /// The face is rendered when looking from an empty voxel toward a solid neighbor.
     pub const DIRECTIONS: [(Face, i32, Vec3); 6] = [
-        (Face::Right, OFFSET_LEFT, Vec3::new(-1.0, 0.0, 0.0)),   // Left neighbor: render RIGHT face
-        (Face::Left, OFFSET_RIGHT, Vec3::new(1.0, 0.0, 0.0)),    // Right neighbor: render LEFT face
-        (Face::Top, OFFSET_DOWN, Vec3::new(0.0, -1.0, 0.0)),     // Down neighbor: render TOP face
-        (Face::Bottom, OFFSET_UP, Vec3::new(0.0, 1.0, 0.0)),     // Up neighbor: render BOTTOM face
-        (Face::Front, OFFSET_BACK, Vec3::new(0.0, 0.0, -1.0)),   // Back neighbor: render FRONT face
-        (Face::Back, OFFSET_FRONT, Vec3::new(0.0, 0.0, 1.0)),    // Front neighbor: render BACK face
+        (Face::Right, OFFSET_LEFT, Vec3::new(-1.0, 0.0, 0.0)), // Left neighbor: render RIGHT face
+        (Face::Left, OFFSET_RIGHT, Vec3::new(1.0, 0.0, 0.0)),  // Right neighbor: render LEFT face
+        (Face::Top, OFFSET_DOWN, Vec3::new(0.0, -1.0, 0.0)),   // Down neighbor: render TOP face
+        (Face::Bottom, OFFSET_UP, Vec3::new(0.0, 1.0, 0.0)),   // Up neighbor: render BOTTOM face
+        (Face::Front, OFFSET_BACK, Vec3::new(0.0, 0.0, -1.0)), // Back neighbor: render FRONT face
+        (Face::Back, OFFSET_FRONT, Vec3::new(0.0, 0.0, 1.0)),  // Front neighbor: render BACK face
     ];
 
     /// Get the normal vector for this face
@@ -117,7 +119,7 @@ impl Face {
                 let u1 = round((x + size) * scale);
                 let v1 = round((z + size) * scale);
                 [[u0, v0], [u0, v1], [u1, v1], [u1, v0]]
-            },
+            }
             Face::Left | Face::Right => {
                 // Left/Right faces use Z and Y coordinates
                 let u0 = round(z * scale);
@@ -125,7 +127,7 @@ impl Face {
                 let u1 = round((z + size) * scale);
                 let v1 = round((y + size) * scale);
                 [[u0, v0], [u0, v1], [u1, v1], [u1, v0]]
-            },
+            }
             Face::Front | Face::Back => {
                 // Front/Back faces use X and Y coordinates
                 let u0 = round(x * scale);
@@ -133,7 +135,7 @@ impl Face {
                 let u1 = round((x + size) * scale);
                 let v1 = round((y + size) * scale);
                 [[u0, v0], [u0, v1], [u1, v1], [u1, v0]]
-            },
+            }
         }
     }
 
