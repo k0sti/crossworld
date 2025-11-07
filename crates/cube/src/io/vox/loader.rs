@@ -1,4 +1,5 @@
-use crate::{CubeCoord, octree::Cube};
+use crate::CubeCoord;
+use crate::core::Cube;
 use dot_vox::DotVoxData;
 use glam::{IVec3, Vec3};
 

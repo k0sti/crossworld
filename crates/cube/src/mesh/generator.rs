@@ -1,9 +1,10 @@
-use crate::face::Face;
-use crate::neighbor_traversal::{
-    traverse_with_neighbors, NeighborGrid, OFFSET_BACK, OFFSET_DOWN, OFFSET_FRONT, OFFSET_LEFT,
-    OFFSET_RIGHT, OFFSET_UP,
+use crate::mesh::face::Face;
+use crate::traversal::{
+    traverse_octree, traverse_with_neighbors, CubeCoord, NeighborGrid, OFFSET_BACK, OFFSET_DOWN,
+    OFFSET_FRONT, OFFSET_LEFT, OFFSET_RIGHT, OFFSET_UP,
 };
-use crate::octree::Cube;
+use crate::core::Cube;
+use glam::Vec3;
 
 /// Builder interface for constructing meshes
 pub trait MeshBuilder {
@@ -124,6 +125,108 @@ impl MeshBuilder for DefaultMeshBuilder {
     }
 }
 
+/// Information about a visible face
+///
+/// Represents a face where an empty voxel borders a solid voxel.
+#[derive(Debug, Clone)]
+pub struct FaceInfo {
+    /// The face direction
+    pub face: Face,
+    /// Position of the face in world space [0,1]
+    pub position: Vec3,
+    /// Size of the voxel
+    pub size: f32,
+    /// Material ID of the solid voxel
+    pub material_id: i32,
+    /// Coordinate of the empty voxel from which the face is visible
+    pub viewer_coord: CubeCoord,
+}
+
+/// Visit all visible faces in the octree
+///
+/// A face is visible when an empty voxel borders a solid voxel.
+/// The callback receives information about each visible face.
+///
+/// This is the core face detection algorithm, separated from mesh building
+/// for reusability. Can be used for mesh generation, surface area calculation,
+/// ambient occlusion, light map baking, debug visualization, etc.
+///
+/// # Arguments
+/// * `root` - The root cube of the octree
+/// * `visitor` - Callback invoked for each visible face
+/// * `max_depth` - Maximum depth to traverse
+/// * `border_materials` - Material IDs for the 4 border layers [y0, y1, y2, y3]
+///
+/// # Example
+/// ```
+/// use crossworld_cube::{Cube, visit_faces};
+///
+/// let root = Cube::Solid(1);
+/// visit_faces(&root, |face_info| {
+///     println!("Face {:?} at {:?} with material {}",
+///         face_info.face, face_info.position, face_info.material_id);
+/// }, 3, [0, 0, 0, 0]);
+/// ```
+pub fn visit_faces<F>(
+    root: &Cube<i32>,
+    mut visitor: F,
+    max_depth: u32,
+    border_materials: [i32; 4],
+) where
+    F: FnMut(&FaceInfo),
+{
+    let grid = NeighborGrid::new(root, border_materials);
+
+    traverse_octree(&grid, &mut |view, coord, _subleaf| {
+        // Only process empty voxels
+        if view.center().id() != 0 {
+            return false;
+        }
+
+        let voxel_size = 1.0 / (1 << (max_depth - coord.depth + 1)) as f32;
+        let base_pos = coord.pos.as_vec3() * voxel_size;
+
+        // Check all 6 directions
+        const DIRECTIONS: [(Face, i32, Vec3); 6] = [
+            (Face::Right, OFFSET_LEFT, Vec3::new(-1.0, 0.0, 0.0)),
+            (Face::Left, OFFSET_RIGHT, Vec3::new(1.0, 0.0, 0.0)),
+            (Face::Top, OFFSET_DOWN, Vec3::new(0.0, -1.0, 0.0)),
+            (Face::Bottom, OFFSET_UP, Vec3::new(0.0, 1.0, 0.0)),
+            (Face::Front, OFFSET_BACK, Vec3::new(0.0, 0.0, -1.0)),
+            (Face::Back, OFFSET_FRONT, Vec3::new(0.0, 0.0, 1.0)),
+        ];
+
+        let mut should_subdivide = false;
+
+        for (face, dir_offset, offset_vec) in DIRECTIONS {
+            if let Some(neighbor_cube) = view.get(dir_offset) {
+                // Check if neighbor is subdivided
+                if !neighbor_cube.is_leaf() {
+                    should_subdivide = true;
+                    continue;
+                }
+
+                let neighbor_id = neighbor_cube.id();
+                if neighbor_id == 0 {
+                    continue; // Skip empty neighbors
+                }
+
+                // Found a visible face!
+                let face_position = base_pos + offset_vec * voxel_size;
+                visitor(&FaceInfo {
+                    face,
+                    position: face_position,
+                    size: voxel_size,
+                    material_id: neighbor_id,
+                    viewer_coord: coord.clone(),
+                });
+            }
+        }
+
+        should_subdivide
+    }, max_depth);
+}
+
 /// Generate mesh from octree using neighbor-aware face culling
 ///
 /// This function only generates faces where empty voxels meet solid voxels.
@@ -240,7 +343,7 @@ pub fn generate_face_mesh<B, F>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::octree::Cube;
+    use crate::core::Cube;
     use std::rc::Rc;
 
     fn simple_color_mapper(value: i32) -> [f32; 3] {

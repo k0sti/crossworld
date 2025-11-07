@@ -87,16 +87,6 @@ impl NeighborGrid {
         (x + y * 4 + z * 16) as usize
     }
 
-    /// Convert linear index to 3D coordinates
-    #[inline]
-    pub fn index_to_xyz(index: usize) -> (i32, i32, i32) {
-        let z = (index / 16) as i32;
-        let rem = index % 16;
-        let y = (rem / 4) as i32;
-        let x = (rem % 4) as i32;
-        (x, y, z)
-    }
-
     /// Convert linear index to 3D position vector
     #[inline]
     pub fn index_to_pos(index: usize) -> IVec3 {
@@ -105,6 +95,13 @@ impl NeighborGrid {
         let y = (rem / 4) as i32;
         let x = (rem % 4) as i32;
         IVec3::new(x, y, z)
+    }
+
+    /// Convert linear index to 3D coordinates (convenience wrapper around index_to_pos)
+    #[inline]
+    pub fn index_to_xyz(index: usize) -> (i32, i32, i32) {
+        let pos = Self::index_to_pos(index);
+        (pos.x, pos.y, pos.z)
     }
 
     /// Convert 3D position to linear index using dot product
@@ -160,6 +157,27 @@ impl<'a> NeighborView<'a> {
         } else {
             None
         }
+    }
+
+    /// Get neighbor voxel by offset (preferred name for `get`)
+    ///
+    /// Use constants: OFFSET_LEFT, OFFSET_RIGHT, OFFSET_DOWN, OFFSET_UP, OFFSET_BACK, OFFSET_FRONT
+    ///
+    /// # Example
+    /// ```
+    /// use crossworld_cube::{OFFSET_LEFT, OFFSET_UP};
+    /// # use crossworld_cube::{Cube, NeighborGrid, NeighborView};
+    /// # let root = Cube::Solid(1);
+    /// # let grid = NeighborGrid::new(&root, [0, 0, 0, 0]);
+    /// # let view = NeighborView::new(&grid, 21);
+    ///
+    /// if let Some(left_neighbor) = view.neighbor(OFFSET_LEFT) {
+    ///     // Process left neighbor
+    /// }
+    /// ```
+    #[inline]
+    pub fn neighbor(&self, offset: i32) -> Option<&Rc<Cube<i32>>> {
+        self.get(offset)
     }
 
     /// Create a child grid one level deeper
@@ -273,6 +291,36 @@ pub fn traverse_with_neighbors(grid: &NeighborGrid, visitor: TraversalVisitor, m
         let coord = CubeCoord::new(octant_pos, max_depth);
         traverse_recursive(view, coord, visitor, false);
     }
+}
+
+/// Traverse octree with neighbor context for each voxel
+///
+/// This is the preferred name for `traverse_with_neighbors`.
+/// Performs depth-first traversal starting from root, calling the visitor for each leaf node.
+/// Automatically handles subdivision when visitor returns true.
+///
+/// # Arguments
+/// * `grid` - Initial 4x4x4 neighbor grid
+/// * `visitor` - Callback function receiving (neighbor_view, cube_coord, is_subleaf)
+/// * `max_depth` - Maximum depth to traverse
+///
+/// # Example
+/// ```
+/// use crossworld_cube::{Cube, NeighborGrid, traverse_octree, OFFSET_LEFT};
+///
+/// let root = Cube::Solid(33);
+/// let border_materials = [33, 33, 0, 0]; // Ground at bottom, sky at top
+/// let grid = NeighborGrid::new(&root, border_materials);
+///
+/// traverse_octree(&grid, &mut |view, coord, subleaf| {
+///     if let Some(left) = view.get(OFFSET_LEFT) {
+///         // Process with left neighbor
+///     }
+///     subleaf  // Subdivide if this is a subleaf, otherwise false
+/// }, 3);
+/// ```
+pub fn traverse_octree(grid: &NeighborGrid, visitor: TraversalVisitor, max_depth: u32) {
+    traverse_with_neighbors(grid, visitor, max_depth)
 }
 
 /// Internal recursive traversal function
