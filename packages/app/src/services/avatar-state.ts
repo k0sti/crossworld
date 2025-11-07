@@ -22,6 +22,7 @@ export interface AvatarConfig {
   avatarUrl?: string            // Load avatar from URL
   avatarData?: string           // Preferred way, generate model based on data (not yet implemented)
   avatarMod?: string            // Custom modification applied to avatar after load (not yet implemented)
+  avatarTexture?: string        // Texture name to apply to avatar (0 = only colors, or texture name like 'grass', 'stone')
   csmCode?: string              // CSM (Cube Script Model) code for procedurally generated voxel models
 }
 
@@ -36,6 +37,7 @@ export interface AvatarState {
   avatarUrl?: string
   avatarData?: string
   avatarMod?: string
+  avatarTexture?: string
 
   // Client info
   clientName: string
@@ -323,6 +325,7 @@ export class AvatarStateService {
       avatarUrl: stateEventData.parsed.avatarUrl,
       avatarData: stateEventData.parsed.avatarData,
       avatarMod: stateEventData.parsed.avatarMod,
+      avatarTexture: stateEventData.parsed.avatarTexture,
       clientName: stateEventData.parsed.clientName || 'Unknown',
       clientVersion: stateEventData.parsed.clientVersion,
       position: stateEventData.parsed.position || { x: 0, y: 0, z: 0 },
@@ -456,8 +459,9 @@ export class AvatarStateService {
       const avatarUrl = getTag('avatar_url')
       const avatarData = getTag('avatar_data')
       const avatarMod = getTag('avatar_mod')
+      const avatarTexture = getTag('avatar_texture')
 
-      logger.log('service', '[AvatarState] Parsed state event:', { avatarType, avatarId, avatarUrl, avatarDataLength: avatarData?.length, pubkey: event.pubkey.slice(0, 8) })
+      logger.log('service', '[AvatarState] Parsed state event:', { avatarType, avatarId, avatarUrl, avatarDataLength: avatarData?.length, avatarTexture, pubkey: event.pubkey.slice(0, 8) })
 
       const clientName = getTag('client') || 'Unknown'
       const clientVersion = getTag('client_version')
@@ -484,6 +488,7 @@ export class AvatarStateService {
         avatarUrl,
         avatarData,
         avatarMod,
+        avatarTexture,
         clientName,
         clientVersion,
         position,
@@ -589,6 +594,9 @@ export class AvatarStateService {
     }
     if (avatarConfig.avatarMod) {
       tags.push(['avatar_mod', avatarConfig.avatarMod])
+    }
+    if (avatarConfig.avatarTexture) {
+      tags.push(['avatar_texture', avatarConfig.avatarTexture])
     }
 
     const unsignedEvent = {
