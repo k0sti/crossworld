@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/world", "crates/worldtool", "crates/cube", "crates/assets"]
+members = ["crates/world", "crates/worldtool", "crates/cube", "crates/assets", "crates/physics"]
 resolver = "2"
 
 [profile.release]
