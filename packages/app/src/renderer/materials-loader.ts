@@ -76,8 +76,6 @@ export class MaterialsLoader {
         this.textureArray[material.index] = texture;
         this.materialIdToTexture.set(material.index, texture);
         this.loadedTextureIndices.add(material.index);
-
-        logger.log('renderer', `Loaded texture ${material.index}: ${material.id}`);
       } catch (error) {
         logger.warn('renderer', `Failed to load texture for material ${material.index} (${material.id}):`, error);
 
@@ -118,8 +116,6 @@ export class MaterialsLoader {
    * Get all loaded textures as an array
    */
   getTextureArray(): THREE.Texture[] {
-    const validTextures = this.textureArray.filter(t => t !== undefined && t !== null);
-    logger.log('renderer', `getTextureArray: ${validTextures.length} valid textures out of ${this.textureArray.length} slots`);
     return this.textureArray;
   }
 

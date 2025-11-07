@@ -76,6 +76,10 @@ export function WorldCanvas({
     const saved = localStorage.getItem('worldPanel.texturesEnabled');
     return saved !== null ? JSON.parse(saved) : true;
   });
+  const [avatarTexturesEnabled, setAvatarTexturesEnabled] = useState(() => {
+    const saved = localStorage.getItem('worldPanel.avatarTexturesEnabled');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
   const [triangleCount, setTriangleCount] = useState<number | undefined>(undefined);
 
   // Save settings to localStorage when they change
@@ -98,6 +102,10 @@ export function WorldCanvas({
   useEffect(() => {
     localStorage.setItem('worldPanel.texturesEnabled', JSON.stringify(texturesEnabled));
   }, [texturesEnabled]);
+
+  useEffect(() => {
+    localStorage.setItem('worldPanel.avatarTexturesEnabled', JSON.stringify(avatarTexturesEnabled));
+  }, [avatarTexturesEnabled]);
 
   // Use external speechEnabled if provided, otherwise use internal state
   const speechEnabled = externalSpeechEnabled ?? internalSpeechEnabled;
@@ -369,6 +377,14 @@ export function WorldCanvas({
     sceneManager.setTextures(texturesEnabled);
   }, [texturesEnabled]);
 
+  // Handle avatar textures toggle
+  useEffect(() => {
+    const sceneManager = localSceneManagerRef.current;
+    if (!sceneManager) return;
+
+    sceneManager.setAvatarTextures(avatarTexturesEnabled);
+  }, [avatarTexturesEnabled]);
+
   // Handle avatar loading based on new unified avatar config
   useEffect(() => {
     const sceneManager = localSceneManagerRef.current;
@@ -405,8 +421,7 @@ export function WorldCanvas({
           const { getModelUrl } = await import('../utils/modelConfig');
           const voxUrl = getModelUrl(avatarConfig.avatarId, 'vox');
           if (voxUrl) {
-
-            sceneManager.createVoxelAvatarFromVoxFile(voxUrl, npubForColors, 1.0, currentTransform)
+            sceneManager.createVoxelAvatarFromVoxFile(voxUrl, npubForColors, 1.0, currentTransform, undefined, avatarConfig.avatarTexture)
               .then(() => {
                 // Refresh profile in case pubkey was set before avatar loaded
                 sceneManager.refreshCurrentAvatarProfile();
@@ -424,7 +439,7 @@ export function WorldCanvas({
           }
         } else if (avatarConfig.avatarUrl) {
           // Load from custom URL
-          sceneManager.createVoxelAvatarFromVoxFile(avatarConfig.avatarUrl, npubForColors, 1.0, currentTransform)
+          sceneManager.createVoxelAvatarFromVoxFile(avatarConfig.avatarUrl, npubForColors, 1.0, currentTransform, undefined, avatarConfig.avatarTexture)
             .then(() => {
               sceneManager.refreshCurrentAvatarProfile();
             })
@@ -495,7 +510,7 @@ export function WorldCanvas({
             }
 
             // Create CSM avatar from mesh data
-            sceneManager.createCsmAvatar(result, npubForColors, 1.0, currentTransform);
+            await sceneManager.createCsmAvatar(result, npubForColors, 1.0, currentTransform, undefined, avatarConfig.avatarTexture);
             sceneManager.refreshCurrentAvatarProfile();
           } catch (error) {
             logger.error('renderer', '[WorldCanvas] Failed to load CSM avatar:', error);
@@ -515,7 +530,7 @@ export function WorldCanvas({
     };
 
     loadAvatar();
-  }, [isLoggedIn, avatarConfig.avatarType, avatarConfig.avatarId, avatarConfig.avatarUrl, avatarConfig.avatarData, avatarConfig.avatarMod]);
+  }, [isLoggedIn, avatarConfig.avatarType, avatarConfig.avatarId, avatarConfig.avatarUrl, avatarConfig.avatarData, avatarConfig.avatarMod, avatarConfig.avatarTexture]);
 
   return (
     <Box
@@ -541,6 +556,8 @@ export function WorldCanvas({
           onWireframeEnabledChange={setWireframeEnabled}
           texturesEnabled={texturesEnabled}
           onTexturesEnabledChange={setTexturesEnabled}
+          avatarTexturesEnabled={avatarTexturesEnabled}
+          onAvatarTexturesEnabledChange={setAvatarTexturesEnabled}
           triangleCount={triangleCount}
           onPublishWorld={onPublishWorld}
           isLoggedIn={isLoggedIn}

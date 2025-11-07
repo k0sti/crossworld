@@ -3,11 +3,17 @@ import * as THREE from 'three';
 import type { GeometryData } from '@workspace/wasm';
 import { Transform } from './transform';
 import { BaseAvatar } from './base-avatar';
+import { createTexturedVoxelMaterial, updateShaderLighting } from './textured-voxel-material';
 
 export interface VoxelAvatarConfig {
   scale?: number;
   renderScaleDepth?: number; // Scale = 1 / 2^renderScaleDepth (default: 0.0 = no scaling)
   userNpub: string;
+  materialId?: number; // Material ID to use for texturing (2-127 for textured materials)
+  textures?: (THREE.Texture | undefined)[]; // Texture array for shader material
+  enableTextures?: boolean; // Whether to enable textures (default: true)
+  renderer?: THREE.WebGLRenderer; // Renderer for WebGL 2.0 texture array creation
+  scene?: THREE.Scene; // Scene for lighting updates
 }
 
 /**
@@ -78,22 +84,70 @@ export class VoxelAvatar extends BaseAvatar {
     geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     geometry.setIndex(new THREE.BufferAttribute(indices, 1));
 
-    // Create material with vertex colors and flat shading for voxel aesthetic
-    const material = new THREE.MeshPhongMaterial({
-      vertexColors: true,
-      flatShading: true, // Maintains blocky voxel look
-      specular: 0x111111,
-      shininess: 30,
-      side: THREE.DoubleSide, // Render both sides to avoid holes
+    // Generate UV coordinates based on face normals (same as world cube)
+    // UVs are tied to the face normal direction for proper texture mapping
+    // Scale texture by 2^3 (8x) for higher frequency detail
+    const textureScale = Math.pow(2, 3); // 8x scale
+    const uvs = new Float32Array(vertices.length / 3 * 2);
+
+    for (let i = 0; i < vertices.length / 3; i++) {
+      const nx = normals[i * 3];
+      const ny = normals[i * 3 + 1];
+      const nz = normals[i * 3 + 2];
+
+      const x = vertices[i * 3];
+      const y = vertices[i * 3 + 1];
+      const z = vertices[i * 3 + 2];
+
+      // Determine dominant axis from normal (face direction)
+      const absNx = Math.abs(nx);
+      const absNy = Math.abs(ny);
+      const absNz = Math.abs(nz);
+
+      let u: number, v: number;
+
+      if (absNy > absNx && absNy > absNz) {
+        // Top/Bottom face (Y-dominant)
+        u = x * textureScale;
+        v = z * textureScale;
+      } else if (absNx > absNz) {
+        // Left/Right face (X-dominant)
+        u = z * textureScale;
+        v = y * textureScale;
+      } else {
+        // Front/Back face (Z-dominant)
+        u = x * textureScale;
+        v = y * textureScale;
+      }
+
+      // Use fractional part for tiling (0-1 range per voxel face)
+      uvs[i * 2] = u - Math.floor(u);
+      uvs[i * 2 + 1] = v - Math.floor(v);
+    }
+
+    geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+
+    // Add materialId attribute for all vertices (same material for entire avatar)
+    const materialId = this.config.materialId ?? 0; // Default to 0 (vertex colors only)
+    const materialIds = new Float32Array(vertices.length / 3).fill(materialId);
+    geometry.setAttribute('materialId', new THREE.BufferAttribute(materialIds, 1));
+
+    logger.log('renderer', `[VoxelAvatar] Geometry materialId attribute:`, {
+      materialId,
+      vertexCount: vertices.length / 3,
+      sampleValues: materialIds.slice(0, 5)
     });
+
+    // Create material using the same shader system as the world cube
+    const material = this.createShaderMaterial();
 
     this.mesh = new THREE.Mesh(geometry, material);
     this.mesh.castShadow = true;
     this.mesh.receiveShadow = true;
 
     // Apply scale with renderScaleDepth FIRST
-    const baseScale = this.config.scale || 1.0;
     const renderScaleDepth = this.config.renderScaleDepth ?? 2.0;
+    const baseScale = this.config.scale || 1.0;
     const finalScale = baseScale / Math.pow(2, renderScaleDepth);
     this.mesh.scale.set(finalScale, finalScale, finalScale);
 
@@ -111,11 +165,45 @@ export class VoxelAvatar extends BaseAvatar {
 
     this.group.add(this.mesh);
 
+    const textureInfo = materialId >= 2 && materialId <= 127 ? `materialId=${materialId}` : 'vertex colors only';
     logger.log('renderer', `VoxelAvatar created for ${this.config.userNpub}:`, {
       vertices: vertices.length / 3,
       triangles: indices.length / 3,
-      size: { x: size.x, y: size.y, z: size.z }
+      size: { x: size.x, y: size.y, z: size.z },
+      texture: textureInfo
     });
+  }
+
+  /**
+   * Create shader material using the same system as the world cube
+   */
+  private createShaderMaterial(): THREE.ShaderMaterial | THREE.RawShaderMaterial {
+    const enableTextures = this.config.enableTextures ?? true;
+    const textures = this.config.textures || [];
+    const renderer = this.config.renderer;
+
+    logger.log('renderer', `[VoxelAvatar] Creating shader material:`, {
+      enableTextures,
+      textureCount: textures.length,
+      hasRenderer: !!renderer,
+      materialId: this.config.materialId,
+      hasScene: !!this.config.scene
+    });
+
+    // Use the shared createTexturedVoxelMaterial function
+    const material = createTexturedVoxelMaterial(textures, enableTextures, renderer);
+
+    // Update lighting if scene is provided
+    if (this.config.scene) {
+      updateShaderLighting(material, this.config.scene);
+    }
+
+    logger.log('renderer', `[VoxelAvatar] Material created, uniforms:`, {
+      enableTextures: material.uniforms.enableTextures?.value,
+      hasTextureArray: !!material.uniforms.textureArray?.value
+    });
+
+    return material;
   }
 
   /**

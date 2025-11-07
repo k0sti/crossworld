@@ -48,6 +48,8 @@ function App() {
   // Avatar state - unified configuration
   const [avatarConfig, setAvatarConfig] = useState<AvatarConfig>({
     avatarType: 'vox',
+    avatarId: 'chr_base', // Default model
+    avatarTexture: 'grass', // Default texture
   })
   const [teleportAnimationType, setTeleportAnimationType] = useState<TeleportAnimationType>('fade')
 
@@ -224,6 +226,7 @@ function App() {
             avatarUrl: state.avatarUrl,
             avatarData: state.avatarData,
             avatarMod: state.avatarMod,
+            avatarTexture: state.avatarTexture,
           }
           setAvatarConfig(restoredConfig)
 
@@ -322,6 +325,7 @@ function App() {
       avatarUrl: restoredState?.avatarUrl ?? avatarConfig.avatarUrl,
       avatarData: restoredState?.avatarData ?? avatarConfig.avatarData,
       avatarMod: restoredState?.avatarMod ?? avatarConfig.avatarMod,
+      avatarTexture: restoredState?.avatarTexture ?? avatarConfig.avatarTexture,
     }
 
     // Use restored position or default
@@ -501,6 +505,7 @@ function App() {
       avatarId: selection.avatarId,
       avatarUrl: selection.avatarUrl,
       avatarData: selection.avatarData,
+      avatarTexture: selection.avatarTexture,
     }
 
     setAvatarConfig(config)
@@ -514,6 +519,7 @@ function App() {
         avatarId: config.avatarId,
         avatarUrl: config.avatarUrl,
         avatarData: config.avatarData,
+        avatarTexture: config.avatarTexture,
       })
     }
   }
@@ -640,6 +646,7 @@ function App() {
               avatarId: avatarConfig.avatarId,
               avatarUrl: avatarConfig.avatarUrl,
               avatarData: avatarConfig.avatarData,
+              avatarTexture: avatarConfig.avatarTexture,
               teleportAnimationType,
             }}
           />
@@ -734,6 +741,7 @@ function App() {
             avatarType: avatarConfig.avatarType,
             avatarId: avatarConfig.avatarId,
             avatarUrl: avatarConfig.avatarUrl,
+            avatarTexture: avatarConfig.avatarTexture,
             teleportAnimationType,
           }}
         />

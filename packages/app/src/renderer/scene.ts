@@ -156,6 +156,8 @@ export class SceneManager {
   private materialsLoader: MaterialsLoader = new MaterialsLoader();
   private texturesLoaded: boolean = false;
   private texturesEnabled: boolean = true;
+  private avatarTexturesEnabled: boolean = true;
+  private texturesLoadingPromise: Promise<void> | null = null;
 
   constructor() {
     this.scene = new THREE.Scene();
@@ -252,28 +254,47 @@ export class SceneManager {
 
   /**
    * Load materials.json and textures for textured voxels
+   * Uses promise caching to prevent multiple concurrent loads
    */
   private async loadMaterialsAndTextures(): Promise<void> {
-    try {
-      logger.log('renderer', 'Loading materials.json...');
-      await this.materialsLoader.loadMaterialsJson();
-
-      logger.log('renderer', 'Loading textures...');
-      await this.materialsLoader.loadTextures();
-
-      this.texturesLoaded = true;
-      logger.log('renderer', 'Materials and textures loaded successfully');
-
-      // Update geometry mesh with textures if it already exists
-      if (this.geometryMesh) {
-        logger.log('renderer', 'Updating existing geometry mesh with textures');
-        // Trigger a re-render with textures by updating the material
-        this.updateGeometryMaterial();
-      }
-    } catch (error) {
-      logger.error('renderer', 'Failed to load materials and textures:', error);
-      this.texturesLoaded = false;
+    // If already loaded, return immediately
+    if (this.texturesLoaded) {
+      return;
     }
+
+    // If currently loading, wait for existing promise
+    if (this.texturesLoadingPromise) {
+      logger.log('renderer', 'Textures already loading, waiting for completion...');
+      return this.texturesLoadingPromise;
+    }
+
+    // Start loading and cache the promise
+    this.texturesLoadingPromise = (async () => {
+      try {
+        logger.log('renderer', 'Loading materials.json...');
+        await this.materialsLoader.loadMaterialsJson();
+
+        logger.log('renderer', 'Loading textures...');
+        await this.materialsLoader.loadTextures();
+
+        this.texturesLoaded = true;
+        logger.log('renderer', 'Materials and textures loaded successfully');
+
+        // Update geometry mesh with textures if it already exists
+        if (this.geometryMesh) {
+          logger.log('renderer', 'Updating existing geometry mesh with textures');
+          // Trigger a re-render with textures by updating the material
+          this.updateGeometryMaterial();
+        }
+      } catch (error) {
+        logger.error('renderer', 'Failed to load materials and textures:', error);
+        this.texturesLoaded = false;
+        this.texturesLoadingPromise = null; // Allow retry
+        throw error;
+      }
+    })();
+
+    return this.texturesLoadingPromise;
   }
 
   /**
@@ -1851,11 +1872,17 @@ export class SceneManager {
   /**
    * Create a voxel avatar from a .vox file
    */
-  async createVoxelAvatarFromVoxFile(voxUrl: string, userNpub: string | undefined = undefined, scale: number = 1.0, transform?: Transform, renderScaleDepth?: number): Promise<void> {
+  async createVoxelAvatarFromVoxFile(voxUrl: string, userNpub: string | undefined = undefined, scale: number = 1.0, transform?: Transform, renderScaleDepth?: number, textureName?: string): Promise<void> {
     // Import the loadVoxFromUrl function
     const { loadVoxFromUrl } = await import('../utils/voxLoader');
 
     try {
+      // Wait for textures to load if texture is requested
+      if (textureName && textureName !== '0' && !this.texturesLoaded) {
+        logger.log('renderer', `[Avatar] Waiting for textures to load before creating avatar with texture '${textureName}'...`);
+        await this.loadMaterialsAndTextures();
+      }
+
       // Load .vox file and get geometry (pass undefined for original colors)
       const geometryData = await loadVoxFromUrl(voxUrl, userNpub ?? undefined);
 
@@ -1865,11 +1892,38 @@ export class SceneManager {
         this.currentAvatar.dispose();
       }
 
-      // Create new voxel avatar
+      // Get material ID if specified
+      let materialId: number | undefined = undefined;
+      if (textureName && textureName !== '0') {
+        logger.log('renderer', `[Avatar] Loading texture: ${textureName}`);
+        const materials = this.materialsLoader['materialsData'];
+
+        if (materials) {
+          const material = materials.materials.find(m => m.id === textureName);
+
+          if (material) {
+            materialId = material.index;
+            logger.log('renderer', `[Avatar] Using material ID ${materialId} for texture '${textureName}'`);
+          } else {
+            logger.warn('renderer', `[Avatar] Texture '${textureName}' not found in materials`);
+          }
+        } else {
+          logger.warn('renderer', `[Avatar] Materials data not loaded yet - this should not happen after await`);
+        }
+      } else {
+        logger.log('renderer', `[Avatar] No texture specified (using vertex colors only)`);
+      }
+
+      // Create new voxel avatar with shared texture system
       const voxelAvatar = new VoxelAvatar({
         userNpub: userNpub ?? '',
         scale,
         renderScaleDepth,
+        materialId,
+        textures: this.materialsLoader.getTextureArray(),
+        enableTextures: this.avatarTexturesEnabled,
+        renderer: this.renderer,
+        scene: this.scene,
       }, transform, this.scene);
 
       // Apply geometry from .vox file
@@ -1896,18 +1950,46 @@ export class SceneManager {
   /**
    * Create a CSM avatar from parsed mesh data
    */
-  createCsmAvatar(meshData: { vertices: number[]; indices: number[]; normals: number[]; colors: number[] }, userNpub: string | undefined = undefined, scale: number = 1.0, transform?: Transform, renderScaleDepth?: number): void {
+  async createCsmAvatar(meshData: { vertices: number[]; indices: number[]; normals: number[]; colors: number[] }, userNpub: string | undefined = undefined, scale: number = 1.0, transform?: Transform, renderScaleDepth?: number, textureName?: string): Promise<void> {
+    // Wait for textures to load if texture is requested
+    if (textureName && textureName !== '0' && !this.texturesLoaded) {
+      logger.log('renderer', `[CSM Avatar] Waiting for textures to load before creating avatar with texture '${textureName}'...`);
+      await this.loadMaterialsAndTextures();
+    }
+
     // Remove existing avatar
     if (this.currentAvatar) {
       this.scene.remove(this.currentAvatar.getObject3D());
       this.currentAvatar.dispose();
     }
 
-    // Create new voxel avatar (CSM avatars use VoxelAvatar class)
+    // Get material ID if specified
+    let materialId: number | undefined = undefined;
+    if (textureName && textureName !== '0') {
+      const materials = this.materialsLoader['materialsData'];
+      if (materials) {
+        const material = materials.materials.find(m => m.id === textureName);
+        if (material) {
+          materialId = material.index;
+          logger.log('renderer', `Using material ID ${materialId} for texture '${textureName}' on CSM avatar`);
+        } else {
+          logger.warn('renderer', `Texture '${textureName}' not found for CSM avatar`);
+        }
+      } else {
+        logger.warn('renderer', `[CSM Avatar] Materials data not loaded yet - this should not happen after await`);
+      }
+    }
+
+    // Create new voxel avatar (CSM avatars use VoxelAvatar class) with shared texture system
     const voxelAvatar = new VoxelAvatar({
       userNpub: userNpub ?? '',
       scale,
       renderScaleDepth,
+      materialId,
+      textures: this.materialsLoader.getTextureArray(),
+      enableTextures: this.avatarTexturesEnabled,
+      renderer: this.renderer,
+      scene: this.scene,
     }, transform, this.scene);
 
     // Convert mesh data to the format VoxelAvatar expects
@@ -2150,7 +2232,10 @@ export class SceneManager {
           this.remoteAvatarConfigs.delete(pubkey);
           logger.log('renderer', `Recreating remote avatar for ${state.npub} due to model change`);
         }
-        this.createRemoteAvatar(pubkey, state);
+        // createRemoteAvatar is async now, but we don't want to block the update loop
+        this.createRemoteAvatar(pubkey, state).catch(error => {
+          logger.error('renderer', `Failed to create remote avatar for ${state.npub}:`, error);
+        });
       } else {
         // Update position for existing avatar
         this.updateRemoteAvatarPosition(pubkey, state);
@@ -2161,20 +2246,52 @@ export class SceneManager {
   /**
    * Create a remote avatar for another user
    */
-  private createRemoteAvatar(pubkey: string, state: AvatarState): void {
+  private async createRemoteAvatar(pubkey: string, state: AvatarState): Promise<void> {
 
-    const { position, avatarType, avatarId, avatarUrl, avatarData, npub } = state;
+    const { position, avatarType, avatarId, avatarUrl, avatarData, avatarTexture, npub } = state;
 
-    logger.log('renderer', `[Scene] Creating remote avatar for ${npub}:`, { avatarType, avatarId, avatarUrl, avatarDataLength: avatarData?.length });
+    logger.log('renderer', `[Scene] Creating remote avatar for ${npub}:`, { avatarType, avatarId, avatarUrl, avatarDataLength: avatarData?.length, avatarTexture });
+
+    // Wait for textures to load if texture is requested
+    if (avatarTexture && avatarTexture !== '0' && !this.texturesLoaded) {
+      logger.log('renderer', `[Remote Avatar] Waiting for textures to load before creating avatar with texture '${avatarTexture}' for ${npub}...`);
+      await this.loadMaterialsAndTextures();
+    }
 
     // Create transform from position data
     const transform = Transform.fromEventData(position);
 
     if (avatarType === 'vox') {
-      // Create voxel avatar (renderScaleDepth defaults to 0.0 = no scaling)
+      // Get material ID if specified
+      let materialId: number | undefined = undefined;
+      if (avatarTexture && avatarTexture !== '0') {
+        logger.log('renderer', `[Remote Avatar] Loading texture: ${avatarTexture} for ${npub}`);
+        // Look up material ID
+        const materials = this.materialsLoader['materialsData'];
+        if (materials) {
+          const material = materials.materials.find(m => m.id === avatarTexture);
+          if (material) {
+            materialId = material.index;
+            logger.log('renderer', `[Remote Avatar] Using material ID ${materialId} for texture '${avatarTexture}' for ${npub}`);
+          } else {
+            logger.warn('renderer', `[Remote Avatar] Material '${avatarTexture}' not found in materials.json for ${npub}`);
+          }
+        } else {
+          logger.warn('renderer', `[Remote Avatar] Materials not loaded yet for ${npub} - this should not happen after await`);
+        }
+      } else {
+        logger.log('renderer', `[Remote Avatar] No texture specified for ${npub} (using vertex colors only)`);
+      }
+
+      // Create voxel avatar with shared texture system
       const voxelAvatar = new VoxelAvatar({
         userNpub: npub,
         scale: 1.0,
+        materialId,
+        textures: this.materialsLoader.getTextureArray(),
+        enableTextures: this.avatarTexturesEnabled,
+        renderer: this.renderer,
+        scene: this.scene,
         // renderScaleDepth defaults to 0.0 in VoxelAvatar
       }, transform, this.scene);
 
@@ -2384,6 +2501,41 @@ export class SceneManager {
     }
 
     logger.log('renderer', `Textures ${enabled ? 'enabled' : 'disabled'}`);
+  }
+
+  /**
+   * Set texture rendering enabled/disabled for all avatars
+   */
+  setAvatarTextures(enabled: boolean): void {
+    this.avatarTexturesEnabled = enabled;
+
+    // Update current avatar material uniform
+    if (this.currentAvatar) {
+      const avatarObj = this.currentAvatar.getObject3D();
+      avatarObj.traverse((child) => {
+        if (child instanceof THREE.Mesh && child.material instanceof THREE.ShaderMaterial) {
+          const material = child.material as THREE.ShaderMaterial;
+          if (material.uniforms.enableTextures) {
+            material.uniforms.enableTextures.value = enabled;
+          }
+        }
+      });
+    }
+
+    // Update all remote avatars material uniforms
+    for (const avatar of this.remoteAvatars.values()) {
+      const avatarObj = avatar.getObject3D();
+      avatarObj.traverse((child) => {
+        if (child instanceof THREE.Mesh && child.material instanceof THREE.ShaderMaterial) {
+          const material = child.material as THREE.ShaderMaterial;
+          if (material.uniforms.enableTextures) {
+            material.uniforms.enableTextures.value = enabled;
+          }
+        }
+      });
+    }
+
+    logger.log('renderer', `Avatar textures ${enabled ? 'enabled' : 'disabled'}`);
   }
 
   // ============================================================================

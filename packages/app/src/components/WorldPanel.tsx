@@ -36,6 +36,9 @@ interface WorldPanelProps {
   // Textures toggle
   texturesEnabled: boolean;
   onTexturesEnabledChange: (enabled: boolean) => void;
+  // Avatar textures toggle
+  avatarTexturesEnabled: boolean;
+  onAvatarTexturesEnabledChange: (enabled: boolean) => void;
   // Publish world
   onPublishWorld?: () => void;
   isLoggedIn?: boolean;
@@ -55,6 +58,8 @@ export function WorldPanel({
   triangleCount,
   texturesEnabled,
   onTexturesEnabledChange,
+  avatarTexturesEnabled,
+  onAvatarTexturesEnabledChange,
   onPublishWorld,
   isLoggedIn,
 }: WorldPanelProps) {
@@ -326,12 +331,23 @@ export function WorldPanel({
 
         {/* Textures toggle */}
         <HStack spacing={2} justify="space-between" pointerEvents="auto">
-          <Text color="teal.300">Textures</Text>
+          <Text color="teal.300">World Textures</Text>
           <Switch
             isChecked={texturesEnabled}
             onChange={(e) => onTexturesEnabledChange(e.target.checked)}
             size="sm"
             colorScheme="teal"
+          />
+        </HStack>
+
+        {/* Avatar Textures toggle */}
+        <HStack spacing={2} justify="space-between" pointerEvents="auto">
+          <Text color="cyan.300">Avatar Textures</Text>
+          <Switch
+            isChecked={avatarTexturesEnabled}
+            onChange={(e) => onAvatarTexturesEnabledChange(e.target.checked)}
+            size="sm"
+            colorScheme="cyan"
           />
         </HStack>
 
