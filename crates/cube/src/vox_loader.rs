@@ -1,6 +1,6 @@
-use crate::octree::Cube;
+use crate::{CubeCoord, octree::Cube};
 use dot_vox::DotVoxData;
-use glam::Vec3;
+use glam::{IVec3, Vec3};
 
 /// Map RGB color (0-255) to material index using R2G3B2 encoding
 /// Materials 128-255 use 7-bit color encoding: r:2, g:3, b:2
@@ -90,7 +90,8 @@ fn convert_dotvox_to_cube(vox_data: &DotVoxData, align: Vec3) -> Result<Cube<i32
         let z = voxel.y as i32 + offset_z; // MagicaVoxel's Y becomes our Z (depth)
 
         // Set voxel in cube using immutable set_voxel
-        cube = cube.set_voxel(x, y, z, depth as u32, material as i32);
+        let depth = depth as u32;
+        cube = cube.update(CubeCoord { pos: IVec3{x, y, z}, depth }, Cube::solid(material as i32));
     }
 
     Ok(cube)
