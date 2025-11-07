@@ -19,7 +19,7 @@ pub use core::{
 
 // Re-export traversal types
 pub use traversal::{
-    traverse_octree, traverse_with_neighbors, CubeCoord, NeighborGrid, NeighborView,
+    traverse_octree, CubeCoord, NeighborGrid, NeighborView,
     TraversalVisitor, OFFSET_BACK, OFFSET_DOWN, OFFSET_FRONT, OFFSET_LEFT, OFFSET_RIGHT, OFFSET_UP,
 };
 

@@ -1,5 +1,5 @@
 use crossworld_physics::{
-    create_box_collider, glam::Vec3, rapier3d::prelude::*, PhysicsWorld, RigidBodyObject,
+    create_box_collider, glam::Vec3, rapier3d::prelude::*, PhysicsWorld, CubeObject,
 };
 
 fn main() {
@@ -10,13 +10,13 @@ fn main() {
     println!("Created physics world with gravity: {:?}", world.gravity());
 
     // Create ground (static box)
-    let mut ground = RigidBodyObject::new_static(&mut world, Vec3::new(0.0, -0.5, 0.0));
+    let mut ground = CubeObject::new_static(&mut world, Vec3::new(0.0, -0.5, 0.0));
     let ground_collider = create_box_collider(Vec3::new(10.0, 0.5, 10.0));
     ground.attach_collider(&mut world, ground_collider);
     println!("Created ground at y = -0.5");
 
     // Create falling box (dynamic)
-    let mut falling_box = RigidBodyObject::new_dynamic(&mut world, Vec3::new(0.0, 10.0, 0.0), 1.0);
+    let mut falling_box = CubeObject::new_dynamic(&mut world, Vec3::new(0.0, 10.0, 0.0), 1.0);
     let box_collider = create_box_collider(Vec3::new(0.5, 0.5, 0.5));
     falling_box.attach_collider(&mut world, box_collider);
     println!("Created falling box at y = 10.0\n");

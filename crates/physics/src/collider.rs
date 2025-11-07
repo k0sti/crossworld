@@ -1,5 +1,5 @@
 use crossworld_cube::{
-    traverse_with_neighbors, Cube, CubeCoord, Face, NeighborGrid, NeighborView, OFFSET_BACK,
+    traverse_octree, Cube, CubeCoord, Face, NeighborGrid, NeighborView, OFFSET_BACK,
     OFFSET_DOWN, OFFSET_FRONT, OFFSET_LEFT, OFFSET_RIGHT, OFFSET_UP,
 };
 use glam::{Quat, Vec3};
@@ -47,7 +47,7 @@ impl VoxelColliderBuilder {
         let grid = NeighborGrid::new(cube, border_materials);
 
         // Traverse all voxels and collect face rectangles
-        traverse_with_neighbors(
+        traverse_octree(
             &grid,
             &mut |view, coord, _subleaf| {
                 builder.process_voxel(view, coord);

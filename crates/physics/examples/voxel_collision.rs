@@ -1,5 +1,5 @@
 use crossworld_physics::{
-    create_sphere_collider, glam::Vec3, rapier3d::prelude::*, PhysicsWorld, RigidBodyObject,
+    create_sphere_collider, glam::Vec3, rapier3d::prelude::*, PhysicsWorld, CubeObject,
     VoxelColliderBuilder,
 };
 use std::rc::Rc;
@@ -20,14 +20,14 @@ fn main() {
 
     // Create static rigid body for voxel terrain
     let mut voxel_body =
-        RigidBodyObject::new_static(&mut world, Vec3::new(0.0, 0.0, 0.0));
+        CubeObject::new_static(&mut world, Vec3::new(0.0, 0.0, 0.0));
     voxel_body.attach_collider(&mut world, voxel_collider);
     println!("Added voxel terrain as static body\n");
 
     // Create falling sphere
     // The voxel cube octants span 0-0.25 in all dimensions
     // Position sphere at the center and just above the top face (y=0.25)
-    let mut sphere = RigidBodyObject::new_dynamic(&mut world, Vec3::new(0.125, 0.5, 0.125), 1.0);
+    let mut sphere = CubeObject::new_dynamic(&mut world, Vec3::new(0.125, 0.5, 0.125), 1.0);
     let sphere_collider = create_sphere_collider(0.05);
     sphere.attach_collider(&mut world, sphere_collider);
     println!("Created falling sphere at (0.125, 0.5, 0.125)\n");

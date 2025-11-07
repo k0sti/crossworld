@@ -279,7 +279,7 @@ pub type TraversalVisitor<'a> = &'a mut dyn FnMut(NeighborView, CubeCoord, bool)
 ///     subleaf  // Subdivide if this is a subleaf, otherwise false
 /// }, 3);
 /// ```
-pub fn traverse_with_neighbors(grid: &NeighborGrid, visitor: TraversalVisitor, max_depth: u32) {
+pub fn traverse_octree(grid: &NeighborGrid, visitor: TraversalVisitor, max_depth: u32) {
     // Traverse the center 2x2x2 octants
     // Center offset in grid: (1,1,1) = 1 + 1*4 + 1*16 = 21
     const CENTER_OFFSET: usize = 21;
@@ -291,36 +291,6 @@ pub fn traverse_with_neighbors(grid: &NeighborGrid, visitor: TraversalVisitor, m
         let coord = CubeCoord::new(octant_pos, max_depth);
         traverse_recursive(view, coord, visitor, false);
     }
-}
-
-/// Traverse octree with neighbor context for each voxel
-///
-/// This is the preferred name for `traverse_with_neighbors`.
-/// Performs depth-first traversal starting from root, calling the visitor for each leaf node.
-/// Automatically handles subdivision when visitor returns true.
-///
-/// # Arguments
-/// * `grid` - Initial 4x4x4 neighbor grid
-/// * `visitor` - Callback function receiving (neighbor_view, cube_coord, is_subleaf)
-/// * `max_depth` - Maximum depth to traverse
-///
-/// # Example
-/// ```
-/// use crossworld_cube::{Cube, NeighborGrid, traverse_octree, OFFSET_LEFT};
-///
-/// let root = Cube::Solid(33);
-/// let border_materials = [33, 33, 0, 0]; // Ground at bottom, sky at top
-/// let grid = NeighborGrid::new(&root, border_materials);
-///
-/// traverse_octree(&grid, &mut |view, coord, subleaf| {
-///     if let Some(left) = view.get(OFFSET_LEFT) {
-///         // Process with left neighbor
-///     }
-///     subleaf  // Subdivide if this is a subleaf, otherwise false
-/// }, 3);
-/// ```
-pub fn traverse_octree(grid: &NeighborGrid, visitor: TraversalVisitor, max_depth: u32) {
-    traverse_with_neighbors(grid, visitor, max_depth)
 }
 
 /// Internal recursive traversal function
