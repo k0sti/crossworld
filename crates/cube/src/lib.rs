@@ -19,13 +19,13 @@ pub use core::{
 
 // Re-export traversal types
 pub use traversal::{
-    traverse_octree, CubeCoord, NeighborGrid, NeighborView,
+    traverse_octree, visit_faces, CubeCoord, FaceInfo, NeighborGrid, NeighborView,
     TraversalVisitor, OFFSET_BACK, OFFSET_DOWN, OFFSET_FRONT, OFFSET_LEFT, OFFSET_RIGHT, OFFSET_UP,
 };
 
 // Re-export mesh types
 pub use mesh::{
-    generate_face_mesh, visit_faces, ColorMapper, DefaultMeshBuilder, Face, FaceInfo,
+    generate_face_mesh, ColorMapper, DefaultMeshBuilder, Face,
     HsvColorMapper, MeshBuilder, PaletteColorMapper, VoxColorMapper,
 };
 
