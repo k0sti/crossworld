@@ -7,18 +7,12 @@ import {
   SimpleGrid,
   Box,
   Badge,
-  Tabs,
-  TabList,
-  TabPanels,
-  Tab,
-  TabPanel,
   Divider,
   Input,
   IconButton,
   Textarea,
   Collapse,
 } from '@chakra-ui/react';
-import { FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import { useState, useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import { ReadyPlayerMeService } from '../services/ready-player-me';
@@ -31,6 +25,7 @@ export interface AvatarSelection {
   avatarId?: string;
   avatarUrl?: string;
   avatarData?: string;  // For CSM: contains the CSM code
+  avatarTexture?: string;  // Texture name (0 = only colors, or texture name like 'grass', 'stone')
   teleportAnimationType: TeleportAnimationType;
 }
 
@@ -49,6 +44,16 @@ interface ModelItem {
   filename: string;
 }
 
+// Available textures for avatars
+const AVATAR_TEXTURES = [
+  'hay', 'grass', 'glass', 'force_field', 'fabric_pink', 'dirt', 'diorite',
+  'concrete', 'coal', 'ash', 'andesite', 'amber', 'wool_white', 'wool_red',
+  'wool_gray', 'wool_blue', 'wood_oak', 'wood_jungle', 'wood_birch', 'wax',
+  'vine', 'topaz', 'sulfur', 'stone', 'stained_glass_blue', 'sponge', 'snow',
+  'slime', 'sandstone', 'salt', 'redstone', 'pearl', 'moss', 'melon', 'marble',
+  'magma', 'leaves_spruce', 'leather_tan'
+];
+
 export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: SelectAvatarProps) {
   const [avatarType, setAvatarType] = useState<'vox' | 'glb' | 'csm'>(currentSelection?.avatarType || 'vox');
   const [selectedId, setSelectedId] = useState<string>(currentSelection?.avatarId || '');
@@ -59,12 +64,12 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
       ? currentSelection.avatarData
       : '>a [1 2 3 4 5 6 7 8]'
   );
+  const [avatarTexture, setAvatarTexture] = useState<string>(currentSelection?.avatarTexture || '0');
   const [teleportAnimationType, setTeleportAnimationType] = useState<TeleportAnimationType>(
     currentSelection?.teleportAnimationType || 'fade'
   );
   const [voxModels, setVoxModels] = useState<ModelItem[]>([]);
   const [glbModels, setGlbModels] = useState<ModelItem[]>([]);
-  const [modelsLoaded, setModelsLoaded] = useState(false);
   const [showMoreSettings, setShowMoreSettings] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -72,43 +77,40 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
   // Check if user has a previous avatar selection
   const hasPreviousSelection = !!(currentSelection?.avatarId || currentSelection?.avatarUrl || currentSelection?.avatarData);
 
-  // Cycle to previous VOX model
-  const cyclePrevVox = () => {
-    if (avatarType !== 'vox' || voxModels.length === 0) return;
-
-    const currentIndex = voxModels.findIndex(m => m.id === selectedId);
-    const prevIndex = currentIndex <= 0 ? voxModels.length - 1 : currentIndex - 1;
-    setSelectedId(voxModels[prevIndex].id);
-    setAvatarUrl('');
-  };
-
-  // Cycle to next VOX model
-  const cycleNextVox = () => {
-    if (avatarType !== 'vox' || voxModels.length === 0) return;
-
-    const currentIndex = voxModels.findIndex(m => m.id === selectedId);
-    const nextIndex = currentIndex >= voxModels.length - 1 ? 0 : currentIndex + 1;
-    setSelectedId(voxModels[nextIndex].id);
-    setAvatarUrl('');
+  // Handle texture selection with logging
+  const handleTextureSelect = (texture: string) => {
+    setAvatarTexture(texture);
+    logger.log('ui', `[SelectAvatar] Texture selected: "${texture === '0' ? 'None (vertex colors only)' : texture}"`);
   };
 
   // Randomize avatar selection
   const randomizeAvatar = () => {
     // Randomize avatar model
+    let selectedModel = '';
     if (avatarType === 'vox' && voxModels.length > 0) {
       const randomIndex = Math.floor(Math.random() * voxModels.length);
+      selectedModel = voxModels[randomIndex].label;
       setSelectedId(voxModels[randomIndex].id);
       setAvatarUrl('');
     } else if (avatarType === 'glb' && glbModels.length > 0) {
       const randomIndex = Math.floor(Math.random() * glbModels.length);
+      selectedModel = glbModels[randomIndex].label;
       setSelectedId(glbModels[randomIndex].id);
       setAvatarUrl('');
     }
 
+    // Randomize texture
+    const randomTextureIndex = Math.floor(Math.random() * AVATAR_TEXTURES.length);
+    const selectedTexture = AVATAR_TEXTURES[randomTextureIndex];
+    setAvatarTexture(selectedTexture);
+
     // Randomize teleport animation
     const teleportTypes: TeleportAnimationType[] = ['fade', 'scale', 'spin', 'slide', 'burst'];
     const randomTeleportIndex = Math.floor(Math.random() * teleportTypes.length);
-    setTeleportAnimationType(teleportTypes[randomTeleportIndex]);
+    const selectedTeleport = teleportTypes[randomTeleportIndex];
+    setTeleportAnimationType(selectedTeleport);
+
+    logger.log('ui', `[SelectAvatar] Randomized avatar: model="${selectedModel}", texture="${selectedTexture}", teleport="${selectedTeleport}"`);
   };
 
   // Load models configuration
@@ -126,7 +128,6 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
       })) || [];
       setVoxModels(vox);
       setGlbModels(glb);
-      setModelsLoaded(true);
 
       // Always select random VOX model when opening selector
       if (vox.length > 0) {
@@ -136,7 +137,6 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
       }
     }).catch(error => {
       logger.error('ui', '[SelectAvatar] Failed to load models config:', error);
-      setModelsLoaded(true); // Still set to true to show the error state
     });
   }, []);
 
@@ -379,6 +379,7 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
       avatarId: avatarType === 'vox' ? selectedId : (avatarType === 'glb' && selectedId !== 'file' ? selectedId : undefined),
       avatarUrl: avatarUrl || undefined,
       avatarData: avatarType === 'csm' ? csmCode : undefined,
+      avatarTexture: avatarTexture !== '0' ? avatarTexture : undefined,
       teleportAnimationType,
     };
     onSave(selection);
@@ -405,36 +406,6 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
   const handleOpenCreator = () => {
     ReadyPlayerMeService.openAvatarCreator();
   };
-
-  const renderModelGrid = (models: ModelItem[]) => (
-    <SimpleGrid columns={6} spacing={2} maxHeight="300px" overflowY="auto">
-      {models.map((model) => (
-        <Box
-          key={model.id}
-          as="button"
-          onClick={() => {
-            setSelectedId(model.id);
-            setAvatarUrl('');
-          }}
-          p={2}
-          bg={selectedId === model.id && !avatarUrl ? 'rgba(100, 150, 250, 0.3)' : 'rgba(80, 80, 80, 0.1)'}
-          border="1px solid"
-          borderColor={selectedId === model.id && !avatarUrl ? 'rgba(100, 150, 250, 0.5)' : 'rgba(255, 255, 255, 0.1)'}
-          borderRadius="md"
-          _hover={{
-            bg: selectedId === model.id && !avatarUrl ? 'rgba(100, 150, 250, 0.4)' : 'rgba(120, 120, 120, 0.2)',
-          }}
-          transition="all 0.2s"
-          cursor="pointer"
-          title={model.filename}
-        >
-          <Text fontSize="xs" color="white" noOfLines={1}>
-            {model.label}
-          </Text>
-        </Box>
-      ))}
-    </SimpleGrid>
-  );
 
   return (
     <ResponsivePanel
@@ -488,41 +459,6 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
                 />
               </Box>
 
-              {/* Left/Right Cycle Buttons (VOX only, shown when More Settings is open) */}
-              {showMoreSettings && avatarType === 'vox' && voxModels.length > 0 && (
-                <>
-                  <IconButton
-                    aria-label="Previous model"
-                    icon={<FiChevronLeft />}
-                    position="absolute"
-                    left="8px"
-                    top="50%"
-                    transform="translateY(-50%)"
-                    onClick={cyclePrevVox}
-                    size="lg"
-                    colorScheme="blue"
-                    variant="solid"
-                    opacity={0.8}
-                    _hover={{ opacity: 1 }}
-                    zIndex={1}
-                  />
-                  <IconButton
-                    aria-label="Next model"
-                    icon={<FiChevronRight />}
-                    position="absolute"
-                    right="8px"
-                    top="50%"
-                    transform="translateY(-50%)"
-                    onClick={cycleNextVox}
-                    size="lg"
-                    colorScheme="blue"
-                    variant="solid"
-                    opacity={0.8}
-                    _hover={{ opacity: 1 }}
-                    zIndex={1}
-                  />
-                </>
-              )}
             </Box>
 
             {/* More Settings Toggle */}
@@ -538,85 +474,68 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
             {/* More Settings Collapsible */}
             <Collapse in={showMoreSettings} animateOpacity>
               <VStack align="stretch" spacing={4}>
-            {/* Tabs */}
-            <Tabs
-              variant="soft-rounded"
-              colorScheme="blue"
-              index={avatarType === 'vox' ? 0 : avatarType === 'glb' ? 1 : 2}
-              onChange={(index) => {
-                const types: ('vox' | 'glb' | 'csm')[] = ['vox', 'glb', 'csm'];
-                setAvatarType(types[index]);
-                setAvatarUrl('');
-                // Clear selectedId when switching tabs to prevent showing wrong type
-                setSelectedId('');
-              }}
-            >
-              <TabList>
-                <Tab fontSize="xs">VOX</Tab>
-                <Tab fontSize="xs">GLB</Tab>
-                <Tab fontSize="xs">CSM</Tab>
-              </TabList>
-
-              <TabPanels>
-                {/* VOX */}
-                <TabPanel>
-                  {modelsLoaded ? renderModelGrid(voxModels) : (
-                    <Text fontSize="sm" color="gray.400" textAlign="center" py={4}>
-                      Loading models...
+            {/* Texture Selector */}
+            <VStack align="stretch" spacing={2}>
+              <Text fontSize="sm" fontWeight="semibold" color="white">
+                Avatar Texture
+              </Text>
+              <SimpleGrid columns={6} spacing={2} maxHeight="200px" overflowY="auto">
+                <Box
+                  as="button"
+                  onClick={() => handleTextureSelect('0')}
+                  p={2}
+                  bg={avatarTexture === '0' ? 'rgba(100, 150, 250, 0.3)' : 'rgba(80, 80, 80, 0.1)'}
+                  border="1px solid"
+                  borderColor={avatarTexture === '0' ? 'rgba(100, 150, 250, 0.5)' : 'rgba(255, 255, 255, 0.1)'}
+                  borderRadius="md"
+                  _hover={{
+                    bg: avatarTexture === '0' ? 'rgba(100, 150, 250, 0.4)' : 'rgba(120, 120, 120, 0.2)',
+                  }}
+                  transition="all 0.2s"
+                  cursor="pointer"
+                  title="No texture (colors only)"
+                >
+                  <Text fontSize="xs" color="white" noOfLines={1}>
+                    None
+                  </Text>
+                </Box>
+                {AVATAR_TEXTURES.map((texture) => (
+                  <Box
+                    key={texture}
+                    as="button"
+                    onClick={() => handleTextureSelect(texture)}
+                    p={2}
+                    bg={avatarTexture === texture ? 'rgba(100, 150, 250, 0.3)' : 'rgba(80, 80, 80, 0.1)'}
+                    border="1px solid"
+                    borderColor={avatarTexture === texture ? 'rgba(100, 150, 250, 0.5)' : 'rgba(255, 255, 255, 0.1)'}
+                    borderRadius="md"
+                    _hover={{
+                      bg: avatarTexture === texture ? 'rgba(100, 150, 250, 0.4)' : 'rgba(120, 120, 120, 0.2)',
+                    }}
+                    transition="all 0.2s"
+                    cursor="pointer"
+                    title={texture}
+                  >
+                    <Text fontSize="xs" color="white" noOfLines={1}>
+                      {texture.replace(/_/g, ' ')}
                     </Text>
-                  )}
-                </TabPanel>
-
-                {/* GLB */}
-                <TabPanel>
-                  {modelsLoaded ? renderModelGrid(glbModels) : (
-                    <Text fontSize="sm" color="gray.400" textAlign="center" py={4}>
-                      Loading models...
-                    </Text>
-                  )}
-                </TabPanel>
-
-                {/* CSM (Cube Script Model) */}
-                <TabPanel>
-                  <VStack align="stretch" spacing={3}>
-                    <Text fontSize="sm" fontWeight="semibold" color="white">
-                      Cube Script Model (CSM)
-                    </Text>
-                    <Textarea
-                      value={csmCode}
-                      onChange={(e) => setCsmCode(e.target.value)}
-                      placeholder="Enter CSM code..."
-                      size="sm"
-                      fontSize="xs"
-                      fontFamily="monospace"
-                      bg="rgba(0, 0, 0, 0.3)"
-                      color="white"
-                      borderColor="rgba(255, 255, 255, 0.2)"
-                      _hover={{ borderColor: 'rgba(255, 255, 255, 0.3)' }}
-                      _focus={{ borderColor: 'blue.400', boxShadow: '0 0 0 1px #3182ce' }}
-                      rows={8}
-                      spellCheck={false}
-                    />
-                    <Text fontSize="xs" color="gray.400">
-                      Example: <code>&gt;a [1 2 3 4 5 6 7 8]</code>
-                    </Text>
-                  </VStack>
-                </TabPanel>
-              </TabPanels>
-            </Tabs>
+                  </Box>
+                ))}
+              </SimpleGrid>
+            </VStack>
 
             <Divider borderColor="rgba(255, 255, 255, 0.1)" />
 
-            {/* Load File/URL Section */}
+            {/* Load Model Section */}
             <VStack align="stretch" spacing={2}>
               <Text fontSize="sm" fontWeight="semibold" color="white">
-                Load Model
+                Load Custom Model
               </Text>
 
               <Input
                 value={inputUrl}
                 onChange={(e) => setInputUrl(e.target.value)}
-                placeholder="https://models.readyplayer.me/..."
+                placeholder="https://models.readyplayer.me/... or .vox/.glb URL"
                 size="sm"
                 fontSize="xs"
                 bg="rgba(255, 255, 255, 0.05)"
@@ -666,6 +585,36 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
                   RPM Creator
                 </Button>
               </HStack>
+            </VStack>
+
+            <Divider borderColor="rgba(255, 255, 255, 0.1)" />
+
+            {/* CSM Code Editor */}
+            <VStack align="stretch" spacing={2}>
+              <Text fontSize="sm" fontWeight="semibold" color="white">
+                Cube Script Model (CSM)
+              </Text>
+              <Textarea
+                value={csmCode}
+                onChange={(e) => {
+                  setCsmCode(e.target.value);
+                  setAvatarType('csm');
+                }}
+                placeholder="Enter CSM code..."
+                size="sm"
+                fontSize="xs"
+                fontFamily="monospace"
+                bg="rgba(0, 0, 0, 0.3)"
+                color="white"
+                borderColor="rgba(255, 255, 255, 0.2)"
+                _hover={{ borderColor: 'rgba(255, 255, 255, 0.3)' }}
+                _focus={{ borderColor: 'blue.400', boxShadow: '0 0 0 1px #3182ce' }}
+                rows={6}
+                spellCheck={false}
+              />
+              <Text fontSize="xs" color="gray.400">
+                Example: <code>&gt;a [1 2 3 4 5 6 7 8]</code>
+              </Text>
             </VStack>
 
             {ENABLE_AVATAR_COLOR_SELECTION && (
