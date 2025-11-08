@@ -1,18 +1,39 @@
 # Renderer Setup and Usage
 
-## Quick Start (NixOS/Nix users)
+## Dual Renderer Implementations
 
-The easiest way to run the renderer is using the provided run script:
+This project provides **two** raytracer implementations:
+
+1. **GlCubeTracer** - GPU-accelerated (WebGL2/OpenGL ES 3.0)
+2. **CpuCubeTracer** - Pure Rust CPU raytracer
+
+Both use identical ray-box intersection and lighting algorithms.
+
+## Quick Start
+
+### GPU Renderer (Default)
 
 ```bash
 cd crates/renderer
-./run.sh
+./run.sh  # or: cargo run --release
 ```
 
 This will automatically:
 - Load all required dependencies via Nix
 - Set up X11 display
-- Build and run the renderer in release mode
+- Build and run the GL renderer in release mode
+
+### CPU Renderer
+
+```bash
+cd crates/renderer
+cargo run --release -- --cpu
+```
+
+This will:
+- Render 10 frames (800x600 each)
+- Output PNG files: `output_frame_000.png` through `output_frame_009.png`
+- No GPU or display server required!
 
 ## What the Renderer Does
 

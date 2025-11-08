@@ -3264,9 +3264,11 @@ checksum = "7a2d987857b319362043e95f5353c0535c1f58eec5336fdfcf626430af7def58"
 name = "renderer"
 version = "0.1.0"
 dependencies = [
+ "glam 0.29.3",
  "glow",
  "glutin",
  "glutin-winit",
+ "image",
  "raw-window-handle",
  "winit",
 ]
