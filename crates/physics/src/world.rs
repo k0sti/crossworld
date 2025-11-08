@@ -124,9 +124,66 @@ impl PhysicsWorld {
         self.gravity = vector![gravity.x, gravity.y, gravity.z];
     }
 
-    // TODO: Implement raycast once we understand the new Rapier API better
-    // /// Perform a raycast through the physics world
-    // pub fn raycast(...) -> Option<(ColliderHandle, f32)> { ... }
+    /// Perform a raycast through the physics world
+    ///
+    /// # Arguments
+    /// * `origin` - Starting point of the ray
+    /// * `direction` - Direction vector (will be normalized)
+    /// * `max_distance` - Maximum distance to check
+    /// * `solid_only` - If true, ignores sensor colliders
+    ///
+    /// # Returns
+    /// Optional tuple of (ColliderHandle, hit_distance, hit_point, hit_normal)
+    pub fn cast_ray(
+        &self,
+        origin: Vec3,
+        direction: Vec3,
+        max_distance: f32,
+        solid_only: bool,
+    ) -> Option<(ColliderHandle, f32, Vec3, Vec3)> {
+        let dir = direction.normalize();
+        let ray = Ray::new(
+            point![origin.x, origin.y, origin.z],
+            vector![dir.x, dir.y, dir.z],
+        );
+
+        let mut filter = QueryFilter::default();
+        if solid_only {
+            filter = filter.exclude_sensors();
+        }
+
+        // Simple raycast using collider_set
+        let mut closest_hit: Option<(ColliderHandle, f32, Vec3)> = None;
+
+        for (handle, collider) in self.collider_set.iter() {
+            if let Some(toi) = collider.shape().cast_ray_and_get_normal(
+                collider.position(),
+                &ray,
+                max_distance,
+                solid_only,
+            ) {
+                let distance = toi.time_of_impact;
+                if closest_hit.is_none() || distance < closest_hit.as_ref().unwrap().1 {
+                    let hit_point = ray.point_at(distance);
+                    closest_hit = Some((
+                        handle,
+                        distance,
+                        Vec3::new(toi.normal.x, toi.normal.y, toi.normal.z),
+                    ));
+                }
+            }
+        }
+
+        closest_hit.map(|(handle, distance, normal)| {
+            let hit_point = ray.point_at(distance);
+            (
+                handle,
+                distance,
+                Vec3::new(hit_point.x, hit_point.y, hit_point.z),
+                normal,
+            )
+        })
+    }
 }
 
 #[cfg(test)]

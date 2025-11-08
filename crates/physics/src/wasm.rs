@@ -2,17 +2,21 @@ use crate::{
     collider::{
         create_box_collider, create_capsule_collider, create_sphere_collider, VoxelColliderBuilder,
     },
+    character_controller::{CharacterController, CharacterControllerConfig},
     world::PhysicsWorld,
 };
 use glam::Vec3;
 use nalgebra::{Quaternion, UnitQuaternion};
 use rapier3d::prelude::*;
 use std::cell::RefCell;
+use std::collections::HashMap;
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
 pub struct WasmPhysicsWorld {
     inner: RefCell<PhysicsWorld>,
+    characters: RefCell<HashMap<u32, CharacterController>>,
+    next_character_id: RefCell<u32>,
 }
 
 #[wasm_bindgen]
@@ -27,6 +31,8 @@ impl WasmPhysicsWorld {
             inner: RefCell::new(PhysicsWorld::new(Vec3::new(
                 gravity_x, gravity_y, gravity_z,
             ))),
+            characters: RefCell::new(HashMap::new()),
+            next_character_id: RefCell::new(1),
         }
     }
 
@@ -55,10 +61,12 @@ impl WasmPhysicsWorld {
         max_depth: u32,
         is_static: bool,
     ) -> Result<u32, JsValue> {
+        use std::rc::Rc;
         let octree = crossworld_cube::parse_csm(csm_code)
             .map_err(|e| JsValue::from_str(&format!("Parse error: {}", e)))?;
 
-        let collider = VoxelColliderBuilder::from_cube(&octree.root, max_depth);
+        let cube_rc = Rc::new(octree.root);
+        let collider = VoxelColliderBuilder::from_cube(&cube_rc, max_depth);
 
         let mut world = self.inner.borrow_mut();
         let body = if is_static {
@@ -100,8 +108,9 @@ impl WasmPhysicsWorld {
             .build();
         let handle = world.add_rigid_body(body);
 
-        let collider = create_box_collider(Vec3::new(half_width, half_height, half_depth));
-        let collider = collider.with_mass(mass);
+        let collider = ColliderBuilder::cuboid(half_width, half_height, half_depth)
+            .density(mass)
+            .build();
         world.add_collider(collider, handle);
 
         handle.into_raw_parts().0
@@ -163,7 +172,9 @@ impl WasmPhysicsWorld {
             .build();
         let handle = world.add_rigid_body(body);
 
-        let collider = create_sphere_collider(radius).with_mass(mass);
+        let collider = ColliderBuilder::ball(radius)
+            .density(mass)
+            .build();
         world.add_collider(collider, handle);
 
         handle.into_raw_parts().0
@@ -196,7 +207,9 @@ impl WasmPhysicsWorld {
             .build();
         let handle = world.add_rigid_body(body);
 
-        let collider = create_capsule_collider(half_height, radius).with_mass(mass);
+        let collider = ColliderBuilder::capsule_y(half_height, radius)
+            .density(mass)
+            .build();
         world.add_collider(collider, handle);
 
         handle.into_raw_parts().0
@@ -448,6 +461,209 @@ impl WasmPhysicsWorld {
     pub fn set_gravity(&self, gravity_x: f32, gravity_y: f32, gravity_z: f32) {
         let mut world = self.inner.borrow_mut();
         world.set_gravity(Vec3::new(gravity_x, gravity_y, gravity_z));
+    }
+
+    // ===== Character Controller Methods =====
+
+    /// Create a character controller
+    ///
+    /// # Arguments
+    /// * `pos_x`, `pos_y`, `pos_z` - Initial position
+    /// * `height` - Character height (e.g., 1.8 for human)
+    /// * `radius` - Character radius (e.g., 0.3)
+    ///
+    /// # Returns
+    /// Character ID
+    #[wasm_bindgen(js_name = createCharacter)]
+    pub fn create_character(
+        &self,
+        pos_x: f32,
+        pos_y: f32,
+        pos_z: f32,
+        height: f32,
+        radius: f32,
+    ) -> u32 {
+        let mut world = self.inner.borrow_mut();
+        let config = CharacterControllerConfig {
+            height,
+            radius,
+            step_height: 0.5,
+            max_slope_angle: 45.0,
+            gravity: 9.8,
+            jump_impulse: 5.0,
+            ground_check_distance: 0.1,
+        };
+
+        let controller = CharacterController::new(
+            &mut world,
+            Vec3::new(pos_x, pos_y, pos_z),
+            config,
+        );
+
+        let mut next_id = self.next_character_id.borrow_mut();
+        let id = *next_id;
+        *next_id += 1;
+
+        self.characters.borrow_mut().insert(id, controller);
+        id
+    }
+
+    /// Move character with horizontal velocity
+    ///
+    /// # Arguments
+    /// * `character_id` - Character ID
+    /// * `vel_x`, `vel_z` - Horizontal velocity (Y is ignored)
+    /// * `dt` - Time step
+    #[wasm_bindgen(js_name = moveCharacter)]
+    pub fn move_character(&self, character_id: u32, vel_x: f32, vel_z: f32, dt: f32) {
+        let mut world = self.inner.borrow_mut();
+        let mut characters = self.characters.borrow_mut();
+
+        if let Some(controller) = characters.get_mut(&character_id) {
+            controller.move_with_velocity(&mut world, Vec3::new(vel_x, 0.0, vel_z), dt);
+        }
+    }
+
+    /// Make character jump
+    ///
+    /// # Arguments
+    /// * `character_id` - Character ID
+    #[wasm_bindgen(js_name = jumpCharacter)]
+    pub fn jump_character(&self, character_id: u32) {
+        let mut characters = self.characters.borrow_mut();
+        if let Some(controller) = characters.get_mut(&character_id) {
+            controller.jump();
+        }
+    }
+
+    /// Get character position
+    ///
+    /// # Arguments
+    /// * `character_id` - Character ID
+    ///
+    /// # Returns
+    /// Array [x, y, z]
+    #[wasm_bindgen(js_name = getCharacterPosition)]
+    pub fn get_character_position(&self, character_id: u32) -> Vec<f32> {
+        let world = self.inner.borrow();
+        let characters = self.characters.borrow();
+
+        if let Some(controller) = characters.get(&character_id) {
+            let pos = controller.position(&world);
+            vec![pos.x, pos.y, pos.z]
+        } else {
+            vec![0.0, 0.0, 0.0]
+        }
+    }
+
+    /// Get character rotation
+    ///
+    /// # Arguments
+    /// * `character_id` - Character ID
+    ///
+    /// # Returns
+    /// Array [x, y, z, w] (quaternion)
+    #[wasm_bindgen(js_name = getCharacterRotation)]
+    pub fn get_character_rotation(&self, character_id: u32) -> Vec<f32> {
+        let world = self.inner.borrow();
+        let characters = self.characters.borrow();
+
+        if let Some(controller) = characters.get(&character_id) {
+            let rot = controller.rotation(&world);
+            vec![rot.x, rot.y, rot.z, rot.w]
+        } else {
+            vec![0.0, 0.0, 0.0, 1.0]
+        }
+    }
+
+    /// Get character velocity
+    ///
+    /// # Arguments
+    /// * `character_id` - Character ID
+    ///
+    /// # Returns
+    /// Array [x, y, z]
+    #[wasm_bindgen(js_name = getCharacterVelocity)]
+    pub fn get_character_velocity(&self, character_id: u32) -> Vec<f32> {
+        let world = self.inner.borrow();
+        let characters = self.characters.borrow();
+
+        if let Some(controller) = characters.get(&character_id) {
+            let vel = controller.velocity(&world);
+            vec![vel.x, vel.y, vel.z]
+        } else {
+            vec![0.0, 0.0, 0.0]
+        }
+    }
+
+    /// Check if character is grounded
+    ///
+    /// # Arguments
+    /// * `character_id` - Character ID
+    ///
+    /// # Returns
+    /// True if on ground
+    #[wasm_bindgen(js_name = isCharacterGrounded)]
+    pub fn is_character_grounded(&self, character_id: u32) -> bool {
+        let characters = self.characters.borrow();
+        if let Some(controller) = characters.get(&character_id) {
+            controller.is_grounded()
+        } else {
+            false
+        }
+    }
+
+    /// Get character ground normal
+    ///
+    /// # Arguments
+    /// * `character_id` - Character ID
+    ///
+    /// # Returns
+    /// Array [x, y, z]
+    #[wasm_bindgen(js_name = getCharacterGroundNormal)]
+    pub fn get_character_ground_normal(&self, character_id: u32) -> Vec<f32> {
+        let characters = self.characters.borrow();
+        if let Some(controller) = characters.get(&character_id) {
+            let normal = controller.ground_normal();
+            vec![normal.x, normal.y, normal.z]
+        } else {
+            vec![0.0, 1.0, 0.0]
+        }
+    }
+
+    /// Set character position (teleport)
+    ///
+    /// # Arguments
+    /// * `character_id` - Character ID
+    /// * `pos_x`, `pos_y`, `pos_z` - New position
+    #[wasm_bindgen(js_name = setCharacterPosition)]
+    pub fn set_character_position(
+        &self,
+        character_id: u32,
+        pos_x: f32,
+        pos_y: f32,
+        pos_z: f32,
+    ) {
+        let mut world = self.inner.borrow_mut();
+        let mut characters = self.characters.borrow_mut();
+
+        if let Some(controller) = characters.get_mut(&character_id) {
+            controller.set_position(&mut world, Vec3::new(pos_x, pos_y, pos_z));
+        }
+    }
+
+    /// Remove character from simulation
+    ///
+    /// # Arguments
+    /// * `character_id` - Character ID to remove
+    #[wasm_bindgen(js_name = removeCharacter)]
+    pub fn remove_character(&self, character_id: u32) {
+        let mut world = self.inner.borrow_mut();
+        let mut characters = self.characters.borrow_mut();
+
+        if let Some(controller) = characters.remove(&character_id) {
+            controller.destroy(&mut world);
+        }
     }
 }
 
