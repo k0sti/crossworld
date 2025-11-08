@@ -335,8 +335,8 @@ impl WasmPhysicsWorld {
 
     /// Get character state
     pub fn getCharacterPosition(&self, id: u32) -> Vec<f32>;
-    pub fn isCharacterGrounded(&self, id: u32) -> bool;
-    pub fn getCharacterGroundNormal(&self, id: u32) -> Vec<f32>;
+    pub fn isObjectGrounded(&self, id: u32) -> bool;
+    pub fn getObjectGroundNormal(&self, id: u32) -> Vec<f32>;
 
     /// Remove character
     pub fn removeCharacter(&mut self, id: u32);
@@ -990,8 +990,8 @@ impl WasmPhysicsWorld {
     pub fn getCharacterPosition(&self, id: u32) -> Vec<f32>; // [x, y, z]
     pub fn getCharacterRotation(&self, id: u32) -> Vec<f32>; // [x, y, z, w]
     pub fn getCharacterVelocity(&self, id: u32) -> Vec<f32>; // [x, y, z]
-    pub fn isCharacterGrounded(&self, id: u32) -> bool;
-    pub fn getCharacterGroundNormal(&self, id: u32) -> Vec<f32>; // [x, y, z]
+    pub fn isObjectGrounded(&self, id: u32) -> bool;
+    pub fn getObjectGroundNormal(&self, id: u32) -> Vec<f32>; // [x, y, z]
 
     // Batch operations (performance optimization)
     pub fn updateAllCharacters(&mut self, dt: f32) -> Vec<f32>;

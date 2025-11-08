@@ -1,6 +1,6 @@
 use glam::{Quat, Vec3};
-use rapier3d::prelude::*;
 use nalgebra::{Quaternion, UnitQuaternion};
+use rapier3d::prelude::*;
 
 use crate::world::PhysicsWorld;
 
@@ -204,10 +204,7 @@ impl CharacterController {
         if let Some(body) = world.get_rigid_body_mut(self.body_handle) {
             body.set_rotation(
                 UnitQuaternion::from_quaternion(Quaternion::new(
-                    rotation.w,
-                    rotation.x,
-                    rotation.y,
-                    rotation.z,
+                    rotation.w, rotation.x, rotation.y, rotation.z,
                 )),
                 true,
             );
@@ -249,8 +246,8 @@ impl CharacterController {
         let max_distance = capsule_half_height + self.config.ground_check_distance;
 
         if let Some((_handle, distance, _point, normal)) =
-            world.cast_ray(ray_origin, ray_dir, max_distance, true) {
-
+            world.cast_ray(ray_origin, ray_dir, max_distance, true)
+        {
             // Only consider grounded if the hit is close to the capsule bottom
             let distance_from_bottom = distance - capsule_half_height;
 
@@ -271,7 +268,6 @@ impl CharacterController {
             self.ground_normal = Vec3::Y;
         }
     }
-
 }
 
 /// Result of a raycast query
@@ -286,19 +282,13 @@ pub struct RaycastHit {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::collider::create_box_collider;
-    use crate::rigid_body::CubeObject;
 
     #[test]
     fn test_character_creation() {
         let mut world = PhysicsWorld::new(Vec3::new(0.0, -9.8, 0.0));
         let config = CharacterControllerConfig::default();
 
-        let controller = CharacterController::new(
-            &mut world,
-            Vec3::new(0.0, 10.0, 0.0),
-            config,
-        );
+        let controller = CharacterController::new(&mut world, Vec3::new(0.0, 10.0, 0.0), config);
 
         assert_eq!(controller.position(&world), Vec3::new(0.0, 10.0, 0.0));
         assert!(!controller.is_grounded());
@@ -309,11 +299,8 @@ mod tests {
         let mut world = PhysicsWorld::new(Vec3::new(0.0, -9.8, 0.0));
         let config = CharacterControllerConfig::default();
 
-        let mut controller = CharacterController::new(
-            &mut world,
-            Vec3::new(0.0, 10.0, 0.0),
-            config,
-        );
+        let mut controller =
+            CharacterController::new(&mut world, Vec3::new(0.0, 10.0, 0.0), config);
 
         let initial_y = controller.position(&world).y;
 
@@ -334,11 +321,7 @@ mod tests {
         let mut world = PhysicsWorld::new(Vec3::new(0.0, -9.8, 0.0));
         let config = CharacterControllerConfig::default();
 
-        let mut controller = CharacterController::new(
-            &mut world,
-            Vec3::new(0.0, 0.0, 0.0),
-            config,
-        );
+        let mut controller = CharacterController::new(&mut world, Vec3::new(0.0, 0.0, 0.0), config);
 
         // Manually set grounded for test
         controller.is_grounded = true;
@@ -356,11 +339,7 @@ mod tests {
         let mut world = PhysicsWorld::new(Vec3::new(0.0, -9.8, 0.0));
         let config = CharacterControllerConfig::default();
 
-        let mut controller = CharacterController::new(
-            &mut world,
-            Vec3::new(0.0, 0.0, 0.0),
-            config,
-        );
+        let mut controller = CharacterController::new(&mut world, Vec3::new(0.0, 0.0, 0.0), config);
 
         let initial_pos = controller.position(&world);
 
@@ -374,8 +353,12 @@ mod tests {
         let final_pos = controller.position(&world);
 
         // Should have moved in X direction
-        assert!(final_pos.x > initial_pos.x,
+        assert!(
+            final_pos.x > initial_pos.x,
             "Expected character to move from {:.2} to > {:.2}, but got {:.2}",
-            initial_pos.x, initial_pos.x, final_pos.x);
+            initial_pos.x,
+            initial_pos.x,
+            final_pos.x
+        );
     }
 }

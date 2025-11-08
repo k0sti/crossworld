@@ -1,6 +1,5 @@
 use crossworld_physics::{
-    create_box_collider, CharacterController, CharacterControllerConfig, CubeObject,
-    PhysicsWorld,
+    create_box_collider, CharacterController, CharacterControllerConfig, CubeObject, PhysicsWorld,
 };
 use glam::Vec3;
 
@@ -84,7 +83,10 @@ fn main() {
     println!("\nPhase 3: Jump and continue walking");
     // Phase 3: Jump (next 2 seconds)
     character.jump();
-    println!("  Jumped! Initial vertical velocity: {:.2}", character.vertical_velocity());
+    println!(
+        "  Jumped! Initial vertical velocity: {:.2}",
+        character.vertical_velocity()
+    );
 
     for i in 0..120 {
         let velocity = Vec3::new(3.0, 0.0, 0.0); // Continue walking
@@ -108,7 +110,10 @@ fn main() {
     // Final state
     let final_pos = character.position(&world);
     println!("\n=== Final State ===");
-    println!("Position: ({:.2}, {:.2}, {:.2})", final_pos.x, final_pos.y, final_pos.z);
+    println!(
+        "Position: ({:.2}, {:.2}, {:.2})",
+        final_pos.x, final_pos.y, final_pos.z
+    );
     println!("Grounded: {}", character.is_grounded());
     println!("Vertical velocity: {:.2}", character.vertical_velocity());
 
@@ -116,7 +121,10 @@ fn main() {
     println!("\n=== Verification ===");
 
     // For now, just check that simulation ran
-    println!("Character moved from (0, 5, 0) to ({:.2}, {:.2}, {:.2})", final_pos.x, final_pos.y, final_pos.z);
+    println!(
+        "Character moved from (0, 5, 0) to ({:.2}, {:.2}, {:.2})",
+        final_pos.x, final_pos.y, final_pos.z
+    );
     println!("✓ Simulation completed successfully!");
 
     // Cleanup
