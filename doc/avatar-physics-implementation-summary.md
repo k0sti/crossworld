@@ -103,8 +103,8 @@ jumpCharacter(characterId: number): void
 getCharacterPosition(characterId: number): [x, y, z]
 getCharacterRotation(characterId: number): [x, y, z, w]
 getCharacterVelocity(characterId: number): [x, y, z]
-isCharacterGrounded(characterId: number): boolean
-getCharacterGroundNormal(characterId: number): [x, y, z]
+isObjectGrounded(objectId: number): boolean
+getObjectGroundNormal(objectId: number): [x, y, z]
 
 // Teleportation
 setCharacterPosition(characterId: number, x: number, y: number, z: number): void
@@ -294,7 +294,7 @@ function update(dt: number) {
     physics.moveCharacter(characterId, 3.0, 0.0, dt);
 
     // Jump
-    if (jumpPressed && physics.isCharacterGrounded(characterId)) {
+    if (jumpPressed && physics.isObjectGrounded(characterId)) {
         physics.jumpCharacter(characterId);
     }
 
