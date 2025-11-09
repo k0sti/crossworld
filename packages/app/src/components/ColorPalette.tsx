@@ -1,6 +1,26 @@
-import { Box, Grid, VStack, Text } from '@chakra-ui/react'
-import React, { useState } from 'react'
-import { DAWNBRINGER_32 } from '@crossworld/editor'
+import { Box, Grid, VStack, Text, Accordion, AccordionItem, AccordionButton, AccordionPanel, AccordionIcon } from '@chakra-ui/react'
+import { useState, useEffect } from 'react'
+
+// Dawnbringer 32 palette mapped to closest R2G3B2 indices (128-255)
+const DAWNBRINGER_R2G3B2_INDICES = [
+  128, 133, 165, 169, 201, 236, 241, 246,
+  253, 217, 181, 177, 173, 168, 169, 169,
+  174, 175, 179, 187, 219, 255, 214, 206,
+  173, 169, 170, 197, 233, 238, 209, 205,
+]
+
+interface Material {
+  index: number;
+  id: string;
+  color: string;
+  description: string;
+}
+
+interface MaterialsData {
+  generated: string;
+  count: number;
+  materials: Material[];
+}
 
 interface ColorPaletteProps {
   isVisible: boolean
@@ -8,17 +28,106 @@ interface ColorPaletteProps {
 }
 
 export function ColorPalette({ isVisible, onColorSelect }: ColorPaletteProps) {
-  const [selectedIndex, setSelectedIndex] = useState<number>(0)
+  const [selectedIndex, setSelectedIndex] = useState<number>(128) // Default to black
+  const [materials, setMaterials] = useState<Material[]>([])
+  const [textureUrls, setTextureUrls] = useState<Map<number, string>>(new Map())
+
+  // Load materials.json
+  useEffect(() => {
+    const loadMaterials = async () => {
+      try {
+        const response = await fetch('/crossworld/assets/materials.json')
+        if (response.ok) {
+          const data: MaterialsData = await response.json()
+          setMaterials(data.materials)
+
+          // Pre-load texture URLs for material range (32-127)
+          const urls = new Map<number, string>()
+          data.materials.forEach(mat => {
+            if (mat.index >= 32 && mat.index <= 127) {
+              urls.set(mat.index, `/crossworld/assets/textures5/${mat.id}.webp`)
+            }
+          })
+          setTextureUrls(urls)
+        }
+      } catch (error) {
+        console.error('Failed to load materials:', error)
+      }
+    }
+
+    if (isVisible) {
+      loadMaterials()
+    }
+  }, [isVisible])
 
   if (!isVisible) return null
 
-  const handleColorClick = (index: number) => {
-    setSelectedIndex(index)
-    if (onColorSelect) {
-      const color = index === -1 ? '' : DAWNBRINGER_32[index]
-      onColorSelect(color, index)
+  const handleColorClick = (materialIndex: number) => {
+    setSelectedIndex(materialIndex)
+    const material = materials.find(m => m.index === materialIndex)
+    if (onColorSelect && material) {
+      const color = material.color
+      onColorSelect(color, materialIndex)
     }
   }
+
+  const renderMaterialBox = (mat: Material, showTexture: boolean = false) => {
+    const isSelected = selectedIndex === mat.index
+    // Convert RGBA format (#AARRGGBB) to RGB format (#RRGGBB) for CSS
+    let colorHex = mat.color.startsWith('#') ? mat.color : '#CCCCCC'
+    if (colorHex.length === 9) {
+      // Strip alpha channel: #AARRGGBB -> #RRGGBB
+      colorHex = '#' + colorHex.substring(3)
+    }
+
+    return (
+      <Box
+        key={mat.index}
+        as="button"
+        w="40px"
+        h="40px"
+        bg={showTexture ? 'transparent' : colorHex}
+        backgroundImage={showTexture && textureUrls.has(mat.index)
+          ? `url(${textureUrls.get(mat.index)})`
+          : undefined}
+        backgroundSize="cover"
+        backgroundPosition="center"
+        borderRadius="sm"
+        border={isSelected ? '2px solid white' : '1px solid rgba(255, 255, 255, 0.3)'}
+        cursor="pointer"
+        onClick={() => handleColorClick(mat.index)}
+        _hover={{
+          transform: 'scale(1.05)',
+          borderColor: 'white',
+          zIndex: 1,
+        }}
+        transition="all 0.1s"
+        title={`${mat.index}: ${mat.id}\n${mat.description}`}
+        position="relative"
+      >
+        <Text
+          fontSize="8px"
+          fontWeight="bold"
+          color="white"
+          textShadow="0 0 3px black, 0 0 3px black"
+          position="absolute"
+          bottom="1px"
+          right="2px"
+        >
+          {mat.index}
+        </Text>
+      </Box>
+    )
+  }
+
+  // Get materials by range
+  const transparentMaterials = materials.filter(m => m.index >= 0 && m.index <= 31)
+  const materialRangeMaterials = materials.filter(m => m.index >= 32 && m.index <= 127)
+
+  // Get Dawnbringer 32 palette materials for color section
+  const colorPaletteMaterials = DAWNBRINGER_R2G3B2_INDICES
+    .map(idx => materials.find(m => m.index === idx))
+    .filter((m): m is Material => m !== undefined)
 
   return (
     <Box
@@ -31,81 +140,66 @@ export function ColorPalette({ isVisible, onColorSelect }: ColorPaletteProps) {
       backdropFilter="blur(8px)"
       borderLeft="1px solid rgba(255, 255, 255, 0.2)"
       p={2}
+      overflowY="auto"
+      width="200px"
     >
       <VStack spacing={2} align="stretch">
-        {/* Clear/Eraser button */}
-        <Box
-          as="button"
-          w="100%"
-          h="28px"
-          bg="linear-gradient(135deg, rgba(255,255,255,0.1) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.1) 75%, transparent 75%, transparent)"
-          backgroundSize="8px 8px"
-          borderRadius="sm"
-          border={selectedIndex === -1 ? '2px solid white' : '1px solid rgba(255, 255, 255, 0.3)'}
-          cursor="pointer"
-          onClick={() => handleColorClick(-1)}
-          _hover={{
-            borderColor: 'white',
-          }}
-          transition="all 0.1s"
-          display="flex"
-          alignItems="center"
-          justifyContent="center"
-        >
-          <Text fontSize="xs" fontWeight="bold" color="white" textShadow="0 0 2px black">
-            CLEAR
-          </Text>
-        </Box>
+        <Text color="white" fontSize="sm" fontWeight="bold" mb={2}>
+          Material Palette
+        </Text>
 
-        {/* Color Grid - 0-15 in left column, 16-31 in right column */}
-        <Grid
-          templateColumns="repeat(2, 1fr)"
-          gap={1}
-        >
-          {Array.from({ length: 16 }, (_, i) => {
-            const leftIndex = i;
-            const rightIndex = i + 16;
-            return (
-              <React.Fragment key={i}>
-                <Box
-                  as="button"
-                  w="24px"
-                  h="24px"
-                  bg={DAWNBRINGER_32[leftIndex]}
-                  borderRadius="sm"
-                  border={selectedIndex === leftIndex ? '2px solid white' : '1px solid rgba(255, 255, 255, 0.3)'}
-                  cursor="pointer"
-                  onClick={() => handleColorClick(leftIndex)}
-                  _hover={{
-                    transform: 'scale(1.1)',
-                    borderColor: 'white',
-                    zIndex: 1,
-                  }}
-                  transition="all 0.1s"
-                  title={`${leftIndex}: ${DAWNBRINGER_32[leftIndex]}`}
-                />
-                <Box
-                  key={rightIndex}
-                  as="button"
-                  w="24px"
-                  h="24px"
-                  bg={DAWNBRINGER_32[rightIndex]}
-                  borderRadius="sm"
-                  border={selectedIndex === rightIndex ? '2px solid white' : '1px solid rgba(255, 255, 255, 0.3)'}
-                  cursor="pointer"
-                  onClick={() => handleColorClick(rightIndex)}
-                  _hover={{
-                    transform: 'scale(1.1)',
-                    borderColor: 'white',
-                    zIndex: 1,
-                  }}
-                  transition="all 0.1s"
-                  title={`${rightIndex}: ${DAWNBRINGER_32[rightIndex]}`}
-                />
-              </React.Fragment>
-            );
-          })}
-        </Grid>
+        <Accordion allowMultiple defaultIndex={[0, 1, 2]}>
+          {/* Transparent Range: 0-31 */}
+          <AccordionItem border="1px solid rgba(255, 255, 255, 0.2)" borderRadius="md" mb={2}>
+            <AccordionButton bg="rgba(128, 128, 255, 0.2)" _hover={{ bg: 'rgba(128, 128, 255, 0.3)' }}>
+              <Box flex="1" textAlign="left">
+                <Text color="white" fontSize="xs" fontWeight="bold">
+                  Transparent (0-31)
+                </Text>
+              </Box>
+              <AccordionIcon color="white" />
+            </AccordionButton>
+            <AccordionPanel pb={2} bg="rgba(0, 0, 0, 0.3)">
+              <Grid templateColumns="repeat(4, 1fr)" gap={1}>
+                {transparentMaterials.map(mat => renderMaterialBox(mat, false))}
+              </Grid>
+            </AccordionPanel>
+          </AccordionItem>
+
+          {/* Material Range: 32-127 (with textures) */}
+          <AccordionItem border="1px solid rgba(255, 255, 255, 0.2)" borderRadius="md" mb={2}>
+            <AccordionButton bg="rgba(139, 69, 19, 0.4)" _hover={{ bg: 'rgba(139, 69, 19, 0.5)' }}>
+              <Box flex="1" textAlign="left">
+                <Text color="white" fontSize="xs" fontWeight="bold">
+                  Materials (32-127)
+                </Text>
+              </Box>
+              <AccordionIcon color="white" />
+            </AccordionButton>
+            <AccordionPanel pb={2} bg="rgba(0, 0, 0, 0.3)">
+              <Grid templateColumns="repeat(4, 1fr)" gap={1}>
+                {materialRangeMaterials.map(mat => renderMaterialBox(mat, true))}
+              </Grid>
+            </AccordionPanel>
+          </AccordionItem>
+
+          {/* Dawnbringer 32 Color Palette */}
+          <AccordionItem border="1px solid rgba(255, 255, 255, 0.2)" borderRadius="md">
+            <AccordionButton bg="rgba(255, 128, 128, 0.2)" _hover={{ bg: 'rgba(255, 128, 128, 0.3)' }}>
+              <Box flex="1" textAlign="left">
+                <Text color="white" fontSize="xs" fontWeight="bold">
+                  Dawnbringer 32
+                </Text>
+              </Box>
+              <AccordionIcon color="white" />
+            </AccordionButton>
+            <AccordionPanel pb={2} bg="rgba(0, 0, 0, 0.3)">
+              <Grid templateColumns="repeat(4, 1fr)" gap={1}>
+                {colorPaletteMaterials.map(mat => renderMaterialBox(mat, false))}
+              </Grid>
+            </AccordionPanel>
+          </AccordionItem>
+        </Accordion>
       </VStack>
     </Box>
   )

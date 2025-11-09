@@ -430,13 +430,13 @@ fn cmd_materials() -> Result<(), Box<dyn std::error::Error>> {
         let g_bits = (index >> 2) & 0b111; // Middle 3 bits
         let b_bits = index & 0b11; // Bottom 2 bits
 
-        // Convert to 8-bit RGB values
-        // 2 bits: 0->0x00, 1->0x49, 2->0x92, 3->0xDB
+        // Convert to 8-bit RGB values (standard R2G3B2 mapping)
+        // 2 bits: 0->0x00, 1->0x55, 2->0xAA, 3->0xFF
         let r = match r_bits {
             0 => 0x00,
-            1 => 0x49,
-            2 => 0x92,
-            3 => 0xDB,
+            1 => 0x55,
+            2 => 0xAA,
+            3 => 0xFF,
             _ => 0x00,
         };
 
@@ -453,12 +453,12 @@ fn cmd_materials() -> Result<(), Box<dyn std::error::Error>> {
             _ => 0x00,
         };
 
-        // 2 bits: 0->0x00, 1->0x49, 2->0x92, 3->0xDB
+        // 2 bits: 0->0x00, 1->0x55, 2->0xAA, 3->0xFF
         let b = match b_bits {
             0 => 0x00,
-            1 => 0x49,
-            2 => 0x92,
-            3 => 0xDB,
+            1 => 0x55,
+            2 => 0xAA,
+            3 => 0xFF,
             _ => 0x00,
         };
 

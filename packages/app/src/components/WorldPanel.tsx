@@ -20,19 +20,12 @@ export interface DebugInfo {
 interface WorldPanelProps {
   info: DebugInfo;
   onApplyDepthSettings?: (worldDepth: number, scaleDepth: number) => void;
-  // Speech feature
-  speechEnabled: boolean;
-  onSpeechEnabledChange: (enabled: boolean) => void;
   // World Grid toggle
   worldGridVisible: boolean;
   onWorldGridVisibleChange: (visible: boolean) => void;
-  // Face mesh toggle
-  faceMeshEnabled: boolean;
-  onFaceMeshEnabledChange: (enabled: boolean) => void;
   // Wireframe toggle
   wireframeEnabled: boolean;
   onWireframeEnabledChange: (enabled: boolean) => void;
-  triangleCount?: number;
   // Textures toggle
   texturesEnabled: boolean;
   onTexturesEnabledChange: (enabled: boolean) => void;
@@ -47,15 +40,10 @@ interface WorldPanelProps {
 export function WorldPanel({
   info,
   onApplyDepthSettings,
-  speechEnabled,
-  onSpeechEnabledChange,
   worldGridVisible,
   onWorldGridVisibleChange,
-  faceMeshEnabled,
-  onFaceMeshEnabledChange,
   wireframeEnabled,
   onWireframeEnabledChange,
-  triangleCount,
   texturesEnabled,
   onTexturesEnabledChange,
   avatarTexturesEnabled,
@@ -278,17 +266,6 @@ export function WorldPanel({
           <Text fontSize="xs">({formatVec(info.cameraPos)})</Text>
         </HStack>
 
-        {/* Speech toggle */}
-        <HStack spacing={2} justify="space-between" pointerEvents="auto">
-          <Text color="purple.300">Speech</Text>
-          <Switch
-            isChecked={speechEnabled}
-            onChange={(e) => onSpeechEnabledChange(e.target.checked)}
-            size="sm"
-            colorScheme="purple"
-          />
-        </HStack>
-
         {/* World Grid toggle */}
         <HStack spacing={2} justify="space-between" pointerEvents="auto">
           <Text color="green.300">World Grid</Text>
@@ -297,24 +274,6 @@ export function WorldPanel({
             onChange={(e) => onWorldGridVisibleChange(e.target.checked)}
             size="sm"
             colorScheme="green"
-          />
-        </HStack>
-
-        {/* Face Mesh toggle with triangle count */}
-        <HStack spacing={2} justify="space-between" pointerEvents="auto">
-          <HStack spacing={1}>
-            <Text color="orange.300">Face Mesh</Text>
-            {triangleCount !== undefined && (
-              <Badge colorScheme="orange" fontSize="xs">
-                {triangleCount.toLocaleString()} tris
-              </Badge>
-            )}
-          </HStack>
-          <Switch
-            isChecked={faceMeshEnabled}
-            onChange={(e) => onFaceMeshEnabledChange(e.target.checked)}
-            size="sm"
-            colorScheme="orange"
           />
         </HStack>
 

@@ -1,4 +1,4 @@
-import { Box, Flex, IconButton, Text, HStack } from '@chakra-ui/react'
+import { Box, Flex, IconButton, Text, HStack, Switch } from '@chakra-ui/react'
 import { FiMenu } from 'react-icons/fi'
 import { ProfileButton } from './ProfileButton'
 import { ConfigPanelType } from '../types/config'
@@ -15,9 +15,11 @@ interface TopBarProps {
   centerContent?: ReactNode
   mainMode?: MainMode
   onModeChange?: (mode: MainMode) => void
+  speechEnabled?: boolean
+  onSpeechEnabledChange?: (enabled: boolean) => void
 }
 
-export function TopBar({ pubkey, onLogin, onOpenPanel, onOpenProfile, activePanelType, centerContent, mainMode = 'walk', onModeChange }: TopBarProps) {
+export function TopBar({ pubkey, onLogin, onOpenPanel, onOpenProfile, activePanelType, centerContent, mainMode = 'walk', onModeChange, speechEnabled, onSpeechEnabledChange }: TopBarProps) {
   const handleMenuClick = () => {
     // Toggle config panel
     if (activePanelType === 'config') {
@@ -88,6 +90,26 @@ export function TopBar({ pubkey, onLogin, onOpenPanel, onOpenProfile, activePane
                   <Text fontSize="sm" color="white">{label}</Text>
                 </Box>
               ))}
+            </HStack>
+          )}
+
+          {/* Speech Toggle */}
+          {pubkey && onSpeechEnabledChange && (
+            <HStack
+              spacing={2}
+              px={3}
+              py={2}
+              bg="rgba(80, 80, 80, 0.1)"
+              border="1px solid rgba(255, 255, 255, 0.1)"
+              borderRadius="md"
+            >
+              <Text fontSize="sm" color="white">Speech</Text>
+              <Switch
+                isChecked={speechEnabled}
+                onChange={(e) => onSpeechEnabledChange(e.target.checked)}
+                size="sm"
+                colorScheme="purple"
+              />
             </HStack>
           )}
 
