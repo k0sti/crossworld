@@ -21,8 +21,6 @@ interface WorldCanvasProps {
   currentUserPubkey?: string | null;
   geometryControllerRef?: React.MutableRefObject<any>;
   sceneManagerRef?: React.MutableRefObject<any>;
-  speechEnabled?: boolean;
-  onSpeechEnabledChange?: (enabled: boolean) => void;
   onWorldCSMUpdate?: (csmText: string) => void;
   timeOfDay: number;
   sunAutoMove: boolean;
@@ -41,8 +39,6 @@ export function WorldCanvas({
   currentUserPubkey,
   geometryControllerRef,
   sceneManagerRef,
-  speechEnabled: externalSpeechEnabled,
-  onSpeechEnabledChange: externalOnSpeechEnabledChange,
   onWorldCSMUpdate,
   timeOfDay,
   sunAutoMove,
@@ -56,17 +52,9 @@ export function WorldCanvas({
   const [debugInfo, setDebugInfo] = useState<DebugInfo>({});
 
   // Scene configuration state with localStorage persistence
-  const [internalSpeechEnabled, setInternalSpeechEnabled] = useState(() => {
-    const saved = localStorage.getItem('worldPanel.speechEnabled');
-    return saved !== null ? JSON.parse(saved) : false;
-  });
   const [worldGridVisible, setWorldGridVisible] = useState(() => {
     const saved = localStorage.getItem('worldPanel.worldGridVisible');
     return saved !== null ? JSON.parse(saved) : false; // Hidden by default
-  });
-  const [faceMeshEnabled, setFaceMeshEnabled] = useState(() => {
-    const saved = localStorage.getItem('worldPanel.faceMeshEnabled');
-    return saved !== null ? JSON.parse(saved) : true;
   });
   const [wireframeEnabled, setWireframeEnabled] = useState(() => {
     const saved = localStorage.getItem('worldPanel.wireframeEnabled');
@@ -74,26 +62,17 @@ export function WorldCanvas({
   });
   const [texturesEnabled, setTexturesEnabled] = useState(() => {
     const saved = localStorage.getItem('worldPanel.texturesEnabled');
-    return saved !== null ? JSON.parse(saved) : true;
+    return saved !== null ? JSON.parse(saved) : false;
   });
   const [avatarTexturesEnabled, setAvatarTexturesEnabled] = useState(() => {
     const saved = localStorage.getItem('worldPanel.avatarTexturesEnabled');
-    return saved !== null ? JSON.parse(saved) : true;
+    return saved !== null ? JSON.parse(saved) : false;
   });
-  const [triangleCount, setTriangleCount] = useState<number | undefined>(undefined);
 
   // Save settings to localStorage when they change
   useEffect(() => {
-    localStorage.setItem('worldPanel.speechEnabled', JSON.stringify(internalSpeechEnabled));
-  }, [internalSpeechEnabled]);
-
-  useEffect(() => {
     localStorage.setItem('worldPanel.worldGridVisible', JSON.stringify(worldGridVisible));
   }, [worldGridVisible]);
-
-  useEffect(() => {
-    localStorage.setItem('worldPanel.faceMeshEnabled', JSON.stringify(faceMeshEnabled));
-  }, [faceMeshEnabled]);
 
   useEffect(() => {
     localStorage.setItem('worldPanel.wireframeEnabled', JSON.stringify(wireframeEnabled));
@@ -106,10 +85,6 @@ export function WorldCanvas({
   useEffect(() => {
     localStorage.setItem('worldPanel.avatarTexturesEnabled', JSON.stringify(avatarTexturesEnabled));
   }, [avatarTexturesEnabled]);
-
-  // Use external speechEnabled if provided, otherwise use internal state
-  const speechEnabled = externalSpeechEnabled ?? internalSpeechEnabled;
-  const setSpeechEnabled = externalOnSpeechEnabledChange ?? setInternalSpeechEnabled;
 
   const handleApplyDepthSettings = async (worldDepth: number, scaleDepth: number) => {
     const geometryController = localGeometryControllerRef.current;
@@ -210,8 +185,6 @@ export function WorldCanvas({
         geometry.uvs,
         geometry.materialIds
       );
-      // Update triangle count
-      setTriangleCount(geometry.stats.triangles);
     }, (csmText: string) => {
       // Load into WASM for raycasting
       sceneManager.loadWorldCube(csmText);
@@ -275,7 +248,6 @@ export function WorldCanvas({
             geometry.uvs,
             geometry.materialIds
           );
-          setTriangleCount(geometry.stats.triangles);
         }).catch((error) => {
           logger.error('renderer', 'Failed to reinitialize geometry controller:', error);
         });
@@ -355,11 +327,6 @@ export function WorldCanvas({
     // Only show world grid when in edit mode AND the toggle is enabled
     sceneManager.setWorldGridVisible(isEditMode && worldGridVisible);
   }, [worldGridVisible, isEditMode]);
-
-  // Note: Face mesh mode is now always enabled, this effect is deprecated
-  // useEffect(() => {
-  //   Face mesh mode is always enabled in the new implementation
-  // }, [faceMeshEnabled]);
 
   // Handle wireframe mode
   useEffect(() => {
@@ -546,19 +513,14 @@ export function WorldCanvas({
         <DebugPanel
           info={debugInfo}
           onApplyDepthSettings={handleApplyDepthSettings}
-          speechEnabled={speechEnabled}
-          onSpeechEnabledChange={setSpeechEnabled}
           worldGridVisible={worldGridVisible}
           onWorldGridVisibleChange={setWorldGridVisible}
-          faceMeshEnabled={faceMeshEnabled}
-          onFaceMeshEnabledChange={setFaceMeshEnabled}
           wireframeEnabled={wireframeEnabled}
           onWireframeEnabledChange={setWireframeEnabled}
           texturesEnabled={texturesEnabled}
           onTexturesEnabledChange={setTexturesEnabled}
           avatarTexturesEnabled={avatarTexturesEnabled}
           onAvatarTexturesEnabledChange={setAvatarTexturesEnabled}
-          triangleCount={triangleCount}
           onPublishWorld={onPublishWorld}
           isLoggedIn={isLoggedIn}
         />

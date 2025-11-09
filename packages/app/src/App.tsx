@@ -588,8 +588,6 @@ function App() {
           currentUserPubkey={pubkey}
           geometryControllerRef={geometryControllerRef}
           sceneManagerRef={sceneManagerRef}
-          speechEnabled={speechEnabled}
-          onSpeechEnabledChange={setSpeechEnabled}
           onWorldCSMUpdate={setWorldCSM}
           timeOfDay={timeOfDay}
           sunAutoMove={sunAutoMove}
@@ -604,6 +602,8 @@ function App() {
           activePanelType={activePanelType}
           mainMode={mainMode}
           onModeChange={setMainMode}
+          speechEnabled={speechEnabled}
+          onSpeechEnabledChange={setSpeechEnabled}
         />
 
         {/* Config Panels */}
