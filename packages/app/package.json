@@ -24,6 +24,7 @@
     "applesauce-react": "^4.0.0",
     "applesauce-relay": "^4.0.0",
     "applesauce-signers": "^4.0.0",
+    "crossworld-cube": "workspace:*",
     "crossworld-physics": "workspace:*",
     "crossworld-world": "workspace:*",
     "framer-motion": "^10.16.4",
