@@ -1,10 +1,10 @@
 import * as logger from '../utils/logger';
 import * as THREE from 'three';
-import type { GeometryData } from '@workspace/wasm';
+import type { GeometryData } from 'crossworld-world';
 import { Transform } from './transform';
 import { BaseAvatar } from './base-avatar';
 import { createTexturedVoxelMaterial, updateShaderLighting } from './textured-voxel-material';
-import type { PhysicsBridge } from '../physics/physics-bridge';
+import type { World } from '../physics/world';
 
 export interface VoxelAvatarConfig {
   scale?: number;
@@ -31,7 +31,7 @@ export class VoxelAvatar extends BaseAvatar {
     config: VoxelAvatarConfig,
     initialTransform?: Transform,
     scene?: THREE.Scene,
-    physicsBridge?: PhysicsBridge
+    physicsBridge?: World
   ) {
     super(initialTransform, scene, physicsBridge);
     this.config = config;

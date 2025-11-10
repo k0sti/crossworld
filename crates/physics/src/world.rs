@@ -170,12 +170,7 @@ impl PhysicsWorld {
             vector![dir.x, dir.y, dir.z],
         );
 
-        let mut filter = QueryFilter::default();
-        if solid_only {
-            filter = filter.exclude_sensors();
-        }
-
-        // Simple raycast using collider_set
+        // Simple raycast using collider_set (manually filtering sensors)
         let mut closest_hit: Option<(ColliderHandle, f32, Vec3)> = None;
 
         for (handle, collider) in self.collider_set.iter() {

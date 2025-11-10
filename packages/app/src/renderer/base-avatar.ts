@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Transform } from './transform';
 import { TeleportAnimation, type TeleportAnimationType } from './teleport-animation';
 import { ProfileIcon } from './profile-icon';
-import type { PhysicsBridge } from '../physics/physics-bridge';
+import type { World } from '../physics/world';
 import * as logger from '../utils/logger';
 
 /**
@@ -67,7 +67,7 @@ export abstract class BaseAvatar implements IAvatar {
   protected raycastMesh: THREE.Mesh | null = null;
 
   // Physics integration (optional)
-  protected physicsBridge: PhysicsBridge | null = null;
+  protected physicsBridge: World | null = null;
   protected physicsHandle: number | null = null;
   protected usePhysics: boolean = false;
 
@@ -89,7 +89,7 @@ export abstract class BaseAvatar implements IAvatar {
   constructor(
     initialTransform?: Transform,
     scene?: THREE.Scene,
-    physicsBridge?: PhysicsBridge
+    physicsBridge?: World
   ) {
     // Default spawn position: 1.0 unit above ground (character center at Y=1.0, feet at ~Y=0.1)
     this.transform = initialTransform ? Transform.fromTransform(initialTransform) : new Transform(4, 1.0, 4);

@@ -1,6 +1,6 @@
 import * as logger from './logger';
-import cubeInit from '@workspace/wasm-cube'
-import * as cubeWasm from '@workspace/wasm-cube'
+import cubeInit from 'crossworld-cube'
+import * as cubeWasm from 'crossworld-cube'
 import type { CubeCoord } from '../types/cube-coord'
 
 let wasmInitialized = false

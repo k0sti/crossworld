@@ -16,7 +16,7 @@ import {
 import { loadAllWasmModules } from './WasmLoader';
 import { initializePhysics } from './PhysicsInitializer';
 import { initializeRenderer } from './RendererInitializer';
-import type { PhysicsBridge } from '../physics/physics-bridge';
+import type { World } from '../physics/world';
 import type { SceneManager } from '../renderer/scene';
 import * as logger from '../utils/logger';
 
@@ -79,7 +79,7 @@ export class AppInitializer {
   /**
    * Get physics bridge (available after 'wasm' phase)
    */
-  getPhysicsBridge(): PhysicsBridge {
+  getWorld(): World {
     if (!this.systems.physicsBridge) {
       throw new Error('Physics bridge not initialized yet');
     }
