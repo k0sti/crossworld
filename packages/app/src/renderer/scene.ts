@@ -921,8 +921,8 @@ export class SceneManager {
       return;
     }
 
-    // Place voxel with selected color (palette 0-31 maps to voxel values 32-63)
-    const colorValue = this.selectedColorIndex + 32;
+    // Place voxel with selected color (palette index maps directly to material ID)
+    const colorValue = this.selectedColorIndex;
 
     // Convert world coordinates (corner) to cube coordinates (octree space)
     const coord = worldToCube(x, y, z, this.getAbsoluteCursorDepth());

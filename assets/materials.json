@@ -1,5 +1,5 @@
 {
-  "generated": "2025-11-04T09:47:48.861906798+00:00",
+  "generated": "2025-11-08T17:43:01.933713964+00:00",
   "count": 256,
   "materials": [
     {
@@ -779,19 +779,19 @@
     {
       "index": 129,
       "id": "color_129",
-      "color": "#FF000049",
+      "color": "#FF000055",
       "description": "Auto-generated color (r:0, g:0, b:1)"
     },
     {
       "index": 130,
       "id": "color_130",
-      "color": "#FF000092",
+      "color": "#FF0000AA",
       "description": "Auto-generated color (r:0, g:0, b:2)"
     },
     {
       "index": 131,
       "id": "color_131",
-      "color": "#FF0000DB",
+      "color": "#FF0000FF",
       "description": "Auto-generated color (r:0, g:0, b:3)"
     },
     {
@@ -803,19 +803,19 @@
     {
       "index": 133,
       "id": "color_133",
-      "color": "#FF002449",
+      "color": "#FF002455",
       "description": "Auto-generated color (r:0, g:1, b:1)"
     },
     {
       "index": 134,
       "id": "color_134",
-      "color": "#FF002492",
+      "color": "#FF0024AA",
       "description": "Auto-generated color (r:0, g:1, b:2)"
     },
     {
       "index": 135,
       "id": "color_135",
-      "color": "#FF0024DB",
+      "color": "#FF0024FF",
       "description": "Auto-generated color (r:0, g:1, b:3)"
     },
     {
@@ -827,19 +827,19 @@
     {
       "index": 137,
       "id": "color_137",
-      "color": "#FF004949",
+      "color": "#FF004955",
       "description": "Auto-generated color (r:0, g:2, b:1)"
     },
     {
       "index": 138,
       "id": "color_138",
-      "color": "#FF004992",
+      "color": "#FF0049AA",
       "description": "Auto-generated color (r:0, g:2, b:2)"
     },
     {
       "index": 139,
       "id": "color_139",
-      "color": "#FF0049DB",
+      "color": "#FF0049FF",
       "description": "Auto-generated color (r:0, g:2, b:3)"
     },
     {
@@ -851,19 +851,19 @@
     {
       "index": 141,
       "id": "color_141",
-      "color": "#FF006D49",
+      "color": "#FF006D55",
       "description": "Auto-generated color (r:0, g:3, b:1)"
     },
     {
       "index": 142,
       "id": "color_142",
-      "color": "#FF006D92",
+      "color": "#FF006DAA",
       "description": "Auto-generated color (r:0, g:3, b:2)"
     },
     {
       "index": 143,
       "id": "color_143",
-      "color": "#FF006DDB",
+      "color": "#FF006DFF",
       "description": "Auto-generated color (r:0, g:3, b:3)"
     },
     {
@@ -875,19 +875,19 @@
     {
       "index": 145,
       "id": "color_145",
-      "color": "#FF009249",
+      "color": "#FF009255",
       "description": "Auto-generated color (r:0, g:4, b:1)"
     },
     {
       "index": 146,
       "id": "color_146",
-      "color": "#FF009292",
+      "color": "#FF0092AA",
       "description": "Auto-generated color (r:0, g:4, b:2)"
     },
     {
       "index": 147,
       "id": "color_147",
-      "color": "#FF0092DB",
+      "color": "#FF0092FF",
       "description": "Auto-generated color (r:0, g:4, b:3)"
     },
     {
@@ -899,19 +899,19 @@
     {
       "index": 149,
       "id": "color_149",
-      "color": "#FF00B649",
+      "color": "#FF00B655",
       "description": "Auto-generated color (r:0, g:5, b:1)"
     },
     {
       "index": 150,
       "id": "color_150",
-      "color": "#FF00B692",
+      "color": "#FF00B6AA",
       "description": "Auto-generated color (r:0, g:5, b:2)"
     },
     {
       "index": 151,
       "id": "color_151",
-      "color": "#FF00B6DB",
+      "color": "#FF00B6FF",
       "description": "Auto-generated color (r:0, g:5, b:3)"
     },
     {
@@ -923,19 +923,19 @@
     {
       "index": 153,
       "id": "color_153",
-      "color": "#FF00DB49",
+      "color": "#FF00DB55",
       "description": "Auto-generated color (r:0, g:6, b:1)"
     },
     {
       "index": 154,
       "id": "color_154",
-      "color": "#FF00DB92",
+      "color": "#FF00DBAA",
       "description": "Auto-generated color (r:0, g:6, b:2)"
     },
     {
       "index": 155,
       "id": "color_155",
-      "color": "#FF00DBDB",
+      "color": "#FF00DBFF",
       "description": "Auto-generated color (r:0, g:6, b:3)"
     },
     {
@@ -947,595 +947,595 @@
     {
       "index": 157,
       "id": "color_157",
-      "color": "#FF00FF49",
+      "color": "#FF00FF55",
       "description": "Auto-generated color (r:0, g:7, b:1)"
     },
     {
       "index": 158,
       "id": "color_158",
-      "color": "#FF00FF92",
+      "color": "#FF00FFAA",
       "description": "Auto-generated color (r:0, g:7, b:2)"
     },
     {
       "index": 159,
       "id": "color_159",
-      "color": "#FF00FFDB",
+      "color": "#FF00FFFF",
       "description": "Auto-generated color (r:0, g:7, b:3)"
     },
     {
       "index": 160,
       "id": "color_160",
-      "color": "#FF490000",
+      "color": "#FF550000",
       "description": "Auto-generated color (r:1, g:0, b:0)"
     },
     {
       "index": 161,
       "id": "color_161",
-      "color": "#FF490049",
+      "color": "#FF550055",
       "description": "Auto-generated color (r:1, g:0, b:1)"
     },
     {
       "index": 162,
       "id": "color_162",
-      "color": "#FF490092",
+      "color": "#FF5500AA",
       "description": "Auto-generated color (r:1, g:0, b:2)"
     },
     {
       "index": 163,
       "id": "color_163",
-      "color": "#FF4900DB",
+      "color": "#FF5500FF",
       "description": "Auto-generated color (r:1, g:0, b:3)"
     },
     {
       "index": 164,
       "id": "color_164",
-      "color": "#FF492400",
+      "color": "#FF552400",
       "description": "Auto-generated color (r:1, g:1, b:0)"
     },
     {
       "index": 165,
       "id": "color_165",
-      "color": "#FF492449",
+      "color": "#FF552455",
       "description": "Auto-generated color (r:1, g:1, b:1)"
     },
     {
       "index": 166,
       "id": "color_166",
-      "color": "#FF492492",
+      "color": "#FF5524AA",
       "description": "Auto-generated color (r:1, g:1, b:2)"
     },
     {
       "index": 167,
       "id": "color_167",
-      "color": "#FF4924DB",
+      "color": "#FF5524FF",
       "description": "Auto-generated color (r:1, g:1, b:3)"
     },
     {
       "index": 168,
       "id": "color_168",
-      "color": "#FF494900",
+      "color": "#FF554900",
       "description": "Auto-generated color (r:1, g:2, b:0)"
     },
     {
       "index": 169,
       "id": "color_169",
-      "color": "#FF494949",
+      "color": "#FF554955",
       "description": "Auto-generated color (r:1, g:2, b:1)"
     },
     {
       "index": 170,
       "id": "color_170",
-      "color": "#FF494992",
+      "color": "#FF5549AA",
       "description": "Auto-generated color (r:1, g:2, b:2)"
     },
     {
       "index": 171,
       "id": "color_171",
-      "color": "#FF4949DB",
+      "color": "#FF5549FF",
       "description": "Auto-generated color (r:1, g:2, b:3)"
     },
     {
       "index": 172,
       "id": "color_172",
-      "color": "#FF496D00",
+      "color": "#FF556D00",
       "description": "Auto-generated color (r:1, g:3, b:0)"
     },
     {
       "index": 173,
       "id": "color_173",
-      "color": "#FF496D49",
+      "color": "#FF556D55",
       "description": "Auto-generated color (r:1, g:3, b:1)"
     },
     {
       "index": 174,
       "id": "color_174",
-      "color": "#FF496D92",
+      "color": "#FF556DAA",
       "description": "Auto-generated color (r:1, g:3, b:2)"
     },
     {
       "index": 175,
       "id": "color_175",
-      "color": "#FF496DDB",
+      "color": "#FF556DFF",
       "description": "Auto-generated color (r:1, g:3, b:3)"
     },
     {
       "index": 176,
       "id": "color_176",
-      "color": "#FF499200",
+      "color": "#FF559200",
       "description": "Auto-generated color (r:1, g:4, b:0)"
     },
     {
       "index": 177,
       "id": "color_177",
-      "color": "#FF499249",
+      "color": "#FF559255",
       "description": "Auto-generated color (r:1, g:4, b:1)"
     },
     {
       "index": 178,
       "id": "color_178",
-      "color": "#FF499292",
+      "color": "#FF5592AA",
       "description": "Auto-generated color (r:1, g:4, b:2)"
     },
     {
       "index": 179,
       "id": "color_179",
-      "color": "#FF4992DB",
+      "color": "#FF5592FF",
       "description": "Auto-generated color (r:1, g:4, b:3)"
     },
     {
       "index": 180,
       "id": "color_180",
-      "color": "#FF49B600",
+      "color": "#FF55B600",
       "description": "Auto-generated color (r:1, g:5, b:0)"
     },
     {
       "index": 181,
       "id": "color_181",
-      "color": "#FF49B649",
+      "color": "#FF55B655",
       "description": "Auto-generated color (r:1, g:5, b:1)"
     },
     {
       "index": 182,
       "id": "color_182",
-      "color": "#FF49B692",
+      "color": "#FF55B6AA",
       "description": "Auto-generated color (r:1, g:5, b:2)"
     },
     {
       "index": 183,
       "id": "color_183",
-      "color": "#FF49B6DB",
+      "color": "#FF55B6FF",
       "description": "Auto-generated color (r:1, g:5, b:3)"
     },
     {
       "index": 184,
       "id": "color_184",
-      "color": "#FF49DB00",
+      "color": "#FF55DB00",
       "description": "Auto-generated color (r:1, g:6, b:0)"
     },
     {
       "index": 185,
       "id": "color_185",
-      "color": "#FF49DB49",
+      "color": "#FF55DB55",
       "description": "Auto-generated color (r:1, g:6, b:1)"
     },
     {
       "index": 186,
       "id": "color_186",
-      "color": "#FF49DB92",
+      "color": "#FF55DBAA",
       "description": "Auto-generated color (r:1, g:6, b:2)"
     },
     {
       "index": 187,
       "id": "color_187",
-      "color": "#FF49DBDB",
+      "color": "#FF55DBFF",
       "description": "Auto-generated color (r:1, g:6, b:3)"
     },
     {
       "index": 188,
       "id": "color_188",
-      "color": "#FF49FF00",
+      "color": "#FF55FF00",
       "description": "Auto-generated color (r:1, g:7, b:0)"
     },
     {
       "index": 189,
       "id": "color_189",
-      "color": "#FF49FF49",
+      "color": "#FF55FF55",
       "description": "Auto-generated color (r:1, g:7, b:1)"
     },
     {
       "index": 190,
       "id": "color_190",
-      "color": "#FF49FF92",
+      "color": "#FF55FFAA",
       "description": "Auto-generated color (r:1, g:7, b:2)"
     },
     {
       "index": 191,
       "id": "color_191",
-      "color": "#FF49FFDB",
+      "color": "#FF55FFFF",
       "description": "Auto-generated color (r:1, g:7, b:3)"
     },
     {
       "index": 192,
       "id": "color_192",
-      "color": "#FF920000",
+      "color": "#FFAA0000",
       "description": "Auto-generated color (r:2, g:0, b:0)"
     },
     {
       "index": 193,
       "id": "color_193",
-      "color": "#FF920049",
+      "color": "#FFAA0055",
       "description": "Auto-generated color (r:2, g:0, b:1)"
     },
     {
       "index": 194,
       "id": "color_194",
-      "color": "#FF920092",
+      "color": "#FFAA00AA",
       "description": "Auto-generated color (r:2, g:0, b:2)"
     },
     {
       "index": 195,
       "id": "color_195",
-      "color": "#FF9200DB",
+      "color": "#FFAA00FF",
       "description": "Auto-generated color (r:2, g:0, b:3)"
     },
     {
       "index": 196,
       "id": "color_196",
-      "color": "#FF922400",
+      "color": "#FFAA2400",
       "description": "Auto-generated color (r:2, g:1, b:0)"
     },
     {
       "index": 197,
       "id": "color_197",
-      "color": "#FF922449",
+      "color": "#FFAA2455",
       "description": "Auto-generated color (r:2, g:1, b:1)"
     },
     {
       "index": 198,
       "id": "color_198",
-      "color": "#FF922492",
+      "color": "#FFAA24AA",
       "description": "Auto-generated color (r:2, g:1, b:2)"
     },
     {
       "index": 199,
       "id": "color_199",
-      "color": "#FF9224DB",
+      "color": "#FFAA24FF",
       "description": "Auto-generated color (r:2, g:1, b:3)"
     },
     {
       "index": 200,
       "id": "color_200",
-      "color": "#FF924900",
+      "color": "#FFAA4900",
       "description": "Auto-generated color (r:2, g:2, b:0)"
     },
     {
       "index": 201,
       "id": "color_201",
-      "color": "#FF924949",
+      "color": "#FFAA4955",
       "description": "Auto-generated color (r:2, g:2, b:1)"
     },
     {
       "index": 202,
       "id": "color_202",
-      "color": "#FF924992",
+      "color": "#FFAA49AA",
       "description": "Auto-generated color (r:2, g:2, b:2)"
     },
     {
       "index": 203,
       "id": "color_203",
-      "color": "#FF9249DB",
+      "color": "#FFAA49FF",
       "description": "Auto-generated color (r:2, g:2, b:3)"
     },
     {
       "index": 204,
       "id": "color_204",
-      "color": "#FF926D00",
+      "color": "#FFAA6D00",
       "description": "Auto-generated color (r:2, g:3, b:0)"
     },
     {
       "index": 205,
       "id": "color_205",
-      "color": "#FF926D49",
+      "color": "#FFAA6D55",
       "description": "Auto-generated color (r:2, g:3, b:1)"
     },
     {
       "index": 206,
       "id": "color_206",
-      "color": "#FF926D92",
+      "color": "#FFAA6DAA",
       "description": "Auto-generated color (r:2, g:3, b:2)"
     },
     {
       "index": 207,
       "id": "color_207",
-      "color": "#FF926DDB",
+      "color": "#FFAA6DFF",
       "description": "Auto-generated color (r:2, g:3, b:3)"
     },
     {
       "index": 208,
       "id": "color_208",
-      "color": "#FF929200",
+      "color": "#FFAA9200",
       "description": "Auto-generated color (r:2, g:4, b:0)"
     },
     {
       "index": 209,
       "id": "color_209",
-      "color": "#FF929249",
+      "color": "#FFAA9255",
       "description": "Auto-generated color (r:2, g:4, b:1)"
     },
     {
       "index": 210,
       "id": "color_210",
-      "color": "#FF929292",
+      "color": "#FFAA92AA",
       "description": "Auto-generated color (r:2, g:4, b:2)"
     },
     {
       "index": 211,
       "id": "color_211",
-      "color": "#FF9292DB",
+      "color": "#FFAA92FF",
       "description": "Auto-generated color (r:2, g:4, b:3)"
     },
     {
       "index": 212,
       "id": "color_212",
-      "color": "#FF92B600",
+      "color": "#FFAAB600",
       "description": "Auto-generated color (r:2, g:5, b:0)"
     },
     {
       "index": 213,
       "id": "color_213",
-      "color": "#FF92B649",
+      "color": "#FFAAB655",
       "description": "Auto-generated color (r:2, g:5, b:1)"
     },
     {
       "index": 214,
       "id": "color_214",
-      "color": "#FF92B692",
+      "color": "#FFAAB6AA",
       "description": "Auto-generated color (r:2, g:5, b:2)"
     },
     {
       "index": 215,
       "id": "color_215",
-      "color": "#FF92B6DB",
+      "color": "#FFAAB6FF",
       "description": "Auto-generated color (r:2, g:5, b:3)"
     },
     {
       "index": 216,
       "id": "color_216",
-      "color": "#FF92DB00",
+      "color": "#FFAADB00",
       "description": "Auto-generated color (r:2, g:6, b:0)"
     },
     {
       "index": 217,
       "id": "color_217",
-      "color": "#FF92DB49",
+      "color": "#FFAADB55",
       "description": "Auto-generated color (r:2, g:6, b:1)"
     },
     {
       "index": 218,
       "id": "color_218",
-      "color": "#FF92DB92",
+      "color": "#FFAADBAA",
       "description": "Auto-generated color (r:2, g:6, b:2)"
     },
     {
       "index": 219,
       "id": "color_219",
-      "color": "#FF92DBDB",
+      "color": "#FFAADBFF",
       "description": "Auto-generated color (r:2, g:6, b:3)"
     },
     {
       "index": 220,
       "id": "color_220",
-      "color": "#FF92FF00",
+      "color": "#FFAAFF00",
       "description": "Auto-generated color (r:2, g:7, b:0)"
     },
     {
       "index": 221,
       "id": "color_221",
-      "color": "#FF92FF49",
+      "color": "#FFAAFF55",
       "description": "Auto-generated color (r:2, g:7, b:1)"
     },
     {
       "index": 222,
       "id": "color_222",
-      "color": "#FF92FF92",
+      "color": "#FFAAFFAA",
       "description": "Auto-generated color (r:2, g:7, b:2)"
     },
     {
       "index": 223,
       "id": "color_223",
-      "color": "#FF92FFDB",
+      "color": "#FFAAFFFF",
       "description": "Auto-generated color (r:2, g:7, b:3)"
     },
     {
       "index": 224,
       "id": "color_224",
-      "color": "#FFDB0000",
+      "color": "#FFFF0000",
       "description": "Auto-generated color (r:3, g:0, b:0)"
     },
     {
       "index": 225,
       "id": "color_225",
-      "color": "#FFDB0049",
+      "color": "#FFFF0055",
       "description": "Auto-generated color (r:3, g:0, b:1)"
     },
     {
       "index": 226,
       "id": "color_226",
-      "color": "#FFDB0092",
+      "color": "#FFFF00AA",
       "description": "Auto-generated color (r:3, g:0, b:2)"
     },
     {
       "index": 227,
       "id": "color_227",
-      "color": "#FFDB00DB",
+      "color": "#FFFF00FF",
       "description": "Auto-generated color (r:3, g:0, b:3)"
     },
     {
       "index": 228,
       "id": "color_228",
-      "color": "#FFDB2400",
+      "color": "#FFFF2400",
       "description": "Auto-generated color (r:3, g:1, b:0)"
     },
     {
       "index": 229,
       "id": "color_229",
-      "color": "#FFDB2449",
+      "color": "#FFFF2455",
       "description": "Auto-generated color (r:3, g:1, b:1)"
     },
     {
       "index": 230,
       "id": "color_230",
-      "color": "#FFDB2492",
+      "color": "#FFFF24AA",
       "description": "Auto-generated color (r:3, g:1, b:2)"
     },
     {
       "index": 231,
       "id": "color_231",
-      "color": "#FFDB24DB",
+      "color": "#FFFF24FF",
       "description": "Auto-generated color (r:3, g:1, b:3)"
     },
     {
       "index": 232,
       "id": "color_232",
-      "color": "#FFDB4900",
+      "color": "#FFFF4900",
       "description": "Auto-generated color (r:3, g:2, b:0)"
     },
     {
       "index": 233,
       "id": "color_233",
-      "color": "#FFDB4949",
+      "color": "#FFFF4955",
       "description": "Auto-generated color (r:3, g:2, b:1)"
     },
     {
       "index": 234,
       "id": "color_234",
-      "color": "#FFDB4992",
+      "color": "#FFFF49AA",
       "description": "Auto-generated color (r:3, g:2, b:2)"
     },
     {
       "index": 235,
       "id": "color_235",
-      "color": "#FFDB49DB",
+      "color": "#FFFF49FF",
       "description": "Auto-generated color (r:3, g:2, b:3)"
     },
     {
       "index": 236,
       "id": "color_236",
-      "color": "#FFDB6D00",
+      "color": "#FFFF6D00",
       "description": "Auto-generated color (r:3, g:3, b:0)"
     },
     {
       "index": 237,
       "id": "color_237",
-      "color": "#FFDB6D49",
+      "color": "#FFFF6D55",
       "description": "Auto-generated color (r:3, g:3, b:1)"
     },
     {
       "index": 238,
       "id": "color_238",
-      "color": "#FFDB6D92",
+      "color": "#FFFF6DAA",
       "description": "Auto-generated color (r:3, g:3, b:2)"
     },
     {
       "index": 239,
       "id": "color_239",
-      "color": "#FFDB6DDB",
+      "color": "#FFFF6DFF",
       "description": "Auto-generated color (r:3, g:3, b:3)"
     },
     {
       "index": 240,
       "id": "color_240",
-      "color": "#FFDB9200",
+      "color": "#FFFF9200",
       "description": "Auto-generated color (r:3, g:4, b:0)"
     },
     {
       "index": 241,
       "id": "color_241",
-      "color": "#FFDB9249",
+      "color": "#FFFF9255",
       "description": "Auto-generated color (r:3, g:4, b:1)"
     },
     {
       "index": 242,
       "id": "color_242",
-      "color": "#FFDB9292",
+      "color": "#FFFF92AA",
       "description": "Auto-generated color (r:3, g:4, b:2)"
     },
     {
       "index": 243,
       "id": "color_243",
-      "color": "#FFDB92DB",
+      "color": "#FFFF92FF",
       "description": "Auto-generated color (r:3, g:4, b:3)"
     },
     {
       "index": 244,
       "id": "color_244",
-      "color": "#FFDBB600",
+      "color": "#FFFFB600",
       "description": "Auto-generated color (r:3, g:5, b:0)"
     },
     {
       "index": 245,
       "id": "color_245",
-      "color": "#FFDBB649",
+      "color": "#FFFFB655",
       "description": "Auto-generated color (r:3, g:5, b:1)"
     },
     {
       "index": 246,
       "id": "color_246",
-      "color": "#FFDBB692",
+      "color": "#FFFFB6AA",
       "description": "Auto-generated color (r:3, g:5, b:2)"
     },
     {
       "index": 247,
       "id": "color_247",
-      "color": "#FFDBB6DB",
+      "color": "#FFFFB6FF",
       "description": "Auto-generated color (r:3, g:5, b:3)"
     },
     {
       "index": 248,
       "id": "color_248",
-      "color": "#FFDBDB00",
+      "color": "#FFFFDB00",
       "description": "Auto-generated color (r:3, g:6, b:0)"
     },
     {
       "index": 249,
       "id": "color_249",
-      "color": "#FFDBDB49",
+      "color": "#FFFFDB55",
       "description": "Auto-generated color (r:3, g:6, b:1)"
     },
     {
       "index": 250,
       "id": "color_250",
-      "color": "#FFDBDB92",
+      "color": "#FFFFDBAA",
       "description": "Auto-generated color (r:3, g:6, b:2)"
     },
     {
       "index": 251,
       "id": "color_251",
-      "color": "#FFDBDBDB",
+      "color": "#FFFFDBFF",
       "description": "Auto-generated color (r:3, g:6, b:3)"
     },
     {
       "index": 252,
       "id": "color_252",
-      "color": "#FFDBFF00",
+      "color": "#FFFFFF00",
       "description": "Auto-generated color (r:3, g:7, b:0)"
     },
     {
       "index": 253,
       "id": "color_253",
-      "color": "#FFDBFF49",
+      "color": "#FFFFFF55",
       "description": "Auto-generated color (r:3, g:7, b:1)"
     },
     {
       "index": 254,
       "id": "color_254",
-      "color": "#FFDBFF92",
+      "color": "#FFFFFFAA",
       "description": "Auto-generated color (r:3, g:7, b:2)"
     },
     {
       "index": 255,
       "id": "color_255",
-      "color": "#FFDBFFDB",
+      "color": "#FFFFFFFF",
       "description": "Auto-generated color (r:3, g:7, b:3)"
     }
   ]
