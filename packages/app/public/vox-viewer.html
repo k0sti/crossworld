@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vox Model Viewer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+            color: #fff;
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: 320px 1fr;
+            height: 100vh;
+            gap: 0;
+        }
+
+        .sidebar {
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(10px);
+            border-right: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .header {
+            padding: 24px 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .header h1 {
+            font-size: 24px;
+            font-weight: 600;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .header p {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.5);
+            margin-top: 4px;
+        }
+
+        .search-box {
+            padding: 16px 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 10px 16px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            color: #fff;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+
+        .search-input:focus {
+            outline: none;
+            background: rgba(255, 255, 255, 0.15);
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .search-input::placeholder {
+            color: rgba(255, 255, 255, 0.4);
+        }
+
+        .model-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px;
+        }
+
+        .model-list::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .model-list::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .model-list::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+        }
+
+        .model-list::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .model-item {
+            padding: 12px 16px;
+            margin: 4px 0;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid transparent;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 14px;
+        }
+
+        .model-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.2);
+            transform: translateX(4px);
+        }
+
+        .model-item.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-color: rgba(255, 255, 255, 0.3);
+            transform: translateX(4px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .viewer-container {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: radial-gradient(circle at center, #1a1a2e 0%, #16213e 100%);
+        }
+
+        #canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        .controls {
+            position: absolute;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(10px);
+            padding: 16px 24px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .control-label {
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.5);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .control-value {
+            font-size: 13px;
+            color: #fff;
+            font-weight: 500;
+        }
+
+        .kbd {
+            display: inline-block;
+            padding: 4px 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+            font-size: 11px;
+            font-family: monospace;
+            margin: 0 2px;
+        }
+
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid rgba(255, 255, 255, 0.1);
+            border-top-color: #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+            margin-top: 16px;
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .model-info {
+            position: absolute;
+            top: 24px;
+            left: 24px;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(10px);
+            padding: 16px 20px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .model-info h2 {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .model-info .count {
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="sidebar">
+            <div class="header">
+                <h1>Vox Viewer</h1>
+                <p>Crossworld Models</p>
+            </div>
+            <div class="search-box">
+                <input
+                    type="text"
+                    class="search-input"
+                    placeholder="Search models..."
+                    id="searchInput"
+                >
+            </div>
+            <div class="model-list" id="modelList"></div>
+        </div>
+        <div class="viewer-container">
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <div class="loading-text">Loading model...</div>
+            </div>
+            <div class="model-info">
+                <h2 id="currentModelName">Select a model</h2>
+                <div class="count" id="modelCount"></div>
+            </div>
+            <canvas id="canvas"></canvas>
+            <div class="controls">
+                <div class="control-group">
+                    <div class="control-label">Navigate</div>
+                    <div class="control-value">
+                        <span class="kbd">↑</span>
+                        <span class="kbd">↓</span>
+                    </div>
+                </div>
+                <div class="control-group">
+                    <div class="control-label">Mouse</div>
+                    <div class="control-value">Drag to rotate • Scroll to zoom</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Simple VOX file parser
+        function parseVoxFile(buffer) {
+            const data = new Uint8Array(buffer);
+            let offset = 0;
+
+            // Read string
+            function readString(length) {
+                const str = String.fromCharCode.apply(null, data.slice(offset, offset + length));
+                offset += length;
+                return str;
+            }
+
+            // Read int32
+            function readInt32() {
+                const value = data[offset] | (data[offset + 1] << 8) | (data[offset + 2] << 16) | (data[offset + 3] << 24);
+                offset += 4;
+                return value;
+            }
+
+            // Read uint8
+            function readUint8() {
+                return data[offset++];
+            }
+
+            // Check magic number
+            const magic = readString(4);
+            if (magic !== 'VOX ') {
+                throw new Error('Invalid VOX file');
+            }
+
+            // Read version
+            const version = readInt32();
+
+            // Default palette (MagicaVoxel default)
+            const defaultPalette = [
+                {r: 255, g: 255, b: 255, a: 255},
+                {r: 255, g: 255, b: 204, a: 255}, {r: 255, g: 255, b: 153, a: 255}, {r: 255, g: 255, b: 102, a: 255},
+                {r: 255, g: 255, b: 51, a: 255}, {r: 255, g: 255, b: 0, a: 255}, {r: 255, g: 204, b: 255, a: 255},
+                {r: 255, g: 204, b: 204, a: 255}, {r: 255, g: 204, b: 153, a: 255}, {r: 255, g: 204, b: 102, a: 255},
+                {r: 255, g: 204, b: 51, a: 255}, {r: 255, g: 204, b: 0, a: 255}, {r: 255, g: 153, b: 255, a: 255},
+                {r: 255, g: 153, b: 204, a: 255}, {r: 255, g: 153, b: 153, a: 255}, {r: 255, g: 153, b: 102, a: 255},
+                {r: 255, g: 153, b: 51, a: 255}, {r: 255, g: 153, b: 0, a: 255}, {r: 255, g: 102, b: 255, a: 255},
+                {r: 255, g: 102, b: 204, a: 255}, {r: 255, g: 102, b: 153, a: 255}, {r: 255, g: 102, b: 102, a: 255},
+                {r: 255, g: 102, b: 51, a: 255}, {r: 255, g: 102, b: 0, a: 255}, {r: 255, g: 51, b: 255, a: 255},
+                {r: 255, g: 51, b: 204, a: 255}, {r: 255, g: 51, b: 153, a: 255}, {r: 255, g: 51, b: 102, a: 255},
+                {r: 255, g: 51, b: 51, a: 255}, {r: 255, g: 51, b: 0, a: 255}, {r: 255, g: 0, b: 255, a: 255},
+                {r: 255, g: 0, b: 204, a: 255}, {r: 255, g: 0, b: 153, a: 255}, {r: 255, g: 0, b: 102, a: 255},
+                {r: 255, g: 0, b: 51, a: 255}, {r: 255, g: 0, b: 0, a: 255}, {r: 204, g: 255, b: 255, a: 255},
+                {r: 204, g: 255, b: 204, a: 255}, {r: 204, g: 255, b: 153, a: 255}, {r: 204, g: 255, b: 102, a: 255},
+                {r: 204, g: 255, b: 51, a: 255}, {r: 204, g: 255, b: 0, a: 255}, {r: 204, g: 204, b: 255, a: 255},
+                {r: 204, g: 204, b: 204, a: 255}, {r: 204, g: 204, b: 153, a: 255}, {r: 204, g: 204, b: 102, a: 255},
+                {r: 204, g: 204, b: 51, a: 255}, {r: 204, g: 204, b: 0, a: 255}, {r: 204, g: 153, b: 255, a: 255},
+                {r: 204, g: 153, b: 204, a: 255}, {r: 204, g: 153, b: 153, a: 255}, {r: 204, g: 153, b: 102, a: 255},
+                {r: 204, g: 153, b: 51, a: 255}, {r: 204, g: 153, b: 0, a: 255}, {r: 204, g: 102, b: 255, a: 255},
+                {r: 204, g: 102, b: 204, a: 255}, {r: 204, g: 102, b: 153, a: 255}, {r: 204, g: 102, b: 102, a: 255},
+                {r: 204, g: 102, b: 51, a: 255}, {r: 204, g: 102, b: 0, a: 255}, {r: 204, g: 51, b: 255, a: 255},
+                {r: 204, g: 51, b: 204, a: 255}, {r: 204, g: 51, b: 153, a: 255}, {r: 204, g: 51, b: 102, a: 255},
+                {r: 204, g: 51, b: 51, a: 255}, {r: 204, g: 51, b: 0, a: 255}, {r: 204, g: 0, b: 255, a: 255},
+                {r: 204, g: 0, b: 204, a: 255}, {r: 204, g: 0, b: 153, a: 255}, {r: 204, g: 0, b: 102, a: 255},
+                {r: 204, g: 0, b: 51, a: 255}, {r: 204, g: 0, b: 0, a: 255}, {r: 153, g: 255, b: 255, a: 255},
+                {r: 153, g: 255, b: 204, a: 255}, {r: 153, g: 255, b: 153, a: 255}, {r: 153, g: 255, b: 102, a: 255},
+                {r: 153, g: 255, b: 51, a: 255}, {r: 153, g: 255, b: 0, a: 255}, {r: 153, g: 204, b: 255, a: 255},
+                {r: 153, g: 204, b: 204, a: 255}, {r: 153, g: 204, b: 153, a: 255}, {r: 153, g: 204, b: 102, a: 255},
+                {r: 153, g: 204, b: 51, a: 255}, {r: 153, g: 204, b: 0, a: 255}, {r: 153, g: 153, b: 255, a: 255},
+                {r: 153, g: 153, b: 204, a: 255}, {r: 153, g: 153, b: 153, a: 255}, {r: 153, g: 153, b: 102, a: 255},
+                {r: 153, g: 153, b: 51, a: 255}, {r: 153, g: 153, b: 0, a: 255}, {r: 153, g: 102, b: 255, a: 255},
+                {r: 153, g: 102, b: 204, a: 255}, {r: 153, g: 102, b: 153, a: 255}, {r: 153, g: 102, b: 102, a: 255},
+                {r: 153, g: 102, b: 51, a: 255}, {r: 153, g: 102, b: 0, a: 255}, {r: 153, g: 51, b: 255, a: 255},
+                {r: 153, g: 51, b: 204, a: 255}, {r: 153, g: 51, b: 153, a: 255}, {r: 153, g: 51, b: 102, a: 255},
+                {r: 153, g: 51, b: 51, a: 255}, {r: 153, g: 51, b: 0, a: 255}, {r: 153, g: 0, b: 255, a: 255},
+                {r: 153, g: 0, b: 204, a: 255}, {r: 153, g: 0, b: 153, a: 255}, {r: 153, g: 0, b: 102, a: 255},
+                {r: 153, g: 0, b: 51, a: 255}, {r: 153, g: 0, b: 0, a: 255}, {r: 102, g: 255, b: 255, a: 255},
+                {r: 102, g: 255, b: 204, a: 255}, {r: 102, g: 255, b: 153, a: 255}, {r: 102, g: 255, b: 102, a: 255},
+                {r: 102, g: 255, b: 51, a: 255}, {r: 102, g: 255, b: 0, a: 255}, {r: 102, g: 204, b: 255, a: 255},
+                {r: 102, g: 204, b: 204, a: 255}, {r: 102, g: 204, b: 153, a: 255}, {r: 102, g: 204, b: 102, a: 255},
+                {r: 102, g: 204, b: 51, a: 255}, {r: 102, g: 204, b: 0, a: 255}, {r: 102, g: 153, b: 255, a: 255},
+                {r: 102, g: 153, b: 204, a: 255}, {r: 102, g: 153, b: 153, a: 255}, {r: 102, g: 153, b: 102, a: 255},
+                {r: 102, g: 153, b: 51, a: 255}, {r: 102, g: 153, b: 0, a: 255}, {r: 102, g: 102, b: 255, a: 255},
+                {r: 102, g: 102, b: 204, a: 255}, {r: 102, g: 102, b: 153, a: 255}, {r: 102, g: 102, b: 102, a: 255},
+                {r: 102, g: 102, b: 51, a: 255}, {r: 102, g: 102, b: 0, a: 255}, {r: 102, g: 51, b: 255, a: 255},
+                {r: 102, g: 51, b: 204, a: 255}, {r: 102, g: 51, b: 153, a: 255}, {r: 102, g: 51, b: 102, a: 255},
+                {r: 102, g: 51, b: 51, a: 255}, {r: 102, g: 51, b: 0, a: 255}, {r: 102, g: 0, b: 255, a: 255},
+                {r: 102, g: 0, b: 204, a: 255}, {r: 102, g: 0, b: 153, a: 255}, {r: 102, g: 0, b: 102, a: 255},
+                {r: 102, g: 0, b: 51, a: 255}, {r: 102, g: 0, b: 0, a: 255}, {r: 51, g: 255, b: 255, a: 255},
+                {r: 51, g: 255, b: 204, a: 255}, {r: 51, g: 255, b: 153, a: 255}, {r: 51, g: 255, b: 102, a: 255},
+                {r: 51, g: 255, b: 51, a: 255}, {r: 51, g: 255, b: 0, a: 255}, {r: 51, g: 204, b: 255, a: 255},
+                {r: 51, g: 204, b: 204, a: 255}, {r: 51, g: 204, b: 153, a: 255}, {r: 51, g: 204, b: 102, a: 255},
+                {r: 51, g: 204, b: 51, a: 255}, {r: 51, g: 204, b: 0, a: 255}, {r: 51, g: 153, b: 255, a: 255},
+                {r: 51, g: 153, b: 204, a: 255}, {r: 51, g: 153, b: 153, a: 255}, {r: 51, g: 153, b: 102, a: 255},
+                {r: 51, g: 153, b: 51, a: 255}, {r: 51, g: 153, b: 0, a: 255}, {r: 51, g: 102, b: 255, a: 255},
+                {r: 51, g: 102, b: 204, a: 255}, {r: 51, g: 102, b: 153, a: 255}, {r: 51, g: 102, b: 102, a: 255},
+                {r: 51, g: 102, b: 51, a: 255}, {r: 51, g: 102, b: 0, a: 255}, {r: 51, g: 51, b: 255, a: 255},
+                {r: 51, g: 51, b: 204, a: 255}, {r: 51, g: 51, b: 153, a: 255}, {r: 51, g: 51, b: 102, a: 255},
+                {r: 51, g: 51, b: 51, a: 255}, {r: 51, g: 51, b: 0, a: 255}, {r: 51, g: 0, b: 255, a: 255},
+                {r: 51, g: 0, b: 204, a: 255}, {r: 51, g: 0, b: 153, a: 255}, {r: 51, g: 0, b: 102, a: 255},
+                {r: 51, g: 0, b: 51, a: 255}, {r: 51, g: 0, b: 0, a: 255}, {r: 0, g: 255, b: 255, a: 255},
+                {r: 0, g: 255, b: 204, a: 255}, {r: 0, g: 255, b: 153, a: 255}, {r: 0, g: 255, b: 102, a: 255},
+                {r: 0, g: 255, b: 51, a: 255}, {r: 0, g: 255, b: 0, a: 255}, {r: 0, g: 204, b: 255, a: 255},
+                {r: 0, g: 204, b: 204, a: 255}, {r: 0, g: 204, b: 153, a: 255}, {r: 0, g: 204, b: 102, a: 255},
+                {r: 0, g: 204, b: 51, a: 255}, {r: 0, g: 204, b: 0, a: 255}, {r: 0, g: 153, b: 255, a: 255},
+                {r: 0, g: 153, b: 204, a: 255}, {r: 0, g: 153, b: 153, a: 255}, {r: 0, g: 153, b: 102, a: 255},
+                {r: 0, g: 153, b: 51, a: 255}, {r: 0, g: 153, b: 0, a: 255}, {r: 0, g: 102, b: 255, a: 255},
+                {r: 0, g: 102, b: 204, a: 255}, {r: 0, g: 102, b: 153, a: 255}, {r: 0, g: 102, b: 102, a: 255},
+                {r: 0, g: 102, b: 51, a: 255}, {r: 0, g: 102, b: 0, a: 255}, {r: 0, g: 51, b: 255, a: 255},
+                {r: 0, g: 51, b: 204, a: 255}, {r: 0, g: 51, b: 153, a: 255}, {r: 0, g: 51, b: 102, a: 255},
+                {r: 0, g: 51, b: 51, a: 255}, {r: 0, g: 51, b: 0, a: 255}, {r: 0, g: 0, b: 255, a: 255},
+                {r: 0, g: 0, b: 204, a: 255}, {r: 0, g: 0, b: 153, a: 255}, {r: 0, g: 0, b: 102, a: 255},
+                {r: 0, g: 0, b: 51, a: 255}, {r: 0, g: 0, b: 0, a: 255}, {r: 238, g: 238, b: 238, a: 255},
+                {r: 221, g: 221, b: 221, a: 255}, {r: 187, g: 187, b: 187, a: 255}, {r: 170, g: 170, b: 170, a: 255},
+                {r: 136, g: 136, b: 136, a: 255}, {r: 119, g: 119, b: 119, a: 255}, {r: 85, g: 85, b: 85, a: 255},
+                {r: 68, g: 68, b: 68, a: 255}, {r: 34, g: 34, b: 34, a: 255}, {r: 17, g: 17, b: 17, a: 255}
+            ];
+
+            // Fill remaining palette slots
+            for (let i = defaultPalette.length; i < 256; i++) {
+                defaultPalette.push({r: 0, g: 0, b: 0, a: 255});
+            }
+
+            let palette = [...defaultPalette];
+            const voxels = [];
+            let sizeX = 0, sizeY = 0, sizeZ = 0;
+
+            // Parse chunks
+            while (offset < data.length) {
+                const chunkId = readString(4);
+                const chunkSize = readInt32();
+                const childChunks = readInt32();
+                const chunkEnd = offset + chunkSize;
+
+                if (chunkId === 'SIZE') {
+                    sizeX = readInt32();
+                    sizeY = readInt32();
+                    sizeZ = readInt32();
+                } else if (chunkId === 'XYZI') {
+                    const numVoxels = readInt32();
+                    for (let i = 0; i < numVoxels; i++) {
+                        const x = readUint8();
+                        const y = readUint8();
+                        const z = readUint8();
+                        const colorIndex = readUint8();
+                        voxels.push({ x, y, z, colorIndex });
+                    }
+                } else if (chunkId === 'RGBA') {
+                    for (let i = 0; i < 256; i++) {
+                        const r = readUint8();
+                        const g = readUint8();
+                        const b = readUint8();
+                        const a = readUint8();
+                        palette[i] = { r, g, b, a };
+                    }
+                } else {
+                    // Skip unknown chunk
+                    offset = chunkEnd;
+                }
+
+                offset = chunkEnd;
+            }
+
+            return { voxels, palette, size: { x: sizeX, y: sizeY, z: sizeZ } };
+        }
+
+        // Three.js setup
+        let scene, camera, renderer, currentMesh, controls;
+        let isMouseDown = false;
+        let mouseX = 0, mouseY = 0;
+        let targetRotationX = 0, targetRotationY = 0;
+        let rotationX = 0, rotationY = 0;
+        let autoRotate = true;
+
+        function initThree() {
+            const canvas = document.getElementById('canvas');
+            const container = canvas.parentElement;
+
+            // Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x1a1a2e);
+
+            // Camera
+            camera = new THREE.PerspectiveCamera(
+                45,
+                container.clientWidth / container.clientHeight,
+                0.1,
+                1000
+            );
+            camera.position.set(30, 30, 30);
+            camera.lookAt(0, 0, 0);
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.shadowMap.enabled = true;
+
+            // Lights
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(10, 20, 10);
+            directionalLight.castShadow = true;
+            scene.add(directionalLight);
+
+            const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.4);
+            directionalLight2.position.set(-10, -10, -10);
+            scene.add(directionalLight2);
+
+            // Mouse controls
+            canvas.addEventListener('mousedown', onMouseDown);
+            canvas.addEventListener('mousemove', onMouseMove);
+            canvas.addEventListener('mouseup', onMouseUp);
+            canvas.addEventListener('wheel', onWheel);
+
+            // Touch controls for mobile
+            canvas.addEventListener('touchstart', onTouchStart);
+            canvas.addEventListener('touchmove', onTouchMove);
+            canvas.addEventListener('touchend', onTouchEnd);
+
+            // Handle resize
+            window.addEventListener('resize', onWindowResize);
+
+            // Start animation loop
+            animate();
+        }
+
+        function onMouseDown(event) {
+            isMouseDown = true;
+            autoRotate = false;
+            mouseX = event.clientX;
+            mouseY = event.clientY;
+        }
+
+        function onMouseMove(event) {
+            if (!isMouseDown) return;
+
+            const deltaX = event.clientX - mouseX;
+            const deltaY = event.clientY - mouseY;
+
+            targetRotationY += deltaX * 0.01;
+            targetRotationX += deltaY * 0.01;
+
+            mouseX = event.clientX;
+            mouseY = event.clientY;
+        }
+
+        function onMouseUp() {
+            isMouseDown = false;
+        }
+
+        function onWheel(event) {
+            event.preventDefault();
+            camera.position.multiplyScalar(1 + event.deltaY * 0.001);
+        }
+
+        function onTouchStart(event) {
+            if (event.touches.length === 1) {
+                autoRotate = false;
+                mouseX = event.touches[0].clientX;
+                mouseY = event.touches[0].clientY;
+            }
+        }
+
+        function onTouchMove(event) {
+            if (event.touches.length === 1) {
+                event.preventDefault();
+                const deltaX = event.touches[0].clientX - mouseX;
+                const deltaY = event.touches[0].clientY - mouseY;
+
+                targetRotationY += deltaX * 0.01;
+                targetRotationX += deltaY * 0.01;
+
+                mouseX = event.touches[0].clientX;
+                mouseY = event.touches[0].clientY;
+            }
+        }
+
+        function onTouchEnd() {
+            // Touch ended
+        }
+
+        function onWindowResize() {
+            const container = document.getElementById('canvas').parentElement;
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (currentMesh) {
+                // Smooth rotation
+                rotationX += (targetRotationX - rotationX) * 0.1;
+                rotationY += (targetRotationY - rotationY) * 0.1;
+
+                currentMesh.rotation.x = rotationX;
+                currentMesh.rotation.y = rotationY;
+
+                // Auto rotate
+                if (autoRotate) {
+                    targetRotationY += 0.005;
+                }
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        function voxelsToGeometry(voxels, palette) {
+            const geometry = new THREE.BufferGeometry();
+            const vertices = [];
+            const colors = [];
+
+            // Create cube geometry for each voxel
+            for (let i = 0; i < voxels.length; i++) {
+                const voxel = voxels[i];
+
+                // Transform coordinates: MagicaVoxel (x, y, z) -> Our system (x, z, y)
+                // MagicaVoxel's Y becomes our Z (depth), MagicaVoxel's Z becomes our Y (up)
+                const x = voxel.x;
+                const y = voxel.z;  // MagicaVoxel's Z becomes Y (up)
+                const z = voxel.y;  // MagicaVoxel's Y becomes Z (depth)
+
+                // MagicaVoxel uses 1-based color indexing, adjust to 0-based palette array
+                const colorIndex = voxel.colorIndex;
+                const paletteIndex = colorIndex > 0 ? colorIndex - 1 : 0;
+
+                // Use palette color directly from the VOX file
+                const paletteColor = palette[paletteIndex];
+                const r = paletteColor.r / 255;
+                const g = paletteColor.g / 255;
+                const b = paletteColor.b / 255;
+
+                // Create a cube for this voxel
+                const cubeVertices = [
+                    // Front face
+                    x, y, z + 1,
+                    x + 1, y, z + 1,
+                    x + 1, y + 1, z + 1,
+                    x, y, z + 1,
+                    x + 1, y + 1, z + 1,
+                    x, y + 1, z + 1,
+
+                    // Back face
+                    x, y, z,
+                    x, y + 1, z,
+                    x + 1, y + 1, z,
+                    x, y, z,
+                    x + 1, y + 1, z,
+                    x + 1, y, z,
+
+                    // Top face
+                    x, y + 1, z,
+                    x, y + 1, z + 1,
+                    x + 1, y + 1, z + 1,
+                    x, y + 1, z,
+                    x + 1, y + 1, z + 1,
+                    x + 1, y + 1, z,
+
+                    // Bottom face
+                    x, y, z,
+                    x + 1, y, z,
+                    x + 1, y, z + 1,
+                    x, y, z,
+                    x + 1, y, z + 1,
+                    x, y, z + 1,
+
+                    // Right face
+                    x + 1, y, z,
+                    x + 1, y + 1, z,
+                    x + 1, y + 1, z + 1,
+                    x + 1, y, z,
+                    x + 1, y + 1, z + 1,
+                    x + 1, y, z + 1,
+
+                    // Left face
+                    x, y, z,
+                    x, y, z + 1,
+                    x, y + 1, z + 1,
+                    x, y, z,
+                    x, y + 1, z + 1,
+                    x, y + 1, z
+                ];
+
+                vertices.push(...cubeVertices);
+
+                // Add color for each vertex
+                for (let j = 0; j < 36; j++) {
+                    colors.push(r, g, b);
+                }
+            }
+
+            geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+            geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+            geometry.computeVertexNormals();
+
+            return geometry;
+        }
+
+        async function loadVoxModel(path) {
+            try {
+                const response = await fetch(path);
+                const arrayBuffer = await response.arrayBuffer();
+                const voxData = parseVoxFile(arrayBuffer);
+
+                // Remove old mesh
+                if (currentMesh) {
+                    scene.remove(currentMesh);
+                    currentMesh.geometry.dispose();
+                    currentMesh.material.dispose();
+                }
+
+                // Create new mesh from voxel data
+                const geometry = voxelsToGeometry(voxData.voxels, voxData.palette);
+                const material = new THREE.MeshLambertMaterial({
+                    vertexColors: true,
+                    flatShading: true
+                });
+
+                // Center the geometry at origin for proper rotation pivot
+                geometry.computeBoundingBox();
+                const center = new THREE.Vector3();
+                geometry.boundingBox.getCenter(center);
+                geometry.translate(-center.x, -center.y, -center.z);
+
+                currentMesh = new THREE.Mesh(geometry, material);
+                currentMesh.position.set(0, 0, 0);
+
+                // Set initial rotation to face camera (rotated 45 degrees around Y axis)
+                targetRotationX = 0;
+                targetRotationY = Math.PI / 4;  // 45 degrees to face front-right
+                rotationX = 0;
+                rotationY = Math.PI / 4;
+                autoRotate = true;
+
+                scene.add(currentMesh);
+
+                // Adjust camera based on model size
+                const size = new THREE.Vector3();
+                geometry.boundingBox.getSize(size);
+                const maxDim = Math.max(size.x, size.y, size.z);
+                const fov = camera.fov * (Math.PI / 180);
+                let cameraZ = Math.abs(maxDim / 2 / Math.tan(fov / 2));
+                cameraZ *= 2.5; // Add some padding
+
+                camera.position.set(cameraZ, cameraZ * 0.7, cameraZ);
+                camera.lookAt(0, 0, 0);
+
+            } catch (error) {
+                console.error('Error loading vox model:', error);
+            }
+        }
+
+        // Get all vox files
+        const models = [
+            'alien_bot1.vox', 'alien_bot2.vox', 'alien_bot3.vox', 'alien_crawl1.vox', 'alien_crawl2.vox',
+            'alien_egg1.vox', 'alien_egg2.vox', 'alien_egg3.vox', 'alien_engi1a.vox', 'alien_engi1b.vox',
+            'alien_engi1c.vox', 'alien_engi2a.vox', 'alien_engi2b.vox', 'alien_engi2c.vox', 'alien_engi2d.vox',
+            'alien_engi3.vox', 'alien_eye1a.vox', 'alien_eye1b.vox', 'alien_eye1c.vox', 'alien_infected1.vox',
+            'alien_infected2.vox', 'alien_infected3.vox', 'alien_lift.vox', 'alien_saucer1a.vox', 'alien_saucer1b.vox',
+            'alien_saucer1c.vox', 'alien_saucer2a.vox', 'alien_saucer2b.vox', 'alien_saucer2c.vox', 'alien_saucer3a.vox',
+            'alien_saucer3b.vox', 'alien_saucer3c.vox', 'alien_tool1.vox', 'alien_tool2.vox', 'alien_tool3.vox',
+            'chr_army1.vox', 'chr_army1a.vox', 'chr_army1b.vox', 'chr_army2.vox', 'chr_army2a.vox',
+            'chr_army2b.vox', 'chr_army3.vox', 'chr_army4.vox', 'chr_army4a.vox', 'chr_base.vox',
+            'chr_beardo1.vox', 'chr_beardo2.vox', 'chr_beardo3.vox', 'chr_beardo4.vox', 'chr_beau.vox',
+            'chr_bedroll1.vox', 'chr_bedroll2.vox', 'chr_bridget.vox', 'chr_bro.vox', 'chr_brookie.vox',
+            'chr_butcher.vox', 'chr_chef.vox', 'chr_cop1.vox', 'chr_cop2.vox', 'chr_costume1.vox',
+            'chr_costume2.vox', 'chr_costume3.vox', 'chr_costume4.vox', 'chr_eskimo.vox', 'chr_fatkid.vox',
+            'chr_goth1.vox', 'chr_goth2.vox', 'chr_goth3.vox', 'chr_hazmat1.vox', 'chr_hazmat2.vox',
+            'chr_headphones.vox', 'chr_hobo1.vox', 'chr_hunter1.vox', 'chr_hunter2.vox', 'chr_janitor.vox',
+            'chr_lady1.vox', 'chr_lady2.vox', 'chr_lady3.vox', 'chr_lady4.vox', 'chr_mailman.vox',
+            'chr_mayor.vox', 'chr_mechanic.vox', 'chr_mike.vox', 'chr_mission1.vox', 'chr_mission2.vox',
+            'chr_naked1.vox', 'chr_naked2.vox', 'chr_naked3.vox', 'chr_naked4.vox', 'chr_naked5.vox',
+            'chr_naked6.vox', 'chr_nun.vox', 'chr_nurse.vox', 'chr_paramedic1.vox', 'chr_paramedic2.vox',
+            'chr_ponytail1.vox', 'chr_ponytail2.vox', 'chr_ponytail3.vox', 'chr_priest.vox', 'chr_punk.vox',
+            'chr_raver1.vox', 'chr_raver2.vox', 'chr_raver3.vox', 'chr_riotcop.vox', 'chr_robot.vox',
+            'chr_scientist.vox', 'chr_sign1.vox', 'chr_sign2.vox', 'chr_sports1.vox', 'chr_sports2.vox',
+            'chr_sports3.vox', 'chr_sports4.vox', 'chr_suit1.vox', 'chr_suit2.vox', 'chr_suit3.vox',
+            'chr_suit4.vox', 'chr_sumo1.vox', 'chr_sumo2.vox', 'chr_super1.vox', 'chr_super2.vox',
+            'chr_super3.vox', 'chr_super4.vox', 'chr_super5.vox', 'chr_thief.vox', 'chr_worker1.vox',
+            'chr_worker2.vox', 'chr_worker3.vox', 'chr_zombie1.vox', 'chr_zombie2.vox', 'chr_zombie3.vox',
+            'chr_zombie4.vox', 'env_crete1a.vox', 'env_crete1b.vox', 'env_crete1c.vox', 'env_crete1d.vox',
+            'env_crete2a.vox', 'env_crete2b.vox', 'env_crete2c.vox', 'env_crete2d.vox', 'env_grass1a.vox',
+            'env_grass1b.vox', 'env_grass1c.vox', 'env_grass1d.vox', 'mob_bear.vox', 'mob_cat1.vox',
+            'mob_cat2.vox', 'mob_cat3.vox', 'mob_cat4.vox', 'mob_dog1.vox', 'mob_dog2.vox',
+            'mob_penguin.vox', 'obj_arcade1.vox', 'obj_arcade2.vox', 'obj_arcade3.vox', 'obj_arcade4.vox',
+            'obj_arcade5.vox', 'obj_armgate1.vox', 'obj_armgate2.vox', 'obj_bench1.vox', 'obj_bench2.vox',
+            'obj_bench3.vox', 'obj_bench4.vox', 'obj_bench5.vox', 'obj_boxingring.vox', 'obj_busstop.vox',
+            'obj_campfire.vox', 'obj_candle.vox', 'obj_cart1.vox', 'obj_cart1a.vox', 'obj_cart1b.vox',
+            'obj_cart2.vox', 'obj_cart2a.vox', 'obj_cart2b.vox', 'obj_celltower.vox', 'obj_chair1.vox',
+            'obj_chair2.vox', 'obj_christmas1.vox', 'obj_column1.vox', 'obj_column2.vox', 'obj_column3.vox',
+            'obj_cone1.vox', 'obj_container1.vox', 'obj_container2.vox', 'obj_container3.vox', 'obj_container4.vox',
+            'obj_cross.vox', 'obj_crosswalk.vox', 'obj_curb1.vox', 'obj_curb2.vox', 'obj_curb3.vox',
+            'obj_curb4.vox', 'obj_curb5.vox', 'obj_curb6.vox', 'obj_curb7.vox', 'obj_curb7a.vox',
+            'obj_curb8.vox', 'obj_dogstand.vox', 'obj_door1.vox', 'obj_door2.vox', 'obj_door3.vox',
+            'obj_door4.vox', 'obj_driveway1.vox', 'obj_driveway2.vox', 'obj_driveway3.vox', 'obj_fence1.vox',
+            'obj_fence2.vox', 'obj_fence3.vox', 'obj_fence4.vox', 'obj_fence5.vox', 'obj_fence6.vox',
+            'obj_fence7.vox', 'obj_fire1.vox', 'obj_fire2.vox', 'obj_fire3.vox', 'obj_fire4.vox',
+            'obj_fire5.vox', 'obj_fountain.vox', 'obj_grave1.vox', 'obj_grave2.vox', 'obj_grave3.vox',
+            'obj_grave4.vox', 'obj_grill.vox', 'obj_guitarcase.vox', 'obj_halo.vox', 'obj_house1.vox',
+            'obj_house1a.vox', 'obj_house1b.vox', 'obj_house1c.vox', 'obj_house2.vox', 'obj_house2a.vox',
+            'obj_house2b.vox', 'obj_house2c.vox', 'obj_house2d.vox', 'obj_house3.vox', 'obj_house3a.vox',
+            'obj_house3b.vox', 'obj_house3c.vox', 'obj_house4.vox', 'obj_house4a.vox', 'obj_house4b.vox',
+            'obj_house4c.vox', 'obj_house4d.vox', 'obj_house5.vox', 'obj_house5a.vox', 'obj_house5b.vox',
+            'obj_house5c.vox', 'obj_house6.vox', 'obj_house6a.vox', 'obj_house6b.vox', 'obj_house6c.vox',
+            'obj_house6d.vox', 'obj_house7.vox', 'obj_house7a.vox', 'obj_house7b.vox', 'obj_house7c.vox',
+            'obj_house8.vox', 'obj_house8a.vox', 'obj_house8b.vox', 'obj_house8c.vox', 'obj_hydrant.vox',
+            'obj_mailbox.vox', 'obj_mailbox2.vox', 'obj_mailbox2a.vox', 'obj_mailbox2b.vox', 'obj_mushroom1.vox',
+            'obj_mushroom2.vox', 'obj_mushroom3.vox', 'obj_newsbox1.vox', 'obj_newsbox2.vox', 'obj_newsbox3.vox',
+            'obj_newsbox4.vox', 'obj_park_block.vox', 'obj_path1.vox', 'obj_pentagram.vox', 'obj_planter1.vox',
+            'obj_planter2.vox', 'obj_planter3a.vox', 'obj_planter3b.vox', 'obj_playgrnd1.vox', 'obj_playgrnd2.vox',
+            'obj_playgrnd3.vox', 'obj_playgrnd4.vox', 'obj_playgrnd5.vox', 'obj_policetape.vox', 'obj_potty1.vox',
+            'obj_potty2.vox', 'obj_potty3.vox', 'obj_pumpkin.vox', 'obj_rubbish1.vox', 'obj_rubbish2.vox',
+            'obj_rubbish3.vox', 'obj_rubbish4.vox', 'obj_sidewalk1.vox', 'obj_sidewalk2.vox', 'obj_sidewalk3.vox',
+            'obj_sidewalk4.vox', 'obj_sidewalk5.vox', 'obj_sign1.vox', 'obj_sign2.vox', 'obj_sign3.vox',
+            'obj_sign4.vox', 'obj_sign5.vox', 'obj_sign6.vox', 'obj_sign7.vox', 'obj_sign8.vox',
+            'obj_sign9.vox', 'obj_splatter1.vox', 'obj_splatter2.vox', 'obj_splatter3.vox', 'obj_stage.vox',
+            'obj_statue1.vox', 'obj_statue2.vox', 'obj_statue3.vox', 'obj_stlight1.vox', 'obj_stlight2.vox',
+            'obj_stlight3.vox', 'obj_store01.vox', 'obj_store02.vox', 'obj_store03.vox', 'obj_store03a.vox',
+            'obj_store04.vox', 'obj_store05.vox', 'obj_store06.vox', 'obj_store07.vox', 'obj_store08.vox',
+            'obj_store09.vox', 'obj_store10.vox', 'obj_store11.vox', 'obj_store12.vox', 'obj_store13.vox',
+            'obj_store14.vox', 'obj_store15.vox', 'obj_store16.vox', 'obj_store16a.vox', 'obj_store16b.vox',
+            'obj_store17.vox', 'obj_store17a.vox', 'obj_story01.vox', 'obj_story01a.vox', 'obj_story01b.vox',
+            'obj_story02.vox', 'obj_story03.vox', 'obj_story03a.vox', 'obj_story03b.vox', 'obj_story03c.vox',
+            'obj_story03d.vox', 'obj_story04.vox', 'obj_story04a.vox', 'obj_story04b.vox', 'obj_story04c.vox',
+            'obj_story04d.vox', 'obj_story05.vox', 'obj_story05a.vox', 'obj_story06.vox', 'obj_story06a.vox',
+            'obj_story06b.vox', 'obj_story06c.vox', 'obj_story06d.vox', 'obj_street1.vox', 'obj_street2.vox',
+            'obj_stretcher.vox', 'obj_table1.vox', 'obj_table2.vox', 'obj_table3.vox', 'obj_table3a.vox',
+            'obj_table3b.vox', 'obj_tracks1.vox', 'obj_tracks2.vox', 'obj_trashcan1.vox', 'obj_trashcan2.vox',
+            'obj_trashcan3.vox', 'obj_trashcan4.vox', 'obj_tree1.vox', 'obj_tree1a.vox', 'obj_tree1b.vox',
+            'obj_tree1c.vox', 'obj_tree2.vox', 'obj_tree2a.vox', 'obj_tree2b.vox', 'obj_tree2c.vox',
+            'obj_tree3.vox', 'obj_tree4.vox', 'obj_trellis.vox', 'obj_trlight1.vox', 'obj_trlight2.vox',
+            'obj_wall.vox', 'piano.vox', 'scene_aliens.vox', 'scene_arcade.vox', 'scene_army.vox',
+            'scene_bus.vox', 'scene_car.vox', 'scene_carflip.vox', 'scene_checkpoint.vox', 'scene_christmas.vox',
+            'scene_church1.vox', 'scene_coffee.vox', 'scene_corner.vox', 'scene_crucifix.vox', 'scene_depot.vox',
+            'scene_depot2.vox', 'scene_depot3.vox', 'scene_fall.vox', 'scene_grave.vox', 'scene_hazmat.vox',
+            'scene_hazmat2.vox', 'scene_headache.vox', 'scene_house.vox', 'scene_house2.vox', 'scene_house3.vox',
+            'scene_house4.vox', 'scene_house5.vox', 'scene_house6.vox', 'scene_house7.vox', 'scene_hunt.vox',
+            'scene_lunch.vox', 'scene_mechanic.vox', 'scene_mechanic2.vox', 'scene_mobile.vox', 'scene_orgy.vox',
+            'scene_parade.vox', 'scene_park.vox', 'scene_park2.vox', 'scene_park3.vox', 'scene_park4.vox',
+            'scene_parked.vox', 'scene_protest.vox', 'scene_riot.vox', 'scene_sacrifice.vox', 'scene_ships.vox',
+            'scene_sidewalk.vox', 'scene_store.vox', 'scene_store10.vox', 'scene_store11.vox', 'scene_store2.vox',
+            'scene_store3.vox', 'scene_store4.vox', 'scene_store5.vox', 'scene_store6.vox', 'scene_store7.vox',
+            'scene_store8.vox', 'scene_store9.vox', 'scene_sumo.vox', 'scene_tentcity.vox', 'scene_tentcity2.vox',
+            'scene_theater.vox', 'scene_train.vox', 'scene_vehicles1.vox', 'scene_vehicles2.vox', 'scene_zombies.vox',
+            'veh_ambulance.vox', 'veh_bus.vox', 'veh_cab1.vox', 'veh_car1.vox', 'veh_car2.vox',
+            'veh_car3.vox', 'veh_car4.vox', 'veh_car5.vox', 'veh_fire.vox', 'veh_lunch1.vox',
+            'veh_lunch2.vox', 'veh_lunch3.vox', 'veh_lunch4.vox', 'veh_mini1.vox', 'veh_mini2.vox',
+            'veh_mini3.vox', 'veh_mini4.vox', 'veh_mini5.vox', 'veh_police1.vox', 'veh_suv1.vox',
+            'veh_suv2.vox', 'veh_suv3.vox', 'veh_tank1.vox', 'veh_train.vox', 'veh_train2.vox',
+            'veh_train3.vox', 'veh_truck1.vox', 'veh_truck2.vox', 'veh_truck3.vox', 'veh_truck4.vox',
+            'veh_truck5.vox', 'veh_truck6.vox', 'veh_truck7.vox', 'veh_wagon1.vox', 'veh_wagon2.vox',
+            'veh_wagon3.vox', 'veh_wagon4.vox'
+        ];
+
+        const basePath = '/crossworld/assets/models/vox/';
+        let currentIndex = 0;
+        let filteredModels = [...models];
+
+        const modelList = document.getElementById('modelList');
+        const searchInput = document.getElementById('searchInput');
+        const loading = document.getElementById('loading');
+        const currentModelName = document.getElementById('currentModelName');
+        const modelCount = document.getElementById('modelCount');
+
+        // Initialize Three.js when page loads
+        window.addEventListener('DOMContentLoaded', () => {
+            initThree();
+        });
+
+        // Render model list
+        function renderModelList() {
+            modelList.innerHTML = '';
+            filteredModels.forEach((model, index) => {
+                const item = document.createElement('div');
+                item.className = 'model-item';
+                item.textContent = model.replace('.vox', '');
+                item.dataset.index = index;
+
+                if (index === currentIndex) {
+                    item.classList.add('active');
+                }
+
+                item.addEventListener('click', () => {
+                    currentIndex = index;
+                    loadModel(model);
+                    updateActiveItem();
+                });
+
+                modelList.appendChild(item);
+            });
+
+            modelCount.textContent = `${filteredModels.length} models`;
+        }
+
+        // Update active item
+        function updateActiveItem() {
+            document.querySelectorAll('.model-item').forEach((item, index) => {
+                item.classList.toggle('active', index === currentIndex);
+            });
+
+            // Scroll active item into view
+            const activeItem = document.querySelector('.model-item.active');
+            if (activeItem) {
+                activeItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        }
+
+        // Load model
+        async function loadModel(modelName) {
+            const modelPath = basePath + modelName;
+            loading.classList.remove('hidden');
+
+            currentModelName.textContent = modelName.replace('.vox', '');
+
+            try {
+                await loadVoxModel(modelPath);
+                loading.classList.add('hidden');
+            } catch (error) {
+                console.error('Failed to load model:', error);
+                loading.classList.add('hidden');
+            }
+        }
+
+        // Search functionality
+        searchInput.addEventListener('input', (e) => {
+            const searchTerm = e.target.value.toLowerCase();
+            filteredModels = models.filter(model =>
+                model.toLowerCase().includes(searchTerm)
+            );
+            currentIndex = 0;
+            renderModelList();
+        });
+
+        // Keyboard navigation
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                currentIndex = (currentIndex + 1) % filteredModels.length;
+                loadModel(filteredModels[currentIndex]);
+                updateActiveItem();
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                currentIndex = (currentIndex - 1 + filteredModels.length) % filteredModels.length;
+                loadModel(filteredModels[currentIndex]);
+                updateActiveItem();
+            }
+        });
+
+        // Initialize
+        renderModelList();
+        if (filteredModels.length > 0) {
+            loadModel(filteredModels[0]);
+        }
+    </script>
+</body>
+</html>
