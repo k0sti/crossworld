@@ -1,5 +1,5 @@
 import * as logger from '../utils/logger';
-import init, { WorldCube, GeometryData } from '@workspace/wasm-world';
+import init, { WorldCube, GeometryData } from 'crossworld-world';
 import { getMacroDepth, getMicroDepth, getBorderDepth, getSeed } from '../config/depth-config';
 import { CubeManager } from './cube-manager';
 

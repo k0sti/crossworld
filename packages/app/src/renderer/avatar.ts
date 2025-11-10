@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { Transform } from './transform';
 import { BaseAvatar } from './base-avatar';
+import type { World } from '../physics/world';
 
 export interface AvatarConfig {
   modelUrl?: string;
@@ -20,8 +21,8 @@ export class Avatar extends BaseAvatar {
   private animations: THREE.AnimationClip[] = [];
   private currentAction: THREE.AnimationAction | null = null;
 
-  constructor(initialTransform?: Transform, config: AvatarConfig = {}, scene?: THREE.Scene) {
-    super(initialTransform, scene);
+  constructor(initialTransform?: Transform, config: AvatarConfig = {}, scene?: THREE.Scene, physicsBridge?: World) {
+    super(initialTransform, scene, physicsBridge);
     this.config = config;
 
     // Load GLB model
@@ -44,6 +45,12 @@ export class Avatar extends BaseAvatar {
 
   protected onStopMoving(): void {
     this.playAnimation('Idle', true);
+  }
+
+  protected onJump(): void {
+    // TODO: Play jump animation if available
+    // this.playAnimation('Jump', false);
+    logger.log('avatar', 'Avatar jumped!');
   }
 
   // ========== GLB-specific implementation ==========
@@ -168,7 +175,7 @@ export class Avatar extends BaseAvatar {
     super.update(deltaTime_s);
   }
 
-  dispose(): void {
+  protected onDispose(): void {
     // Dispose animation mixer
     if (this.mixer) {
       this.mixer.stopAllAction();

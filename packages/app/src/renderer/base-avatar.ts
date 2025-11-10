@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { Transform } from './transform';
 import { TeleportAnimation, type TeleportAnimationType } from './teleport-animation';
 import { ProfileIcon } from './profile-icon';
+import type { World } from '../physics/world';
+import * as logger from '../utils/logger';
 
 /**
  * Common interface for all avatar types (GLB, VOX, etc.)
@@ -19,6 +21,7 @@ export interface IAvatar {
   teleportTo(x: number, z: number, animationType: TeleportAnimationType): void;
   setPositionImmediate(x: number, z: number): void;
   setRunSpeed(isRunning: boolean): void;
+  jump(): void;
 
   // Profile icon
   setProfilePicture(pictureUrl: string | null): Promise<void>;
@@ -63,6 +66,11 @@ export abstract class BaseAvatar implements IAvatar {
   protected raycaster: THREE.Raycaster = new THREE.Raycaster();
   protected raycastMesh: THREE.Mesh | null = null;
 
+  // Physics integration (optional)
+  protected physicsBridge: World | null = null;
+  protected physicsHandle: number | null = null;
+  protected usePhysics: boolean = false;
+
   // Avatar pivot point for placement in world
   public static readonly PIVOT = AVATAR_PIVOT;
 
@@ -78,12 +86,19 @@ export abstract class BaseAvatar implements IAvatar {
     return this.baseMoveSpeed * (this.isRunning ? 2.0 : 1.0);
   }
 
-  constructor(initialTransform?: Transform, scene?: THREE.Scene) {
-    this.transform = initialTransform ? Transform.fromTransform(initialTransform) : new Transform(4, 0, 4);
+  constructor(
+    initialTransform?: Transform,
+    scene?: THREE.Scene,
+    physicsBridge?: World
+  ) {
+    // Default spawn position: 1.0 unit above ground (character center at Y=1.0, feet at ~Y=0.1)
+    this.transform = initialTransform ? Transform.fromTransform(initialTransform) : new Transform(4, 1.0, 4);
     this.targetTransform = this.transform.clone();
     this.scene = scene || null;
     this.currentDirection = this.transform.getAngle();
     this.targetDirection = this.currentDirection;
+
+    logger.log('avatar', `Avatar spawning at position: (${this.transform.getX()}, ${this.transform.getY()}, ${this.transform.getZ()})`);
 
     this.group = new THREE.Group();
     this.transform.applyToObject3D(this.group);
@@ -92,6 +107,27 @@ export abstract class BaseAvatar implements IAvatar {
     this.profileIcon = new ProfileIcon(0.8);
     this.profileIcon.setPosition(0, 2.1, 0); // Position above avatar (lowered to be closer)
     this.group.add(this.profileIcon.getSprite());
+
+    // Initialize physics if provided
+    if (physicsBridge) {
+      logger.log('avatar', 'Initializing physics for avatar');
+      this.physicsBridge = physicsBridge;
+      this.usePhysics = true;
+      const pos = this.transform.getPosition();
+      logger.log('avatar', `Creating physics character at (${pos.x}, ${pos.y}, ${pos.z})`);
+      try {
+        this.physicsHandle = physicsBridge.createCharacter(
+          new THREE.Vector3(pos.x, pos.y, pos.z)
+        );
+        logger.log('avatar', `Physics character created with handle: ${this.physicsHandle}`);
+      } catch (error) {
+        logger.error('avatar', 'Failed to create physics character:', error);
+        this.usePhysics = false;
+        this.physicsBridge = null;
+      }
+    } else {
+      logger.log('avatar', 'No physics bridge provided, avatar will use non-physics movement');
+    }
   }
 
   // ========== Abstract methods (subclass-specific) ==========
@@ -118,10 +154,29 @@ export abstract class BaseAvatar implements IAvatar {
    */
   protected abstract onStartMoving(): void;
 
+  /**
+   * Called when avatar jumps (for animation/visual feedback)
+   */
+  protected abstract onJump(): void;
+
   // ========== Shared implementation ==========
 
   setRunSpeed(isRunning: boolean): void {
     this.isRunning = isRunning;
+  }
+
+  jump(): void {
+    // If physics is enabled, use physics jump
+    if (this.usePhysics && this.physicsBridge && this.physicsHandle !== null) {
+      const isGrounded = this.physicsBridge.isGrounded(this.physicsHandle);
+      logger.log('avatar', `Jump requested (physics enabled, grounded=${isGrounded})`);
+      this.physicsBridge.jump(this.physicsHandle);
+      this.onJump();
+    } else {
+      logger.log('avatar', 'Jump requested (non-physics mode)');
+      // Fallback: just trigger visual feedback without physics
+      this.onJump();
+    }
   }
 
   setTargetPosition(x: number, z: number): void {
@@ -290,6 +345,77 @@ export abstract class BaseAvatar implements IAvatar {
       return;
     }
 
+    // If physics is enabled, sync position and rotation from physics
+    if (this.usePhysics && this.physicsBridge && this.physicsHandle !== null) {
+      // Send movement velocity to physics
+      if (this.isMoving) {
+        const dx = this.targetTransform.getX() - this.transform.getX();
+        const dz = this.targetTransform.getZ() - this.transform.getZ();
+        const distance = Math.sqrt(dx * dx + dz * dz);
+
+        if (distance > 0.01) {
+          const targetDir = new THREE.Vector2(dx / distance, dz / distance);
+          const velocity3D = new THREE.Vector3(
+            targetDir.x * this.moveSpeed,
+            0,
+            targetDir.y * this.moveSpeed
+          );
+          this.physicsBridge.moveCharacter(this.physicsHandle, velocity3D, deltaTime_s);
+        } else {
+          // Reached target
+          this.isMoving = false;
+          this.onStopMoving();
+        }
+      } else {
+        // Not moving, send zero velocity
+        this.physicsBridge.moveCharacter(this.physicsHandle, new THREE.Vector3(0, 0, 0), deltaTime_s);
+      }
+
+      // Sync position from physics
+      const physicsPos = this.physicsBridge.getCharacterPosition(this.physicsHandle);
+      const isGrounded = this.physicsBridge.isGrounded(this.physicsHandle);
+
+      // Physics position is at the center of the capsule (height=1.8m)
+      // Visual model should have feet on ground, so offset down by half height
+      const characterHeight = 1.8;
+      const visualOffset = characterHeight / 2.0;
+      const visualY = physicsPos.y - visualOffset;
+
+      // Log physics state (throttled - only log occasionally)
+      if (Math.random() < 0.05) { // ~5% of frames for more frequent updates during debugging
+        logger.log('avatar', `Physics: pos=(${physicsPos.x.toFixed(2)}, ${physicsPos.y.toFixed(2)}, ${physicsPos.z.toFixed(2)}), visual_y=${visualY.toFixed(2)}, grounded=${isGrounded}`);
+      }
+
+      this.transform.setXZ(physicsPos.x, physicsPos.z);
+      this.transform.setY(visualY);
+      this.group.position.set(physicsPos.x, visualY, physicsPos.z);
+
+      // Update rotation to face movement direction if moving
+      if (this.isMoving) {
+        const dx = this.targetTransform.getX() - this.transform.getX();
+        const dz = this.targetTransform.getZ() - this.transform.getZ();
+        this.targetDirection = Math.atan2(dx, dz) + this.getRotationOffset();
+
+        const angleDiff = this.angleDifference(this.targetDirection, this.currentDirection);
+        const turnAmount = this.turnSpeed * deltaTime_s;
+
+        if (Math.abs(angleDiff) < turnAmount) {
+          this.currentDirection = this.targetDirection;
+        } else {
+          this.currentDirection += Math.sign(angleDiff) * turnAmount;
+        }
+
+        while (this.currentDirection > Math.PI) this.currentDirection -= 2 * Math.PI;
+        while (this.currentDirection < -Math.PI) this.currentDirection += 2 * Math.PI;
+
+        this.transform.setAngle(this.currentDirection);
+        this.group.quaternion.copy(this.transform.getRotation());
+      }
+
+      return;
+    }
+
+    // Original non-physics movement logic
     if (!this.isMoving) {
       return;
     }
@@ -378,5 +504,20 @@ export abstract class BaseAvatar implements IAvatar {
     return this.teleportAnimation?.isActive() ?? false;
   }
 
-  abstract dispose(): void;
+  dispose(): void {
+    // Cleanup physics if enabled
+    if (this.usePhysics && this.physicsBridge && this.physicsHandle !== null) {
+      this.physicsBridge.removeCharacter(this.physicsHandle);
+      this.physicsHandle = null;
+    }
+
+    // Subclasses can override for additional cleanup
+    this.onDispose();
+  }
+
+  /**
+   * Called when avatar is being disposed
+   * Subclasses should override to clean up resources
+   */
+  protected abstract onDispose(): void;
 }
