@@ -15,3 +15,4 @@ export { DEFAULT_RELAYS, DEFAULT_RELAY_STATES, WORLD_RELAYS, APP_NPUB, APP_PUBKE
 // Services
 export { LoginSettingsService } from './services/login-settings'
 export type { LoginMethod, LoginSettings, GuestAccountData } from './services/login-settings'
+export { getEnabledWorldRelays, getEnabledProfileRelays, getAllEnabledRelays } from './services/relay-settings'

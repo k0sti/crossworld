@@ -1,16 +1,31 @@
 import * as logger from './logger';
-import initWasm from 'crossworld-cube';
+import initCubeWasm from 'crossworld-cube';
+import initWorldWasm from 'crossworld-world';
 
-let initialized = false;
+let cubeInitialized = false;
+let worldInitialized = false;
 
 /**
  * Initialize the cube WASM module (idempotent)
+ * Used for CSM parsing and voxel avatar generation
  */
 export async function ensureCubeWasmInitialized(): Promise<void> {
-  if (!initialized) {
-    await initWasm();
-    initialized = true;
+  if (!cubeInitialized) {
+    await initCubeWasm();
+    cubeInitialized = true;
     logger.log('common', '[CubeWasm] WASM module initialized');
+  }
+}
+
+/**
+ * Initialize the world WASM module (idempotent)
+ * Used for world geometry generation (GeometryData, WorldCube)
+ */
+export async function ensureWorldWasmInitialized(): Promise<void> {
+  if (!worldInitialized) {
+    await initWorldWasm();
+    worldInitialized = true;
+    logger.log('common', '[WorldWasm] WASM module initialized');
   }
 }
 
@@ -85,7 +100,7 @@ export function raycastWasm(
   far: boolean,
   maxDepth: number
 ): any {
-  if (!initialized) {
+  if (!cubeInitialized) {
     logger.error('common', '[CubeWasm] Attempted to call raycastWasm before WASM initialization');
     return null;
   }

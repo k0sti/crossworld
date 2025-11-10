@@ -3,12 +3,15 @@ import { useEffect, useRef, useState } from 'react';
 import { Box } from '@chakra-ui/react';
 import { SceneManager } from '../renderer/scene';
 import { GeometryController } from '../geometry/geometry-controller';
-import { AppInitializer } from '../AppInitializer';
+import { AppInitializer } from '../initialization/AppInitializer';
+import type { InitializationState } from '../initialization/types';
 import type { AvatarStateService, AvatarConfig } from '../services/avatar-state';
 import type { TeleportAnimationType } from '../renderer/teleport-animation';
 import { DebugPanel, type DebugInfo } from './WorldPanel';
+import { InitializationOverlay } from './InitializationOverlay';
 import { onDepthChange, onSeedChange, getSeed } from '../config/depth-config';
 import type { MainMode } from '@crossworld/common';
+import { useAccountManager } from 'applesauce-react/hooks';
 
 interface WorldCanvasProps {
   isLoggedIn: boolean;
@@ -50,6 +53,8 @@ export function WorldCanvas({
   const localGeometryControllerRef = useRef<GeometryController | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const [debugInfo, setDebugInfo] = useState<DebugInfo>({});
+  const [initState, setInitState] = useState<InitializationState | null>(null);
+  const [showInitOverlay, setShowInitOverlay] = useState(true);
 
   // Scene configuration state with localStorage persistence
   const [worldGridVisible, setWorldGridVisible] = useState(() => {
@@ -123,6 +128,8 @@ export function WorldCanvas({
     }
   };
 
+  const accountManager = useAccountManager();
+
   useEffect(() => {
     if (!canvasRef.current) return;
 
@@ -132,8 +139,20 @@ export function WorldCanvas({
 
     localGeometryControllerRef.current = geometryController;
 
-    // Initialize app (WASM + Physics + Renderer)
-    initializer.initialize(canvas)
+    // Subscribe to initialization state updates
+    const unsubscribeInit = initializer.onStateChange((state) => {
+      setInitState(state);
+      // Hide overlay after ready
+      if (state.phase === 'ready') {
+        setTimeout(() => setShowInitOverlay(false), 1000);
+      }
+    });
+
+    // Initialize app (WASM + Network + Physics + Renderer)
+    initializer.initialize({
+      canvas,
+      accountManager,
+    })
       .then(() => {
         logger.log('common', '[WorldCanvas] AppInitializer complete');
 
@@ -218,6 +237,7 @@ export function WorldCanvas({
           sceneManager.dispose();
           geometryController.destroy();
           initializer.dispose();
+          unsubscribeInit();
           if (unsubscribe) {
             unsubscribe();
           }
@@ -229,6 +249,7 @@ export function WorldCanvas({
 
     // Return early cleanup function (for unmount before init completes)
     return () => {
+      unsubscribeInit();
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
       }
@@ -554,6 +575,10 @@ export function WorldCanvas({
       zIndex={0}
     >
       <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: '100%' }} />
+
+      {/* Initialization progress badges */}
+      <InitializationOverlay initState={initState} show={showInitOverlay} />
+
       {isEditMode && (
         <DebugPanel
           info={debugInfo}

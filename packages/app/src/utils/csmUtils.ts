@@ -1,27 +1,14 @@
 import * as logger from './logger';
-import cubeInit from 'crossworld-cube'
 import * as cubeWasm from 'crossworld-cube'
 import type { CubeCoord } from '../types/cube-coord'
-
-let wasmInitialized = false
-let initPromise: Promise<void> | null = null
+import { ensureCubeWasmInitialized } from './cubeWasm'
 
 /**
  * Ensure WASM is initialized
+ * @deprecated Use ensureCubeWasmInitialized from ./cubeWasm instead
  */
 export async function ensureWasmInitialized(): Promise<void> {
-  if (wasmInitialized) return
-
-  if (initPromise) {
-    await initPromise
-    return
-  }
-
-  initPromise = cubeInit().then(() => {
-    wasmInitialized = true
-  })
-
-  await initPromise
+  await ensureCubeWasmInitialized()
 }
 
 /**
