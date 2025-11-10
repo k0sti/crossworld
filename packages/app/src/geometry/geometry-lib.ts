@@ -1,6 +1,6 @@
 import * as logger from '../utils/logger';
-import init, { WorldCube, GeometryData } from '@workspace/wasm';
-import { getMacroDepth, getMicroDepth, getBorderDepth } from '../config/depth-config';
+import init, { WorldCube, GeometryData } from '@workspace/wasm-world';
+import { getMacroDepth, getMicroDepth, getBorderDepth, getSeed } from '../config/depth-config';
 import { CubeManager } from './cube-manager';
 
 let wasmInitialized = false;
@@ -25,9 +25,9 @@ export async function initializeWasm(): Promise<void> {
 export class GeometryGenerator {
   private manager: CubeManager;
 
-  constructor(macroDepth: number = getMacroDepth(), microDepth: number = getMicroDepth(), borderDepth: number = getBorderDepth()) {
-    this.manager = new CubeManager(macroDepth, microDepth, borderDepth);
-    logger.log('geometry', `GeometryGenerator created: macro=${macroDepth}, micro=${microDepth}, border=${borderDepth}`);
+  constructor(macroDepth: number = getMacroDepth(), microDepth: number = getMicroDepth(), borderDepth: number = getBorderDepth(), seed: number = getSeed()) {
+    this.manager = new CubeManager(macroDepth, microDepth, borderDepth, seed);
+    logger.log('geometry', `GeometryGenerator created: macro=${macroDepth}, micro=${microDepth}, border=${borderDepth}, seed=${seed}`);
   }
 
   async initialize(): Promise<void> {
