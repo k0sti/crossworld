@@ -1,14 +1,25 @@
 # Renderer
 
-A WebGL2-based renderer for cube octrees with raytracing capabilities using the glow crate.
+Dual-implementation cube raytracer with both GPU (WebGL2/OpenGL) and CPU (pure Rust) backends.
 
 ## Features
 
-- **WebGL2/OpenGL ES 3.0 Support**: Uses the glow crate for cross-platform OpenGL rendering
-- **GPU Raytracing**: Fragment shader-based raytracing for rendering 3D cubes
-- **Directional Lighting**: Real-time diffuse and ambient lighting with Fresnel edge highlighting
-- **Animated Camera**: Rotating camera that orbits around the scene
-- **Real-time Rendering**: Continuous rendering loop with time-based animations
+### Common
+- **Shared Renderer Trait**: Common interface for both implementations
+- **Identical Algorithms**: Same raytracing, lighting, and camera code
+- **Directional Lighting**: Diffuse + ambient lighting with Fresnel edge highlighting
+- **Animated Camera**: Rotating camera orbiting the cube
+
+### GlCubeTracer (GPU Implementation)
+- **WebGL2/OpenGL ES 3.0**: Fragment shader-based raytracing
+- **Real-time Rendering**: 60+ FPS interactive display
+- **X11/Wayland Support**: Cross-platform window management
+
+### CpuCubeTracer (Pure Rust Implementation)
+- **No GPU Required**: Software raytracing on CPU
+- **Image Output**: Renders to PNG files
+- **Batch Rendering**: Generate animation frames
+- **Portable**: Works on any platform with Rust
 
 ## Implementation Details
 
@@ -66,7 +77,21 @@ direnv allow
 DISPLAY=:0 cargo run -p renderer
 ```
 
-**Note:** The renderer requires an X11 display server. Make sure `DISPLAY` is set correctly (typically `:0` or `:1`).
+**Note:** The GL renderer requires an X11 display server. Make sure `DISPLAY` is set correctly (typically `:0` or `:1`).
+
+### Running the CPU Renderer
+
+The CPU renderer doesn't require a display server and outputs PNG files:
+
+```bash
+# Run CPU renderer (outputs 10 frames)
+cargo run --release -- --cpu
+
+# Or with nix-shell
+nix-shell shell.nix --run 'cargo run --release -- --cpu'
+```
+
+Output: `output_frame_000.png` through `output_frame_009.png`
 
 ### On other Linux systems
 
@@ -92,6 +117,25 @@ sudo dnf install wayland-devel libxkbcommon-devel mesa-libGL-devel \
 cargo run -p renderer
 ```
 
+## Code Structure
+
+```
+src/
+├── main.rs          # Entry point, dual-mode runner
+├── renderer.rs      # Common Renderer trait and shared code
+├── gl_tracer.rs     # GlCubeTracer (GPU implementation)
+└── cpu_tracer.rs    # CpuCubeTracer (CPU implementation)
+```
+
+### Shared Code (renderer.rs)
+
+- `Renderer` trait - Common interface
+- `intersect_box()` - Ray-box intersection algorithm
+- `create_camera_ray()` - Camera ray generation
+- `calculate_lighting()` - Lighting calculations
+
+Both implementations use identical algorithms, just in different languages (GLSL vs Rust).
+
 ## Dependencies
 
 - `glow`: OpenGL bindings
@@ -99,6 +143,8 @@ cargo run -p renderer
 - `glutin-winit`: Glutin-winit integration
 - `winit`: Window creation and event handling
 - `raw-window-handle`: Window handle abstractions
+- `glam`: Vector math library
+- `image`: PNG encoding/decoding
 
 ## Future Extensions
 

@@ -1,12 +1,3 @@
-mod cpu_tracer;
-mod egui_app;
-mod gl_tracer;
-mod renderer;
-
-use cpu_tracer::CpuCubeTracer;
-use egui_app::DualRendererApp;
-use renderer::Renderer;
-
 use glow::*;
 use glutin::config::ConfigTemplateBuilder;
 use glutin::context::{ContextApi, ContextAttributesBuilder, Version};
@@ -15,7 +6,6 @@ use glutin::prelude::*;
 use glutin::surface::{SurfaceAttributesBuilder, WindowSurface};
 use glutin_winit::DisplayBuilder;
 use raw_window_handle::HasWindowHandle;
-use std::error::Error;
 use std::num::NonZeroU32;
 use std::sync::Arc;
 use winit::application::ApplicationHandler;
@@ -26,7 +16,7 @@ use winit::window::{Window, WindowId};
 #[cfg(target_os = "linux")]
 use winit::platform::x11::EventLoopBuilderExtX11;
 
-struct App {
+struct SimpleApp {
     window: Option<Window>,
     gl_context: Option<glutin::context::PossiblyCurrentContext>,
     gl_surface: Option<glutin::surface::Surface<WindowSurface>>,
@@ -34,12 +24,16 @@ struct App {
     egui_ctx: Option<egui::Context>,
     egui_state: Option<egui_winit::State>,
     painter: Option<egui_glow::Painter>,
-    dual_renderer: Option<DualRendererApp>,
-    single_frame: bool,
-    frame_rendered: bool,
+
+    // Simple animated color
+    time: f32,
+
+    // GL resources for a simple triangle
+    program: Option<glow::Program>,
+    vao: Option<glow::VertexArray>,
 }
 
-impl Default for App {
+impl Default for SimpleApp {
     fn default() -> Self {
         Self {
             window: None,
@@ -49,29 +43,87 @@ impl Default for App {
             egui_ctx: None,
             egui_state: None,
             painter: None,
-            dual_renderer: None,
-            single_frame: false,
-            frame_rendered: false,
+            time: 0.0,
+            program: None,
+            vao: None,
         }
     }
 }
 
-impl App {
-    fn with_single_frame(mut self, single_frame: bool) -> Self {
-        self.single_frame = single_frame;
-        self
+impl SimpleApp {
+    unsafe fn create_gl_resources(gl: &Context) -> (glow::Program, glow::VertexArray) {
+        // Simple vertex shader - draws a triangle using vertex ID
+        let vertex_shader_src = r#"#version 300 es
+        precision mediump float;
+
+        void main() {
+            // Create a triangle using gl_VertexID
+            vec2 pos[3] = vec2[3](
+                vec2(-0.6, -0.6),
+                vec2(0.6, -0.6),
+                vec2(0.0, 0.6)
+            );
+            gl_Position = vec4(pos[gl_VertexID], 0.0, 1.0);
+        }
+        "#;
+
+        // Simple fragment shader - rainbow colors
+        let fragment_shader_src = r#"#version 300 es
+        precision mediump float;
+
+        uniform float u_time;
+        out vec4 fragColor;
+
+        void main() {
+            float r = sin(u_time) * 0.5 + 0.5;
+            float g = sin(u_time * 0.7) * 0.5 + 0.5;
+            float b = sin(u_time * 1.3) * 0.5 + 0.5;
+            fragColor = vec4(r, g, b, 1.0);
+        }
+        "#;
+
+        let program = gl.create_program().unwrap();
+
+        let vertex_shader = gl.create_shader(VERTEX_SHADER).unwrap();
+        gl.shader_source(vertex_shader, vertex_shader_src);
+        gl.compile_shader(vertex_shader);
+        if !gl.get_shader_compile_status(vertex_shader) {
+            panic!("Vertex shader error: {}", gl.get_shader_info_log(vertex_shader));
+        }
+
+        let fragment_shader = gl.create_shader(FRAGMENT_SHADER).unwrap();
+        gl.shader_source(fragment_shader, fragment_shader_src);
+        gl.compile_shader(fragment_shader);
+        if !gl.get_shader_compile_status(fragment_shader) {
+            panic!("Fragment shader error: {}", gl.get_shader_info_log(fragment_shader));
+        }
+
+        gl.attach_shader(program, vertex_shader);
+        gl.attach_shader(program, fragment_shader);
+        gl.link_program(program);
+        if !gl.get_program_link_status(program) {
+            panic!("Program link error: {}", gl.get_program_info_log(program));
+        }
+
+        gl.delete_shader(vertex_shader);
+        gl.delete_shader(fragment_shader);
+
+        // Create VAO
+        let vao = gl.create_vertex_array().unwrap();
+
+        (program, vao)
     }
 }
 
-impl ApplicationHandler for App {
+impl ApplicationHandler for SimpleApp {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.window.is_some() {
             return;
         }
 
         let window_attributes = Window::default_attributes()
-            .with_title("Dual Cube Raytracer - GPU vs CPU")
-            .with_inner_size(winit::dpi::LogicalSize::new(1000, 700));
+            .with_title("Simple egui + OpenGL Test")
+            .with_inner_size(winit::dpi::LogicalSize::new(800, 600));
 
         let template = ConfigTemplateBuilder::new()
             .with_alpha_size(8)
@@ -94,9 +146,7 @@ impl ApplicationHandler for App {
             .unwrap();
 
         let window = window.unwrap();
-
         let window_handle = window.window_handle().ok().map(|h| h.as_raw());
-
         let gl_display = gl_config.display();
 
         let context_attributes = ContextAttributesBuilder::new()
@@ -128,6 +178,9 @@ impl ApplicationHandler for App {
             Context::from_loader_function_cstr(|s| gl_display.get_proc_address(s))
         });
 
+        // Create GL resources for triangle rendering
+        let (program, vao) = unsafe { Self::create_gl_resources(&gl) };
+
         // Initialize egui
         let egui_ctx = egui::Context::default();
         let egui_state = egui_winit::State::new(
@@ -140,12 +193,7 @@ impl ApplicationHandler for App {
         );
         let painter = egui_glow::Painter::new(gl.clone(), "", None, false).unwrap();
 
-        // Initialize dual renderer
-        let dual_renderer = unsafe { DualRendererApp::new(&gl).unwrap() };
-
-        println!("Dual renderer initialized!");
-        println!("  - GPU: GlCubeTracer");
-        println!("  - CPU: CpuCubeTracer");
+        println!("Simple egui + OpenGL app initialized!");
 
         self.window = Some(window);
         self.gl_context = Some(gl_context);
@@ -154,7 +202,8 @@ impl ApplicationHandler for App {
         self.egui_ctx = Some(egui_ctx);
         self.egui_state = Some(egui_state);
         self.painter = Some(painter);
-        self.dual_renderer = Some(dual_renderer);
+        self.program = Some(program);
+        self.vao = Some(vao);
     }
 
     fn window_event(
@@ -186,28 +235,65 @@ impl ApplicationHandler for App {
                 }
             }
             WindowEvent::RedrawRequested => {
-                if let (Some(window), Some(gl), Some(egui_ctx), Some(egui_state), Some(painter), Some(dual_renderer), Some(gl_context), Some(gl_surface)) = (
+                if let (Some(window), Some(gl), Some(egui_ctx), Some(egui_state), Some(painter), Some(gl_context), Some(gl_surface)) = (
                     self.window.as_ref(),
                     self.gl.as_ref(),
                     self.egui_ctx.as_ref(),
                     self.egui_state.as_mut(),
                     self.painter.as_mut(),
-                    self.dual_renderer.as_mut(),
                     self.gl_context.as_ref(),
                     self.gl_surface.as_ref(),
                 ) {
                     let size = window.inner_size();
 
+                    // Animate time
+                    self.time += 0.016;
+                    let r = (self.time.sin() * 0.5 + 0.5) as f32;
+                    let g = ((self.time * 0.7).sin() * 0.5 + 0.5) as f32;
+                    let b = ((self.time * 1.3).sin() * 0.5 + 0.5) as f32;
+
                     unsafe {
                         gl.viewport(0, 0, size.width as i32, size.height as i32);
-                        gl.clear_color(0.1, 0.1, 0.1, 1.0);
+                        gl.clear_color(r * 0.2, g * 0.2, b * 0.2, 1.0);
                         gl.clear(COLOR_BUFFER_BIT);
+
+                        // Draw a triangle with OpenGL
+                        if let (Some(program), Some(vao)) = (self.program, self.vao) {
+                            gl.use_program(Some(program));
+
+                            // Set time uniform
+                            if let Some(location) = gl.get_uniform_location(program, "u_time") {
+                                gl.uniform_1_f32(Some(&location), self.time);
+                            }
+
+                            gl.bind_vertex_array(Some(vao));
+                            gl.draw_arrays(TRIANGLES, 0, 3);
+                            gl.bind_vertex_array(None);
+                        }
                     }
 
                     // Run egui
                     let raw_input = egui_state.take_egui_input(window);
                     let full_output = egui_ctx.run(raw_input, |ctx| {
-                        dual_renderer.show_ui(ctx, gl);
+                        egui::CentralPanel::default().show(ctx, |ui| {
+                            ui.heading("Simple egui + OpenGL Test");
+                            ui.separator();
+                            ui.label(format!("Time: {:.2}s", self.time));
+                            ui.label(format!("Background RGB: ({:.2}, {:.2}, {:.2})", r, g, b));
+                            ui.separator();
+                            ui.label("✓ egui is working!");
+                            ui.label("✓ OpenGL triangle should be visible behind this panel");
+
+                            ui.add_space(20.0);
+
+                            if ui.button("Click me!").clicked() {
+                                println!("Button clicked at time {:.2}", self.time);
+                            }
+
+                            ui.add_space(20.0);
+                            ui.label("The background color is animated.");
+                            ui.label("The triangle color is also animated.");
+                        });
                     });
 
                     egui_state.handle_platform_output(window, full_output.platform_output);
@@ -218,17 +304,7 @@ impl ApplicationHandler for App {
                     painter.paint_and_update_textures(size_in_pixels, full_output.pixels_per_point, &clipped_primitives, &full_output.textures_delta);
 
                     gl_surface.swap_buffers(gl_context).unwrap();
-
-                    // Check if single frame mode
-                    if self.single_frame {
-                        if !self.frame_rendered {
-                            self.frame_rendered = true;
-                            println!("\n=== Single frame rendered, exiting ===");
-                            event_loop.exit();
-                        }
-                    } else {
-                        window.request_redraw();
-                    }
+                    window.request_redraw();
                 }
             }
             _ => (),
@@ -236,94 +312,26 @@ impl ApplicationHandler for App {
     }
 
     fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
-        if !self.single_frame {
-            if let Some(window) = self.window.as_ref() {
-                window.request_redraw();
-            }
+        if let Some(window) = self.window.as_ref() {
+            window.request_redraw();
         }
     }
 }
 
-impl Drop for App {
+impl Drop for SimpleApp {
     fn drop(&mut self) {
-        if let (Some(gl), Some(dual_renderer)) = (self.gl.as_ref(), self.dual_renderer.as_ref()) {
-            unsafe {
-                dual_renderer.destroy(gl);
-            }
-        }
         if let Some(mut painter) = self.painter.take() {
             painter.destroy();
         }
     }
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
-    let args: Vec<String> = std::env::args().collect();
-
-    // Parse command line arguments
-    let mut cpu_only = false;
-    let mut single_frame = false;
-
-    for arg in args.iter().skip(1) {
-        match arg.as_str() {
-            "--cpu" => cpu_only = true,
-            "--single-frame" => single_frame = true,
-            _ => {
-                eprintln!("Unknown argument: {}", arg);
-                eprintln!("Usage: renderer [--cpu] [--single-frame]");
-                eprintln!("  --cpu          Run CPU renderer only (batch mode)");
-                eprintln!("  --single-frame Render one frame and exit (for debugging)");
-                return Ok(());
-            }
-        }
-    }
-
-    if cpu_only {
-        run_cpu_renderer()?;
-    } else {
-        run_dual_renderer(single_frame)?;
-    }
-
-    Ok(())
-}
-
-fn run_cpu_renderer() -> Result<(), Box<dyn Error>> {
-    println!("Running CPU raytracer (batch mode)...");
-
-    let mut cpu_renderer = CpuCubeTracer::new();
-    println!("Renderer: {}", cpu_renderer.name());
-
-    let width = 800;
-    let height = 600;
-    let num_frames = 10;
-
-    for frame in 0..num_frames {
-        let time = frame as f32 * 0.1;
-        println!("Rendering frame {} at time {:.2}...", frame, time);
-
-        cpu_renderer.render(width, height, time);
-
-        // Save the frame
-        let filename = format!("output_frame_{:03}.png", frame);
-        cpu_renderer.save_image(&filename)?;
-        println!("Saved {}", filename);
-    }
-
-    println!("CPU rendering complete! Generated {} frames", num_frames);
-    Ok(())
-}
-
-fn run_dual_renderer(single_frame: bool) -> Result<(), Box<dyn Error>> {
-    if single_frame {
-        println!("Running dual raytracer (single frame mode for debugging)...");
-    } else {
-        println!("Running dual raytracer (GPU + CPU side-by-side)...");
-    }
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    println!("Starting simple egui + OpenGL test...");
 
     #[cfg(target_os = "linux")]
     let event_loop = {
         let mut builder = EventLoop::builder();
-        // Force X11 backend on Linux (fallback from Wayland)
         builder.with_x11();
         builder.build()?
     };
@@ -333,7 +341,7 @@ fn run_dual_renderer(single_frame: bool) -> Result<(), Box<dyn Error>> {
 
     event_loop.set_control_flow(ControlFlow::Poll);
 
-    let mut app = App::default().with_single_frame(single_frame);
+    let mut app = SimpleApp::default();
     event_loop.run_app(&mut app)?;
 
     Ok(())
