@@ -26,6 +26,7 @@ use winit::window::{Window, WindowId};
 #[cfg(target_os = "linux")]
 use winit::platform::x11::EventLoopBuilderExtX11;
 
+#[derive(Default)]
 struct App {
     window: Option<Window>,
     gl_context: Option<glutin::context::PossiblyCurrentContext>,
@@ -37,23 +38,6 @@ struct App {
     dual_renderer: Option<DualRendererApp>,
     single_frame: bool,
     frame_rendered: bool,
-}
-
-impl Default for App {
-    fn default() -> Self {
-        Self {
-            window: None,
-            gl_context: None,
-            gl_surface: None,
-            gl: None,
-            egui_ctx: None,
-            egui_state: None,
-            painter: None,
-            dual_renderer: None,
-            single_frame: false,
-            frame_rendered: false,
-        }
-    }
 }
 
 impl App {
@@ -164,7 +148,7 @@ impl ApplicationHandler for App {
         event: WindowEvent,
     ) {
         if let Some(egui_state) = &mut self.egui_state {
-            let _ = egui_state.on_window_event(&self.window.as_ref().unwrap(), &event);
+            let _ = egui_state.on_window_event(self.window.as_ref().unwrap(), &event);
         }
 
         match event {
@@ -186,7 +170,16 @@ impl ApplicationHandler for App {
                 }
             }
             WindowEvent::RedrawRequested => {
-                if let (Some(window), Some(gl), Some(egui_ctx), Some(egui_state), Some(painter), Some(dual_renderer), Some(gl_context), Some(gl_surface)) = (
+                if let (
+                    Some(window),
+                    Some(gl),
+                    Some(egui_ctx),
+                    Some(egui_state),
+                    Some(painter),
+                    Some(dual_renderer),
+                    Some(gl_context),
+                    Some(gl_surface),
+                ) = (
                     self.window.as_ref(),
                     self.gl.as_ref(),
                     self.egui_ctx.as_ref(),
@@ -213,9 +206,15 @@ impl ApplicationHandler for App {
                     egui_state.handle_platform_output(window, full_output.platform_output);
 
                     // Paint egui
-                    let clipped_primitives = egui_ctx.tessellate(full_output.shapes, full_output.pixels_per_point);
+                    let clipped_primitives =
+                        egui_ctx.tessellate(full_output.shapes, full_output.pixels_per_point);
                     let size_in_pixels = [size.width, size.height];
-                    painter.paint_and_update_textures(size_in_pixels, full_output.pixels_per_point, &clipped_primitives, &full_output.textures_delta);
+                    painter.paint_and_update_textures(
+                        size_in_pixels,
+                        full_output.pixels_per_point,
+                        &clipped_primitives,
+                        &full_output.textures_delta,
+                    );
 
                     gl_surface.swap_buffers(gl_context).unwrap();
 
@@ -236,10 +235,10 @@ impl ApplicationHandler for App {
     }
 
     fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
-        if !self.single_frame {
-            if let Some(window) = self.window.as_ref() {
-                window.request_redraw();
-            }
+        if !self.single_frame
+            && let Some(window) = self.window.as_ref()
+        {
+            window.request_redraw();
         }
     }
 }

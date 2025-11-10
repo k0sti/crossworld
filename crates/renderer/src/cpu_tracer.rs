@@ -47,11 +47,7 @@ impl CpuCubeTracer {
         );
 
         // Camera setup (same as GL version)
-        let camera_pos = glam::Vec3::new(
-            3.0 * (time * 0.3).cos(),
-            2.0,
-            3.0 * (time * 0.3).sin(),
-        );
+        let camera_pos = glam::Vec3::new(3.0 * (time * 0.3).cos(), 2.0, 3.0 * (time * 0.3).sin());
         let target = glam::Vec3::ZERO;
         let up = glam::Vec3::Y;
 

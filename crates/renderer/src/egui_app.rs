@@ -59,49 +59,49 @@ impl DualRendererApp {
                 // Clean up old resources
                 if let Some(fb) = self.gl_framebuffer {
                     gl.delete_framebuffer(fb);
-            }
-            if let Some(tex) = self.gl_texture {
-                gl.delete_texture(tex);
-            }
+                }
+                if let Some(tex) = self.gl_texture {
+                    gl.delete_texture(tex);
+                }
 
-            // Create texture (use RGBA for better compatibility)
-            let texture = gl.create_texture().unwrap();
-            gl.bind_texture(TEXTURE_2D, Some(texture));
-            gl.tex_image_2d(
-                TEXTURE_2D,
-                0,
-                RGBA as i32,
-                width,
-                height,
-                0,
-                RGBA,
-                UNSIGNED_BYTE,
-                None,
-            );
-            gl.tex_parameter_i32(TEXTURE_2D, TEXTURE_MIN_FILTER, LINEAR as i32);
-            gl.tex_parameter_i32(TEXTURE_2D, TEXTURE_MAG_FILTER, LINEAR as i32);
+                // Create texture (use RGBA for better compatibility)
+                let texture = gl.create_texture().unwrap();
+                gl.bind_texture(TEXTURE_2D, Some(texture));
+                gl.tex_image_2d(
+                    TEXTURE_2D,
+                    0,
+                    RGBA as i32,
+                    width,
+                    height,
+                    0,
+                    RGBA,
+                    UNSIGNED_BYTE,
+                    None,
+                );
+                gl.tex_parameter_i32(TEXTURE_2D, TEXTURE_MIN_FILTER, LINEAR as i32);
+                gl.tex_parameter_i32(TEXTURE_2D, TEXTURE_MAG_FILTER, LINEAR as i32);
 
-            // Create framebuffer
-            let framebuffer = gl.create_framebuffer().unwrap();
-            gl.bind_framebuffer(FRAMEBUFFER, Some(framebuffer));
-            gl.framebuffer_texture_2d(
-                FRAMEBUFFER,
-                COLOR_ATTACHMENT0,
-                TEXTURE_2D,
-                Some(texture),
-                0,
-            );
+                // Create framebuffer
+                let framebuffer = gl.create_framebuffer().unwrap();
+                gl.bind_framebuffer(FRAMEBUFFER, Some(framebuffer));
+                gl.framebuffer_texture_2d(
+                    FRAMEBUFFER,
+                    COLOR_ATTACHMENT0,
+                    TEXTURE_2D,
+                    Some(texture),
+                    0,
+                );
 
-            // Set draw buffer
-            gl.draw_buffers(&[COLOR_ATTACHMENT0]);
+                // Set draw buffer
+                gl.draw_buffers(&[COLOR_ATTACHMENT0]);
 
-            // Check framebuffer status
-            let status = gl.check_framebuffer_status(FRAMEBUFFER);
-            if status != FRAMEBUFFER_COMPLETE {
-                panic!("Framebuffer not complete: {:?}", status);
-            }
+                // Check framebuffer status
+                let status = gl.check_framebuffer_status(FRAMEBUFFER);
+                if status != FRAMEBUFFER_COMPLETE {
+                    panic!("Framebuffer not complete: {:?}", status);
+                }
 
-            gl.bind_framebuffer(FRAMEBUFFER, None);
+                gl.bind_framebuffer(FRAMEBUFFER, None);
 
                 self.gl_texture = Some(texture);
                 self.gl_framebuffer = Some(framebuffer);
@@ -118,15 +118,14 @@ impl DualRendererApp {
             // Render to framebuffer
             gl.bind_framebuffer(FRAMEBUFFER, self.gl_framebuffer);
             gl.viewport(0, 0, width as i32, height as i32);
-            self.gl_renderer.render_to_gl(gl, width as i32, height as i32, time);
+            self.gl_renderer
+                .render_to_gl(gl, width as i32, height as i32, time);
             gl.bind_framebuffer(FRAMEBUFFER, None);
         }
     }
 
     pub unsafe fn read_gl_texture_to_image(&self, gl: &Arc<Context>) -> Option<ColorImage> {
-        if self.gl_framebuffer.is_none() {
-            return None;
-        }
+        self.gl_framebuffer?;
 
         let (width, height) = self.render_size;
         let mut pixels = vec![0u8; (width * height * 4) as usize];
@@ -197,14 +196,14 @@ impl DualRendererApp {
             .zip(cpu_image.pixels.iter())
             .map(|(gl_pixel, cpu_pixel)| {
                 // Compute absolute difference per channel
-                let r_diff = (gl_pixel.r() as i16 - cpu_pixel.r() as i16).abs() as u8;
-                let g_diff = (gl_pixel.g() as i16 - cpu_pixel.g() as i16).abs() as u8;
-                let b_diff = (gl_pixel.b() as i16 - cpu_pixel.b() as i16).abs() as u8;
+                let r_diff = (gl_pixel.r() as i16 - cpu_pixel.r() as i16).unsigned_abs();
+                let g_diff = (gl_pixel.g() as i16 - cpu_pixel.g() as i16).unsigned_abs();
+                let b_diff = (gl_pixel.b() as i16 - cpu_pixel.b() as i16).unsigned_abs();
 
                 // Amplify differences for visibility (multiply by 10, capped at 255)
-                let r_amp = (r_diff as u16 * 10).min(255) as u8;
-                let g_amp = (g_diff as u16 * 10).min(255) as u8;
-                let b_amp = (b_diff as u16 * 10).min(255) as u8;
+                let r_amp = (r_diff * 10).min(255) as u8;
+                let g_amp = (g_diff * 10).min(255) as u8;
+                let b_amp = (b_diff * 10).min(255) as u8;
 
                 egui::Color32::from_rgb(r_amp, g_amp, b_amp)
             })
@@ -235,7 +234,10 @@ impl DualRendererApp {
                 ui.separator();
                 ui.label(format!("Time: {:.2}s", time));
                 ui.separator();
-                ui.label(format!("Resolution: {}x{}", self.render_size.0, self.render_size.1));
+                ui.label(format!(
+                    "Resolution: {}x{}",
+                    self.render_size.0, self.render_size.1
+                ));
             });
         });
 
@@ -245,7 +247,10 @@ impl DualRendererApp {
             let gl_color_image = unsafe { self.read_gl_texture_to_image(gl) };
 
             let cpu_color_image = if let Some(image_buffer) = self.cpu_renderer.image_buffer() {
-                let (width, height) = (image_buffer.width() as usize, image_buffer.height() as usize);
+                let (width, height) = (
+                    image_buffer.width() as usize,
+                    image_buffer.height() as usize,
+                );
                 let pixels: Vec<egui::Color32> = image_buffer
                     .pixels()
                     .map(|p| egui::Color32::from_rgb(p[0], p[1], p[2]))
@@ -261,27 +266,18 @@ impl DualRendererApp {
             // Compute difference if both images are available
             if let (Some(gl_img), Some(cpu_img)) = (&gl_color_image, &cpu_color_image) {
                 let diff_image = self.compute_difference_image(gl_img, cpu_img);
-                self.diff_texture = Some(ctx.load_texture(
-                    "diff_render",
-                    diff_image,
-                    TextureOptions::LINEAR,
-                ));
+                self.diff_texture =
+                    Some(ctx.load_texture("diff_render", diff_image, TextureOptions::LINEAR));
             }
 
             // Create textures
             if let Some(ref gl_img) = gl_color_image {
-                self.gl_egui_texture = Some(ctx.load_texture(
-                    "gl_render",
-                    gl_img.clone(),
-                    TextureOptions::LINEAR,
-                ));
+                self.gl_egui_texture =
+                    Some(ctx.load_texture("gl_render", gl_img.clone(), TextureOptions::LINEAR));
             }
             if let Some(ref cpu_img) = cpu_color_image {
-                self.cpu_texture = Some(ctx.load_texture(
-                    "cpu_render",
-                    cpu_img.clone(),
-                    TextureOptions::LINEAR,
-                ));
+                self.cpu_texture =
+                    Some(ctx.load_texture("cpu_render", cpu_img.clone(), TextureOptions::LINEAR));
             }
 
             ui.columns(3, |columns| {
