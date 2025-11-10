@@ -24,6 +24,9 @@ out vec4 FragColor;
 
 uniform vec2 u_resolution;
 uniform float u_time;
+uniform vec3 u_camera_pos;
+uniform vec4 u_camera_rot;  // quaternion (x, y, z, w)
+uniform bool u_use_camera;
 
 // Ray structure
 struct Ray {
@@ -38,6 +41,14 @@ struct HitInfo {
     vec3 point;
     vec3 normal;
 };
+
+// Rotate vector by quaternion
+vec3 quat_rotate(vec4 q, vec3 v) {
+    vec3 qv = q.xyz;
+    vec3 uv = cross(qv, v);
+    vec3 uuv = cross(qv, uv);
+    return v + 2.0 * (uv * q.w + uuv);
+}
 
 // Ray-box intersection
 HitInfo intersectBox(Ray ray, vec3 boxMin, vec3 boxMax) {
@@ -86,13 +97,27 @@ void main() {
     vec2 uv = (gl_FragCoord.xy - 0.5 * u_resolution) / u_resolution.y;
 
     // Camera setup
-    vec3 cameraPos = vec3(3.0 * cos(u_time * 0.3), 2.0, 3.0 * sin(u_time * 0.3));
-    vec3 target = vec3(0.0, 0.0, 0.0);
-    vec3 up = vec3(0.0, 1.0, 0.0);
+    vec3 cameraPos;
+    vec3 forward, right, camUp;
 
-    vec3 forward = normalize(target - cameraPos);
-    vec3 right = normalize(cross(forward, up));
-    vec3 camUp = cross(right, forward);
+    if (u_use_camera) {
+        // Use explicit camera configuration
+        cameraPos = u_camera_pos;
+
+        // Get camera basis vectors from quaternion
+        forward = quat_rotate(u_camera_rot, vec3(0.0, 0.0, -1.0));
+        right = quat_rotate(u_camera_rot, vec3(1.0, 0.0, 0.0));
+        camUp = quat_rotate(u_camera_rot, vec3(0.0, 1.0, 0.0));
+    } else {
+        // Use time-based orbiting camera
+        cameraPos = vec3(3.0 * cos(u_time * 0.3), 2.0, 3.0 * sin(u_time * 0.3));
+        vec3 target = vec3(0.0, 0.0, 0.0);
+        vec3 up = vec3(0.0, 1.0, 0.0);
+
+        forward = normalize(target - cameraPos);
+        right = normalize(cross(forward, up));
+        camUp = cross(right, forward);
+    }
 
     // Create ray
     Ray ray;
@@ -116,8 +141,8 @@ void main() {
         // Diffuse lighting
         float diffuse = max(dot(hit.normal, lightDir), 0.0);
 
-        // Ambient
-        float ambient = 0.2;
+        // Ambient - increased for brighter appearance
+        float ambient = 0.5;
 
         // Base cube color with some variation based on normal
         vec3 baseColor = vec3(0.8, 0.4, 0.2);
@@ -125,8 +150,8 @@ void main() {
         baseColor = mix(baseColor, vec3(0.6, 0.8, 0.4), abs(hit.normal.y));
         baseColor = mix(baseColor, vec3(0.4, 0.5, 0.9), abs(hit.normal.z));
 
-        // Combine lighting
-        color = baseColor * (ambient + diffuse * 0.8);
+        // Combine lighting - increased diffuse contribution
+        color = baseColor * (ambient + diffuse * 1.2);
 
         // Add some edge highlighting
         float fresnel = pow(1.0 - abs(dot(-ray.direction, hit.normal)), 3.0);
@@ -145,6 +170,9 @@ pub struct GlCubeTracer {
     vao: VertexArray,
     resolution_location: Option<UniformLocation>,
     time_location: Option<UniformLocation>,
+    camera_pos_location: Option<UniformLocation>,
+    camera_rot_location: Option<UniformLocation>,
+    use_camera_location: Option<UniformLocation>,
 }
 
 impl GlCubeTracer {
@@ -161,12 +189,18 @@ impl GlCubeTracer {
             // Get uniform locations
             let resolution_location = gl.get_uniform_location(program, "u_resolution");
             let time_location = gl.get_uniform_location(program, "u_time");
+            let camera_pos_location = gl.get_uniform_location(program, "u_camera_pos");
+            let camera_rot_location = gl.get_uniform_location(program, "u_camera_rot");
+            let use_camera_location = gl.get_uniform_location(program, "u_use_camera");
 
             Ok(Self {
                 program,
                 vao,
                 resolution_location,
                 time_location,
+                camera_pos_location,
+                camera_rot_location,
+                use_camera_location,
             })
         }
     }
@@ -187,6 +221,56 @@ impl GlCubeTracer {
             if let Some(loc) = &self.time_location {
                 gl.uniform_1_f32(Some(loc), time);
             }
+            // Disable camera mode (use time-based animation)
+            if let Some(loc) = &self.use_camera_location {
+                gl.uniform_1_i32(Some(loc), 0);
+            }
+
+            // Draw fullscreen triangle
+            gl.draw_arrays(TRIANGLES, 0, 3);
+        }
+    }
+
+    pub unsafe fn render_to_gl_with_camera(
+        &self,
+        gl: &Context,
+        width: i32,
+        height: i32,
+        camera: &crate::renderer::CameraConfig,
+    ) {
+        unsafe {
+            // Clear to black (background for raytraced scene)
+            gl.clear_color(0.1, 0.1, 0.1, 1.0);
+            gl.clear(COLOR_BUFFER_BIT);
+
+            gl.use_program(Some(self.program));
+            gl.bind_vertex_array(Some(self.vao));
+
+            // Set uniforms
+            if let Some(loc) = &self.resolution_location {
+                gl.uniform_2_f32(Some(loc), width as f32, height as f32);
+            }
+            if let Some(loc) = &self.camera_pos_location {
+                gl.uniform_3_f32(
+                    Some(loc),
+                    camera.position.x,
+                    camera.position.y,
+                    camera.position.z,
+                );
+            }
+            if let Some(loc) = &self.camera_rot_location {
+                gl.uniform_4_f32(
+                    Some(loc),
+                    camera.rotation.x,
+                    camera.rotation.y,
+                    camera.rotation.z,
+                    camera.rotation.w,
+                );
+            }
+            // Enable camera mode
+            if let Some(loc) = &self.use_camera_location {
+                gl.uniform_1_i32(Some(loc), 1);
+            }
 
             // Draw fullscreen triangle
             gl.draw_arrays(TRIANGLES, 0, 3);
@@ -204,6 +288,11 @@ impl GlCubeTracer {
 impl Renderer for GlCubeTracer {
     fn render(&mut self, _width: u32, _height: u32, _time: f32) {
         // Note: GL rendering is handled by render_to_gl in the app loop
+        // This is here to satisfy the trait, but actual rendering needs GL context
+    }
+
+    fn render_with_camera(&mut self, _width: u32, _height: u32, _camera: &crate::renderer::CameraConfig) {
+        // Note: GL rendering is handled by render_to_gl_with_camera in the app loop
         // This is here to satisfy the trait, but actual rendering needs GL context
     }
 
