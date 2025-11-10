@@ -5,7 +5,7 @@
  */
 
 import * as THREE from 'three';
-import type { PhysicsBridge } from '../physics/physics-bridge';
+import type { World } from '../physics/world';
 import type { SceneManager } from '../renderer/scene';
 
 /**
@@ -46,7 +46,7 @@ export interface InitializationState {
  */
 export interface InitializedSystems {
   /** Physics bridge (initialized in 'wasm' phase) */
-  physicsBridge: PhysicsBridge;
+  physicsBridge: World;
 
   /** Scene manager (initialized in 'rendering' phase) */
   sceneManager: SceneManager;

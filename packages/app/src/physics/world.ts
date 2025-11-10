@@ -17,13 +17,13 @@ async function ensurePhysicsWasmInitialized(): Promise<void> {
 }
 
 /**
- * PhysicsBridge - TypeScript wrapper for the WASM physics engine
+ * World - TypeScript wrapper for the WASM physics engine
  *
- * Provides a clean interface for character controller physics,
- * managing the lifecycle of physics characters and synchronizing
+ * Provides a clean interface for physics world and character controllers,
+ * managing the lifecycle of physics objects and synchronizing
  * state between the physics simulation and Three.js rendering.
  */
-export class PhysicsBridge {
+export class World {
   private world: WasmPhysicsWorld | null = null;
   private initialized: boolean = false;
   private gravity: THREE.Vector3;
@@ -63,7 +63,7 @@ export class PhysicsBridge {
     radius: number = 0.3
   ): number {
     if (!this.world) {
-      throw new Error('PhysicsBridge not initialized. Call init() first.');
+      throw new Error('World not initialized. Call init() first.');
     }
     return this.world.createCharacter(position.x, position.y, position.z, height, radius);
   }

@@ -6,7 +6,7 @@
 
 import * as THREE from 'three';
 import { SceneManager } from '../renderer/scene';
-import { PhysicsBridge } from '../physics/physics-bridge';
+import { World } from '../physics/world';
 import * as logger from '../utils/logger';
 
 export interface RendererConfig {
@@ -14,7 +14,7 @@ export interface RendererConfig {
   canvas: HTMLCanvasElement;
 
   /** Physics bridge (must be initialized) */
-  physicsBridge: PhysicsBridge;
+  physicsBridge: World;
 
   /** Enable antialiasing (default: true) */
   antialias?: boolean;

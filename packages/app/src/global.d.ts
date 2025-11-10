@@ -4,7 +4,3 @@ interface Window {
     signEvent(event: any): Promise<any>;
   };
 }
-
-declare module '@workspace/wasm' {
-  export * from 'crossworld-world';
-}

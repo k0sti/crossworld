@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { Transform } from './transform';
 import { BaseAvatar } from './base-avatar';
-import type { PhysicsBridge } from '../physics/physics-bridge';
+import type { World } from '../physics/world';
 
 export interface AvatarConfig {
   modelUrl?: string;
@@ -21,7 +21,7 @@ export class Avatar extends BaseAvatar {
   private animations: THREE.AnimationClip[] = [];
   private currentAction: THREE.AnimationAction | null = null;
 
-  constructor(initialTransform?: Transform, config: AvatarConfig = {}, scene?: THREE.Scene, physicsBridge?: PhysicsBridge) {
+  constructor(initialTransform?: Transform, config: AvatarConfig = {}, scene?: THREE.Scene, physicsBridge?: World) {
     super(initialTransform, scene, physicsBridge);
     this.config = config;
 

@@ -7,7 +7,7 @@ import { Transform } from './transform';
 import type { TeleportAnimationType } from './teleport-animation';
 import { CameraController } from './camera-controller';
 import { GamepadController } from './gamepad-controller';
-import { PhysicsBridge } from '../physics/physics-bridge';
+import { World } from '../physics/world';
 import {
   worldToCube,
   cubeToWorld,
@@ -27,6 +27,7 @@ import {
 } from '../config/depth-config';
 import { CheckerPlane } from './checker-plane';
 import { loadCubeFromCsm, raycastWasm } from '../utils/cubeWasm';
+import { GeometryData } from 'crossworld-world';
 import { raycastMesh, type MeshRaycastResult } from '../utils/meshRaycast';
 import { raycastWorld, calculateAvatarPlacement } from '../utils/worldRaycast';
 import { SunSystem } from './sun-system';
@@ -66,7 +67,7 @@ export class SceneManager {
   private checkerPlane: CheckerPlane | null = null;
   private groundPlane: THREE.Plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0); // Plane at y=0
   private currentAvatar: IAvatar | null = null;
-  private physicsBridge: PhysicsBridge;
+  private physicsBridge: World;
   private raycaster: THREE.Raycaster;
   private mouse: THREE.Vector2;
   private lastTime: number = 0;
@@ -174,7 +175,7 @@ export class SceneManager {
     this.mouse = new THREE.Vector2();
 
     // Initialize physics
-    this.physicsBridge = new PhysicsBridge(new THREE.Vector3(0, -9.8, 0));
+    this.physicsBridge = new World(new THREE.Vector3(0, -9.8, 0));
   }
 
   async initialize(canvas: HTMLCanvasElement): Promise<void> {
@@ -2018,12 +2019,12 @@ export class SceneManager {
     }, transform, this.scene, this.physicsBridge);
 
     // Convert mesh data to the format VoxelAvatar expects
-    const geometryData = {
-      vertices: new Float32Array(meshData.vertices),
-      indices: new Uint32Array(meshData.indices),
-      normals: new Float32Array(meshData.normals),
-      colors: new Float32Array(meshData.colors),
-    };
+    const geometryData = GeometryData.new(
+      new Float32Array(meshData.vertices),
+      new Uint32Array(meshData.indices),
+      new Float32Array(meshData.normals),
+      new Float32Array(meshData.colors)
+    );
 
     // Apply geometry from CSM mesh
     voxelAvatar.applyGeometry(geometryData);

@@ -5,7 +5,7 @@
  */
 
 import * as THREE from 'three';
-import { PhysicsBridge } from '../physics/physics-bridge';
+import { World } from '../physics/world';
 import * as logger from '../utils/logger';
 
 export interface PhysicsConfig {
@@ -19,12 +19,12 @@ export interface PhysicsConfig {
 /**
  * Initialize physics world
  *
- * Creates PhysicsBridge and sets up the physics world with ground plane
+ * Creates World and sets up the physics world with ground plane
  *
  * @param config Physics configuration
- * @returns Initialized PhysicsBridge
+ * @returns Initialized World
  */
-export async function initializePhysics(config: PhysicsConfig = {}): Promise<PhysicsBridge> {
+export async function initializePhysics(config: PhysicsConfig = {}): Promise<World> {
   const {
     gravity = new THREE.Vector3(0, -9.8, 0),
   } = config;
@@ -33,12 +33,12 @@ export async function initializePhysics(config: PhysicsConfig = {}): Promise<Phy
   const startTime = performance.now();
 
   // Create physics bridge
-  const physicsBridge = new PhysicsBridge(gravity);
+  const physicsBridge = new World(gravity);
 
   // Initialize physics world (creates WasmPhysicsWorld internally)
   await physicsBridge.init();
 
-  // Ground plane is created automatically in PhysicsBridge.init()
+  // Ground plane is created automatically in World.init()
   // No need to create it again here
 
   const elapsed = performance.now() - startTime;
@@ -51,7 +51,7 @@ export async function initializePhysics(config: PhysicsConfig = {}): Promise<Phy
 /**
  * Dispose physics world
  */
-export function disposePhysics(physicsBridge: PhysicsBridge): void {
+export function disposePhysics(physicsBridge: World): void {
   logger.log('common', '[PhysicsInit] Disposing physics world...');
   physicsBridge.dispose();
 }
