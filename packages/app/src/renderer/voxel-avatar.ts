@@ -1,6 +1,6 @@
 import * as logger from '../utils/logger';
 import * as THREE from 'three';
-import type { GeometryData } from '@workspace/wasm';
+import type { GeometryData } from '@workspace/wasm-world';
 import { Transform } from './transform';
 import { BaseAvatar } from './base-avatar';
 import { createTexturedVoxelMaterial, updateShaderLighting } from './textured-voxel-material';

@@ -1,6 +1,6 @@
 import * as logger from '../utils/logger';
 import { GeometryResult } from '../workers/geometry-worker';
-import { getMacroDepth, getMicroDepth, getBorderDepth } from '../config/depth-config';
+import { getMacroDepth, getMicroDepth, getBorderDepth, getSeed } from '../config/depth-config';
 
 export class GeometryController {
   private worker: Worker | null = null;
@@ -11,11 +11,13 @@ export class GeometryController {
   private macroDepth: number;
   private microDepth: number;
   private borderDepth: number;
+  private seed: number;
 
-  constructor(macroDepth: number = getMacroDepth(), microDepth: number = getMicroDepth(), borderDepth: number = getBorderDepth()) {
+  constructor(macroDepth: number = getMacroDepth(), microDepth: number = getMicroDepth(), borderDepth: number = getBorderDepth(), seed: number = getSeed()) {
     this.macroDepth = macroDepth;
     this.microDepth = microDepth;
     this.borderDepth = borderDepth;
+    this.seed = seed;
   }
 
   async initialize(
@@ -41,7 +43,7 @@ export class GeometryController {
         }
       });
 
-      this.worker.postMessage({ type: 'init', macroDepth: this.macroDepth, microDepth: this.microDepth, borderDepth: this.borderDepth });
+      this.worker.postMessage({ type: 'init', macroDepth: this.macroDepth, microDepth: this.microDepth, borderDepth: this.borderDepth, seed: this.seed });
     });
   }
 
@@ -157,16 +159,17 @@ export class GeometryController {
     });
   }
 
-  async reinitialize(macroDepth: number, microDepth: number, borderDepth: number, onGeometryUpdate: (geometry: GeometryResult) => void): Promise<void> {
+  async reinitialize(macroDepth: number, microDepth: number, borderDepth: number, seed: number, onGeometryUpdate: (geometry: GeometryResult) => void): Promise<void> {
     // Terminate existing worker
     this.destroy();
 
-    // Update depths
+    // Update depths and seed
     this.macroDepth = macroDepth;
     this.microDepth = microDepth;
     this.borderDepth = borderDepth;
+    this.seed = seed;
 
-    // Reinitialize with new depths
+    // Reinitialize with new depths and seed
     await this.initialize(onGeometryUpdate);
   }
 

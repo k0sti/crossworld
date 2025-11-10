@@ -32,19 +32,7 @@ impl WorldCube {
     /// - Each border layer wraps the world in an octa (8 cubes)
     /// - 4 bottom cubes + 4 top cubes surround the world
     /// - Original world placed at octant 0 (bottom-front-left)
-    pub fn new(macro_depth: u32, micro_depth: u32, border_depth: u32) -> Self {
-        // Generate a random seed for unique world generation each time
-        #[cfg(not(test))]
-        let seed = {
-            // Use JavaScript's Math.random() for WASM compatibility
-            let random_value = js_sys::Math::random();
-            (random_value * (u32::MAX as f64)) as u32
-        };
-
-        // Use fixed seed for tests for reproducibility
-        #[cfg(test)]
-        let seed = 12345u32;
-
+    pub fn new(macro_depth: u32, micro_depth: u32, border_depth: u32, seed: u32) -> Self {
         let noise = Perlin::new(seed);
         let fbm = Fbm::new(seed);
 
@@ -254,7 +242,7 @@ impl WorldCube {
 
 impl Default for WorldCube {
     fn default() -> Self {
-        Self::new(4, 0, 4) // Default: macro depth 4, micro depth 0, border depth 4
+        Self::new(4, 0, 4, 0) // Default: macro depth 4, micro depth 0, border depth 4, seed 0
     }
 }
 

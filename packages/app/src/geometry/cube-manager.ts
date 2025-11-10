@@ -1,6 +1,6 @@
 import * as logger from '../utils/logger';
-import { WorldCube, GeometryData } from '@workspace/wasm';
-import { getMacroDepth, getMicroDepth, getBorderDepth } from '../config/depth-config';
+import { WorldCube, GeometryData } from '@workspace/wasm-world';
+import { getMacroDepth, getMicroDepth, getBorderDepth, getSeed } from '../config/depth-config';
 
 /**
  * Operation types for the command queue
@@ -25,25 +25,28 @@ export class CubeManager {
   private macroDepth: number;
   private microDepth: number;
   private borderDepth: number;
+  private seed: number;
   private isProcessing = false;
 
   constructor(
     macroDepth: number = getMacroDepth(),
     microDepth: number = getMicroDepth(),
-    borderDepth: number = getBorderDepth()
+    borderDepth: number = getBorderDepth(),
+    seed: number = getSeed()
   ) {
     this.macroDepth = macroDepth;
     this.microDepth = microDepth;
     this.borderDepth = borderDepth;
-    logger.log('geometry', `CubeManager created: macro=${macroDepth}, micro=${microDepth}, border=${borderDepth}`);
+    this.seed = seed;
+    logger.log('geometry', `CubeManager created: macro=${macroDepth}, micro=${microDepth}, border=${borderDepth}, seed=${seed}`);
   }
 
   /**
    * Initialize the world cube
    */
   async initialize(): Promise<void> {
-    logger.log('geometry', `Initializing WorldCube: macro=${this.macroDepth}, micro=${this.microDepth}, border=${this.borderDepth}`);
-    this.worldCube = new WorldCube(this.macroDepth, this.microDepth, this.borderDepth);
+    logger.log('geometry', `Initializing WorldCube: macro=${this.macroDepth}, micro=${this.microDepth}, border=${this.borderDepth}, seed=${this.seed}`);
+    this.worldCube = new WorldCube(this.macroDepth, this.microDepth, this.borderDepth, this.seed);
 
     // Load material colors from materials.json
     await this.loadMaterialColors();
