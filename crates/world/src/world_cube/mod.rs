@@ -1,7 +1,7 @@
 mod builder;
 
 use crate::GeometryData;
-use crossworld_cube::{
+use cube::{
     ColorMapper, Cube, CubeCoord, DefaultMeshBuilder, Octree, glam::IVec3, serialize_csm,
 };
 use noise::{Fbm, Perlin};
@@ -187,7 +187,7 @@ impl WorldCube {
         // Use face-based mesh generation with neighbor culling
         // Base depth is where voxels are 1 unit in size (macro_depth + border_depth)
         let base_depth = self.macro_depth + self.border_depth;
-        crossworld_cube::generate_face_mesh(
+        cube::generate_face_mesh(
             &self.octree.root,
             &mut builder,
             |index| color_mapper.map(index),

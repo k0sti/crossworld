@@ -1,6 +1,6 @@
 use super::WorldCube;
 use super::world_cube::WorldCube as WorldCubeInternal;
-use crossworld_cube::Cube;
+use cube::Cube;
 
 #[test]
 fn test_basic_voxel_operations() {

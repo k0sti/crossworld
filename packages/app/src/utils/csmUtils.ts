@@ -1,5 +1,6 @@
 import * as logger from './logger';
-import * as cubeWasm from 'crossworld-cube'
+import cubeInit from 'cube'
+import * as cubeWasm from 'cube'
 import type { CubeCoord } from '../types/cube-coord'
 import { ensureCubeWasmInitialized } from './cubeWasm'
 

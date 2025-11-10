@@ -1,4 +1,4 @@
-use crossworld_cube::{Cube, IVec3Ext, glam::IVec3};
+use cube::{Cube, IVec3Ext, glam::IVec3};
 use noise::{Fbm, NoiseFn, Perlin};
 use std::rc::Rc;
 
