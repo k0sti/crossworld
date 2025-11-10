@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Box } from '@chakra-ui/react';
 import { SceneManager } from '../renderer/scene';
 import { GeometryController } from '../geometry/geometry-controller';
-import init from '@workspace/wasm-world';
+import init from 'crossworld-world';
 import type { AvatarStateService, AvatarConfig } from '../services/avatar-state';
 import type { TeleportAnimationType } from '../renderer/teleport-animation';
 import { DebugPanel, type DebugInfo } from './WorldPanel';
@@ -168,8 +168,10 @@ export function WorldCanvas({
       sceneManagerRef.current = sceneManager;
     }
 
-    // Initialize scene
-    sceneManager.initialize(canvas);
+    // Initialize scene (async to allow physics WASM loading)
+    sceneManager.initialize(canvas).catch((error: unknown) => {
+      logger.error('renderer', 'Failed to initialize scene:', error);
+    });
 
     // Set position update callback and subscribe to state changes
     let unsubscribe: (() => void) | undefined;

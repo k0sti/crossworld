@@ -1,3 +1,4 @@
+mod character_controller;
 mod collider;
 mod cube_object;
 mod world;
@@ -6,6 +7,7 @@ mod world;
 #[cfg(feature = "wasm")]
 mod wasm;
 
+pub use character_controller::{CharacterController, CharacterControllerConfig, RaycastHit};
 pub use collider::{
     create_box_collider, create_capsule_collider, create_sphere_collider, VoxelColliderBuilder,
 };

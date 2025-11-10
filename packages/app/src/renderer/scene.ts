@@ -7,6 +7,7 @@ import { Transform } from './transform';
 import type { TeleportAnimationType } from './teleport-animation';
 import { CameraController } from './camera-controller';
 import { GamepadController } from './gamepad-controller';
+import { World } from '../physics/world';
 import {
   worldToCube,
   cubeToWorld,
@@ -26,6 +27,7 @@ import {
 } from '../config/depth-config';
 import { CheckerPlane } from './checker-plane';
 import { loadCubeFromCsm, raycastWasm } from '../utils/cubeWasm';
+import { GeometryData } from 'crossworld-world';
 import { raycastMesh, type MeshRaycastResult } from '../utils/meshRaycast';
 import { raycastWorld, calculateAvatarPlacement } from '../utils/worldRaycast';
 import { SunSystem } from './sun-system';
@@ -65,6 +67,7 @@ export class SceneManager {
   private checkerPlane: CheckerPlane | null = null;
   private groundPlane: THREE.Plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0); // Plane at y=0
   private currentAvatar: IAvatar | null = null;
+  private physicsBridge: World;
   private raycaster: THREE.Raycaster;
   private mouse: THREE.Vector2;
   private lastTime: number = 0;
@@ -170,9 +173,12 @@ export class SceneManager {
     this.renderer = new THREE.WebGLRenderer();
     this.raycaster = new THREE.Raycaster();
     this.mouse = new THREE.Vector2();
+
+    // Initialize physics
+    this.physicsBridge = new World(new THREE.Vector3(0, -9.8, 0));
   }
 
-  initialize(canvas: HTMLCanvasElement): void {
+  async initialize(canvas: HTMLCanvasElement): Promise<void> {
     // Request WebGL 2.0 context for texture array support
     const gl = canvas.getContext('webgl2');
     if (!gl) {
@@ -180,6 +186,9 @@ export class SceneManager {
     } else {
       logger.log('renderer', 'Using WebGL 2.0 context');
     }
+
+    // Initialize physics WASM module
+    await this.physicsBridge.init();
 
     this.renderer = new THREE.WebGLRenderer({
       canvas,
@@ -987,10 +996,19 @@ export class SceneManager {
         this.adjustCursorDepth(-1);
       }
 
+      // Jump with Spacebar (when not in edit mode)
+      if (event.code === 'Space' && !this.isEditMode) {
+        event.preventDefault();
+        if (this.currentAvatar) {
+          this.currentAvatar.jump();
+        }
+        return;
+      }
+
       // Edit mode specific controls
       if (!this.isEditMode) return;
 
-      // Toggle depth select mode with Spacebar
+      // Toggle depth select mode with Spacebar (in edit mode)
       if (event.code === 'Space') {
         event.preventDefault();
         this.depthSelectMode = this.depthSelectMode === 1 ? 2 : 1;
@@ -1700,6 +1718,9 @@ export class SceneManager {
       this.updateVoxelCursorAtCenter();
     }
 
+    // Step physics simulation
+    this.physicsBridge.step(deltaTime_s);
+
     // Update current avatar
     if (this.currentAvatar) {
       const wasTeleporting = this.currentAvatar.isTeleporting();
@@ -1774,8 +1795,9 @@ export class SceneManager {
 
       // Handle jump button (A button)
       if (this.gamepadController.wasJumpPressed()) {
-        // TODO: Implement jump functionality
-        console.log('[Scene] Jump button pressed!');
+        if (this.currentAvatar) {
+          this.currentAvatar.jump();
+        }
       }
     }
 
@@ -1814,6 +1836,10 @@ export class SceneManager {
     return this.scene;
   }
 
+  getRenderer(): THREE.WebGLRenderer {
+    return this.renderer;
+  }
+
   createAvatar(modelUrl?: string, scale?: number, transform?: Transform, renderScaleDepth?: number): void {
     // Remove existing avatar
     if (this.currentAvatar) {
@@ -1821,8 +1847,8 @@ export class SceneManager {
       this.currentAvatar.dispose();
     }
 
-    // Create new GLB avatar
-    this.currentAvatar = new Avatar(transform, { modelUrl, scale, renderScaleDepth }, this.scene);
+    // Create new GLB avatar with physics
+    this.currentAvatar = new Avatar(transform, { modelUrl, scale, renderScaleDepth }, this.scene, this.physicsBridge);
     this.scene.add(this.currentAvatar.getObject3D());
 
     // Set raycast mesh for ground detection
@@ -1914,7 +1940,7 @@ export class SceneManager {
         logger.log('renderer', `[Avatar] No texture specified (using vertex colors only)`);
       }
 
-      // Create new voxel avatar with shared texture system
+      // Create new voxel avatar with shared texture system and physics
       const voxelAvatar = new VoxelAvatar({
         userNpub: userNpub ?? '',
         scale,
@@ -1924,7 +1950,7 @@ export class SceneManager {
         enableTextures: this.avatarTexturesEnabled,
         renderer: this.renderer,
         scene: this.scene,
-      }, transform, this.scene);
+      }, transform, this.scene, this.physicsBridge);
 
       // Apply geometry from .vox file
       voxelAvatar.applyGeometry(geometryData);
@@ -1980,7 +2006,7 @@ export class SceneManager {
       }
     }
 
-    // Create new voxel avatar (CSM avatars use VoxelAvatar class) with shared texture system
+    // Create new voxel avatar (CSM avatars use VoxelAvatar class) with shared texture system and physics
     const voxelAvatar = new VoxelAvatar({
       userNpub: userNpub ?? '',
       scale,
@@ -1990,20 +2016,15 @@ export class SceneManager {
       enableTextures: this.avatarTexturesEnabled,
       renderer: this.renderer,
       scene: this.scene,
-    }, transform, this.scene);
+    }, transform, this.scene, this.physicsBridge);
 
     // Convert mesh data to the format VoxelAvatar expects
-    const vertexCount = meshData.vertices.length / 3;
-    const geometryData = {
-      vertices: new Float32Array(meshData.vertices),
-      indices: new Uint32Array(meshData.indices),
-      normals: new Float32Array(meshData.normals),
-      colors: new Float32Array(meshData.colors),
-      uvs: new Float32Array(vertexCount * 2),
-      materialIds: new Uint8Array(vertexCount),
-      free: () => {},
-      [Symbol.dispose]: () => {},
-    } as any;
+    const geometryData = GeometryData.new(
+      new Float32Array(meshData.vertices),
+      new Uint32Array(meshData.indices),
+      new Float32Array(meshData.normals),
+      new Float32Array(meshData.colors)
+    );
 
     // Apply geometry from CSM mesh
     voxelAvatar.applyGeometry(geometryData);
@@ -2288,7 +2309,7 @@ export class SceneManager {
         logger.log('renderer', `[Remote Avatar] No texture specified for ${npub} (using vertex colors only)`);
       }
 
-      // Create voxel avatar with shared texture system
+      // Create voxel avatar with shared texture system (remote avatars don't use physics)
       const voxelAvatar = new VoxelAvatar({
         userNpub: npub,
         scale: 1.0,
@@ -2298,7 +2319,7 @@ export class SceneManager {
         renderer: this.renderer,
         scene: this.scene,
         // renderScaleDepth defaults to 0.0 in VoxelAvatar
-      }, transform, this.scene);
+      }, transform, this.scene); // Remote avatars don't get physics
 
       // Generate or load geometry (use undefined for npub to preserve original colors)
       if (avatarId && avatarId !== 'generated') {

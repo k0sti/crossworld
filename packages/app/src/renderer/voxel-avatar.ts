@@ -1,9 +1,10 @@
 import * as logger from '../utils/logger';
 import * as THREE from 'three';
-import type { GeometryData } from '@workspace/wasm-world';
+import type { GeometryData } from 'crossworld-world';
 import { Transform } from './transform';
 import { BaseAvatar } from './base-avatar';
 import { createTexturedVoxelMaterial, updateShaderLighting } from './textured-voxel-material';
+import type { World } from '../physics/world';
 
 export interface VoxelAvatarConfig {
   scale?: number;
@@ -29,9 +30,10 @@ export class VoxelAvatar extends BaseAvatar {
   constructor(
     config: VoxelAvatarConfig,
     initialTransform?: Transform,
-    scene?: THREE.Scene
+    scene?: THREE.Scene,
+    physicsBridge?: World
   ) {
-    super(initialTransform, scene);
+    super(initialTransform, scene, physicsBridge);
     this.config = config;
   }
 
@@ -52,6 +54,11 @@ export class VoxelAvatar extends BaseAvatar {
 
   protected onStopMoving(): void {
     // No animations for voxel avatars
+  }
+
+  protected onJump(): void {
+    // TODO: Add visual feedback for voxel avatar jump (scale bounce, particles, etc.)
+    logger.log('avatar', 'VoxelAvatar jumped!');
   }
 
   // ========== VOX-specific implementation ==========
@@ -209,7 +216,7 @@ export class VoxelAvatar extends BaseAvatar {
   /**
    * Clean up resources
    */
-  dispose(): void {
+  protected onDispose(): void {
     if (this.mesh) {
       this.mesh.geometry.dispose();
       if (Array.isArray(this.mesh.material)) {

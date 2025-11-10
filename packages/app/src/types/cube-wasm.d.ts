@@ -1,4 +1,4 @@
-declare module '@workspace/wasm-cube' {
+declare module 'crossworld-cube' {
   export interface MeshResult {
     vertices: number[];
     indices: number[];
