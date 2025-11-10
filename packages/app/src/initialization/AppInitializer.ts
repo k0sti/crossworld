@@ -11,6 +11,7 @@ import {
   type AppInitializerConfig,
   type InitializationPhase,
   type InitializationStateCallback,
+  type SubComponentStatus,
   isValidTransition,
 } from './types';
 import { loadAllWasmModules } from './WasmLoader';
@@ -18,15 +19,16 @@ import { initializePhysics } from './PhysicsInitializer';
 import { initializeRenderer } from './RendererInitializer';
 import type { World } from '../physics/world';
 import type { SceneManager } from '../renderer/scene';
+import { AvatarStateService } from '../services/avatar-state';
 import * as logger from '../utils/logger';
 
 /**
  * AppInitializer - Single source of truth for app initialization
  *
- * Manages initialization of all subsystems in the correct order:
- * 1. WASM modules (cube + physics) - parallel
+ * Manages initialization of all subsystems with parallel loading:
+ * 1. WASM modules (cube + physics) + Network (Nostr) - parallel
  * 2. Rendering infrastructure (renderer, scene, physics world)
- * 3. User session (login, profile) - handled by UI
+ * 3. User session (login, profile)
  * 4. Game world (materials, textures)
  * 5. Avatar spawning
  * 6. Ready to interact
@@ -42,7 +44,51 @@ export class AppInitializer {
       progress: 0,
       message: 'Initialization not started',
       timestamp: Date.now(),
+      subComponents: new Map(),
     };
+
+    // Initialize sub-component tracking
+    this.initializeSubComponents();
+  }
+
+  /**
+   * Initialize sub-component status tracking
+   */
+  private initializeSubComponents(): void {
+    const components: SubComponentStatus[] = [
+      {
+        id: 'wasm',
+        name: 'WASM',
+        color: 'purple',
+        status: 'pending',
+        progress: 0,
+      },
+      {
+        id: 'rendering',
+        name: 'Rendering',
+        color: 'blue',
+        status: 'pending',
+        progress: 0,
+      },
+      {
+        id: 'network',
+        name: 'Network',
+        color: 'green',
+        status: 'pending',
+        progress: 0,
+      },
+      {
+        id: 'session',
+        name: 'Session',
+        color: 'orange',
+        status: 'pending',
+        progress: 0,
+      },
+    ];
+
+    components.forEach((component) => {
+      this.state.subComponents.set(component.id, component);
+    });
   }
 
   /**
@@ -107,40 +153,56 @@ export class AppInitializer {
   }
 
   /**
+   * Get account manager (available after 'network' phase)
+   */
+  getAccountManager() {
+    return this.systems.accountManager;
+  }
+
+  /**
+   * Get avatar state service (available after 'network' phase)
+   */
+  getAvatarStateService() {
+    return this.systems.avatarStateService;
+  }
+
+  /**
    * Initialize all subsystems
    *
    * This is the main entry point for app initialization.
-   * Progresses through phases: wasm → rendering → ready
-   * (session and world phases are handled by UI components)
+   * Uses parallel loading for WASM and Network phases.
    */
   async initialize(config: AppInitializerConfig): Promise<void> {
     try {
       logger.log('common', '[AppInitializer] Starting initialization...');
       const totalStartTime = performance.now();
 
-      // Phase 1: Load WASM modules
-      await this.executePhase('wasm', async () => {
-        this.updateProgress(0, 'Loading WASM modules...');
-        await loadAllWasmModules();
-        this.updateProgress(100, 'WASM modules loaded');
-      });
+      // Phase 1: Parallel loading of WASM and Network
+      this.updatePhase('wasm', 0, 'Starting parallel initialization...');
 
-      // Phase 2: Initialize physics
-      this.updatePhase('rendering', 0, 'Initializing physics...');
-      const physicsBridge = await initializePhysics();
-      this.systems.physicsBridge = physicsBridge;
-      this.updateProgress(33, 'Physics initialized');
+      const [wasmResult, networkResult] = await Promise.allSettled([
+        // WASM track
+        this.initializeWasm(),
+        // Network track
+        this.initializeNetwork(config.accountManager),
+      ]);
 
-      // Phase 3: Initialize renderer and scene
-      this.updateProgress(33, 'Initializing renderer...');
-      const { sceneManager, renderer } = await initializeRenderer({
-        canvas: config.canvas,
-        physicsBridge,
-      });
-      this.systems.sceneManager = sceneManager;
-      this.systems.renderer = renderer;
-      this.systems.canvas = config.canvas;
-      this.updateProgress(100, 'Renderer initialized');
+      // Check for errors in parallel phase
+      if (wasmResult.status === 'rejected') {
+        throw new Error(`WASM initialization failed: ${wasmResult.reason}`);
+      }
+      if (networkResult.status === 'rejected') {
+        logger.warn('common', `Network initialization failed: ${networkResult.reason}`);
+        // Continue without network - it's not critical for core functionality
+      } else {
+        // Store network systems
+        const { accountManager, avatarStateService } = networkResult.value;
+        this.systems.accountManager = accountManager;
+        this.systems.avatarStateService = avatarStateService;
+      }
+
+      // Phase 2: Initialize rendering (requires WASM physics)
+      await this.initializeRendering(config.canvas, wasmResult.value);
 
       // Ready!
       this.updatePhase('ready', 100, 'Initialization complete');
@@ -154,6 +216,65 @@ export class AppInitializer {
       this.notifyCallbacks();
       throw error;
     }
+  }
+
+  /**
+   * Initialize WASM modules
+   */
+  private async initializeWasm(): Promise<World> {
+    this.updateSubComponent('wasm', { status: 'loading', progress: 0 });
+
+    await loadAllWasmModules();
+    this.updateSubComponent('wasm', { status: 'loading', progress: 50, message: 'WASM loaded' });
+
+    const physicsBridge = await initializePhysics();
+    this.systems.physicsBridge = physicsBridge;
+    this.updateSubComponent('wasm', { status: 'complete', progress: 100, message: 'Complete' });
+
+    return physicsBridge;
+  }
+
+  /**
+   * Initialize Network (Nostr) subsystems
+   */
+  private async initializeNetwork(accountManager: any) {
+    this.updateSubComponent('network', { status: 'loading', progress: 0, message: 'Connecting...' });
+
+    // Create avatar state service if we have an account manager
+    let avatarStateService: AvatarStateService | undefined;
+
+    if (accountManager) {
+      avatarStateService = new AvatarStateService(accountManager);
+      this.updateSubComponent('network', { status: 'loading', progress: 50, message: 'Service created' });
+
+      // Start subscription to avatar states
+      avatarStateService.startSubscription();
+      this.updateSubComponent('network', { status: 'loading', progress: 75, message: 'Subscribed' });
+    }
+
+    this.updateSubComponent('network', { status: 'complete', progress: 100, message: 'Complete' });
+
+    return { accountManager, avatarStateService };
+  }
+
+  /**
+   * Initialize rendering subsystems
+   */
+  private async initializeRendering(canvas: HTMLCanvasElement, physicsBridge: World): Promise<void> {
+    this.updatePhase('rendering', 0, 'Initializing renderer...');
+    this.updateSubComponent('rendering', { status: 'loading', progress: 0 });
+
+    const { sceneManager, renderer } = await initializeRenderer({
+      canvas,
+      physicsBridge,
+    });
+
+    this.systems.sceneManager = sceneManager;
+    this.systems.renderer = renderer;
+    this.systems.canvas = canvas;
+
+    this.updateSubComponent('rendering', { status: 'complete', progress: 100, message: 'Complete' });
+    this.updateProgress(100, 'Renderer initialized');
   }
 
   /**
@@ -177,17 +298,6 @@ export class AppInitializer {
   // Private helper methods
 
   /**
-   * Execute a phase with error handling
-   */
-  private async executePhase(
-    phase: InitializationPhase,
-    action: () => Promise<void>
-  ): Promise<void> {
-    this.updatePhase(phase, 0, `Starting ${phase} phase...`);
-    await action();
-  }
-
-  /**
    * Update current phase
    */
   private updatePhase(phase: InitializationPhase, progress: number, message: string): void {
@@ -196,6 +306,7 @@ export class AppInitializer {
     }
 
     this.state = {
+      ...this.state,
       phase,
       progress,
       message,
@@ -215,6 +326,27 @@ export class AppInitializer {
       message,
       timestamp: Date.now(),
     };
+
+    this.notifyCallbacks();
+  }
+
+  /**
+   * Update sub-component status
+   */
+  private updateSubComponent(
+    id: string,
+    update: Partial<Omit<SubComponentStatus, 'id' | 'name' | 'color'>>
+  ): void {
+    const current = this.state.subComponents.get(id);
+    if (!current) {
+      logger.warn('common', `[AppInitializer] Unknown sub-component: ${id}`);
+      return;
+    }
+
+    this.state.subComponents.set(id, {
+      ...current,
+      ...update,
+    });
 
     this.notifyCallbacks();
   }

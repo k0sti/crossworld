@@ -10,10 +10,12 @@ import {
 
 interface RestoreStateModalProps {
   isOpen: boolean
+  status?: string
 }
 
 export function RestoreStateModal({
   isOpen,
+  status = 'Fetching previous state...',
 }: RestoreStateModalProps) {
   return (
     <Modal isOpen={isOpen} onClose={() => {}} isCentered closeOnOverlayClick={false}>
@@ -23,7 +25,7 @@ export function RestoreStateModal({
           <VStack spacing={4}>
             <Spinner size="xl" color="blue.500" thickness="4px" />
             <Text fontSize="lg" fontWeight="medium">
-              Fetching previous state...
+              {status}
             </Text>
           </VStack>
         </ModalBody>

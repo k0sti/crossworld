@@ -12,7 +12,7 @@ import { ExtensionAccount, SimpleAccount, NostrConnectAccount } from 'applesauce
 import { ExtensionSigner, NostrConnectSigner } from 'applesauce-signers'
 import { useAccountManager } from 'applesauce-react/hooks'
 import { Relay } from 'applesauce-relay'
-import { DEFAULT_RELAYS } from '../config'
+import { getEnabledProfileRelays } from '../services/relay-settings'
 import { NostrSigninScreen } from './NostrSigninScreen'
 import { LoginSettingsService } from '../services/login-settings'
 
@@ -47,7 +47,8 @@ export function ProfileButton({ pubkey, onLogin, onOpenProfile }: ProfileButtonP
   }, [pubkey])
 
   const fetchProfile = async (pubkey: string) => {
-    for (const relayUrl of DEFAULT_RELAYS) {
+    const profileRelays = getEnabledProfileRelays()
+    for (const relayUrl of profileRelays) {
       try {
         const relay = new Relay(relayUrl)
         const events = await new Promise<any[]>((resolve) => {
