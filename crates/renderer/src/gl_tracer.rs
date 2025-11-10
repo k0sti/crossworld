@@ -173,7 +173,8 @@ impl GlCubeTracer {
 
     pub unsafe fn render_to_gl(&self, gl: &Context, width: i32, height: i32, time: f32) {
         unsafe {
-            gl.clear_color(0.0, 0.0, 0.0, 1.0);
+            // Clear to black (background for raytraced scene)
+            gl.clear_color(0.1, 0.1, 0.1, 1.0);
             gl.clear(COLOR_BUFFER_BIT);
 
             gl.use_program(Some(self.program));
