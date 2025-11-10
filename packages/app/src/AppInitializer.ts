@@ -115,8 +115,8 @@ export class AppInitializer {
       await this.world.init();
       this.updateState('rendering', 33, 'Physics initialized');
 
-      // Create scene manager and initialize
-      this.sceneManager = new SceneManager();
+      // Create scene manager with initialized physics world and initialize
+      this.sceneManager = new SceneManager(this.world);
       await this.sceneManager.initialize(canvas);
       this.renderer = this.sceneManager.getRenderer();
       this.updateState('rendering', 100, 'Renderer initialized');
