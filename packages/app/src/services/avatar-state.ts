@@ -1,7 +1,8 @@
 import * as logger from '../utils/logger';
 import { SimplePool, type Event } from 'nostr-tools'
 import { npubEncode } from 'nostr-tools/nip19'
-import { WORLD_RELAYS, getLiveChatATag, getAvatarStateDTag, AVATAR_STATE_CONFIG } from '../config'
+import { getLiveChatATag, getAvatarStateDTag, AVATAR_STATE_CONFIG } from '../config'
+import { getEnabledWorldRelays } from './relay-settings'
 import type { AccountManager } from 'applesauce-accounts'
 
 export type AvatarType = 'vox' | 'glb' | 'csm'
@@ -140,74 +141,96 @@ export class AvatarStateService {
       return
     }
 
+    // Get enabled world relays from settings
+    const worldRelays = getEnabledWorldRelays()
+    if (worldRelays.length === 0) {
+      logger.warn('service', '[AvatarState] No world relays enabled, skipping subscription')
+      return
+    }
+
     const now = Math.floor(Date.now() / 1000)
     const recentSince = now - AVATAR_STATE_CONFIG.SUBSCRIPTION_WINDOW_S
 
     // Enable batching to prevent multiple listener notifications during initial load
     this.batchingNotifications = true
 
-    // Step 1: Query existing state events (30317) without 'since'
-    // This gets all current avatar states regardless of age
-    logger.log('service', '[AvatarState] Fetching existing state events...')
-    const existingStates = await this.pool.querySync(
-      WORLD_RELAYS,
-      {
-        kinds: [AVATAR_STATE_CONFIG.STATE_EVENT_KIND],
-        '#a': [this.liveActivityATag],
-        // No 'since' - we want all current state events
-      }
-    )
+    try {
+      // Step 1: Query existing state events (30317) without 'since'
+      // This gets all current avatar states regardless of age
+      logger.log('service', '[AvatarState] Fetching existing state events...')
+      const existingStates = await this.pool.querySync(
+        worldRelays,
+        {
+          kinds: [AVATAR_STATE_CONFIG.STATE_EVENT_KIND],
+          '#a': [this.liveActivityATag],
+          // No 'since' - we want all current state events
+        }
+      )
 
-    // Process existing state events
-    existingStates.forEach(event => {
-      this.handleStateEvent(event)
-    })
+      // Process existing state events
+      existingStates.forEach(event => {
+        this.handleStateEvent(event)
+      })
 
-    logger.log('service', `[AvatarState] Loaded ${existingStates.length} existing state events`)
+      logger.log('service', `[AvatarState] Loaded ${existingStates.length} existing state events`)
+    } catch (error) {
+      logger.warn('service', '[AvatarState] Failed to fetch existing states (relay may be unavailable):', error)
+      // Continue - relay might come online later
+    }
 
-    // Step 2: Query recent update events (1317) from the last hour
-    logger.log('service', '[AvatarState] Fetching recent update events...')
-    const recentUpdates = await this.pool.querySync(
-      WORLD_RELAYS,
-      {
-        kinds: [AVATAR_STATE_CONFIG.UPDATE_EVENT_KIND],
-        '#a': [this.liveActivityATag],
-        since: recentSince,
-      }
-    )
+    try {
+      // Step 2: Query recent update events (1317) from the last hour
+      logger.log('service', '[AvatarState] Fetching recent update events...')
+      const recentUpdates = await this.pool.querySync(
+        worldRelays,
+        {
+          kinds: [AVATAR_STATE_CONFIG.UPDATE_EVENT_KIND],
+          '#a': [this.liveActivityATag],
+          since: recentSince,
+        }
+      )
 
-    // Process recent update events
-    recentUpdates.forEach(event => {
-      this.handleUpdateEvent(event)
-    })
+      // Process recent update events
+      recentUpdates.forEach(event => {
+        this.handleUpdateEvent(event)
+      })
 
-    logger.log('service', `[AvatarState] Loaded ${recentUpdates.length} recent update events`)
+      logger.log('service', `[AvatarState] Loaded ${recentUpdates.length} recent update events`)
+    } catch (error) {
+      logger.warn('service', '[AvatarState] Failed to fetch recent updates (relay may be unavailable):', error)
+      // Continue - relay might come online later
+    }
 
     // Disable batching and send a single notification with all loaded states
     this.batchingNotifications = false
     this.notifyListeners()
 
-    // Step 3: Subscribe to live updates (both state and update events) from now onwards
-    this.subscription = this.pool.subscribeMany(
-      WORLD_RELAYS,
-      {
-        kinds: [AVATAR_STATE_CONFIG.STATE_EVENT_KIND, AVATAR_STATE_CONFIG.UPDATE_EVENT_KIND],
-        '#a': [this.liveActivityATag],
-        since: now, // Only new events from now on
-      },
-      {
-        onevent: (event: Event) => {
-          if (event.kind === AVATAR_STATE_CONFIG.STATE_EVENT_KIND) {
-            this.handleStateEvent(event)
-          } else if (event.kind === AVATAR_STATE_CONFIG.UPDATE_EVENT_KIND) {
-            this.handleUpdateEvent(event)
-          }
+    try {
+      // Step 3: Subscribe to live updates (both state and update events) from now onwards
+      this.subscription = this.pool.subscribeMany(
+        worldRelays,
+        {
+          kinds: [AVATAR_STATE_CONFIG.STATE_EVENT_KIND, AVATAR_STATE_CONFIG.UPDATE_EVENT_KIND],
+          '#a': [this.liveActivityATag],
+          since: now, // Only new events from now on
         },
-        oneose: () => {
-          logger.log('service', '[AvatarState] Live subscription established')
-        },
-      }
-    )
+        {
+          onevent: (event: Event) => {
+            if (event.kind === AVATAR_STATE_CONFIG.STATE_EVENT_KIND) {
+              this.handleStateEvent(event)
+            } else if (event.kind === AVATAR_STATE_CONFIG.UPDATE_EVENT_KIND) {
+              this.handleUpdateEvent(event)
+            }
+          },
+          oneose: () => {
+            logger.log('service', '[AvatarState] Live subscription established')
+          },
+        }
+      )
+    } catch (error) {
+      logger.warn('service', '[AvatarState] Failed to subscribe to live updates (relay may be unavailable):', error)
+      // App will work in offline mode without multi-user features
+    }
   }
 
   /**
@@ -606,9 +629,25 @@ export class AvatarStateService {
       content: customMessage,
     }
 
+    // Get enabled world relays from settings
+    const worldRelays = getEnabledWorldRelays()
+    if (worldRelays.length === 0) {
+      logger.warn('service', '[AvatarState] No world relays enabled, state event not published')
+      // Update local state even if we can't publish
+      this.currentState = {
+        ...avatarConfig,
+        position,
+        status,
+        voiceConnected,
+        micEnabled,
+        customMessage,
+      }
+      return
+    }
+
     try {
       const signedEvent = await account.signEvent(unsignedEvent)
-      await this.pool.publish(WORLD_RELAYS, signedEvent)
+      await this.pool.publish(worldRelays, signedEvent)
 
       // Update current state
       this.currentState = {
@@ -620,8 +659,17 @@ export class AvatarStateService {
         customMessage,
       }
     } catch (err) {
-      logger.error('service', 'Failed to publish state event:', err)
-      throw err
+      logger.warn('service', '[AvatarState] Failed to publish state event (relay may be unavailable):', err)
+      // Update local state even if we can't publish
+      this.currentState = {
+        ...avatarConfig,
+        position,
+        status,
+        voiceConnected,
+        micEnabled,
+        customMessage,
+      }
+      // Don't throw - allow app to continue working offline
     }
   }
 
@@ -692,15 +740,25 @@ export class AvatarStateService {
       content: update.customMessage || '',
     }
 
+    // Get enabled world relays from settings
+    const worldRelays = getEnabledWorldRelays()
+    if (worldRelays.length === 0) {
+      // Update local state even if we can't publish
+      Object.assign(this.currentState, update)
+      return
+    }
+
     try {
       const signedEvent = await account.signEvent(unsignedEvent)
-      await this.pool.publish(WORLD_RELAYS, signedEvent)
+      await this.pool.publish(worldRelays, signedEvent)
 
       // Update current state
       Object.assign(this.currentState, update)
     } catch (err) {
-      logger.error('service', 'Failed to publish update event:', err)
-      throw err
+      logger.warn('service', '[AvatarState] Failed to publish update event (relay may be unavailable):', err)
+      // Update local state even if we can't publish
+      Object.assign(this.currentState, update)
+      // Don't throw - allow app to continue working offline
     }
   }
 
@@ -772,9 +830,12 @@ export class AvatarStateService {
       const now = Math.floor(Date.now() / 1000)
       const since = now - AVATAR_STATE_CONFIG.SUBSCRIPTION_WINDOW_S
 
+      // Get enabled world relays from settings
+      const worldRelays = getEnabledWorldRelays()
+
       // Query for state event
       const stateEvent = await this.pool.get(
-        WORLD_RELAYS,
+        worldRelays,
         {
           kinds: [AVATAR_STATE_CONFIG.STATE_EVENT_KIND],
           authors: [pubkey],
@@ -830,6 +891,7 @@ export class AvatarStateService {
   destroy(): void {
     this.stopHeartbeat()
     this.stopSubscription()
-    this.pool.close(WORLD_RELAYS)
+    const worldRelays = getEnabledWorldRelays()
+    this.pool.close(worldRelays)
   }
 }

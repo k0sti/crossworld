@@ -33,7 +33,7 @@ import { raycastWorld, calculateAvatarPlacement } from '../utils/worldRaycast';
 import { SunSystem } from './sun-system';
 import { PostProcessing } from './post-processing';
 import { profileCache } from '../services/profile-cache';
-import { DEFAULT_RELAYS } from '../config';
+import { getEnabledProfileRelays } from '../services/relay-settings';
 import * as logger from '../utils/logger';
 import { MaterialsLoader } from './materials-loader';
 import { createTexturedVoxelMaterial, updateShaderLighting } from './textured-voxel-material';
@@ -2399,7 +2399,7 @@ export class SceneManager {
   private async fetchAndApplyProfilePicture(pubkey: string, avatar: IAvatar, npub?: string): Promise<void> {
     logger.log('renderer', `[Scene] fetchAndApplyProfilePicture called for pubkey: ${pubkey}, npub: ${npub}`);
     try {
-      const profile = await profileCache.getProfile(pubkey, DEFAULT_RELAYS);
+      const profile = await profileCache.getProfile(pubkey, getEnabledProfileRelays());
       logger.log('renderer', `[Scene] Profile fetched:`, profile);
 
       // Set display name for initials fallback

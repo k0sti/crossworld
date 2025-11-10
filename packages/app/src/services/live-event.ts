@@ -1,6 +1,7 @@
 import * as logger from '../utils/logger';
 import { SimplePool, type Event } from 'nostr-tools'
-import { LIVE_CHAT_D_TAG, APP_PUBKEY, DEFAULT_RELAYS } from '../config'
+import { LIVE_CHAT_D_TAG, APP_PUBKEY } from '../config'
+import { getEnabledWorldRelays } from './relay-settings'
 
 export interface LiveEventData {
   title: string
@@ -16,9 +17,10 @@ export interface LiveEventData {
  */
 export async function fetchLiveEvent(): Promise<LiveEventData | null> {
   const pool = new SimplePool()
+  const worldRelays = getEnabledWorldRelays()
 
   try {
-    const event = await pool.get(DEFAULT_RELAYS, {
+    const event = await pool.get(worldRelays, {
       kinds: [30311],
       authors: [APP_PUBKEY],
       '#d': [LIVE_CHAT_D_TAG],
@@ -31,7 +33,7 @@ export async function fetchLiveEvent(): Promise<LiveEventData | null> {
 
     return parseLiveEvent(event)
   } finally {
-    pool.close(DEFAULT_RELAYS)
+    pool.close(worldRelays)
   }
 }
 
@@ -42,9 +44,10 @@ export function subscribeLiveEvent(
   onUpdate: (data: LiveEventData) => void
 ): () => void {
   const pool = new SimplePool()
+  const worldRelays = getEnabledWorldRelays()
 
   const sub = pool.subscribeMany(
-    DEFAULT_RELAYS,
+    worldRelays,
     {
       kinds: [30311],
       authors: [APP_PUBKEY],
@@ -65,7 +68,7 @@ export function subscribeLiveEvent(
 
   return () => {
     sub.close()
-    pool.close(DEFAULT_RELAYS)
+    pool.close(worldRelays)
   }
 }
 
