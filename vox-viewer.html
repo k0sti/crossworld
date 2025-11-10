@@ -608,10 +608,13 @@
                 const x = voxel.x;
                 const y = voxel.z;  // MagicaVoxel's Z becomes Y (up)
                 const z = voxel.y;  // MagicaVoxel's Y becomes Z (depth)
+
+                // MagicaVoxel uses 1-based color indexing, adjust to 0-based palette array
                 const colorIndex = voxel.colorIndex;
+                const paletteIndex = colorIndex > 0 ? colorIndex - 1 : 0;
 
                 // Use palette color directly from the VOX file
-                const paletteColor = palette[colorIndex];
+                const paletteColor = palette[paletteIndex];
                 const r = paletteColor.r / 255;
                 const g = paletteColor.g / 255;
                 const b = paletteColor.b / 255;
@@ -711,11 +714,11 @@
                 currentMesh = new THREE.Mesh(geometry, material);
                 currentMesh.position.set(0, 0, 0);
 
-                // Reset rotation
+                // Set initial rotation to face camera (rotated 45 degrees around Y axis)
                 targetRotationX = 0;
-                targetRotationY = 0;
+                targetRotationY = Math.PI / 4;  // 45 degrees to face front-right
                 rotationX = 0;
-                rotationY = 0;
+                rotationY = Math.PI / 4;
                 autoRotate = true;
 
                 scene.add(currentMesh);
