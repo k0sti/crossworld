@@ -168,8 +168,10 @@ export function WorldCanvas({
       sceneManagerRef.current = sceneManager;
     }
 
-    // Initialize scene
-    sceneManager.initialize(canvas);
+    // Initialize scene (async to allow physics WASM loading)
+    sceneManager.initialize(canvas).catch((error: unknown) => {
+      logger.error('renderer', 'Failed to initialize scene:', error);
+    });
 
     // Set position update callback and subscribe to state changes
     let unsubscribe: (() => void) | undefined;

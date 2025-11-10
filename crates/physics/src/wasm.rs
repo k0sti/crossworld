@@ -6,7 +6,7 @@ use crate::{
     world::PhysicsWorld,
 };
 use glam::Vec3;
-use nalgebra::{Quaternion, UnitQuaternion};
+use nalgebra::{Quaternion, Unit, UnitQuaternion};
 use rapier3d::prelude::*;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -47,18 +47,19 @@ impl WasmPhysicsWorld {
 
     /// Add rigid body from voxel cube (CSM format)
     ///
-    /// # Arguments
-    /// * `csm_code` - Cube in CSM (Cubescript) format
-    /// * `max_depth` - Maximum octree depth for collision detail
-    /// * `is_static` - If true, body is immovable (terrain). If false, dynamic (movable object)
-    ///
-    /// # Returns
-    /// Object ID for the created body
-    #[wasm_bindgen(js_name = addVoxelBody)]
-    pub fn add_cube(&self, cube: &Cube, config: &ObjectConfig) -> Result<u32, JsValue> {
-        use std::rc::Rc;
-        //TODO Implement
-    }
+    // TODO: Implement add_cube method for voxel objects
+    // Currently commented out to allow WASM build
+    // /// # Arguments
+    // /// * `cube` - Cube object
+    // /// * `config` - Object configuration
+    // ///
+    // /// # Returns
+    // /// Object ID for the created body
+    // #[wasm_bindgen(js_name = addVoxelBody)]
+    // pub fn add_cube(&self, cube: &Cube, config: &ObjectConfig) -> Result<u32, JsValue> {
+    //     use std::rc::Rc;
+    //     //TODO Implement
+    // }
 
     /// Get list of all object IDs
     ///
@@ -345,6 +346,37 @@ impl WasmPhysicsWorld {
         id
     }
 
+    /// Create a static ground plane at Y=0
+    ///
+    /// Creates an infinite horizontal plane for character controllers to walk on.
+    /// The plane is fixed (static) and cannot be moved.
+    ///
+    /// # Returns
+    /// Object ID for the ground plane body
+    #[wasm_bindgen(js_name = createGroundPlane)]
+    pub fn create_ground_plane(&self) -> u32 {
+        let mut world = self.inner.borrow_mut();
+
+        // Create a fixed (static) rigid body at the origin
+        let ground_body = RigidBodyBuilder::fixed()
+            .translation(vector![0.0, 0.0, 0.0])
+            .build();
+
+        let body_handle = world.add_rigid_body(ground_body);
+
+        // Create a horizontal plane collider (Y=0 plane with normal pointing up)
+        let ground_normal = Unit::new_normalize(vector![0.0, 1.0, 0.0]);
+        let ground_collider = ColliderBuilder::halfspace(ground_normal)
+            .friction(0.5)
+            .restitution(0.0)
+            .build();
+
+        world.add_collider(ground_collider, body_handle);
+
+        // Return the body handle as object ID
+        body_handle.into_raw_parts().0
+    }
+
     /// Move character with horizontal velocity
     ///
     /// # Arguments
@@ -390,6 +422,23 @@ impl WasmPhysicsWorld {
         }
     }
 
+    /// Get character vertical velocity
+    ///
+    /// # Arguments
+    /// * `character_id` - Character ID
+    ///
+    /// # Returns
+    /// Vertical velocity (positive = upward, negative = falling)
+    #[wasm_bindgen(js_name = getCharacterVerticalVelocity)]
+    pub fn get_character_vertical_velocity(&self, character_id: u32) -> f32 {
+        let characters = self.characters.borrow();
+        if let Some(controller) = characters.get(&character_id) {
+            controller.vertical_velocity()
+        } else {
+            0.0
+        }
+    }
+
     /// Get object (character) ground normal
     ///
     /// # Arguments
@@ -405,6 +454,25 @@ impl WasmPhysicsWorld {
             vec![normal.x, normal.y, normal.z]
         } else {
             vec![0.0, 1.0, 0.0]
+        }
+    }
+
+    /// Get character position
+    ///
+    /// # Arguments
+    /// * `character_id` - Character ID
+    ///
+    /// # Returns
+    /// Array [x, y, z]
+    #[wasm_bindgen(js_name = getCharacterPosition)]
+    pub fn get_character_position(&self, character_id: u32) -> Vec<f32> {
+        let world = self.inner.borrow();
+        let characters = self.characters.borrow();
+        if let Some(controller) = characters.get(&character_id) {
+            let pos = controller.position(&world);
+            vec![pos.x, pos.y, pos.z]
+        } else {
+            vec![0.0, 0.0, 0.0]
         }
     }
 }

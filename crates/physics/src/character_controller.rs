@@ -243,13 +243,45 @@ impl CharacterController {
 
         // Check just beyond the capsule bottom
         let capsule_half_height = self.config.height / 2.0;
-        let max_distance = capsule_half_height + self.config.ground_check_distance;
+
+        // Use adaptive ray distance: short when grounded, long when falling
+        // This allows finding ground even when falling from high up, but keeps
+        // the grounded check precise for walking on slopes
+        let max_distance = if self.is_grounded {
+            capsule_half_height + self.config.ground_check_distance  // Precise check: ~1.0m
+        } else {
+            100.0  // Long-range check when falling: 100m
+        };
+
+        #[cfg(target_arch = "wasm32")]
+        {
+            use wasm_bindgen::prelude::*;
+            #[wasm_bindgen]
+            extern "C" {
+                #[wasm_bindgen(js_namespace = console)]
+                fn log(s: &str);
+            }
+            log(&format!("[GroundDetect] pos.y={:.2}, half_height={:.2}, max_dist={:.2}, v_vel={:.2}",
+                position.y, capsule_half_height, max_distance, self.vertical_velocity));
+        }
 
         if let Some((_handle, distance, _point, normal)) =
-            world.cast_ray(ray_origin, ray_dir, max_distance, true)
+            world.cast_ray_with_exclusion(ray_origin, ray_dir, max_distance, true, Some(self.collider_handle))
         {
             // Only consider grounded if the hit is close to the capsule bottom
             let distance_from_bottom = distance - capsule_half_height;
+
+            #[cfg(target_arch = "wasm32")]
+            {
+                use wasm_bindgen::prelude::*;
+                #[wasm_bindgen]
+                extern "C" {
+                    #[wasm_bindgen(js_namespace = console)]
+                    fn log(s: &str);
+                }
+                log(&format!("[GroundDetect] HIT: distance={:.2}, from_bottom={:.2}, check_dist={:.2}",
+                    distance, distance_from_bottom, self.config.ground_check_distance));
+            }
 
             if distance_from_bottom <= self.config.ground_check_distance {
                 self.is_grounded = true;
@@ -264,6 +296,16 @@ impl CharacterController {
                 self.ground_normal = Vec3::Y;
             }
         } else {
+            #[cfg(target_arch = "wasm32")]
+            {
+                use wasm_bindgen::prelude::*;
+                #[wasm_bindgen]
+                extern "C" {
+                    #[wasm_bindgen(js_namespace = console)]
+                    fn log(s: &str);
+                }
+                log("[GroundDetect] NO HIT");
+            }
             self.is_grounded = false;
             self.ground_normal = Vec3::Y;
         }

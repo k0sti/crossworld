@@ -131,6 +131,7 @@ impl PhysicsWorld {
     /// * `direction` - Direction vector (will be normalized)
     /// * `max_distance` - Maximum distance to check
     /// * `solid_only` - If true, ignores sensor colliders
+    /// * `exclude_collider` - Optional collider to exclude from the raycast
     ///
     /// # Returns
     /// Optional tuple of (ColliderHandle, hit_distance, hit_point, hit_normal)
@@ -140,6 +141,28 @@ impl PhysicsWorld {
         direction: Vec3,
         max_distance: f32,
         solid_only: bool,
+    ) -> Option<(ColliderHandle, f32, Vec3, Vec3)> {
+        self.cast_ray_with_exclusion(origin, direction, max_distance, solid_only, None)
+    }
+
+    /// Perform a raycast through the physics world with an optional collider exclusion
+    ///
+    /// # Arguments
+    /// * `origin` - Starting point of the ray
+    /// * `direction` - Direction vector (will be normalized)
+    /// * `max_distance` - Maximum distance to check
+    /// * `solid_only` - If true, ignores sensor colliders
+    /// * `exclude_collider` - Optional collider to exclude from the raycast
+    ///
+    /// # Returns
+    /// Optional tuple of (ColliderHandle, hit_distance, hit_point, hit_normal)
+    pub fn cast_ray_with_exclusion(
+        &self,
+        origin: Vec3,
+        direction: Vec3,
+        max_distance: f32,
+        solid_only: bool,
+        exclude_collider: Option<ColliderHandle>,
     ) -> Option<(ColliderHandle, f32, Vec3, Vec3)> {
         let dir = direction.normalize();
         let ray = Ray::new(
@@ -156,6 +179,13 @@ impl PhysicsWorld {
         let mut closest_hit: Option<(ColliderHandle, f32, Vec3)> = None;
 
         for (handle, collider) in self.collider_set.iter() {
+            // Skip excluded collider
+            if let Some(excluded) = exclude_collider {
+                if handle == excluded {
+                    continue;
+                }
+            }
+
             if let Some(toi) = collider.shape().cast_ray_and_get_normal(
                 collider.position(),
                 &ray,
@@ -164,7 +194,7 @@ impl PhysicsWorld {
             ) {
                 let distance = toi.time_of_impact;
                 if closest_hit.is_none() || distance < closest_hit.as_ref().unwrap().1 {
-                    let hit_point = ray.point_at(distance);
+                    let _hit_point = ray.point_at(distance);
                     closest_hit = Some((
                         handle,
                         distance,
