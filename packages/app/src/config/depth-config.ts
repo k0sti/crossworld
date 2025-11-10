@@ -13,8 +13,14 @@ let currentMicroDepth = 0;
 /** Current border depth - number of border cube layers */
 let currentBorderDepth = 4;
 
+/** Current world generation seed - for deterministic world generation */
+let currentSeed = 0;
+
 /** Callbacks to notify when depth changes */
 const depthChangeListeners: Array<(macroDepth: number, microDepth: number, borderDepth: number) => void> = [];
+
+/** Callbacks to notify when seed changes */
+const seedChangeListeners: Array<(seed: number) => void> = [];
 
 /**
  * Get current macro depth
@@ -130,6 +136,25 @@ export function setBorderDepth(depth: number): void {
 }
 
 /**
+ * Get current seed
+ */
+export function getSeed(): number {
+  return currentSeed;
+}
+
+/**
+ * Set seed and notify listeners
+ */
+export function setSeed(seed: number): void {
+  if (seed < 0 || seed > 4294967295) {
+    logger.warn('common', `Invalid seed ${seed}, must be between 0 and 4294967295`);
+    return;
+  }
+  currentSeed = seed;
+  notifySeedListeners();
+}
+
+/**
  * Subscribe to depth changes
  */
 export function onDepthChange(callback: (macroDepth: number, microDepth: number, borderDepth: number) => void): () => void {
@@ -144,10 +169,33 @@ export function onDepthChange(callback: (macroDepth: number, microDepth: number,
 }
 
 /**
+ * Subscribe to seed changes
+ */
+export function onSeedChange(callback: (seed: number) => void): () => void {
+  seedChangeListeners.push(callback);
+  // Return unsubscribe function
+  return () => {
+    const index = seedChangeListeners.indexOf(callback);
+    if (index > -1) {
+      seedChangeListeners.splice(index, 1);
+    }
+  };
+}
+
+/**
  * Notify all listeners of depth change
  */
 function notifyListeners(): void {
   depthChangeListeners.forEach(callback => {
     callback(currentMacroDepth, currentMicroDepth, currentBorderDepth);
+  });
+}
+
+/**
+ * Notify all listeners of seed change
+ */
+function notifySeedListeners(): void {
+  seedChangeListeners.forEach(callback => {
+    callback(currentSeed);
   });
 }

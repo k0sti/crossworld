@@ -1993,12 +1993,17 @@ export class SceneManager {
     }, transform, this.scene);
 
     // Convert mesh data to the format VoxelAvatar expects
+    const vertexCount = meshData.vertices.length / 3;
     const geometryData = {
       vertices: new Float32Array(meshData.vertices),
       indices: new Uint32Array(meshData.indices),
       normals: new Float32Array(meshData.normals),
       colors: new Float32Array(meshData.colors),
-    };
+      uvs: new Float32Array(vertexCount * 2),
+      materialIds: new Uint8Array(vertexCount),
+      free: () => {},
+      [Symbol.dispose]: () => {},
+    } as any;
 
     // Apply geometry from CSM mesh
     voxelAvatar.applyGeometry(geometryData);
