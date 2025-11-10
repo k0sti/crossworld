@@ -1,7 +1,7 @@
 import * as logger from '../utils/logger';
 import { SimplePool, type Event } from 'nostr-tools'
-import { WORLD_RELAYS } from '../config'
 import { getMacroDepth, getMicroDepth } from '../config/depth-config'
+import { getEnabledWorldRelays } from './relay-settings'
 import type { AccountManager } from 'applesauce-accounts'
 
 // Singleton pool for world storage operations
@@ -117,15 +117,16 @@ export async function publishWorld(
   // Sign event
   const signedEvent = await account.signer.signEvent(unsignedEvent)
 
-  // Publish to WORLD_RELAYS using persistent pool
-  if (!WORLD_RELAYS || WORLD_RELAYS.length === 0) {
-    logger.warn('storage', 'No world relays configured, world not published')
+  // Publish to enabled world relays using persistent pool
+  const worldRelays = getEnabledWorldRelays()
+  if (worldRelays.length === 0) {
+    logger.warn('storage', 'No world relays enabled, world not published')
     // Return signed event even if we can't publish (for local storage)
     return signedEvent
   }
 
   try {
-    await pool.publish(WORLD_RELAYS, signedEvent)
+    await pool.publish(worldRelays, signedEvent)
   } catch (err) {
     logger.warn('storage', 'Failed to publish world (relay may be unavailable):', err)
     // Return signed event anyway - it's still valid for local use
@@ -141,14 +142,15 @@ export async function publishWorld(
 export async function fetchUserWorlds(pubkey: string): Promise<WorldMetadata[]> {
   const pool = getPool()
 
-  // Check if world relays are configured
-  if (!WORLD_RELAYS || WORLD_RELAYS.length === 0) {
-    logger.warn('storage', 'No world relays configured, cannot fetch worlds')
+  // Get enabled world relays from settings
+  const worldRelays = getEnabledWorldRelays()
+  if (worldRelays.length === 0) {
+    logger.warn('storage', 'No world relays enabled, cannot fetch worlds')
     return []
   }
 
   try {
-    const events = await pool.querySync(WORLD_RELAYS, {
+    const events = await pool.querySync(worldRelays, {
       kinds: [30078],
       authors: [pubkey],
     })
@@ -185,14 +187,15 @@ export async function fetchWorldByDTag(
 ): Promise<WorldMetadata | null> {
   const pool = getPool()
 
-  // Check if world relays are configured
-  if (!WORLD_RELAYS || WORLD_RELAYS.length === 0) {
-    logger.warn('storage', 'No world relays configured, cannot fetch world')
+  // Get enabled world relays from settings
+  const worldRelays = getEnabledWorldRelays()
+  if (worldRelays.length === 0) {
+    logger.warn('storage', 'No world relays enabled, cannot fetch world')
     return null
   }
 
   try {
-    const event = await pool.get(WORLD_RELAYS, {
+    const event = await pool.get(worldRelays, {
       kinds: [30078],
       authors: [pubkey],
       '#d': [dTag],

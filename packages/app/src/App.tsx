@@ -17,6 +17,8 @@ import { ModelSelector } from './components/ModelSelector'
 import { ScriptPanel } from './components/ScriptPanel'
 import { GameControllerPanel } from './components/GameControllerPanel'
 import { AvatarStateService, type AvatarConfig, type AvatarState } from './services/avatar-state'
+import { restoreAvatarConfig, type RestoreStatus } from './services/avatar-restoration'
+import { saveAvatarToSession } from './services/avatar-session-storage'
 import { useVoice } from './hooks/useVoice'
 import type { TeleportAnimationType } from './renderer/teleport-animation'
 import { LoginSettingsService } from '@crossworld/common'
@@ -35,6 +37,9 @@ function App() {
   const [isClientListOpen, setIsClientListOpen] = useState(false)
   const [viewedProfilePubkey, setViewedProfilePubkey] = useState<string | null>(null)
   const accountManager = useAccountManager()
+
+  // Avatar state service is now created by AppInitializer during network phase
+  // We create it here for backward compatibility until full refactor
   const avatarStateService = useMemo(() => new AvatarStateService(accountManager), [accountManager])
   const toast = useToast()
 
@@ -58,7 +63,7 @@ function App() {
 
   // State restoration
   const [showRestoreModal, setShowRestoreModal] = useState(false)
-  const restoreTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const [restoreStatusMessage, setRestoreStatusMessage] = useState('Fetching previous state...')
   const initialStatePublished = useRef(false)
   const voiceAutoConnected = useRef(false)
 
@@ -201,75 +206,68 @@ function App() {
     autoLogin()
   }, [accountManager, toast])
 
-  // Query last state when logging in
+  // Restore avatar when logging in (waterfall: Nostr → Session → Selector)
   useEffect(() => {
     if (!pubkey) return
 
     // Show loading modal
     setShowRestoreModal(true)
+    setRestoreStatusMessage('Fetching avatar from network...')
 
-    // Set 10-second timeout to dismiss modal
-    restoreTimeoutRef.current = setTimeout(() => {
-      setShowRestoreModal(false)
-    }, 10000)
-
-    const queryAndRestore = async () => {
+    const performRestore = async () => {
       try {
-        const state = await avatarStateService.queryLastState(pubkey)
-
-        if (state) {
-          // Auto-restore state
-          // Build avatar config from restored state
-          const restoredConfig: AvatarConfig = {
-            avatarType: state.avatarType || 'vox',
-            avatarId: state.avatarId,
-            avatarUrl: state.avatarUrl,
-            avatarData: state.avatarData,
-            avatarMod: state.avatarMod,
-            avatarTexture: state.avatarTexture,
+        const result = await restoreAvatarConfig(
+          pubkey,
+          (pk) => avatarStateService.queryLastState(pk),
+          {
+            nostrTimeout: 5000, // 5 second timeout for Nostr
+            onStatusChange: (_status: RestoreStatus, message: string) => {
+              setRestoreStatusMessage(message)
+            },
           }
-          setAvatarConfig(restoredConfig)
+        )
 
-          // Publish state with restored data
-          publishInitialState(state)
+        // Hide restore modal
+        setShowRestoreModal(false)
 
+        if (result.config) {
+          // Avatar restored from Nostr or session
+          setAvatarConfig(result.config)
+
+          if (result.state) {
+            // We have full state from Nostr - publish it
+            publishInitialState(result.state)
+          }
+
+          const sourceLabel = result.source === 'nostr' ? 'network' : 'session'
           toast({
-            title: 'State restored',
-            description: 'Your previous avatar and position have been restored',
+            title: 'Avatar restored',
+            description: `Your avatar was loaded from ${sourceLabel}`,
             status: 'success',
             duration: 3000,
             isClosable: true,
           })
         } else {
-          // No previous state, show avatar selection
+          // No avatar found - show selector
+          logger.log('ui', '[App] No saved avatar found, showing selector')
           setShowSelectAvatar(true)
-          // Still dismiss the restore modal
         }
-
-        // Dismiss modal
-        if (restoreTimeoutRef.current) {
-          clearTimeout(restoreTimeoutRef.current)
-        }
-        setShowRestoreModal(false)
       } catch (err) {
-        logger.error('ui', '[App] Failed to query/restore state:', err)
-        // On error, show avatar selection
+        logger.error('ui', '[App] Avatar restoration failed:', err)
+        setShowRestoreModal(false)
         setShowSelectAvatar(true)
 
-        if (restoreTimeoutRef.current) {
-          clearTimeout(restoreTimeoutRef.current)
-        }
-        setShowRestoreModal(false)
+        toast({
+          title: 'Could not restore avatar',
+          description: 'Please select an avatar',
+          status: 'warning',
+          duration: 3000,
+          isClosable: true,
+        })
       }
     }
 
-    queryAndRestore()
-
-    return () => {
-      if (restoreTimeoutRef.current) {
-        clearTimeout(restoreTimeoutRef.current)
-      }
-    }
+    performRestore()
   }, [pubkey, avatarStateService, toast])
 
   // Auto-load world from Nostr when user logs in
@@ -461,6 +459,9 @@ function App() {
     // Skip if not logged in or initial state not yet published
     if (!pubkey || !initialStatePublished.current) return
 
+    // Save to session storage for fallback
+    saveAvatarToSession(pubkey, avatarConfig)
+
     // Publish state event with updated config (preserves position)
     avatarStateService.updateAvatarConfig(avatarConfig).catch(console.error)
   }, [pubkey, avatarConfig, avatarStateService])
@@ -511,6 +512,11 @@ function App() {
     setAvatarConfig(config)
     setTeleportAnimationType(selection.teleportAnimationType)
     setShowSelectAvatar(false)
+
+    // Save to session storage
+    if (pubkey) {
+      saveAvatarToSession(pubkey, config)
+    }
 
     // If this is first login, publish initial state with the new config
     if (pubkey && !initialStatePublished.current) {
@@ -727,6 +733,7 @@ function App() {
         {/* Loading State Modal */}
         <RestoreStateModal
           isOpen={showRestoreModal}
+          status={restoreStatusMessage}
         />
 
         {/* Avatar Selection Modal (first login) */}

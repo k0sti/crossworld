@@ -1,7 +1,8 @@
 import * as logger from '../utils/logger';
 import { SimplePool, type Event } from 'nostr-tools'
 import { npubEncode } from 'nostr-tools/nip19'
-import { WORLD_RELAYS, getLiveChatATag, getAvatarStateDTag, AVATAR_STATE_CONFIG } from '../config'
+import { getLiveChatATag, getAvatarStateDTag, AVATAR_STATE_CONFIG } from '../config'
+import { getEnabledWorldRelays } from './relay-settings'
 import type { AccountManager } from 'applesauce-accounts'
 
 export type AvatarType = 'vox' | 'glb' | 'csm'
@@ -140,9 +141,10 @@ export class AvatarStateService {
       return
     }
 
-    // Check if world relays are configured
-    if (!WORLD_RELAYS || WORLD_RELAYS.length === 0) {
-      logger.warn('service', '[AvatarState] No world relays configured, skipping subscription')
+    // Get enabled world relays from settings
+    const worldRelays = getEnabledWorldRelays()
+    if (worldRelays.length === 0) {
+      logger.warn('service', '[AvatarState] No world relays enabled, skipping subscription')
       return
     }
 
@@ -157,7 +159,7 @@ export class AvatarStateService {
       // This gets all current avatar states regardless of age
       logger.log('service', '[AvatarState] Fetching existing state events...')
       const existingStates = await this.pool.querySync(
-        WORLD_RELAYS,
+        worldRelays,
         {
           kinds: [AVATAR_STATE_CONFIG.STATE_EVENT_KIND],
           '#a': [this.liveActivityATag],
@@ -180,7 +182,7 @@ export class AvatarStateService {
       // Step 2: Query recent update events (1317) from the last hour
       logger.log('service', '[AvatarState] Fetching recent update events...')
       const recentUpdates = await this.pool.querySync(
-        WORLD_RELAYS,
+        worldRelays,
         {
           kinds: [AVATAR_STATE_CONFIG.UPDATE_EVENT_KIND],
           '#a': [this.liveActivityATag],
@@ -206,7 +208,7 @@ export class AvatarStateService {
     try {
       // Step 3: Subscribe to live updates (both state and update events) from now onwards
       this.subscription = this.pool.subscribeMany(
-        WORLD_RELAYS,
+        worldRelays,
         {
           kinds: [AVATAR_STATE_CONFIG.STATE_EVENT_KIND, AVATAR_STATE_CONFIG.UPDATE_EVENT_KIND],
           '#a': [this.liveActivityATag],
@@ -627,9 +629,10 @@ export class AvatarStateService {
       content: customMessage,
     }
 
-    // Check if world relays are configured
-    if (!WORLD_RELAYS || WORLD_RELAYS.length === 0) {
-      logger.warn('service', '[AvatarState] No world relays configured, state event not published')
+    // Get enabled world relays from settings
+    const worldRelays = getEnabledWorldRelays()
+    if (worldRelays.length === 0) {
+      logger.warn('service', '[AvatarState] No world relays enabled, state event not published')
       // Update local state even if we can't publish
       this.currentState = {
         ...avatarConfig,
@@ -644,7 +647,7 @@ export class AvatarStateService {
 
     try {
       const signedEvent = await account.signEvent(unsignedEvent)
-      await this.pool.publish(WORLD_RELAYS, signedEvent)
+      await this.pool.publish(worldRelays, signedEvent)
 
       // Update current state
       this.currentState = {
@@ -737,8 +740,9 @@ export class AvatarStateService {
       content: update.customMessage || '',
     }
 
-    // Check if world relays are configured
-    if (!WORLD_RELAYS || WORLD_RELAYS.length === 0) {
+    // Get enabled world relays from settings
+    const worldRelays = getEnabledWorldRelays()
+    if (worldRelays.length === 0) {
       // Update local state even if we can't publish
       Object.assign(this.currentState, update)
       return
@@ -746,7 +750,7 @@ export class AvatarStateService {
 
     try {
       const signedEvent = await account.signEvent(unsignedEvent)
-      await this.pool.publish(WORLD_RELAYS, signedEvent)
+      await this.pool.publish(worldRelays, signedEvent)
 
       // Update current state
       Object.assign(this.currentState, update)
@@ -826,9 +830,12 @@ export class AvatarStateService {
       const now = Math.floor(Date.now() / 1000)
       const since = now - AVATAR_STATE_CONFIG.SUBSCRIPTION_WINDOW_S
 
+      // Get enabled world relays from settings
+      const worldRelays = getEnabledWorldRelays()
+
       // Query for state event
       const stateEvent = await this.pool.get(
-        WORLD_RELAYS,
+        worldRelays,
         {
           kinds: [AVATAR_STATE_CONFIG.STATE_EVENT_KIND],
           authors: [pubkey],
@@ -884,6 +891,7 @@ export class AvatarStateService {
   destroy(): void {
     this.stopHeartbeat()
     this.stopSubscription()
-    this.pool.close(WORLD_RELAYS)
+    const worldRelays = getEnabledWorldRelays()
+    this.pool.close(worldRelays)
   }
 }

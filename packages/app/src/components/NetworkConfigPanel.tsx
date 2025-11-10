@@ -78,10 +78,10 @@ export function NetworkConfigPanel({ isOpen, onClose }: NetworkConfigPanelProps)
       const shouldBeEnabled = relay.enabledForProfile || relay.enabledForWorld
 
       if (shouldBeEnabled && !instance) {
-        // Connect
+        // Connect only if relay is enabled for at least one purpose
         connectRelay(relay.url)
       } else if (!shouldBeEnabled && instance) {
-        // Disconnect
+        // Disconnect if relay is not enabled for any purpose
         disconnectRelay(relay.url)
       }
     })
