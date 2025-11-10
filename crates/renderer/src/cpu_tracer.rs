@@ -24,6 +24,12 @@ impl CpuCubeTracer {
         self.image_buffer.as_ref()
     }
 
+    /// Get a mutable reference to the image buffer
+    #[allow(dead_code)]
+    pub fn image_buffer_mut(&mut self) -> Option<&mut ImageBuffer<Rgb<u8>, Vec<u8>>> {
+        self.image_buffer.as_mut()
+    }
+
     /// Save the rendered image to a file
     pub fn save_image(&self, path: &str) -> Result<(), image::ImageError> {
         if let Some(buffer) = &self.image_buffer {
@@ -34,10 +40,10 @@ impl CpuCubeTracer {
 
     /// Render a single pixel
     fn render_pixel(&self, x: u32, y: u32, width: u32, height: u32, time: f32) -> glam::Vec3 {
-        // Normalized pixel coordinates
+        // Normalized pixel coordinates (flip Y to match GL coordinate system)
         let uv = glam::Vec2::new(
             (x as f32 - 0.5 * width as f32) / height as f32,
-            (y as f32 - 0.5 * height as f32) / height as f32,
+            -((y as f32 - 0.5 * height as f32) / height as f32),
         );
 
         // Camera setup (same as GL version)
