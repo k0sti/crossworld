@@ -33,6 +33,13 @@ export class World {
   }
 
   /**
+   * Check if the physics world is initialized
+   */
+  isInitialized(): boolean {
+    return this.initialized;
+  }
+
+  /**
    * Initialize the physics world asynchronously
    * Must be called before using any physics methods
    */
