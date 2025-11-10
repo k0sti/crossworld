@@ -594,34 +594,6 @@
             renderer.render(scene, camera);
         }
 
-        // Map RGB color to material index using R2G3B2 encoding (matching crossworld's system)
-        function mapColorToMaterial(r, g, b) {
-            // Extract top bits: red (2 bits), green (3 bits), blue (2 bits)
-            const r_bits = (r >> 6) & 0b11;      // Top 2 bits of red
-            const g_bits = (g >> 5) & 0b111;     // Top 3 bits of green
-            const b_bits = (b >> 6) & 0b11;      // Top 2 bits of blue
-
-            // Combine into 7-bit index and add 128 offset
-            return 128 + ((r_bits << 5) | (g_bits << 2) | b_bits);
-        }
-
-        // Get RGB from material index (reverse of mapColorToMaterial)
-        function materialToRGB(material) {
-            const bits = material - 128;
-            const r_bits = (bits >> 5) & 0b11;
-            const g_bits = (bits >> 2) & 0b111;
-            const b_bits = bits & 0b11;
-
-            // Expand bits back to full 8-bit color
-            // For 2-bit: 00->0, 01->85, 10->170, 11->255
-            // For 3-bit: 000->0, 001->36, 010->73, 011->109, 100->146, 101->182, 110->219, 111->255
-            const r = (r_bits * 255) / 3;
-            const g = (g_bits * 255) / 7;
-            const b = (b_bits * 255) / 3;
-
-            return { r, g, b };
-        }
-
         function voxelsToGeometry(voxels, palette) {
             const geometry = new THREE.BufferGeometry();
             const vertices = [];
@@ -638,17 +610,11 @@
                 const z = voxel.y;  // MagicaVoxel's Y becomes Z (depth)
                 const colorIndex = voxel.colorIndex;
 
-                // Get original palette color
+                // Use palette color directly from the VOX file
                 const paletteColor = palette[colorIndex];
-
-                // Map to material index using R2G3B2 encoding
-                const materialId = mapColorToMaterial(paletteColor.r, paletteColor.g, paletteColor.b);
-
-                // Convert material back to RGB for rendering
-                const color = materialToRGB(materialId);
-                const r = color.r / 255;
-                const g = color.g / 255;
-                const b = color.b / 255;
+                const r = paletteColor.r / 255;
+                const g = paletteColor.g / 255;
+                const b = paletteColor.b / 255;
 
                 // Create a cube for this voxel
                 const cubeVertices = [
@@ -736,13 +702,14 @@
                     flatShading: true
                 });
 
-                currentMesh = new THREE.Mesh(geometry, material);
-
-                // Center the model
+                // Center the geometry at origin for proper rotation pivot
                 geometry.computeBoundingBox();
                 const center = new THREE.Vector3();
                 geometry.boundingBox.getCenter(center);
-                currentMesh.position.sub(center);
+                geometry.translate(-center.x, -center.y, -center.z);
+
+                currentMesh = new THREE.Mesh(geometry, material);
+                currentMesh.position.set(0, 0, 0);
 
                 // Reset rotation
                 targetRotationX = 0;
