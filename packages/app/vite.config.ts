@@ -105,7 +105,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@workspace/wasm': path.resolve(__dirname, '../wasm-world/crossworld-world.js'),
+      '@workspace/wasm-world': path.resolve(__dirname, '../wasm-world/crossworld-world.js'),
       '@workspace/wasm-cube': path.resolve(__dirname, '../wasm-cube/crossworld_cube.js'),
       '@assets': path.resolve(__dirname, '../../assets')
     }

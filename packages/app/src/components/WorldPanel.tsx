@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Box, Text, VStack, HStack, Switch, Badge, Popover, PopoverTrigger, PopoverContent, PopoverBody, Button } from '@chakra-ui/react';
+import { Box, Text, VStack, HStack, Switch, Badge, Popover, PopoverTrigger, PopoverContent, PopoverBody, Button, Input } from '@chakra-ui/react';
 import { CubeCoord } from '../types/cube-coord';
-import { getMacroDepth, getMicroDepth, getBorderDepth, onDepthChange, setMacroDepth as setGlobalMacroDepth, setMicroDepth as setGlobalMicroDepth, setBorderDepth as setGlobalBorderDepth } from '../config/depth-config';
+import { getMacroDepth, getMicroDepth, getBorderDepth, getSeed, onDepthChange, onSeedChange, setMacroDepth as setGlobalMacroDepth, setMicroDepth as setGlobalMicroDepth, setBorderDepth as setGlobalBorderDepth, setSeed as setGlobalSeed } from '../config/depth-config';
 
 export interface DebugInfo {
   cursorWorld?: { x: number; y: number; z: number };
@@ -66,6 +66,7 @@ export function WorldPanel({
   const [macroDepth, setMacroDepth] = useState(getMacroDepth());
   const [microDepth, setMicroDepth] = useState(getMicroDepth());
   const [borderDepth, setBorderDepth] = useState(getBorderDepth());
+  const [seed, setSeed] = useState(getSeed());
 
   // Subscribe to depth changes from config
   useEffect(() => {
@@ -73,6 +74,14 @@ export function WorldPanel({
       setMacroDepth(newMacroDepth);
       setMicroDepth(newMicroDepth);
       setBorderDepth(newBorderDepth);
+    });
+    return unsubscribe;
+  }, []);
+
+  // Subscribe to seed changes from config
+  useEffect(() => {
+    const unsubscribe = onSeedChange((newSeed) => {
+      setSeed(newSeed);
     });
     return unsubscribe;
   }, []);
@@ -98,6 +107,11 @@ export function WorldPanel({
   const handleBorderChange = (newBorder: number) => {
     setBorderDepth(newBorder);
     setGlobalBorderDepth(newBorder);
+  };
+
+  const handleSeedChange = (newSeed: number) => {
+    setSeed(newSeed);
+    setGlobalSeed(newSeed);
     if (onApplyDepthSettings) {
       const totalDepth = macroDepth + microDepth;
       onApplyDepthSettings(totalDepth, microDepth);
@@ -246,6 +260,70 @@ export function WorldPanel({
                           {depth}
                         </Button>
                       ))}
+                    </VStack>
+                  </PopoverBody>
+                </PopoverContent>
+              </>
+            )}
+          </Popover>
+
+          {/* Seed selector */}
+          <Popover placement="top">
+            {({ onClose }) => (
+              <>
+                <PopoverTrigger>
+                  <Badge
+                    colorScheme="green"
+                    fontSize="xs"
+                    cursor="pointer"
+                    _hover={{ opacity: 0.8 }}
+                  >
+                    seed {seed}
+                  </Badge>
+                </PopoverTrigger>
+                <PopoverContent bg="gray.800" borderColor="green.500" width="200px" pointerEvents="auto">
+                  <PopoverBody p={2}>
+                    <VStack spacing={2}>
+                      <Text fontSize="xs" color="gray.400">World Seed (0-4294967295)</Text>
+                      <Input
+                        size="xs"
+                        type="number"
+                        min={0}
+                        max={4294967295}
+                        value={seed}
+                        onChange={(e) => {
+                          const value = parseInt(e.target.value) || 0;
+                          handleSeedChange(Math.max(0, Math.min(4294967295, value)));
+                        }}
+                        onKeyPress={(e) => {
+                          if (e.key === 'Enter') {
+                            onClose();
+                          }
+                        }}
+                      />
+                      <HStack spacing={1} width="100%">
+                        <Button
+                          size="xs"
+                          colorScheme="green"
+                          onClick={() => {
+                            handleSeedChange(0);
+                          }}
+                          flex={1}
+                        >
+                          Reset
+                        </Button>
+                        <Button
+                          size="xs"
+                          colorScheme="green"
+                          variant="outline"
+                          onClick={() => {
+                            handleSeedChange(Math.floor(Math.random() * 4294967295));
+                          }}
+                          flex={1}
+                        >
+                          Random
+                        </Button>
+                      </HStack>
                     </VStack>
                   </PopoverBody>
                 </PopoverContent>

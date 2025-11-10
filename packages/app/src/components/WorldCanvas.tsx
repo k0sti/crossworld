@@ -3,11 +3,11 @@ import { useEffect, useRef, useState } from 'react';
 import { Box } from '@chakra-ui/react';
 import { SceneManager } from '../renderer/scene';
 import { GeometryController } from '../geometry/geometry-controller';
-import init from '@workspace/wasm';
+import init from '@workspace/wasm-world';
 import type { AvatarStateService, AvatarConfig } from '../services/avatar-state';
 import type { TeleportAnimationType } from '../renderer/teleport-animation';
 import { DebugPanel, type DebugInfo } from './WorldPanel';
-import { onDepthChange } from '../config/depth-config';
+import { onDepthChange, onSeedChange, getSeed } from '../config/depth-config';
 import type { MainMode } from '@crossworld/common';
 
 interface WorldCanvasProps {
@@ -132,7 +132,7 @@ export function WorldCanvas({
       const currentBorder = geometryController.getBorderDepth();
 
       if (currentMacro !== macroDepth) {
-        await geometryController.reinitialize(macroDepth, microDepth, currentBorder, (geometry) => {
+        await geometryController.reinitialize(macroDepth, microDepth, currentBorder, getSeed(), (geometry) => {
           sceneManager.updateGeometry(
             geometry.vertices,
             geometry.indices,
@@ -266,7 +266,7 @@ export function WorldCanvas({
       // Reinitialize if macro or border depth changed (these affect world generation)
       if (currentMacro !== macroDepth || currentBorder !== borderDepth) {
         logger.log('renderer', `[WorldCanvas] Depth changed: macro ${currentMacro}->${macroDepth}, border ${currentBorder}->${borderDepth}, reinitializing...`);
-        geometryController.reinitialize(macroDepth, microDepth, borderDepth, (geometry) => {
+        geometryController.reinitialize(macroDepth, microDepth, borderDepth, getSeed(), (geometry) => {
           sceneManager.updateGeometry(
             geometry.vertices,
             geometry.indices,
@@ -280,6 +280,39 @@ export function WorldCanvas({
           logger.error('renderer', 'Failed to reinitialize geometry controller:', error);
         });
       }
+    });
+
+    return unsubscribe;
+  }, []);
+
+  // Subscribe to seed changes and reinitialize when seed changes
+  useEffect(() => {
+    const geometryController = localGeometryControllerRef.current;
+    const sceneManager = localSceneManagerRef.current;
+
+    if (!geometryController || !sceneManager) return;
+
+    const unsubscribe = onSeedChange((seed) => {
+      logger.log('renderer', `[WorldCanvas] Seed changed to ${seed}, reinitializing world...`);
+      geometryController.reinitialize(
+        geometryController.getMacroDepth(),
+        geometryController.getMicroDepth(),
+        geometryController.getBorderDepth(),
+        seed,
+        (geometry) => {
+          sceneManager.updateGeometry(
+            geometry.vertices,
+            geometry.indices,
+            geometry.normals,
+            geometry.colors,
+            geometry.uvs,
+            geometry.materialIds
+          );
+          setTriangleCount(geometry.stats.triangles);
+        }
+      ).catch((error) => {
+        logger.error('renderer', 'Failed to reinitialize geometry controller:', error);
+      });
     });
 
     return unsubscribe;

@@ -32,10 +32,7 @@ impl WorldCube {
     /// - Each border layer wraps the world in an octa (8 cubes)
     /// - 4 bottom cubes + 4 top cubes surround the world
     /// - Original world placed at octant 0 (bottom-front-left)
-    pub fn new(macro_depth: u32, micro_depth: u32, border_depth: u32, seed: Option<u32>) -> Self {
-        // Use provided seed, or default to 0 for deterministic generation
-        let seed = seed.unwrap_or(0);
-
+    pub fn new(macro_depth: u32, micro_depth: u32, border_depth: u32, seed: u32) -> Self {
         let noise = Perlin::new(seed);
         let fbm = Fbm::new(seed);
 
@@ -245,7 +242,7 @@ impl WorldCube {
 
 impl Default for WorldCube {
     fn default() -> Self {
-        Self::new(4, 0, 4, Some(0)) // Default: macro depth 4, micro depth 0, border depth 4, seed 0
+        Self::new(4, 0, 4, 0) // Default: macro depth 4, micro depth 0, border depth 4, seed 0
     }
 }
 

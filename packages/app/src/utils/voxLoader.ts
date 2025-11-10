@@ -1,5 +1,5 @@
 import * as logger from './logger';
-import type { GeometryData } from '@workspace/wasm'
+import type { GeometryData } from '@workspace/wasm-world'
 import cubeInit from '@workspace/wasm-cube'
 import * as cubeWasm from '@workspace/wasm-cube'
 
