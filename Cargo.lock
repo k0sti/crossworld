@@ -888,26 +888,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0a5c400df2834b80a4c3327b3aad3a4c4cd4de0629063962b03235697506a28"
 
 [[package]]
-name = "crossworld-cube"
-version = "0.0.1"
-dependencies = [
- "dot_vox",
- "getrandom 0.3.3",
- "glam 0.29.3",
- "image",
- "nom",
- "serde",
- "serde-wasm-bindgen",
- "thiserror 2.0.17",
- "wasm-bindgen",
- "wasm-bindgen-test",
-]
-
-[[package]]
 name = "crossworld-physics"
 version = "0.0.1"
 dependencies = [
- "crossworld-cube",
+ "cube",
  "getrandom 0.3.3",
  "glam 0.29.3",
  "rapier3d",
@@ -924,7 +908,7 @@ name = "crossworld-world"
 version = "0.0.1"
 dependencies = [
  "console_error_panic_hook",
- "crossworld-cube",
+ "cube",
  "dot_vox",
  "getrandom 0.3.3",
  "js-sys",
@@ -951,6 +935,22 @@ dependencies = [
  "generic-array",
  "rand_core",
  "typenum",
+]
+
+[[package]]
+name = "cube"
+version = "0.0.1"
+dependencies = [
+ "dot_vox",
+ "getrandom 0.3.3",
+ "glam 0.29.3",
+ "image",
+ "nom",
+ "serde",
+ "serde-wasm-bindgen",
+ "thiserror 2.0.17",
+ "wasm-bindgen",
+ "wasm-bindgen-test",
 ]
 
 [[package]]
@@ -3473,6 +3473,7 @@ checksum = "7a2d987857b319362043e95f5353c0535c1f58eec5336fdfcf626430af7def58"
 name = "renderer"
 version = "0.1.0"
 dependencies = [
+ "cube",
  "egui",
  "egui-winit",
  "egui_glow",

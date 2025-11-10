@@ -1,6 +1,7 @@
 mod cpu_tracer;
 mod egui_app;
 mod gl_tracer;
+mod gpu_tracer;
 mod renderer;
 
 use cpu_tracer::CpuCubeTracer;

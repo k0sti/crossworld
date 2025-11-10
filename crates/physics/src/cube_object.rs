@@ -1,5 +1,5 @@
 use crate::world::PhysicsWorld;
-use crossworld_cube::Cube;
+use cube::Cube;
 use glam::{Quat, Vec3};
 use nalgebra::{Quaternion, UnitQuaternion};
 use rapier3d::prelude::*;

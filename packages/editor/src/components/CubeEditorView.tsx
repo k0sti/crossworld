@@ -35,7 +35,7 @@ export function CubeEditorView(_props: CubeEditorViewProps) {
 
   // Initialize WASM module
   useEffect(() => {
-    import('crossworld-cube').then(async (wasmModule) => {
+    import('cube').then(async (wasmModule) => {
       await wasmModule.default()  // Initialize WASM
       const wasm = wasmModule as any // Type assertion needed for dynamic import
       wasm.create_model(MODEL_ID, CUBE_MAX_DEPTH)

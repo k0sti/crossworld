@@ -19,7 +19,7 @@
     "baseUrl": ".",
     "paths": {
       "crossworld-world": ["../wasm-world"],
-      "crossworld-cube": ["../wasm-cube"]
+      "cube": ["../wasm-cube"]
     },
 
     /* Linting */

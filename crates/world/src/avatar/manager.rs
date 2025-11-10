@@ -1,4 +1,4 @@
-use crossworld_cube::{Cube, glam::Vec3};
+use cube::{Cube, glam::Vec3};
 
 /// Manages avatar loading from .vox files
 #[allow(dead_code)]
@@ -19,7 +19,7 @@ impl AvatarManager {
     pub fn load_from_vox(&mut self, bytes: &[u8]) -> Result<(), String> {
         // Use cube crate's vox loader with centered alignment
         let align = Vec3::splat(0.5); // Center the model
-        self.base_model = crossworld_cube::load_vox_to_cube(bytes, align)?;
+        self.base_model = cube::load_vox_to_cube(bytes, align)?;
         Ok(())
     }
 

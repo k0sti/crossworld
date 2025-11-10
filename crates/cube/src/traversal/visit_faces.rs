@@ -37,7 +37,7 @@ pub struct FaceInfo {
 ///
 /// # Example
 /// ```
-/// use crossworld_cube::{Cube, visit_faces};
+/// use cube::{Cube, visit_faces};
 ///
 /// let root = Cube::Solid(1);
 /// visit_faces(&root, |face_info| {

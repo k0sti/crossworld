@@ -15,7 +15,7 @@ wasm = ["dep:wasm-bindgen", "dep:serde", "dep:serde-wasm-bindgen"]
 rapier3d = { git = "https://github.com/dimforge/rapier.git" }
 
 # Voxel model integration
-crossworld-cube = { path = "../cube" }
+cube = { path = "../cube" }
 
 # Math library (shared with rest of project)
 glam = { version = "0.29", features = ["serde"] }

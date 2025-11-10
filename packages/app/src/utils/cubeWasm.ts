@@ -1,5 +1,5 @@
 import * as logger from './logger';
-import initCubeWasm from 'crossworld-cube';
+import initCubeWasm from 'cube';
 import initWorldWasm from 'crossworld-world';
 
 let cubeInitialized = false;
@@ -40,7 +40,7 @@ export async function ensureWorldWasmInitialized(): Promise<void> {
  */
 export async function parseCsmToMesh(csmCode: string, maxDepth: number = 3) {
   await ensureCubeWasmInitialized();
-  const wasmModule = await import('crossworld-cube');
+  const wasmModule = await import('cube');
 
   // Load CSM into a WasmCube
   // @ts-ignore - WASM module exports loadCsm
@@ -57,7 +57,7 @@ export async function parseCsmToMesh(csmCode: string, maxDepth: number = 3) {
  */
 export async function validateCsm(csmCode: string) {
   await ensureCubeWasmInitialized();
-  const wasmModule = await import('crossworld-cube');
+  const wasmModule = await import('cube');
   // @ts-ignore - WASM module exports validateCsm
   return wasmModule.validateCsm(csmCode);
 }
@@ -70,7 +70,7 @@ export async function loadCubeFromCsm(csmText: string): Promise<any | null> {
   try {
     // Dynamic import to access WASM functions
     // @ts-ignore - WASM module exports not fully typed
-    const wasmModule = await import('crossworld-cube');
+    const wasmModule = await import('cube');
     // @ts-ignore - WASM loadCsm export
     return wasmModule.loadCsm(csmText);
   } catch (error) {

@@ -96,7 +96,7 @@ impl WorldCube {
     /// * `csm_code` - Cubescript format text
     #[wasm_bindgen(js_name = setRoot)]
     pub fn set_root(&self, csm_code: &str) -> Result<(), JsValue> {
-        match crossworld_cube::parse_csm(csm_code) {
+        match cube::parse_csm(csm_code) {
             Ok(octree) => {
                 self.inner.borrow_mut().set_root(octree.root);
                 Ok(())
