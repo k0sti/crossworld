@@ -88,14 +88,20 @@ impl SimpleApp {
         gl.shader_source(vertex_shader, vertex_shader_src);
         gl.compile_shader(vertex_shader);
         if !gl.get_shader_compile_status(vertex_shader) {
-            panic!("Vertex shader error: {}", gl.get_shader_info_log(vertex_shader));
+            panic!(
+                "Vertex shader error: {}",
+                gl.get_shader_info_log(vertex_shader)
+            );
         }
 
         let fragment_shader = gl.create_shader(FRAGMENT_SHADER).unwrap();
         gl.shader_source(fragment_shader, fragment_shader_src);
         gl.compile_shader(fragment_shader);
         if !gl.get_shader_compile_status(fragment_shader) {
-            panic!("Fragment shader error: {}", gl.get_shader_info_log(fragment_shader));
+            panic!(
+                "Fragment shader error: {}",
+                gl.get_shader_info_log(fragment_shader)
+            );
         }
 
         gl.attach_shader(program, vertex_shader);
@@ -235,7 +241,15 @@ impl ApplicationHandler for SimpleApp {
                 }
             }
             WindowEvent::RedrawRequested => {
-                if let (Some(window), Some(gl), Some(egui_ctx), Some(egui_state), Some(painter), Some(gl_context), Some(gl_surface)) = (
+                if let (
+                    Some(window),
+                    Some(gl),
+                    Some(egui_ctx),
+                    Some(egui_state),
+                    Some(painter),
+                    Some(gl_context),
+                    Some(gl_surface),
+                ) = (
                     self.window.as_ref(),
                     self.gl.as_ref(),
                     self.egui_ctx.as_ref(),
@@ -299,9 +313,15 @@ impl ApplicationHandler for SimpleApp {
                     egui_state.handle_platform_output(window, full_output.platform_output);
 
                     // Paint egui
-                    let clipped_primitives = egui_ctx.tessellate(full_output.shapes, full_output.pixels_per_point);
+                    let clipped_primitives =
+                        egui_ctx.tessellate(full_output.shapes, full_output.pixels_per_point);
                     let size_in_pixels = [size.width, size.height];
-                    painter.paint_and_update_textures(size_in_pixels, full_output.pixels_per_point, &clipped_primitives, &full_output.textures_delta);
+                    painter.paint_and_update_textures(
+                        size_in_pixels,
+                        full_output.pixels_per_point,
+                        &clipped_primitives,
+                        &full_output.textures_delta,
+                    );
 
                     gl_surface.swap_buffers(gl_context).unwrap();
                     window.request_redraw();

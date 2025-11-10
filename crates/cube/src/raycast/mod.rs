@@ -1,7 +1,7 @@
 // Raycasting through octrees
 
-pub mod raycast;
+mod impls;
 
 // Re-export main types
-pub use raycast::RaycastHit;
+pub use impls::RaycastHit;
 // Raycast methods are implemented on Cube<T>
