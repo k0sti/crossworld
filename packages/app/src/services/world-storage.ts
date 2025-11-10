@@ -118,11 +118,18 @@ export async function publishWorld(
   const signedEvent = await account.signer.signEvent(unsignedEvent)
 
   // Publish to WORLD_RELAYS using persistent pool
+  if (!WORLD_RELAYS || WORLD_RELAYS.length === 0) {
+    logger.warn('storage', 'No world relays configured, world not published')
+    // Return signed event even if we can't publish (for local storage)
+    return signedEvent
+  }
+
   try {
     await pool.publish(WORLD_RELAYS, signedEvent)
   } catch (err) {
-    logger.error('storage', 'Failed to publish world:', err)
-    throw new Error('Failed to publish to relay')
+    logger.warn('storage', 'Failed to publish world (relay may be unavailable):', err)
+    // Return signed event anyway - it's still valid for local use
+    return signedEvent
   }
 
   return signedEvent
@@ -134,13 +141,65 @@ export async function publishWorld(
 export async function fetchUserWorlds(pubkey: string): Promise<WorldMetadata[]> {
   const pool = getPool()
 
-  const events = await pool.querySync(WORLD_RELAYS, {
-    kinds: [30078],
-    authors: [pubkey],
-  })
+  // Check if world relays are configured
+  if (!WORLD_RELAYS || WORLD_RELAYS.length === 0) {
+    logger.warn('storage', 'No world relays configured, cannot fetch worlds')
+    return []
+  }
 
-  return events.map(event => {
-    const dTag = event.tags.find(t => t[0] === 'd')?.[1] || ''
+  try {
+    const events = await pool.querySync(WORLD_RELAYS, {
+      kinds: [30078],
+      authors: [pubkey],
+    })
+
+    return events.map(event => {
+      const dTag = event.tags.find(t => t[0] === 'd')?.[1] || ''
+      const parsed = parseDTag(dTag)
+
+      return {
+        pubkey: event.pubkey,
+        dTag,
+        title: event.tags.find(t => t[0] === 'title')?.[1],
+        description: event.tags.find(t => t[0] === 'description')?.[1],
+        macroDepth: parsed.macroDepth,
+        microDepth: parsed.microDepth,
+        octantPath: parsed.octantPath,
+        csmCode: event.content,
+        createdAt: event.created_at,
+        eventId: event.id,
+      }
+    })
+  } catch (error) {
+    logger.warn('storage', 'Failed to fetch user worlds (relay may be unavailable):', error)
+    return []
+  }
+}
+
+/**
+ * Fetch specific world by d-tag
+ */
+export async function fetchWorldByDTag(
+  pubkey: string,
+  dTag: string
+): Promise<WorldMetadata | null> {
+  const pool = getPool()
+
+  // Check if world relays are configured
+  if (!WORLD_RELAYS || WORLD_RELAYS.length === 0) {
+    logger.warn('storage', 'No world relays configured, cannot fetch world')
+    return null
+  }
+
+  try {
+    const event = await pool.get(WORLD_RELAYS, {
+      kinds: [30078],
+      authors: [pubkey],
+      '#d': [dTag],
+    })
+
+    if (!event) return null
+
     const parsed = parseDTag(dTag)
 
     return {
@@ -155,39 +214,9 @@ export async function fetchUserWorlds(pubkey: string): Promise<WorldMetadata[]> 
       createdAt: event.created_at,
       eventId: event.id,
     }
-  })
-}
-
-/**
- * Fetch specific world by d-tag
- */
-export async function fetchWorldByDTag(
-  pubkey: string,
-  dTag: string
-): Promise<WorldMetadata | null> {
-  const pool = getPool()
-
-  const event = await pool.get(WORLD_RELAYS, {
-    kinds: [30078],
-    authors: [pubkey],
-    '#d': [dTag],
-  })
-
-  if (!event) return null
-
-  const parsed = parseDTag(dTag)
-
-  return {
-    pubkey: event.pubkey,
-    dTag,
-    title: event.tags.find(t => t[0] === 'title')?.[1],
-    description: event.tags.find(t => t[0] === 'description')?.[1],
-    macroDepth: parsed.macroDepth,
-    microDepth: parsed.microDepth,
-    octantPath: parsed.octantPath,
-    csmCode: event.content,
-    createdAt: event.created_at,
-    eventId: event.id,
+  } catch (error) {
+    logger.warn('storage', 'Failed to fetch world (relay may be unavailable):', error)
+    return null
   }
 }
 
