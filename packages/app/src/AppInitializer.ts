@@ -8,7 +8,7 @@
 import * as THREE from 'three';
 import { World } from './physics/world';
 import { SceneManager } from './renderer/scene';
-import { ensureCubeWasmInitialized } from './utils/cubeWasm';
+import { ensureCubeWasmInitialized, ensureWorldWasmInitialized } from './utils/cubeWasm';
 import initPhysicsWasm from '../../wasm-physics/crossworld_physics.js';
 import * as logger from './utils/logger';
 
@@ -151,9 +151,10 @@ export class AppInitializer {
     logger.log('common', '[AppInitializer] Loading WASM modules...');
     const start = performance.now();
 
-    // Load both in parallel
+    // Load all three WASM modules in parallel
     await Promise.all([
       this.loadCubeWasm(),
+      this.loadWorldWasm(),
       this.loadPhysicsWasm(),
     ]);
 
@@ -164,6 +165,11 @@ export class AppInitializer {
   private async loadCubeWasm(): Promise<void> {
     await ensureCubeWasmInitialized();
     logger.log('common', '[AppInitializer] Cube WASM ready');
+  }
+
+  private async loadWorldWasm(): Promise<void> {
+    await ensureWorldWasmInitialized();
+    logger.log('common', '[AppInitializer] World WASM ready');
   }
 
   private async loadPhysicsWasm(): Promise<void> {
