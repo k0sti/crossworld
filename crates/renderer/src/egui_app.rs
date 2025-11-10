@@ -17,6 +17,7 @@ pub struct DualRendererApp {
     // egui textures
     gl_egui_texture: Option<TextureHandle>,
     cpu_texture: Option<TextureHandle>,
+    diff_texture: Option<TextureHandle>,
 
     // Timing
     start_time: std::time::Instant,
@@ -43,6 +44,7 @@ impl DualRendererApp {
             gl_texture_size: (0, 0),
             gl_egui_texture: None,
             cpu_texture: None,
+            diff_texture: None,
             start_time: std::time::Instant::now(),
             frame_count: 0,
             last_fps_update: std::time::Instant::now(),
@@ -181,6 +183,39 @@ impl DualRendererApp {
         }
     }
 
+    fn compute_difference_image(
+        &self,
+        gl_image: &ColorImage,
+        cpu_image: &ColorImage,
+    ) -> ColorImage {
+        assert_eq!(gl_image.size, cpu_image.size);
+        let size = gl_image.size;
+
+        let diff_pixels: Vec<egui::Color32> = gl_image
+            .pixels
+            .iter()
+            .zip(cpu_image.pixels.iter())
+            .map(|(gl_pixel, cpu_pixel)| {
+                // Compute absolute difference per channel
+                let r_diff = (gl_pixel.r() as i16 - cpu_pixel.r() as i16).abs() as u8;
+                let g_diff = (gl_pixel.g() as i16 - cpu_pixel.g() as i16).abs() as u8;
+                let b_diff = (gl_pixel.b() as i16 - cpu_pixel.b() as i16).abs() as u8;
+
+                // Amplify differences for visibility (multiply by 10, capped at 255)
+                let r_amp = (r_diff as u16 * 10).min(255) as u8;
+                let g_amp = (g_diff as u16 * 10).min(255) as u8;
+                let b_amp = (b_diff as u16 * 10).min(255) as u8;
+
+                egui::Color32::from_rgb(r_amp, g_amp, b_amp)
+            })
+            .collect();
+
+        ColorImage {
+            size,
+            pixels: diff_pixels,
+        }
+    }
+
     pub fn show_ui(&mut self, ctx: &egui::Context, gl: &Arc<Context>) {
         let time = self.start_time.elapsed().as_secs_f32();
 
@@ -204,71 +239,94 @@ impl DualRendererApp {
             });
         });
 
-        // Main panel with side-by-side views
+        // Main panel with three columns
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.columns(2, |columns| {
+            // First, gather both images
+            let gl_color_image = unsafe { self.read_gl_texture_to_image(gl) };
+
+            let cpu_color_image = if let Some(image_buffer) = self.cpu_renderer.image_buffer() {
+                let (width, height) = (image_buffer.width() as usize, image_buffer.height() as usize);
+                let pixels: Vec<egui::Color32> = image_buffer
+                    .pixels()
+                    .map(|p| egui::Color32::from_rgb(p[0], p[1], p[2]))
+                    .collect();
+                Some(ColorImage {
+                    size: [width, height],
+                    pixels,
+                })
+            } else {
+                None
+            };
+
+            // Compute difference if both images are available
+            if let (Some(gl_img), Some(cpu_img)) = (&gl_color_image, &cpu_color_image) {
+                let diff_image = self.compute_difference_image(gl_img, cpu_img);
+                self.diff_texture = Some(ctx.load_texture(
+                    "diff_render",
+                    diff_image,
+                    TextureOptions::LINEAR,
+                ));
+            }
+
+            // Create textures
+            if let Some(ref gl_img) = gl_color_image {
+                self.gl_egui_texture = Some(ctx.load_texture(
+                    "gl_render",
+                    gl_img.clone(),
+                    TextureOptions::LINEAR,
+                ));
+            }
+            if let Some(ref cpu_img) = cpu_color_image {
+                self.cpu_texture = Some(ctx.load_texture(
+                    "cpu_render",
+                    cpu_img.clone(),
+                    TextureOptions::LINEAR,
+                ));
+            }
+
+            ui.columns(3, |columns| {
                 // Left: GL Renderer
                 columns[0].vertical_centered(|ui| {
-                    ui.heading("GPU Raytracer (OpenGL)");
-                    ui.label("Fragment shader, real-time");
-                    ui.add_space(10.0);
+                    ui.heading("GPU");
+                    ui.label("OpenGL shader");
 
-                    // Read GL framebuffer and convert to egui texture
-                    unsafe {
-                        if let Some(color_image) = self.read_gl_texture_to_image(gl) {
-                            // Recreate texture each frame
-                            self.gl_egui_texture = Some(ctx.load_texture(
-                                "gl_render",
-                                color_image,
-                                TextureOptions::LINEAR,
-                            ));
+                    if let Some(texture) = &self.gl_egui_texture {
+                        ui.image(egui::ImageSource::Texture(egui::load::SizedTexture {
+                            id: texture.id(),
+                            size: [self.render_size.0 as f32, self.render_size.1 as f32].into(),
+                        }));
+                    } else {
+                        ui.label("N/A");
+                    }
+                });
 
-                            if let Some(texture) = &self.gl_egui_texture {
-                                ui.image(egui::ImageSource::Texture(egui::load::SizedTexture {
-                                    id: texture.id(),
-                                    size: [self.render_size.0 as f32, self.render_size.1 as f32].into(),
-                                }));
-                            }
-                        } else {
-                            ui.label("GL texture not available");
-                        }
+                // Center: Difference
+                columns[1].vertical_centered(|ui| {
+                    ui.heading("Difference");
+                    ui.label("Amplified 10x");
+
+                    if let Some(texture) = &self.diff_texture {
+                        ui.image(egui::ImageSource::Texture(egui::load::SizedTexture {
+                            id: texture.id(),
+                            size: [self.render_size.0 as f32, self.render_size.1 as f32].into(),
+                        }));
+                    } else {
+                        ui.label("N/A");
                     }
                 });
 
                 // Right: CPU Renderer
-                columns[1].vertical_centered(|ui| {
-                    ui.heading("CPU Raytracer (Pure Rust)");
-                    ui.label("Software rendering, single-threaded");
-                    ui.add_space(10.0);
+                columns[2].vertical_centered(|ui| {
+                    ui.heading("CPU");
+                    ui.label("Pure Rust");
 
-                    // Convert CPU image to egui texture
-                    if let Some(image_buffer) = self.cpu_renderer.image_buffer() {
-                        let (width, height) = (image_buffer.width() as usize, image_buffer.height() as usize);
-
-                        // Convert to egui ColorImage
-                        let pixels: Vec<egui::Color32> = image_buffer
-                            .pixels()
-                            .map(|p| egui::Color32::from_rgb(p[0], p[1], p[2]))
-                            .collect();
-
-                        let color_image = ColorImage {
-                            size: [width, height],
-                            pixels,
-                        };
-
-                        // Recreate texture each frame
-                        self.cpu_texture = Some(ctx.load_texture(
-                            "cpu_render",
-                            color_image,
-                            TextureOptions::LINEAR,
-                        ));
-
-                        if let Some(texture) = &self.cpu_texture {
-                            ui.image(egui::ImageSource::Texture(egui::load::SizedTexture {
-                                id: texture.id(),
-                                size: [self.render_size.0 as f32, self.render_size.1 as f32].into(),
-                            }));
-                        }
+                    if let Some(texture) = &self.cpu_texture {
+                        ui.image(egui::ImageSource::Texture(egui::load::SizedTexture {
+                            id: texture.id(),
+                            size: [self.render_size.0 as f32, self.render_size.1 as f32].into(),
+                        }));
+                    } else {
+                        ui.label("N/A");
                     }
                 });
             });
