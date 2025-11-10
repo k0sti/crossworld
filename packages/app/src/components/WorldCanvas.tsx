@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Box } from '@chakra-ui/react';
 import { SceneManager } from '../renderer/scene';
 import { GeometryController } from '../geometry/geometry-controller';
-import init from 'crossworld-world';
+import { AppInitializer } from '../AppInitializer';
 import type { AvatarStateService, AvatarConfig } from '../services/avatar-state';
 import type { TeleportAnimationType } from '../renderer/teleport-animation';
 import { DebugPanel, type DebugInfo } from './WorldPanel';
@@ -127,103 +127,114 @@ export function WorldCanvas({
     if (!canvasRef.current) return;
 
     const canvas = canvasRef.current;
-    const sceneManager = new SceneManager();
+    const initializer = new AppInitializer();
     const geometryController = new GeometryController();
 
-    localSceneManagerRef.current = sceneManager;
     localGeometryControllerRef.current = geometryController;
 
-    // Expose geometry controller to parent if ref provided
-    if (geometryControllerRef) {
-      geometryControllerRef.current = geometryController;
-    }
+    // Initialize app (WASM + Physics + Renderer)
+    initializer.initialize(canvas)
+      .then(() => {
+        logger.log('common', '[WorldCanvas] AppInitializer complete');
 
-    // Expose scene manager to parent if ref provided
-    if (sceneManagerRef) {
-      sceneManagerRef.current = sceneManager;
-    }
+        // Get initialized subsystems
+        const sceneManager = initializer.getSceneManager();
+        localSceneManagerRef.current = sceneManager;
 
-    // Initialize scene (async to allow physics WASM loading)
-    sceneManager.initialize(canvas).catch((error: unknown) => {
-      logger.error('renderer', 'Failed to initialize scene:', error);
-    });
+        // Expose refs to parent if provided
+        if (geometryControllerRef) {
+          geometryControllerRef.current = geometryController;
+        }
+        if (sceneManagerRef) {
+          sceneManagerRef.current = sceneManager;
+        }
 
-    // Set position update callback and subscribe to state changes
-    let unsubscribe: (() => void) | undefined;
-    if (avatarStateService) {
-      sceneManager.setPositionUpdateCallback((x, y, z, quaternion, moveStyle) => {
-        avatarStateService.publishPosition({ x, y, z, quaternion }, moveStyle).catch(console.error);
+        // Set position update callback and subscribe to state changes
+        let unsubscribe: (() => void) | undefined;
+        if (avatarStateService) {
+          sceneManager.setPositionUpdateCallback((x, y, z, quaternion, moveStyle) => {
+            avatarStateService.publishPosition({ x, y, z, quaternion }, moveStyle).catch(console.error);
+          });
+
+          // Subscribe to avatar state changes
+          unsubscribe = avatarStateService.onChange((states) => {
+            sceneManager.updateRemoteAvatars(states);
+          });
+        }
+
+        // Set voxel edit callback for world cube editing
+        sceneManager.setOnVoxelEdit((coord, colorIndex) => {
+          if (colorIndex === 0) {
+            // Remove voxel at specified depth
+            geometryController.removeVoxelAtDepth(coord.x, coord.y, coord.z, coord.depth);
+          } else {
+            // Set voxel at specified depth
+            geometryController.setVoxelAtDepth(coord.x, coord.y, coord.z, coord.depth, colorIndex);
+          }
+        });
+
+        // Initialize geometry controller (after WASM is loaded by AppInitializer)
+        geometryController.initialize((geometry) => {
+          sceneManager.updateGeometry(
+            geometry.vertices,
+            geometry.indices,
+            geometry.normals,
+            geometry.colors,
+            geometry.uvs,
+            geometry.materialIds
+          );
+        }, (csmText: string) => {
+          // Load into WASM for raycasting
+          sceneManager.loadWorldCube(csmText);
+          // Call parent callback if provided
+          onWorldCSMUpdate?.(csmText);
+        }).catch((error) => {
+          logger.error('renderer', 'Failed to initialize geometry controller:', error);
+        });
+
+        // Animation loop
+        const animate = () => {
+          sceneManager.render();
+
+          // Update debug info every frame
+          setDebugInfo(sceneManager.getDebugInfo());
+
+          animationFrameRef.current = requestAnimationFrame(animate);
+        };
+        animate();
+
+        // Handle resize
+        const handleResize = () => {
+          sceneManager.handleResize();
+        };
+        window.addEventListener('resize', handleResize);
+
+        // Store cleanup function
+        return () => {
+          if (animationFrameRef.current) {
+            cancelAnimationFrame(animationFrameRef.current);
+          }
+          window.removeEventListener('resize', handleResize);
+          sceneManager.dispose();
+          geometryController.destroy();
+          initializer.dispose();
+          if (unsubscribe) {
+            unsubscribe();
+          }
+        };
+      })
+      .catch((error) => {
+        logger.error('common', '[WorldCanvas] AppInitializer failed:', error);
       });
 
-      // Subscribe to avatar state changes
-      unsubscribe = avatarStateService.onChange((states) => {
-        sceneManager.updateRemoteAvatars(states);
-      });
-    }
-
-    // Set voxel edit callback for world cube editing
-    sceneManager.setOnVoxelEdit((coord, colorIndex) => {
-      if (colorIndex === 0) {
-        // Remove voxel at specified depth
-        geometryController.removeVoxelAtDepth(coord.x, coord.y, coord.z, coord.depth);
-      } else {
-        // Set voxel at specified depth
-        geometryController.setVoxelAtDepth(coord.x, coord.y, coord.z, coord.depth, colorIndex);
-      }
-    });
-
-    // Initialize WASM
-    init().catch((error: unknown) => {
-      logger.error('renderer', 'Failed to initialize WASM:', error);
-    });
-
-    // Initialize geometry controller
-    geometryController.initialize((geometry) => {
-      sceneManager.updateGeometry(
-        geometry.vertices,
-        geometry.indices,
-        geometry.normals,
-        geometry.colors,
-        geometry.uvs,
-        geometry.materialIds
-      );
-    }, (csmText: string) => {
-      // Load into WASM for raycasting
-      sceneManager.loadWorldCube(csmText);
-      // Call parent callback if provided
-      onWorldCSMUpdate?.(csmText);
-    }).catch((error) => {
-      logger.error('renderer', 'Failed to initialize geometry controller:', error);
-    });
-
-    // Animation loop
-    const animate = () => {
-      sceneManager.render();
-
-      // Update debug info every frame
-      setDebugInfo(sceneManager.getDebugInfo());
-
-      animationFrameRef.current = requestAnimationFrame(animate);
-    };
-    animate();
-
-    // Handle resize
-    const handleResize = () => {
-      sceneManager.handleResize();
-    };
-    window.addEventListener('resize', handleResize);
-
-    // Cleanup
+    // Return early cleanup function (for unmount before init completes)
     return () => {
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
       }
-      window.removeEventListener('resize', handleResize);
-      sceneManager.dispose();
-      geometryController.destroy();
-      if (unsubscribe) {
-        unsubscribe();
-      }
+      localGeometryControllerRef.current?.destroy();
+      localSceneManagerRef.current?.dispose();
+      initializer.dispose();
     };
   }, [avatarStateService]);
 

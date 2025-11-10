@@ -162,7 +162,7 @@ export class SceneManager {
   private avatarTexturesEnabled: boolean = true;
   private texturesLoadingPromise: Promise<void> | null = null;
 
-  constructor() {
+  constructor(world?: World) {
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(
       75,
@@ -174,8 +174,12 @@ export class SceneManager {
     this.raycaster = new THREE.Raycaster();
     this.mouse = new THREE.Vector2();
 
-    // Initialize physics
-    this.physicsBridge = new World(new THREE.Vector3(0, -9.8, 0));
+    // Use provided physics world or create a new one (for backwards compatibility)
+    if (world) {
+      this.physicsBridge = world;
+    } else {
+      this.physicsBridge = new World(new THREE.Vector3(0, -9.8, 0));
+    }
   }
 
   async initialize(canvas: HTMLCanvasElement): Promise<void> {
@@ -187,8 +191,11 @@ export class SceneManager {
       logger.log('renderer', 'Using WebGL 2.0 context');
     }
 
-    // Initialize physics WASM module
-    await this.physicsBridge.init();
+    // Initialize physics WASM module only if we created our own world
+    // (if world was provided by AppInitializer, it's already initialized)
+    if (!this.physicsBridge.isInitialized()) {
+      await this.physicsBridge.init();
+    }
 
     this.renderer = new THREE.WebGLRenderer({
       canvas,
