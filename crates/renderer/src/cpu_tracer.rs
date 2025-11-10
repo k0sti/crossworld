@@ -1,21 +1,61 @@
+use crate::gpu_tracer::{raycast, GpuTracer};
 use crate::renderer::*;
+use cube::{parse_csm, Cube};
 use image::{ImageBuffer, Rgb};
+use std::rc::Rc;
 
 /// Pure Rust CPU raytracer that renders to an image buffer
 pub struct CpuCubeTracer {
-    cube_bounds: CubeBounds,
     light_dir: glam::Vec3,
     background_color: glam::Vec3,
     image_buffer: Option<ImageBuffer<Rgb<u8>, Vec<u8>>>,
+    gpu_tracer: GpuTracer,
 }
 
 impl CpuCubeTracer {
     pub fn new() -> Self {
+        // Generate a simple cube using cubscript
+        let cubscript = ">a [1 2 3 4 5 6 7 8]";
+        let cube = Self::parse_cube(cubscript);
+
         Self {
-            cube_bounds: CubeBounds::default(),
             light_dir: glam::Vec3::new(0.5, 1.0, 0.3).normalize(),
             background_color: glam::Vec3::new(0.2, 0.3, 0.4),
             image_buffer: None,
+            gpu_tracer: GpuTracer::new(cube),
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn new_with_cube(cube: Rc<Cube<i32>>) -> Self {
+        Self {
+            light_dir: glam::Vec3::new(0.5, 1.0, 0.3).normalize(),
+            background_color: glam::Vec3::new(0.2, 0.3, 0.4),
+            image_buffer: None,
+            gpu_tracer: GpuTracer::new(cube),
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn new_with_cubscript(cubscript: &str) -> Self {
+        let cube = Self::parse_cube(cubscript);
+        Self {
+            light_dir: glam::Vec3::new(0.5, 1.0, 0.3).normalize(),
+            background_color: glam::Vec3::new(0.2, 0.3, 0.4),
+            image_buffer: None,
+            gpu_tracer: GpuTracer::new(cube),
+        }
+    }
+
+    /// Parse cubscript code and return a Cube instance
+    fn parse_cube(cubscript: &str) -> Rc<Cube<i32>> {
+        match parse_csm(cubscript) {
+            Ok(octree) => Rc::new(octree.root),
+            Err(e) => {
+                eprintln!("Failed to parse cubscript: {}", e);
+                eprintln!("Using default solid cube");
+                Rc::new(Cube::Solid(1))
+            }
         }
     }
 
@@ -80,14 +120,36 @@ impl CpuCubeTracer {
 
     /// Render a ray and return the color
     fn render_ray(&self, ray: Ray) -> glam::Vec3 {
-        // Intersect with cube
-        let hit = intersect_box(ray, self.cube_bounds.min, self.cube_bounds.max);
+        // Use GPU tracer's raycast function for initial bounding box hit
+        let hit = self.gpu_tracer.raycast(ray.origin, ray.direction);
 
         // Background color
         let mut color = self.background_color;
 
         if hit.hit {
-            color = calculate_lighting(&hit, ray.direction, self.light_dir);
+            // Recursive raycast into the cube octree structure
+            let cube = self.gpu_tracer.cube();
+            let result = raycast(cube, hit.point, ray.direction);
+
+            if result.hit {
+                // Convert RaycastHit to HitInfo for lighting calculation
+                let hit_info = HitInfo {
+                    hit: result.hit,
+                    t: result.t,
+                    point: result.point,
+                    normal: result.normal,
+                };
+                color = calculate_lighting(&hit_info, ray.direction, self.light_dir);
+            } else {
+                // Use initial hit for lighting if recursive raycast missed
+                let hit_info = HitInfo {
+                    hit: hit.hit,
+                    t: hit.t,
+                    point: hit.point,
+                    normal: hit.normal,
+                };
+                color = calculate_lighting(&hit_info, ray.direction, self.light_dir);
+            }
         }
 
         // Gamma correction

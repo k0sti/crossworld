@@ -1,4 +1,4 @@
-declare module 'crossworld-cube' {
+declare module 'cube' {
   export interface MeshResult {
     vertices: number[];
     indices: number[];

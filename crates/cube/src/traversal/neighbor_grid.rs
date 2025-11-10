@@ -165,8 +165,8 @@ impl<'a> NeighborView<'a> {
     ///
     /// # Example
     /// ```
-    /// use crossworld_cube::{OFFSET_LEFT, OFFSET_UP};
-    /// # use crossworld_cube::{Cube, NeighborGrid, NeighborView};
+    /// use cube::{OFFSET_LEFT, OFFSET_UP};
+    /// # use cube::{Cube, NeighborGrid, NeighborView};
     /// # let root = Cube::Solid(1);
     /// # let grid = NeighborGrid::new(&root, [0, 0, 0, 0]);
     /// # let view = NeighborView::new(&grid, 21);

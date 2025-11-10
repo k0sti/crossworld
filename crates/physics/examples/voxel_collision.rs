@@ -11,7 +11,7 @@ fn main() {
     let mut world = PhysicsWorld::new(Vec3::new(0.0, -9.81, 0.0));
 
     // Create a simple voxel cube (solid cube)
-    let cube = Rc::new(crossworld_cube::Cube::Solid(1));
+    let cube = Rc::new(cube::Cube::Solid(1));
     println!("Created voxel cube (solid)");
 
     // Generate collision geometry from voxel cube
