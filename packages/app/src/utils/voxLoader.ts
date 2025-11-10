@@ -1,7 +1,7 @@
 import * as logger from './logger';
 import type { GeometryData } from 'crossworld-world'
-import cubeInit from 'crossworld-cube'
-import * as cubeWasm from 'crossworld-cube'
+import cubeInit from 'cube'
+import * as cubeWasm from 'cube'
 
 /**
  * Load a .vox file from a URL and generate Three.js geometry

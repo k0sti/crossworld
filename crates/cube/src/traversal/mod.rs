@@ -44,7 +44,7 @@ pub type TraversalVisitor<'a> = &'a mut dyn FnMut(NeighborView, CubeCoord, bool)
 ///
 /// # Example
 /// ```
-/// use crossworld_cube::{Cube, NeighborGrid, traverse_octree, OFFSET_LEFT};
+/// use cube::{Cube, NeighborGrid, traverse_octree, OFFSET_LEFT};
 ///
 /// let root = Cube::Solid(33);
 /// let border_materials = [33, 33, 0, 0]; // Ground at bottom, sky at top
