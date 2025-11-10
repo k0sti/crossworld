@@ -1,25 +1,15 @@
 import * as logger from '../utils/logger';
-import init, { WorldCube, GeometryData } from 'crossworld-world';
+import { WorldCube, GeometryData } from 'crossworld-world';
 import { getMacroDepth, getMicroDepth, getBorderDepth, getSeed } from '../config/depth-config';
 import { CubeManager } from './cube-manager';
+import { ensureWorldWasmInitialized } from '../utils/cubeWasm';
 
-let wasmInitialized = false;
-let initPromise: Promise<void> | null = null;
-
+/**
+ * Initialize WASM module (delegates to central init function)
+ * @deprecated Use ensureWorldWasmInitialized from utils/cubeWasm instead
+ */
 export async function initializeWasm(): Promise<void> {
-  if (wasmInitialized) return;
-
-  if (initPromise) {
-    await initPromise;
-    return;
-  }
-
-  initPromise = init().then(() => {
-    wasmInitialized = true;
-    logger.log('geometry', 'WASM module initialized');
-  });
-
-  await initPromise;
+  await ensureWorldWasmInitialized();
 }
 
 export class GeometryGenerator {
