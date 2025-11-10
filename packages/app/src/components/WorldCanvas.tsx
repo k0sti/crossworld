@@ -282,7 +282,6 @@ export function WorldCanvas({
             geometry.uvs,
             geometry.materialIds
           );
-          setTriangleCount(geometry.stats.triangles);
         }
       ).catch((error) => {
         logger.error('renderer', 'Failed to reinitialize geometry controller:', error);

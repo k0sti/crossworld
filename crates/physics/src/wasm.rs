@@ -1,8 +1,5 @@
 use crate::{
     character_controller::{CharacterController, CharacterControllerConfig},
-    collider::{
-        create_box_collider, create_capsule_collider, create_sphere_collider, VoxelColliderBuilder,
-    },
     world::PhysicsWorld,
 };
 use glam::Vec3;
