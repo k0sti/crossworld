@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Vox Model Viewer</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/vox-reader@1.0.0/index.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -289,6 +288,167 @@
     </div>
 
     <script>
+        // Simple VOX file parser
+        function parseVoxFile(buffer) {
+            const data = new Uint8Array(buffer);
+            let offset = 0;
+
+            // Read string
+            function readString(length) {
+                const str = String.fromCharCode.apply(null, data.slice(offset, offset + length));
+                offset += length;
+                return str;
+            }
+
+            // Read int32
+            function readInt32() {
+                const value = data[offset] | (data[offset + 1] << 8) | (data[offset + 2] << 16) | (data[offset + 3] << 24);
+                offset += 4;
+                return value;
+            }
+
+            // Read uint8
+            function readUint8() {
+                return data[offset++];
+            }
+
+            // Check magic number
+            const magic = readString(4);
+            if (magic !== 'VOX ') {
+                throw new Error('Invalid VOX file');
+            }
+
+            // Read version
+            const version = readInt32();
+
+            // Default palette (MagicaVoxel default)
+            const defaultPalette = [
+                {r: 255, g: 255, b: 255, a: 255},
+                {r: 255, g: 255, b: 204, a: 255}, {r: 255, g: 255, b: 153, a: 255}, {r: 255, g: 255, b: 102, a: 255},
+                {r: 255, g: 255, b: 51, a: 255}, {r: 255, g: 255, b: 0, a: 255}, {r: 255, g: 204, b: 255, a: 255},
+                {r: 255, g: 204, b: 204, a: 255}, {r: 255, g: 204, b: 153, a: 255}, {r: 255, g: 204, b: 102, a: 255},
+                {r: 255, g: 204, b: 51, a: 255}, {r: 255, g: 204, b: 0, a: 255}, {r: 255, g: 153, b: 255, a: 255},
+                {r: 255, g: 153, b: 204, a: 255}, {r: 255, g: 153, b: 153, a: 255}, {r: 255, g: 153, b: 102, a: 255},
+                {r: 255, g: 153, b: 51, a: 255}, {r: 255, g: 153, b: 0, a: 255}, {r: 255, g: 102, b: 255, a: 255},
+                {r: 255, g: 102, b: 204, a: 255}, {r: 255, g: 102, b: 153, a: 255}, {r: 255, g: 102, b: 102, a: 255},
+                {r: 255, g: 102, b: 51, a: 255}, {r: 255, g: 102, b: 0, a: 255}, {r: 255, g: 51, b: 255, a: 255},
+                {r: 255, g: 51, b: 204, a: 255}, {r: 255, g: 51, b: 153, a: 255}, {r: 255, g: 51, b: 102, a: 255},
+                {r: 255, g: 51, b: 51, a: 255}, {r: 255, g: 51, b: 0, a: 255}, {r: 255, g: 0, b: 255, a: 255},
+                {r: 255, g: 0, b: 204, a: 255}, {r: 255, g: 0, b: 153, a: 255}, {r: 255, g: 0, b: 102, a: 255},
+                {r: 255, g: 0, b: 51, a: 255}, {r: 255, g: 0, b: 0, a: 255}, {r: 204, g: 255, b: 255, a: 255},
+                {r: 204, g: 255, b: 204, a: 255}, {r: 204, g: 255, b: 153, a: 255}, {r: 204, g: 255, b: 102, a: 255},
+                {r: 204, g: 255, b: 51, a: 255}, {r: 204, g: 255, b: 0, a: 255}, {r: 204, g: 204, b: 255, a: 255},
+                {r: 204, g: 204, b: 204, a: 255}, {r: 204, g: 204, b: 153, a: 255}, {r: 204, g: 204, b: 102, a: 255},
+                {r: 204, g: 204, b: 51, a: 255}, {r: 204, g: 204, b: 0, a: 255}, {r: 204, g: 153, b: 255, a: 255},
+                {r: 204, g: 153, b: 204, a: 255}, {r: 204, g: 153, b: 153, a: 255}, {r: 204, g: 153, b: 102, a: 255},
+                {r: 204, g: 153, b: 51, a: 255}, {r: 204, g: 153, b: 0, a: 255}, {r: 204, g: 102, b: 255, a: 255},
+                {r: 204, g: 102, b: 204, a: 255}, {r: 204, g: 102, b: 153, a: 255}, {r: 204, g: 102, b: 102, a: 255},
+                {r: 204, g: 102, b: 51, a: 255}, {r: 204, g: 102, b: 0, a: 255}, {r: 204, g: 51, b: 255, a: 255},
+                {r: 204, g: 51, b: 204, a: 255}, {r: 204, g: 51, b: 153, a: 255}, {r: 204, g: 51, b: 102, a: 255},
+                {r: 204, g: 51, b: 51, a: 255}, {r: 204, g: 51, b: 0, a: 255}, {r: 204, g: 0, b: 255, a: 255},
+                {r: 204, g: 0, b: 204, a: 255}, {r: 204, g: 0, b: 153, a: 255}, {r: 204, g: 0, b: 102, a: 255},
+                {r: 204, g: 0, b: 51, a: 255}, {r: 204, g: 0, b: 0, a: 255}, {r: 153, g: 255, b: 255, a: 255},
+                {r: 153, g: 255, b: 204, a: 255}, {r: 153, g: 255, b: 153, a: 255}, {r: 153, g: 255, b: 102, a: 255},
+                {r: 153, g: 255, b: 51, a: 255}, {r: 153, g: 255, b: 0, a: 255}, {r: 153, g: 204, b: 255, a: 255},
+                {r: 153, g: 204, b: 204, a: 255}, {r: 153, g: 204, b: 153, a: 255}, {r: 153, g: 204, b: 102, a: 255},
+                {r: 153, g: 204, b: 51, a: 255}, {r: 153, g: 204, b: 0, a: 255}, {r: 153, g: 153, b: 255, a: 255},
+                {r: 153, g: 153, b: 204, a: 255}, {r: 153, g: 153, b: 153, a: 255}, {r: 153, g: 153, b: 102, a: 255},
+                {r: 153, g: 153, b: 51, a: 255}, {r: 153, g: 153, b: 0, a: 255}, {r: 153, g: 102, b: 255, a: 255},
+                {r: 153, g: 102, b: 204, a: 255}, {r: 153, g: 102, b: 153, a: 255}, {r: 153, g: 102, b: 102, a: 255},
+                {r: 153, g: 102, b: 51, a: 255}, {r: 153, g: 102, b: 0, a: 255}, {r: 153, g: 51, b: 255, a: 255},
+                {r: 153, g: 51, b: 204, a: 255}, {r: 153, g: 51, b: 153, a: 255}, {r: 153, g: 51, b: 102, a: 255},
+                {r: 153, g: 51, b: 51, a: 255}, {r: 153, g: 51, b: 0, a: 255}, {r: 153, g: 0, b: 255, a: 255},
+                {r: 153, g: 0, b: 204, a: 255}, {r: 153, g: 0, b: 153, a: 255}, {r: 153, g: 0, b: 102, a: 255},
+                {r: 153, g: 0, b: 51, a: 255}, {r: 153, g: 0, b: 0, a: 255}, {r: 102, g: 255, b: 255, a: 255},
+                {r: 102, g: 255, b: 204, a: 255}, {r: 102, g: 255, b: 153, a: 255}, {r: 102, g: 255, b: 102, a: 255},
+                {r: 102, g: 255, b: 51, a: 255}, {r: 102, g: 255, b: 0, a: 255}, {r: 102, g: 204, b: 255, a: 255},
+                {r: 102, g: 204, b: 204, a: 255}, {r: 102, g: 204, b: 153, a: 255}, {r: 102, g: 204, b: 102, a: 255},
+                {r: 102, g: 204, b: 51, a: 255}, {r: 102, g: 204, b: 0, a: 255}, {r: 102, g: 153, b: 255, a: 255},
+                {r: 102, g: 153, b: 204, a: 255}, {r: 102, g: 153, b: 153, a: 255}, {r: 102, g: 153, b: 102, a: 255},
+                {r: 102, g: 153, b: 51, a: 255}, {r: 102, g: 153, b: 0, a: 255}, {r: 102, g: 102, b: 255, a: 255},
+                {r: 102, g: 102, b: 204, a: 255}, {r: 102, g: 102, b: 153, a: 255}, {r: 102, g: 102, b: 102, a: 255},
+                {r: 102, g: 102, b: 51, a: 255}, {r: 102, g: 102, b: 0, a: 255}, {r: 102, g: 51, b: 255, a: 255},
+                {r: 102, g: 51, b: 204, a: 255}, {r: 102, g: 51, b: 153, a: 255}, {r: 102, g: 51, b: 102, a: 255},
+                {r: 102, g: 51, b: 51, a: 255}, {r: 102, g: 51, b: 0, a: 255}, {r: 102, g: 0, b: 255, a: 255},
+                {r: 102, g: 0, b: 204, a: 255}, {r: 102, g: 0, b: 153, a: 255}, {r: 102, g: 0, b: 102, a: 255},
+                {r: 102, g: 0, b: 51, a: 255}, {r: 102, g: 0, b: 0, a: 255}, {r: 51, g: 255, b: 255, a: 255},
+                {r: 51, g: 255, b: 204, a: 255}, {r: 51, g: 255, b: 153, a: 255}, {r: 51, g: 255, b: 102, a: 255},
+                {r: 51, g: 255, b: 51, a: 255}, {r: 51, g: 255, b: 0, a: 255}, {r: 51, g: 204, b: 255, a: 255},
+                {r: 51, g: 204, b: 204, a: 255}, {r: 51, g: 204, b: 153, a: 255}, {r: 51, g: 204, b: 102, a: 255},
+                {r: 51, g: 204, b: 51, a: 255}, {r: 51, g: 204, b: 0, a: 255}, {r: 51, g: 153, b: 255, a: 255},
+                {r: 51, g: 153, b: 204, a: 255}, {r: 51, g: 153, b: 153, a: 255}, {r: 51, g: 153, b: 102, a: 255},
+                {r: 51, g: 153, b: 51, a: 255}, {r: 51, g: 153, b: 0, a: 255}, {r: 51, g: 102, b: 255, a: 255},
+                {r: 51, g: 102, b: 204, a: 255}, {r: 51, g: 102, b: 153, a: 255}, {r: 51, g: 102, b: 102, a: 255},
+                {r: 51, g: 102, b: 51, a: 255}, {r: 51, g: 102, b: 0, a: 255}, {r: 51, g: 51, b: 255, a: 255},
+                {r: 51, g: 51, b: 204, a: 255}, {r: 51, g: 51, b: 153, a: 255}, {r: 51, g: 51, b: 102, a: 255},
+                {r: 51, g: 51, b: 51, a: 255}, {r: 51, g: 51, b: 0, a: 255}, {r: 51, g: 0, b: 255, a: 255},
+                {r: 51, g: 0, b: 204, a: 255}, {r: 51, g: 0, b: 153, a: 255}, {r: 51, g: 0, b: 102, a: 255},
+                {r: 51, g: 0, b: 51, a: 255}, {r: 51, g: 0, b: 0, a: 255}, {r: 0, g: 255, b: 255, a: 255},
+                {r: 0, g: 255, b: 204, a: 255}, {r: 0, g: 255, b: 153, a: 255}, {r: 0, g: 255, b: 102, a: 255},
+                {r: 0, g: 255, b: 51, a: 255}, {r: 0, g: 255, b: 0, a: 255}, {r: 0, g: 204, b: 255, a: 255},
+                {r: 0, g: 204, b: 204, a: 255}, {r: 0, g: 204, b: 153, a: 255}, {r: 0, g: 204, b: 102, a: 255},
+                {r: 0, g: 204, b: 51, a: 255}, {r: 0, g: 204, b: 0, a: 255}, {r: 0, g: 153, b: 255, a: 255},
+                {r: 0, g: 153, b: 204, a: 255}, {r: 0, g: 153, b: 153, a: 255}, {r: 0, g: 153, b: 102, a: 255},
+                {r: 0, g: 153, b: 51, a: 255}, {r: 0, g: 153, b: 0, a: 255}, {r: 0, g: 102, b: 255, a: 255},
+                {r: 0, g: 102, b: 204, a: 255}, {r: 0, g: 102, b: 153, a: 255}, {r: 0, g: 102, b: 102, a: 255},
+                {r: 0, g: 102, b: 51, a: 255}, {r: 0, g: 102, b: 0, a: 255}, {r: 0, g: 51, b: 255, a: 255},
+                {r: 0, g: 51, b: 204, a: 255}, {r: 0, g: 51, b: 153, a: 255}, {r: 0, g: 51, b: 102, a: 255},
+                {r: 0, g: 51, b: 51, a: 255}, {r: 0, g: 51, b: 0, a: 255}, {r: 0, g: 0, b: 255, a: 255},
+                {r: 0, g: 0, b: 204, a: 255}, {r: 0, g: 0, b: 153, a: 255}, {r: 0, g: 0, b: 102, a: 255},
+                {r: 0, g: 0, b: 51, a: 255}, {r: 0, g: 0, b: 0, a: 255}, {r: 238, g: 238, b: 238, a: 255},
+                {r: 221, g: 221, b: 221, a: 255}, {r: 187, g: 187, b: 187, a: 255}, {r: 170, g: 170, b: 170, a: 255},
+                {r: 136, g: 136, b: 136, a: 255}, {r: 119, g: 119, b: 119, a: 255}, {r: 85, g: 85, b: 85, a: 255},
+                {r: 68, g: 68, b: 68, a: 255}, {r: 34, g: 34, b: 34, a: 255}, {r: 17, g: 17, b: 17, a: 255}
+            ];
+
+            // Fill remaining palette slots
+            for (let i = defaultPalette.length; i < 256; i++) {
+                defaultPalette.push({r: 0, g: 0, b: 0, a: 255});
+            }
+
+            let palette = [...defaultPalette];
+            const voxels = [];
+            let sizeX = 0, sizeY = 0, sizeZ = 0;
+
+            // Parse chunks
+            while (offset < data.length) {
+                const chunkId = readString(4);
+                const chunkSize = readInt32();
+                const childChunks = readInt32();
+                const chunkEnd = offset + chunkSize;
+
+                if (chunkId === 'SIZE') {
+                    sizeX = readInt32();
+                    sizeY = readInt32();
+                    sizeZ = readInt32();
+                } else if (chunkId === 'XYZI') {
+                    const numVoxels = readInt32();
+                    for (let i = 0; i < numVoxels; i++) {
+                        const x = readUint8();
+                        const y = readUint8();
+                        const z = readUint8();
+                        const colorIndex = readUint8();
+                        voxels.push({ x, y, z, colorIndex });
+                    }
+                } else if (chunkId === 'RGBA') {
+                    for (let i = 0; i < 256; i++) {
+                        const r = readUint8();
+                        const g = readUint8();
+                        const b = readUint8();
+                        const a = readUint8();
+                        palette[i] = { r, g, b, a };
+                    }
+                } else {
+                    // Skip unknown chunk
+                    offset = chunkEnd;
+                }
+
+                offset = chunkEnd;
+            }
+
+            return { voxels, palette, size: { x: sizeX, y: sizeY, z: sizeZ } };
+        }
+
         // Three.js setup
         let scene, camera, renderer, currentMesh, controls;
         let isMouseDown = false;
@@ -522,7 +682,7 @@
             try {
                 const response = await fetch(path);
                 const arrayBuffer = await response.arrayBuffer();
-                const voxData = window.voxReader.parse(arrayBuffer);
+                const voxData = parseVoxFile(arrayBuffer);
 
                 // Remove old mesh
                 if (currentMesh) {
