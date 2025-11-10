@@ -38,7 +38,7 @@ impl CpuCubeTracer {
         Ok(())
     }
 
-    /// Render a single pixel
+    /// Render a single pixel with time-based camera
     fn render_pixel(&self, x: u32, y: u32, width: u32, height: u32, time: f32) -> glam::Vec3 {
         // Normalized pixel coordinates (flip Y to match GL coordinate system)
         let uv = glam::Vec2::new(
@@ -54,6 +54,32 @@ impl CpuCubeTracer {
         // Create ray
         let ray = create_camera_ray(uv, camera_pos, target, up);
 
+        self.render_ray(ray)
+    }
+
+    /// Render a single pixel with explicit camera configuration
+    fn render_pixel_with_camera(
+        &self,
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+        camera: &CameraConfig,
+    ) -> glam::Vec3 {
+        // Normalized pixel coordinates (flip Y to match GL coordinate system)
+        let uv = glam::Vec2::new(
+            (x as f32 - 0.5 * width as f32) / height as f32,
+            -((y as f32 - 0.5 * height as f32) / height as f32),
+        );
+
+        // Create ray from camera
+        let ray = create_camera_ray(uv, camera.position, camera.target(), camera.up());
+
+        self.render_ray(ray)
+    }
+
+    /// Render a ray and return the color
+    fn render_ray(&self, ray: Ray) -> glam::Vec3 {
         // Intersect with cube
         let hit = intersect_box(ray, self.cube_bounds.min, self.cube_bounds.max);
 
@@ -82,6 +108,22 @@ impl Renderer for CpuCubeTracer {
         // Create or resize image buffer
         let buffer = ImageBuffer::from_fn(width, height, |x, y| {
             let color = self.render_pixel(x, y, width, height, time);
+
+            // Convert to RGB8
+            let r = (color.x.clamp(0.0, 1.0) * 255.0) as u8;
+            let g = (color.y.clamp(0.0, 1.0) * 255.0) as u8;
+            let b = (color.z.clamp(0.0, 1.0) * 255.0) as u8;
+
+            Rgb([r, g, b])
+        });
+
+        self.image_buffer = Some(buffer);
+    }
+
+    fn render_with_camera(&mut self, width: u32, height: u32, camera: &CameraConfig) {
+        // Create or resize image buffer
+        let buffer = ImageBuffer::from_fn(width, height, |x, y| {
+            let color = self.render_pixel_with_camera(x, y, width, height, camera);
 
             // Convert to RGB8
             let r = (color.x.clamp(0.0, 1.0) * 255.0) as u8;
