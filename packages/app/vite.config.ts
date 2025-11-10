@@ -110,7 +110,7 @@ export default defineConfig({
       '@assets': path.resolve(__dirname, '../../assets')
     }
   },
-  publicDir: false,
+  publicDir: 'public',
   // Serve assets from project root during dev
   server: {
     host: '0.0.0.0',  // Listen on all interfaces
