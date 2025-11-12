@@ -12,6 +12,11 @@ import {
   IconButton,
   Textarea,
   Collapse,
+  Select,
+  Slider,
+  SliderTrack,
+  SliderFilledTrack,
+  SliderThumb,
 } from '@chakra-ui/react';
 import { useState, useRef, useEffect } from 'react';
 import * as THREE from 'three';
@@ -19,6 +24,8 @@ import { ReadyPlayerMeService } from '../services/ready-player-me';
 import type { TeleportAnimationType } from '../renderer/teleport-animation';
 import { ENABLE_AVATAR_COLOR_SELECTION } from '../constants/features';
 import { ResponsivePanel } from './ResponsivePanel';
+import { MaterialsLoader } from '../renderer/materials-loader';
+import { createTexturedVoxelMaterial, updateShaderLighting } from '../renderer/textured-voxel-material';
 
 export interface AvatarSelection {
   avatarType: 'vox' | 'glb' | 'csm';
@@ -71,6 +78,12 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
   const [voxModels, setVoxModels] = useState<ModelItem[]>([]);
   const [glbModels, setGlbModels] = useState<ModelItem[]>([]);
   const [showMoreSettings, setShowMoreSettings] = useState(false);
+  const [materialsLoader] = useState(() => new MaterialsLoader());
+  const [texturesLoaded, setTexturesLoaded] = useState(false);
+  const [brightness, setBrightness] = useState<number>(1.0); // 0.5 - 2.0 range
+  const [ambientLight, setAmbientLight] = useState<number>(1.5);
+  const [directionalLight, setDirectionalLight] = useState<number>(2.0);
+  const [textureDepth, setTextureDepth] = useState<number>(0); // 0-5, scales texture by 2^depth
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -113,6 +126,25 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
     logger.log('ui', `[SelectAvatar] Randomized avatar: model="${selectedModel}", texture="${selectedTexture}", teleport="${selectedTeleport}"`);
   };
 
+  // Load materials and textures
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const loadTextures = async () => {
+      try {
+        logger.log('ui', '[SelectAvatar] Loading materials and textures...');
+        await materialsLoader.loadMaterialsJson();
+        await materialsLoader.loadTextures(true); // Use high-res textures for avatar selector
+        setTexturesLoaded(true);
+        logger.log('ui', '[SelectAvatar] Materials and textures loaded successfully');
+      } catch (error) {
+        logger.error('ui', '[SelectAvatar] Failed to load materials/textures:', error);
+      }
+    };
+
+    loadTextures();
+  }, [isOpen, materialsLoader]);
+
   // Load models configuration
   useEffect(() => {
     loadModelsConfig().then(config => {
@@ -149,6 +181,8 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
     mesh?: THREE.Object3D;
     animationId?: number;
     cameraDistance: number;
+    ambientLight?: THREE.AmbientLight;
+    directionalLight?: THREE.DirectionalLight;
   } | null>(null);
   const [sceneReady, setSceneReady] = useState(false);
   const previewContainerRef = useRef<HTMLDivElement>(null);
@@ -162,30 +196,40 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
 
     const canvas = previewCanvas;
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x1a1a1e);
+    scene.background = new THREE.Color(0x87ceeb); // Sky blue - same as world
 
     const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 1000);
     const cameraDistance = 3;
-    camera.position.set(0, 1, cameraDistance);
-    camera.lookAt(0, 0.5, 0);
+    camera.position.set(0, 0, cameraDistance);
+    camera.lookAt(0, 0, 0); // Look at center since avatar pivot is now centered
 
     // Get container size for responsive canvas
-    const containerWidth = previewContainerRef.current?.clientWidth || 400;
-    const canvasSize = Math.min(containerWidth - 32, 400); // Max 400px, with padding
+    // Calculate based on viewport width since previewContainer is inline-block
+    const viewportWidth = window.innerWidth;
+    const maxCanvasSize = 800;
+    const canvasSize = Math.min(viewportWidth * 0.8, maxCanvasSize); // 80% of viewport, max 800px
 
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     renderer.setSize(canvasSize, canvasSize);
     renderer.setPixelRatio(window.devicePixelRatio);
 
-    // Lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-    scene.add(ambientLight);
+    // Lighting - much brighter to compensate for shader's low lighting multipliers
+    // The textured voxel shader multiplies by ~0.4-0.5, so we need lights ~2-3x brighter
+    const ambientLightObj = new THREE.AmbientLight(0xffffff, ambientLight * brightness);
+    scene.add(ambientLightObj);
 
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    directionalLight.position.set(5, 10, 5);
-    scene.add(directionalLight);
+    const directionalLightObj = new THREE.DirectionalLight(0xffffff, directionalLight * brightness);
+    directionalLightObj.position.set(5, 10, 5);
+    scene.add(directionalLightObj);
 
-    previewSceneRef.current = { scene, camera, renderer, cameraDistance };
+    previewSceneRef.current = {
+      scene,
+      camera,
+      renderer,
+      cameraDistance,
+      ambientLight: ambientLightObj,
+      directionalLight: directionalLightObj
+    };
     setSceneReady(true);
 
     // Mouse wheel zoom handler
@@ -198,8 +242,8 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
       const newDistance = Math.max(1, Math.min(10, currentDistance + event.deltaY * zoomSpeed));
 
       previewSceneRef.current.cameraDistance = newDistance;
-      camera.position.set(0, 1, newDistance);
-      camera.lookAt(0, 0.5, 0);
+      camera.position.set(0, 0, newDistance);
+      camera.lookAt(0, 0, 0);
     };
 
     canvas.addEventListener('wheel', handleWheel, { passive: false });
@@ -229,6 +273,22 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
       setSceneReady(false);
     };
   }, [isOpen, previewCanvas]);
+
+  // Update lighting when parameters change
+  useEffect(() => {
+    if (!sceneReady || !previewSceneRef.current) return;
+
+    const { ambientLight: ambientLightObj, directionalLight: directionalLightObj } = previewSceneRef.current;
+
+    if (ambientLightObj) {
+      ambientLightObj.intensity = ambientLight * brightness;
+      logger.log('ui', `[SelectAvatar] Updated ambient light: ${ambientLight * brightness}`);
+    }
+    if (directionalLightObj) {
+      directionalLightObj.intensity = directionalLight * brightness;
+      logger.log('ui', `[SelectAvatar] Updated directional light: ${directionalLight * brightness}`);
+    }
+  }, [sceneReady, brightness, ambientLight, directionalLight]);
 
   // Update preview when selection changes (but NOT when just switching tabs)
   useEffect(() => {
@@ -322,17 +382,89 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
           geometry.setAttribute('color', new THREE.BufferAttribute(geometryData.colors, 3));
           geometry.setIndex(new THREE.BufferAttribute(geometryData.indices, 1));
 
+          // Generate UV coordinates - combine both approaches
+          // Use face normals to determine which axes to use, plus add normal contribution for variation
+          const uvs = new Float32Array(geometryData.vertices.length / 3 * 2);
+
+          for (let i = 0; i < geometryData.vertices.length / 3; i++) {
+            const nx = geometryData.normals[i * 3];
+            const ny = geometryData.normals[i * 3 + 1];
+            const nz = geometryData.normals[i * 3 + 2];
+
+            const x = geometryData.vertices[i * 3];
+            const y = geometryData.vertices[i * 3 + 1];
+            const z = geometryData.vertices[i * 3 + 2];
+
+            // Determine dominant axis from normal (face direction)
+            const absNx = Math.abs(nx);
+            const absNy = Math.abs(ny);
+            const absNz = Math.abs(nz);
+
+            let u: number, v: number;
+
+            // Use position divided by a scale factor for texture tiling
+            // Scale by 2^textureDepth to increase texture frequency
+            const textureScale = Math.pow(2, textureDepth);
+            const scale = 10 * textureScale; // Higher scale = larger UVs = smaller texture
+
+            if (absNy > absNx && absNy > absNz) {
+              // Top/Bottom face (Y-dominant)
+              u = x / scale + nx * 0.1;
+              v = z / scale + nz * 0.1;
+            } else if (absNx > absNz) {
+              // Left/Right face (X-dominant)
+              u = z / scale + nz * 0.1;
+              v = y / scale + ny * 0.1;
+            } else {
+              // Front/Back face (Z-dominant)
+              u = x / scale + nx * 0.1;
+              v = y / scale + ny * 0.1;
+            }
+
+            // Use fractional part for tiling (0-1 range per texture repeat)
+            uvs[i * 2] = u - Math.floor(u);
+            uvs[i * 2 + 1] = v - Math.floor(v);
+          }
+
+          geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+
+          // Get material ID from selected texture
+          let materialId = 0; // Default to vertex colors only
+          if (avatarTexture && avatarTexture !== '0' && texturesLoaded) {
+            const materialsData = (materialsLoader as any).materialsData;
+            if (materialsData) {
+              const material = materialsData.materials.find((m: any) => m.id === avatarTexture);
+              if (material) {
+                materialId = material.index;
+                logger.log('ui', `[SelectAvatar] Using material ID ${materialId} for texture '${avatarTexture}'`);
+              }
+            }
+          }
+
+          // Add materialId attribute for all vertices
+          const materialIds = new Float32Array(geometryData.vertices.length / 3).fill(materialId);
+          geometry.setAttribute('materialId', new THREE.BufferAttribute(materialIds, 1));
+
           // CENTER THE GEOMETRY so rotation happens around geometric center
           geometry.computeBoundingBox();
           const geoCenter = new THREE.Vector3();
           geometry.boundingBox!.getCenter(geoCenter);
           geometry.translate(-geoCenter.x, 0, -geoCenter.z); // Only center horizontally
 
-          const material = new THREE.MeshPhongMaterial({
-            vertexColors: true,
-            specular: 0x111111,
-            shininess: 30,
-          });
+          // Create material using textured shader if textures are loaded
+          let material: THREE.Material;
+          if (texturesLoaded && previewSceneRef.current.renderer) {
+            const textureArray = materialsLoader.getTextureArray();
+            material = createTexturedVoxelMaterial(textureArray, true, previewSceneRef.current.renderer);
+            logger.log('ui', '[SelectAvatar] Using textured material');
+          } else {
+            material = new THREE.MeshPhongMaterial({
+              vertexColors: true,
+              specular: 0x111111,
+              shininess: 30,
+            });
+            logger.log('ui', '[SelectAvatar] Using fallback phong material');
+          }
 
           const mesh = new THREE.Mesh(geometry, material);
 
@@ -341,18 +473,33 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
           const box = geometry.boundingBox!;
           const size = box.getSize(new THREE.Vector3());
 
-          // Lift mesh so bottom is at y=0 (geometry is already centered in X/Z)
-          mesh.position.y = -box.min.y;
-
-          // Scale to fit in view
+          // Scale to fit in view BEFORE positioning
           const maxDim = Math.max(size.x, size.y, size.z);
           const scale = 1.5 / maxDim;
           mesh.scale.setScalar(scale);
+
+          // Recalculate bounding box after scaling
+          const scaledBox = new THREE.Box3().setFromObject(mesh);
+          const scaledSize = new THREE.Vector3();
+          scaledBox.getSize(scaledSize);
+
+          // Position mesh with pivot at center (0.5, 0.5, 0.5) for all axes
+          // Formula: position = -(min + size * pivot)
+          const pivot = new THREE.Vector3(0.5, 0.5, 0.5);
+          mesh.position.x = -(scaledBox.min.x + scaledSize.x * pivot.x);
+          mesh.position.y = -(scaledBox.min.y + scaledSize.y * pivot.y);
+          mesh.position.z = -(scaledBox.min.z + scaledSize.z * pivot.z);
 
           // Add directly to scene - no group needed since geometry is centered
           mesh.rotation.y = Math.PI; // Rotate 180 degrees to show front
           scene.add(mesh);
           previewSceneRef.current.mesh = mesh;
+
+          // Update shader lighting AFTER mesh is added to scene
+          if (material instanceof THREE.ShaderMaterial) {
+            updateShaderLighting(material, scene);
+            logger.log('ui', '[SelectAvatar] Updated shader lighting');
+          }
         } catch (error) {
           logger.error('ui', '[SelectAvatar] Failed to load VOX model:', error);
           // Show error placeholder (wrapped in group for consistent rotation)
@@ -371,7 +518,7 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
     };
 
     loadPreview();
-  }, [isOpen, sceneReady, selectedId, avatarUrl, voxModels, glbModels, csmCode, avatarType]);
+  }, [isOpen, sceneReady, selectedId, avatarUrl, voxModels, glbModels, csmCode, avatarType, avatarTexture, texturesLoaded, materialsLoader, textureDepth]);
 
   const handleSave = () => {
     const selection: AvatarSelection = {
@@ -418,35 +565,32 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
       zIndex={2000}
       title="Select Avatar"
       actions={
-        <HStack spacing={2} width="100%">
-          <Button flex={1} colorScheme="blue" onClick={handleSave} size="lg">
+        <VStack spacing={2} width="100%" maxW="800px" mx="auto">
+          <Button width="100%" colorScheme="blue" onClick={handleSave} size="lg">
             That's me!
           </Button>
-          <Button flex={1} variant="outline" onClick={randomizeAvatar} size="lg">
+          <Button width="100%" variant="outline" onClick={randomizeAvatar} size="lg">
             Not me
           </Button>
-        </HStack>
+        </VStack>
       }
     >
       <Box
-        maxW="900px"
+        maxW="1200px"
         mx="auto"
         w="full"
       >
         <VStack align="stretch" spacing={4}>
           {/* Preview Canvas with Cycle Buttons */}
-          <Box position="relative">
+          <Box position="relative" display="flex" justifyContent="center">
               <Box
                 ref={previewContainerRef}
-                display="flex"
-                justifyContent="center"
-                alignItems="center"
                 bg="rgba(26, 26, 30, 0.8)"
                 borderRadius="md"
-                p={4}
+                p={2}
                 border="1px solid"
                 borderColor="rgba(255, 255, 255, 0.1)"
-                minHeight="300px"
+                display="inline-block"
               >
                 <canvas
                   ref={setPreviewCanvas}
@@ -474,54 +618,156 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
             {/* More Settings Collapsible */}
             <Collapse in={showMoreSettings} animateOpacity>
               <VStack align="stretch" spacing={4}>
-            {/* Texture Selector */}
+            {/* Model Selector */}
             <VStack align="stretch" spacing={2}>
               <Text fontSize="sm" fontWeight="semibold" color="white">
-                Avatar Texture
+                Model
               </Text>
-              <SimpleGrid columns={6} spacing={2} maxHeight="200px" overflowY="auto">
-                <Box
-                  as="button"
-                  onClick={() => handleTextureSelect('0')}
-                  p={2}
-                  bg={avatarTexture === '0' ? 'rgba(100, 150, 250, 0.3)' : 'rgba(80, 80, 80, 0.1)'}
-                  border="1px solid"
-                  borderColor={avatarTexture === '0' ? 'rgba(100, 150, 250, 0.5)' : 'rgba(255, 255, 255, 0.1)'}
-                  borderRadius="md"
-                  _hover={{
-                    bg: avatarTexture === '0' ? 'rgba(100, 150, 250, 0.4)' : 'rgba(120, 120, 120, 0.2)',
-                  }}
-                  transition="all 0.2s"
-                  cursor="pointer"
-                  title="No texture (colors only)"
-                >
-                  <Text fontSize="xs" color="white" noOfLines={1}>
-                    None
-                  </Text>
-                </Box>
-                {AVATAR_TEXTURES.map((texture) => (
-                  <Box
-                    key={texture}
-                    as="button"
-                    onClick={() => handleTextureSelect(texture)}
-                    p={2}
-                    bg={avatarTexture === texture ? 'rgba(100, 150, 250, 0.3)' : 'rgba(80, 80, 80, 0.1)'}
-                    border="1px solid"
-                    borderColor={avatarTexture === texture ? 'rgba(100, 150, 250, 0.5)' : 'rgba(255, 255, 255, 0.1)'}
-                    borderRadius="md"
-                    _hover={{
-                      bg: avatarTexture === texture ? 'rgba(100, 150, 250, 0.4)' : 'rgba(120, 120, 120, 0.2)',
-                    }}
-                    transition="all 0.2s"
-                    cursor="pointer"
-                    title={texture}
-                  >
-                    <Text fontSize="xs" color="white" noOfLines={1}>
-                      {texture.replace(/_/g, ' ')}
-                    </Text>
-                  </Box>
+              <Select
+                value={selectedId || ''}
+                onChange={(e) => {
+                  setSelectedId(e.target.value);
+                  setAvatarUrl('');
+                }}
+                size="sm"
+                bg="rgba(255, 255, 255, 0.05)"
+                color="white"
+                borderColor="rgba(255, 255, 255, 0.2)"
+                _hover={{ borderColor: 'rgba(255, 255, 255, 0.3)' }}
+              >
+                {voxModels.map((model) => (
+                  <option key={model.id} value={model.id}>
+                    {model.label}
+                  </option>
                 ))}
-              </SimpleGrid>
+              </Select>
+            </VStack>
+
+            <Divider borderColor="rgba(255, 255, 255, 0.1)" />
+
+            {/* Material Selector */}
+            <VStack align="stretch" spacing={2}>
+              <Text fontSize="sm" fontWeight="semibold" color="white">
+                Material
+              </Text>
+              <Select
+                value={avatarTexture}
+                onChange={(e) => handleTextureSelect(e.target.value)}
+                size="sm"
+                bg="rgba(255, 255, 255, 0.05)"
+                color="white"
+                borderColor="rgba(255, 255, 255, 0.2)"
+                _hover={{ borderColor: 'rgba(255, 255, 255, 0.3)' }}
+              >
+                <option value="0">None (vertex colors)</option>
+                {AVATAR_TEXTURES.map((texture) => (
+                  <option key={texture} value={texture}>
+                    {texture.replace(/_/g, ' ')}
+                  </option>
+                ))}
+              </Select>
+            </VStack>
+
+            <Divider borderColor="rgba(255, 255, 255, 0.1)" />
+
+            {/* Brightness Control */}
+            <VStack align="stretch" spacing={2}>
+              <HStack justify="space-between">
+                <Text fontSize="sm" fontWeight="semibold" color="white">
+                  Brightness
+                </Text>
+                <Text fontSize="xs" color="gray.400">
+                  {brightness.toFixed(2)}
+                </Text>
+              </HStack>
+              <Slider
+                value={brightness}
+                onChange={setBrightness}
+                min={0.5}
+                max={2.0}
+                step={0.1}
+                colorScheme="blue"
+              >
+                <SliderTrack bg="rgba(255, 255, 255, 0.1)">
+                  <SliderFilledTrack />
+                </SliderTrack>
+                <SliderThumb boxSize={4} />
+              </Slider>
+            </VStack>
+
+            {/* Ambient Light Control */}
+            <VStack align="stretch" spacing={2}>
+              <HStack justify="space-between">
+                <Text fontSize="sm" fontWeight="semibold" color="white">
+                  Ambient Light
+                </Text>
+                <Text fontSize="xs" color="gray.400">
+                  {ambientLight.toFixed(2)}
+                </Text>
+              </HStack>
+              <Slider
+                value={ambientLight}
+                onChange={setAmbientLight}
+                min={0.0}
+                max={3.0}
+                step={0.1}
+                colorScheme="blue"
+              >
+                <SliderTrack bg="rgba(255, 255, 255, 0.1)">
+                  <SliderFilledTrack />
+                </SliderTrack>
+                <SliderThumb boxSize={4} />
+              </Slider>
+            </VStack>
+
+            {/* Directional Light Control */}
+            <VStack align="stretch" spacing={2}>
+              <HStack justify="space-between">
+                <Text fontSize="sm" fontWeight="semibold" color="white">
+                  Directional Light
+                </Text>
+                <Text fontSize="xs" color="gray.400">
+                  {directionalLight.toFixed(2)}
+                </Text>
+              </HStack>
+              <Slider
+                value={directionalLight}
+                onChange={setDirectionalLight}
+                min={0.0}
+                max={3.0}
+                step={0.1}
+                colorScheme="blue"
+              >
+                <SliderTrack bg="rgba(255, 255, 255, 0.1)">
+                  <SliderFilledTrack />
+                </SliderTrack>
+                <SliderThumb boxSize={4} />
+              </Slider>
+            </VStack>
+
+            {/* Texture Depth Control */}
+            <VStack align="stretch" spacing={2}>
+              <HStack justify="space-between">
+                <Text fontSize="sm" fontWeight="semibold" color="white">
+                  Texture Scale
+                </Text>
+                <Text fontSize="xs" color="gray.400">
+                  {Math.pow(2, textureDepth).toFixed(1)}x
+                </Text>
+              </HStack>
+              <Slider
+                value={textureDepth}
+                onChange={setTextureDepth}
+                min={0}
+                max={5}
+                step={1}
+                colorScheme="blue"
+              >
+                <SliderTrack bg="rgba(255, 255, 255, 0.1)">
+                  <SliderFilledTrack />
+                </SliderTrack>
+                <SliderThumb boxSize={4} />
+              </Slider>
             </VStack>
 
             <Divider borderColor="rgba(255, 255, 255, 0.1)" />
