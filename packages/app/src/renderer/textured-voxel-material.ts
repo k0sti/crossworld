@@ -179,7 +179,8 @@ export function createTexturedVoxelMaterial(textures: (THREE.Texture | undefined
       if (enableTextures && matId >= 2 && matId <= 127) {
         // Sample texture array using material ID as the layer index
         vec4 texColor = texture(textureArray, vec3(vUv, float(matId)));
-        baseColor = texColor.rgb;
+        // Multiply texture with vertex color - texture is base, vertex color adjusts it
+        baseColor = texColor.rgb * vColor;
       }
       // Otherwise use vertex color (solid color materials 0-1, 128-255 or when textures disabled)
 
@@ -254,7 +255,8 @@ export function createTexturedVoxelMaterial(textures: (THREE.Texture | undefined
         else if (matId == 9) texColor = texture2D(texture9, vUv);
         else if (matId == 10) texColor = texture2D(texture10, vUv);
 
-        baseColor = texColor.rgb;
+        // Multiply texture with vertex color - texture is base, vertex color adjusts it
+        baseColor = texColor.rgb * vColor;
       }
 
       vec3 normal = normalize(vNormal);

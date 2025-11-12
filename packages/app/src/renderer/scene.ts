@@ -291,7 +291,7 @@ export class SceneManager {
         await this.materialsLoader.loadMaterialsJson();
 
         logger.log('renderer', 'Loading textures...');
-        await this.materialsLoader.loadTextures();
+        await this.materialsLoader.loadTextures(false); // Use low-res textures for world (performance)
 
         this.texturesLoaded = true;
         logger.log('renderer', 'Materials and textures loaded successfully');

@@ -42,8 +42,10 @@ export class MaterialsLoader {
 
   /**
    * Load textures for materials 2-127 (textured materials)
+   * @param useHighRes - If true, load high-res textures from /assets/textures (for avatars)
+   *                     If false, load low-res textures from /assets/textures5 (for world)
    */
-  async loadTextures(): Promise<void> {
+  async loadTextures(useHighRes: boolean = false): Promise<void> {
     if (!this.materialsData) {
       throw new Error('Materials data not loaded. Call loadMaterialsJson first.');
     }
@@ -53,14 +55,15 @@ export class MaterialsLoader {
       m => m.index >= 2 && m.index <= 127
     );
 
-    logger.log('renderer', `Loading ${texturedMaterials.length} textures...`);
+    const textureDir = useHighRes ? 'textures' : 'textures5';
+    logger.log('renderer', `Loading ${texturedMaterials.length} ${useHighRes ? 'high-res' : 'low-res'} textures from ${textureDir}...`);
 
     // Initialize texture array with placeholders
     this.textureArray = new Array(128);
 
     // Load textures in parallel
     const loadPromises = texturedMaterials.map(async (material) => {
-      const texturePath = `/crossworld/assets/textures5/${material.id}.webp`;
+      const texturePath = `/crossworld/assets/${textureDir}/${material.id}.webp`;
 
       try {
         const texture = await textureLoader.loadAsync(texturePath);
