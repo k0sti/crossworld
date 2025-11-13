@@ -21,7 +21,7 @@ async fn main() -> anyhow::Result<()> {
     );
     let world_state = WorldState::load_or_default(config.world.clone(), storage)?;
 
-    let server = WebTransportServer::new(config, world_state);
+    let server = WebTransportServer::new(config, world_state).await?;
     server.run().await?;
 
     Ok(())

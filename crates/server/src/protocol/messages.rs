@@ -94,3 +94,21 @@ pub struct WorldUpdate {
     pub author: String,
     pub timestamp: u64,
 }
+
+/// Messages clients can send after the initial handshake.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ClientMessage {
+    WorldRequest(WorldRequest),
+    WorldEdit(WorldEdit),
+    Disconnect,
+}
+
+/// Messages the server sends back to clients.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ServerMessage {
+    HandshakeAck(HandshakeAck),
+    WorldData(WorldData),
+    WorldEditAck(WorldEditAck),
+    WorldUpdate(WorldUpdate),
+    Error(String),
+}

@@ -23,8 +23,12 @@ pub enum StorageError {
 pub trait StorageBackend: Send + Sync + 'static {
     fn save_world(&self, root: &Cube<u8>) -> Result<(), StorageError>;
     fn load_world(&self) -> Result<Cube<u8>, StorageError>;
-    fn save_edit(&self, edit: &EditOperation, timestamp: u64, author: &str)
-        -> Result<(), StorageError>;
+    fn save_edit(
+        &self,
+        edit: &EditOperation,
+        timestamp: u64,
+        author: &str,
+    ) -> Result<(), StorageError>;
     fn compact(&self) -> Result<(), StorageError>;
 }
 

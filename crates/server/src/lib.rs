@@ -16,8 +16,8 @@ pub use config::{ServerConfig, WorldConfig};
 pub use network::{ServerError, WebTransportServer};
 pub use protocol::{
     messages::{
-        EditError, EditOperation, EditResult, Handshake, HandshakeAck, WorldData, WorldEdit,
-        WorldEditAck, WorldInfo, WorldRequest, WorldUpdate,
+        ClientMessage, EditError, EditOperation, EditResult, Handshake, HandshakeAck,
+        ServerMessage, WorldData, WorldEdit, WorldEditAck, WorldInfo, WorldRequest, WorldUpdate,
     },
     AuthLevel,
 };

@@ -96,9 +96,7 @@ impl<B: StorageBackend> WorldState<B> {
                     self.inner.backend.save_world(&*root)?;
                 } else {
                     self.inner.cache.insert(*coord, cube.clone()).await;
-                    self.inner
-                        .backend
-                        .save_edit(operation, timestamp, author)?;
+                    self.inner.backend.save_edit(operation, timestamp, author)?;
                 }
             }
         }

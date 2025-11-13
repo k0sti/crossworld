@@ -1,4 +1,4 @@
-use crate::protocol::AuthLevel;
+use crate::protocol::{AuthLevel, EditOperation};
 use cube::CubeCoord;
 use rand::{rngs::OsRng, RngCore};
 use tokio::sync::RwLock;
@@ -35,9 +35,20 @@ impl ClientSession {
     }
 
     pub async fn is_subscribed(&self, coord: &CubeCoord) -> bool {
+        self.subscription_for(coord).await.is_some()
+    }
+
+    pub async fn subscription_for(&self, coord: &CubeCoord) -> Option<u64> {
         let subs = self.subscriptions.read().await;
         subs.iter()
-            .any(|sub| sub.coord.depth == coord.depth && sub.coord.pos == coord.pos)
+            .find(|sub| sub.coord.depth == coord.depth && sub.coord.pos == coord.pos)
+            .map(|sub| sub.id)
+    }
+
+    pub async fn subscription_for_operation(&self, op: &EditOperation) -> Option<u64> {
+        match op {
+            EditOperation::SetCube { coord, .. } => self.subscription_for(coord).await,
+        }
     }
 
     pub async fn check_rate_limit(&self) -> bool {

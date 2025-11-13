@@ -1,4 +1,5 @@
 pub mod broadcast;
+mod io;
 pub mod session;
 pub mod webtransport;
 
@@ -22,6 +23,10 @@ pub enum ServerError {
     Io(#[from] std::io::Error),
     #[error("session mismatch")]
     InvalidSession,
+    #[error("connection closed")]
+    ConnectionClosed,
+    #[error("transport error: {0}")]
+    Transport(String),
 }
 
 pub type Result<T> = std::result::Result<T, ServerError>;

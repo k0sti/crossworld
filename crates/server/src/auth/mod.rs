@@ -55,26 +55,24 @@ impl AuthConfig {
 }
 
 fn read_list(var: &str) -> Option<Vec<String>> {
-    std::env::var(var)
-        .ok()
-        .and_then(|value| {
-            let items: Vec<String> = value
-                .split(',')
-                .filter_map(|entry| {
-                    let trimmed = entry.trim();
-                    if trimmed.is_empty() {
-                        None
-                    } else {
-                        Some(trimmed.to_string())
-                    }
-                })
-                .collect();
-            if items.is_empty() {
-                None
-            } else {
-                Some(items)
-            }
-        })
+    std::env::var(var).ok().and_then(|value| {
+        let items: Vec<String> = value
+            .split(',')
+            .filter_map(|entry| {
+                let trimmed = entry.trim();
+                if trimmed.is_empty() {
+                    None
+                } else {
+                    Some(trimmed.to_string())
+                }
+            })
+            .collect();
+        if items.is_empty() {
+            None
+        } else {
+            Some(items)
+        }
+    })
 }
 
 /// Errors that can occur during authentication.
@@ -105,7 +103,11 @@ impl AuthManager {
         &self.config
     }
 
-    pub fn verify_handshake(&self, server_url: &str, handshake: &Handshake) -> Result<AuthLevel, AuthError> {
+    pub fn verify_handshake(
+        &self,
+        server_url: &str,
+        handshake: &Handshake,
+    ) -> Result<AuthLevel, AuthError> {
         if handshake.npub.is_empty() {
             if self.config.allow_anonymous_read {
                 return Ok(AuthLevel::ReadOnly);

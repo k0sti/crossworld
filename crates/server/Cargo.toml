@@ -14,7 +14,7 @@ name = "crossworld-server"
 path = "src/main.rs"
 
 [features]
-default = ["runtime"]
+default = ["runtime", "webtransport", "nostr"]
 runtime = []
 webtransport = ["dep:wtransport"]
 nostr = ["dep:nostr-sdk"]
