@@ -4,19 +4,15 @@ import {
   HStack,
   Button,
   Text,
-  SimpleGrid,
   Box,
   Badge,
   Divider,
   Input,
-  IconButton,
-  Textarea,
   Collapse,
-  Select,
-  Slider,
-  SliderTrack,
-  SliderFilledTrack,
-  SliderThumb,
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+  PopoverBody,
 } from '@chakra-ui/react';
 import { useState, useRef, useEffect } from 'react';
 import * as THREE from 'three';
@@ -66,11 +62,6 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
   const [selectedId, setSelectedId] = useState<string>(currentSelection?.avatarId || '');
   const [avatarUrl, setAvatarUrl] = useState<string>(currentSelection?.avatarUrl || '');
   const [inputUrl, setInputUrl] = useState<string>('');
-  const [csmCode, setCsmCode] = useState<string>(
-    currentSelection?.avatarType === 'csm' && currentSelection?.avatarData
-      ? currentSelection.avatarData
-      : '>a [1 2 3 4 5 6 7 8]'
-  );
   const [avatarTexture, setAvatarTexture] = useState<string>(currentSelection?.avatarTexture || '0');
   const [teleportAnimationType, setTeleportAnimationType] = useState<TeleportAnimationType>(
     currentSelection?.teleportAnimationType || 'fade'
@@ -80,9 +71,6 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
   const [showMoreSettings, setShowMoreSettings] = useState(false);
   const [materialsLoader] = useState(() => new MaterialsLoader());
   const [texturesLoaded, setTexturesLoaded] = useState(false);
-  const [brightness, setBrightness] = useState<number>(1.0); // 0.5 - 2.0 range
-  const [ambientLight, setAmbientLight] = useState<number>(1.5);
-  const [directionalLight, setDirectionalLight] = useState<number>(2.0);
   const [textureDepth, setTextureDepth] = useState<number>(0); // 0-5, scales texture by 2^depth
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -181,8 +169,6 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
     mesh?: THREE.Object3D;
     animationId?: number;
     cameraDistance: number;
-    ambientLight?: THREE.AmbientLight;
-    directionalLight?: THREE.DirectionalLight;
   } | null>(null);
   const [sceneReady, setSceneReady] = useState(false);
   const previewContainerRef = useRef<HTMLDivElement>(null);
@@ -203,11 +189,8 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
     camera.position.set(0, 0, cameraDistance);
     camera.lookAt(0, 0, 0); // Look at center since avatar pivot is now centered
 
-    // Get container size for responsive canvas
-    // Calculate based on viewport width since previewContainer is inline-block
-    const viewportWidth = window.innerWidth;
-    const maxCanvasSize = 800;
-    const canvasSize = Math.min(viewportWidth * 0.8, maxCanvasSize); // 80% of viewport, max 800px
+    // Set canvas size to 600px
+    const canvasSize = 600;
 
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     renderer.setSize(canvasSize, canvasSize);
@@ -215,10 +198,10 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
 
     // Lighting - much brighter to compensate for shader's low lighting multipliers
     // The textured voxel shader multiplies by ~0.4-0.5, so we need lights ~2-3x brighter
-    const ambientLightObj = new THREE.AmbientLight(0xffffff, ambientLight * brightness);
+    const ambientLightObj = new THREE.AmbientLight(0xffffff, 1.5);
     scene.add(ambientLightObj);
 
-    const directionalLightObj = new THREE.DirectionalLight(0xffffff, directionalLight * brightness);
+    const directionalLightObj = new THREE.DirectionalLight(0xffffff, 2.0);
     directionalLightObj.position.set(5, 10, 5);
     scene.add(directionalLightObj);
 
@@ -227,8 +210,6 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
       camera,
       renderer,
       cameraDistance,
-      ambientLight: ambientLightObj,
-      directionalLight: directionalLightObj
     };
     setSceneReady(true);
 
@@ -274,22 +255,6 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
     };
   }, [isOpen, previewCanvas]);
 
-  // Update lighting when parameters change
-  useEffect(() => {
-    if (!sceneReady || !previewSceneRef.current) return;
-
-    const { ambientLight: ambientLightObj, directionalLight: directionalLightObj } = previewSceneRef.current;
-
-    if (ambientLightObj) {
-      ambientLightObj.intensity = ambientLight * brightness;
-      logger.log('ui', `[SelectAvatar] Updated ambient light: ${ambientLight * brightness}`);
-    }
-    if (directionalLightObj) {
-      directionalLightObj.intensity = directionalLight * brightness;
-      logger.log('ui', `[SelectAvatar] Updated directional light: ${directionalLight * brightness}`);
-    }
-  }, [sceneReady, brightness, ambientLight, directionalLight]);
-
   // Update preview when selection changes (but NOT when just switching tabs)
   useEffect(() => {
     if (!isOpen || !sceneReady || !previewSceneRef.current) {
@@ -297,8 +262,7 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
     }
 
     // Don't reload preview if no model is selected yet
-    // CSM models are an exception - they always have code to render
-    if (!selectedId && !avatarUrl && avatarType !== 'csm') {
+    if (!selectedId && !avatarUrl) {
       return;
     }
 
@@ -518,14 +482,14 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
     };
 
     loadPreview();
-  }, [isOpen, sceneReady, selectedId, avatarUrl, voxModels, glbModels, csmCode, avatarType, avatarTexture, texturesLoaded, materialsLoader, textureDepth]);
+  }, [isOpen, sceneReady, selectedId, avatarUrl, voxModels, glbModels, avatarType, avatarTexture, texturesLoaded, materialsLoader, textureDepth]);
 
   const handleSave = () => {
     const selection: AvatarSelection = {
       avatarType,
       avatarId: avatarType === 'vox' ? selectedId : (avatarType === 'glb' && selectedId !== 'file' ? selectedId : undefined),
       avatarUrl: avatarUrl || undefined,
-      avatarData: avatarType === 'csm' ? csmCode : undefined,
+      avatarData: undefined, // CSM removed
       avatarTexture: avatarTexture !== '0' ? avatarTexture : undefined,
       teleportAnimationType,
     };
@@ -619,158 +583,210 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
             <Collapse in={showMoreSettings} animateOpacity>
               <VStack align="stretch" spacing={4}>
             {/* Model Selector */}
-            <VStack align="stretch" spacing={2}>
-              <Text fontSize="sm" fontWeight="semibold" color="white">
+            <HStack spacing={2} justify="space-between">
+              <Text fontSize="sm" color="white">
                 Model
               </Text>
-              <Select
-                value={selectedId || ''}
-                onChange={(e) => {
-                  setSelectedId(e.target.value);
-                  setAvatarUrl('');
-                }}
-                size="sm"
-                bg="rgba(255, 255, 255, 0.05)"
-                color="white"
-                borderColor="rgba(255, 255, 255, 0.2)"
-                _hover={{ borderColor: 'rgba(255, 255, 255, 0.3)' }}
-              >
-                {voxModels.map((model) => (
-                  <option key={model.id} value={model.id}>
-                    {model.label}
-                  </option>
-                ))}
-              </Select>
-            </VStack>
-
-            <Divider borderColor="rgba(255, 255, 255, 0.1)" />
+              <Popover placement="top">
+                {({ onClose }) => (
+                  <>
+                    <PopoverTrigger>
+                      <Badge
+                        colorScheme="blue"
+                        fontSize="xs"
+                        cursor="pointer"
+                        _hover={{ opacity: 0.8 }}
+                      >
+                        {voxModels.find(m => m.id === selectedId)?.label || 'Select...'}
+                      </Badge>
+                    </PopoverTrigger>
+                    <PopoverContent bg="gray.800" borderColor="blue.500" width="auto" maxH="300px" overflowY="auto">
+                      <PopoverBody p={1}>
+                        <VStack spacing={1}>
+                          {voxModels.map((model) => (
+                            <Button
+                              key={model.id}
+                              size="xs"
+                              variant={selectedId === model.id ? 'solid' : 'ghost'}
+                              colorScheme="blue"
+                              onClick={() => {
+                                setSelectedId(model.id);
+                                setAvatarUrl('');
+                                onClose();
+                              }}
+                              width="100%"
+                            >
+                              {model.label}
+                            </Button>
+                          ))}
+                        </VStack>
+                      </PopoverBody>
+                    </PopoverContent>
+                  </>
+                )}
+              </Popover>
+            </HStack>
 
             {/* Material Selector */}
-            <VStack align="stretch" spacing={2}>
-              <Text fontSize="sm" fontWeight="semibold" color="white">
+            <HStack spacing={2} justify="space-between">
+              <Text fontSize="sm" color="white">
                 Material
               </Text>
-              <Select
-                value={avatarTexture}
-                onChange={(e) => handleTextureSelect(e.target.value)}
-                size="sm"
-                bg="rgba(255, 255, 255, 0.05)"
-                color="white"
-                borderColor="rgba(255, 255, 255, 0.2)"
-                _hover={{ borderColor: 'rgba(255, 255, 255, 0.3)' }}
-              >
-                <option value="0">None (vertex colors)</option>
-                {AVATAR_TEXTURES.map((texture) => (
-                  <option key={texture} value={texture}>
-                    {texture.replace(/_/g, ' ')}
-                  </option>
-                ))}
-              </Select>
-            </VStack>
+              <Popover placement="top">
+                {({ onClose }) => (
+                  <>
+                    <PopoverTrigger>
+                      <Badge
+                        colorScheme="purple"
+                        fontSize="xs"
+                        cursor="pointer"
+                        _hover={{ opacity: 0.8 }}
+                      >
+                        {avatarTexture === '0' ? 'None' : avatarTexture.replace(/_/g, ' ')}
+                      </Badge>
+                    </PopoverTrigger>
+                    <PopoverContent bg="gray.800" borderColor="purple.500" width="auto" maxH="300px" overflowY="auto">
+                      <PopoverBody p={1}>
+                        <VStack spacing={1}>
+                          <Button
+                            size="xs"
+                            variant={avatarTexture === '0' ? 'solid' : 'ghost'}
+                            colorScheme="purple"
+                            onClick={() => {
+                              handleTextureSelect('0');
+                              onClose();
+                            }}
+                            width="100%"
+                          >
+                            None
+                          </Button>
+                          {AVATAR_TEXTURES.map((texture) => (
+                            <Button
+                              key={texture}
+                              size="xs"
+                              variant={avatarTexture === texture ? 'solid' : 'ghost'}
+                              colorScheme="purple"
+                              onClick={() => {
+                                handleTextureSelect(texture);
+                                onClose();
+                              }}
+                              width="100%"
+                            >
+                              {texture.replace(/_/g, ' ')}
+                            </Button>
+                          ))}
+                        </VStack>
+                      </PopoverBody>
+                    </PopoverContent>
+                  </>
+                )}
+              </Popover>
+            </HStack>
 
-            <Divider borderColor="rgba(255, 255, 255, 0.1)" />
+            {/* Texture Scale Control */}
+            <HStack spacing={2} justify="space-between">
+              <Text fontSize="sm" color="white">
+                Texture Scale
+              </Text>
+              <Popover placement="top">
+                {({ onClose }) => (
+                  <>
+                    <PopoverTrigger>
+                      <Badge
+                        colorScheme="orange"
+                        fontSize="xs"
+                        cursor="pointer"
+                        _hover={{ opacity: 0.8 }}
+                      >
+                        {Math.pow(2, textureDepth).toFixed(1)}x
+                      </Badge>
+                    </PopoverTrigger>
+                    <PopoverContent bg="gray.800" borderColor="orange.500" width="auto">
+                      <PopoverBody p={1}>
+                        <VStack spacing={1}>
+                          {[0, 1, 2, 3, 4, 5].map((depth) => (
+                            <Button
+                              key={depth}
+                              size="xs"
+                              variant={textureDepth === depth ? 'solid' : 'ghost'}
+                              colorScheme="orange"
+                              onClick={() => {
+                                setTextureDepth(depth);
+                                onClose();
+                              }}
+                              width="100%"
+                            >
+                              {Math.pow(2, depth).toFixed(1)}x
+                            </Button>
+                          ))}
+                        </VStack>
+                      </PopoverBody>
+                    </PopoverContent>
+                  </>
+                )}
+              </Popover>
+            </HStack>
 
-            {/* Brightness Control */}
-            <VStack align="stretch" spacing={2}>
-              <HStack justify="space-between">
-                <Text fontSize="sm" fontWeight="semibold" color="white">
-                  Brightness
+            {/* Teleport Animation */}
+            <HStack spacing={2} justify="space-between">
+              <HStack spacing={2}>
+                <Text fontSize="sm" color="white">
+                  Teleport
                 </Text>
-                <Text fontSize="xs" color="gray.400">
-                  {brightness.toFixed(2)}
-                </Text>
+                <Badge colorScheme="gray" fontSize="2xs" px={2}>
+                  CTRL+Click
+                </Badge>
               </HStack>
-              <Slider
-                value={brightness}
-                onChange={setBrightness}
-                min={0.5}
-                max={2.0}
-                step={0.1}
-                colorScheme="blue"
-              >
-                <SliderTrack bg="rgba(255, 255, 255, 0.1)">
-                  <SliderFilledTrack />
-                </SliderTrack>
-                <SliderThumb boxSize={4} />
-              </Slider>
-            </VStack>
+              <Popover placement="top">
+                {({ onClose }) => {
+                  const teleportOptions: { type: TeleportAnimationType; icon: string; label: string }[] = [
+                    { type: 'fade', icon: '🌫️', label: 'Fade' },
+                    { type: 'scale', icon: '⚫', label: 'Scale' },
+                    { type: 'spin', icon: '🌀', label: 'Spin' },
+                    { type: 'slide', icon: '⬇️', label: 'Slide' },
+                    { type: 'burst', icon: '✨', label: 'Burst' },
+                  ];
+                  const currentOption = teleportOptions.find(opt => opt.type === teleportAnimationType);
 
-            {/* Ambient Light Control */}
-            <VStack align="stretch" spacing={2}>
-              <HStack justify="space-between">
-                <Text fontSize="sm" fontWeight="semibold" color="white">
-                  Ambient Light
-                </Text>
-                <Text fontSize="xs" color="gray.400">
-                  {ambientLight.toFixed(2)}
-                </Text>
-              </HStack>
-              <Slider
-                value={ambientLight}
-                onChange={setAmbientLight}
-                min={0.0}
-                max={3.0}
-                step={0.1}
-                colorScheme="blue"
-              >
-                <SliderTrack bg="rgba(255, 255, 255, 0.1)">
-                  <SliderFilledTrack />
-                </SliderTrack>
-                <SliderThumb boxSize={4} />
-              </Slider>
-            </VStack>
-
-            {/* Directional Light Control */}
-            <VStack align="stretch" spacing={2}>
-              <HStack justify="space-between">
-                <Text fontSize="sm" fontWeight="semibold" color="white">
-                  Directional Light
-                </Text>
-                <Text fontSize="xs" color="gray.400">
-                  {directionalLight.toFixed(2)}
-                </Text>
-              </HStack>
-              <Slider
-                value={directionalLight}
-                onChange={setDirectionalLight}
-                min={0.0}
-                max={3.0}
-                step={0.1}
-                colorScheme="blue"
-              >
-                <SliderTrack bg="rgba(255, 255, 255, 0.1)">
-                  <SliderFilledTrack />
-                </SliderTrack>
-                <SliderThumb boxSize={4} />
-              </Slider>
-            </VStack>
-
-            {/* Texture Depth Control */}
-            <VStack align="stretch" spacing={2}>
-              <HStack justify="space-between">
-                <Text fontSize="sm" fontWeight="semibold" color="white">
-                  Texture Scale
-                </Text>
-                <Text fontSize="xs" color="gray.400">
-                  {Math.pow(2, textureDepth).toFixed(1)}x
-                </Text>
-              </HStack>
-              <Slider
-                value={textureDepth}
-                onChange={setTextureDepth}
-                min={0}
-                max={5}
-                step={1}
-                colorScheme="blue"
-              >
-                <SliderTrack bg="rgba(255, 255, 255, 0.1)">
-                  <SliderFilledTrack />
-                </SliderTrack>
-                <SliderThumb boxSize={4} />
-              </Slider>
-            </VStack>
-
-            <Divider borderColor="rgba(255, 255, 255, 0.1)" />
+                  return (
+                    <>
+                      <PopoverTrigger>
+                        <Badge
+                          colorScheme="green"
+                          fontSize="xs"
+                          cursor="pointer"
+                          _hover={{ opacity: 0.8 }}
+                        >
+                          {currentOption?.icon} {currentOption?.label}
+                        </Badge>
+                      </PopoverTrigger>
+                      <PopoverContent bg="gray.800" borderColor="green.500" width="auto">
+                        <PopoverBody p={1}>
+                          <VStack spacing={1}>
+                            {teleportOptions.map((option) => (
+                              <Button
+                                key={option.type}
+                                size="xs"
+                                variant={teleportAnimationType === option.type ? 'solid' : 'ghost'}
+                                colorScheme="green"
+                                onClick={() => {
+                                  setTeleportAnimationType(option.type);
+                                  onClose();
+                                }}
+                                width="100%"
+                                leftIcon={<Text fontSize="sm">{option.icon}</Text>}
+                              >
+                                {option.label}
+                              </Button>
+                            ))}
+                          </VStack>
+                        </PopoverBody>
+                      </PopoverContent>
+                    </>
+                  );
+                }}
+              </Popover>
+            </HStack>
 
             {/* Load Model Section */}
             <VStack align="stretch" spacing={2}>
@@ -833,36 +849,6 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
               </HStack>
             </VStack>
 
-            <Divider borderColor="rgba(255, 255, 255, 0.1)" />
-
-            {/* CSM Code Editor */}
-            <VStack align="stretch" spacing={2}>
-              <Text fontSize="sm" fontWeight="semibold" color="white">
-                Cube Script Model (CSM)
-              </Text>
-              <Textarea
-                value={csmCode}
-                onChange={(e) => {
-                  setCsmCode(e.target.value);
-                  setAvatarType('csm');
-                }}
-                placeholder="Enter CSM code..."
-                size="sm"
-                fontSize="xs"
-                fontFamily="monospace"
-                bg="rgba(0, 0, 0, 0.3)"
-                color="white"
-                borderColor="rgba(255, 255, 255, 0.2)"
-                _hover={{ borderColor: 'rgba(255, 255, 255, 0.3)' }}
-                _focus={{ borderColor: 'blue.400', boxShadow: '0 0 0 1px #3182ce' }}
-                rows={6}
-                spellCheck={false}
-              />
-              <Text fontSize="xs" color="gray.400">
-                Example: <code>&gt;a [1 2 3 4 5 6 7 8]</code>
-              </Text>
-            </VStack>
-
             {ENABLE_AVATAR_COLOR_SELECTION && (
               <>
                 <Divider borderColor="rgba(255, 255, 255, 0.1)" />
@@ -876,89 +862,8 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
                     Feature disabled
                   </Text>
                 </VStack>
-
-                <Divider borderColor="rgba(255, 255, 255, 0.1)" />
               </>
             )}
-
-            {/* Teleport Animation */}
-            <VStack align="stretch" spacing={2}>
-              <HStack>
-                <Text fontSize="sm" fontWeight="semibold" color="white">
-                  Teleport
-                </Text>
-                <Badge colorScheme="gray" fontSize="2xs" px={2}>
-                  CTRL+Click
-                </Badge>
-              </HStack>
-
-              <HStack spacing={2} justify="center">
-                <IconButton
-                  aria-label="Fade animation"
-                  icon={<Text fontSize="lg">🌫️</Text>}
-                  size="sm"
-                  bg={teleportAnimationType === 'fade' ? 'rgba(100, 150, 250, 0.3)' : 'rgba(80, 80, 80, 0.1)'}
-                  borderColor={teleportAnimationType === 'fade' ? 'rgba(100, 150, 250, 0.5)' : 'rgba(255, 255, 255, 0.1)'}
-                  borderWidth="1px"
-                  _hover={{
-                    bg: teleportAnimationType === 'fade' ? 'rgba(100, 150, 250, 0.4)' : 'rgba(120, 120, 120, 0.2)',
-                  }}
-                  onClick={() => setTeleportAnimationType('fade')}
-                />
-
-                <IconButton
-                  aria-label="Scale animation"
-                  icon={<Text fontSize="lg">⚫</Text>}
-                  size="sm"
-                  bg={teleportAnimationType === 'scale' ? 'rgba(100, 150, 250, 0.3)' : 'rgba(80, 80, 80, 0.1)'}
-                  borderColor={teleportAnimationType === 'scale' ? 'rgba(100, 150, 250, 0.5)' : 'rgba(255, 255, 255, 0.1)'}
-                  borderWidth="1px"
-                  _hover={{
-                    bg: teleportAnimationType === 'scale' ? 'rgba(100, 150, 250, 0.4)' : 'rgba(120, 120, 120, 0.2)',
-                  }}
-                  onClick={() => setTeleportAnimationType('scale')}
-                />
-
-                <IconButton
-                  aria-label="Spin animation"
-                  icon={<Text fontSize="lg">🌀</Text>}
-                  size="sm"
-                  bg={teleportAnimationType === 'spin' ? 'rgba(100, 150, 250, 0.3)' : 'rgba(80, 80, 80, 0.1)'}
-                  borderColor={teleportAnimationType === 'spin' ? 'rgba(100, 150, 250, 0.5)' : 'rgba(255, 255, 255, 0.1)'}
-                  borderWidth="1px"
-                  _hover={{
-                    bg: teleportAnimationType === 'spin' ? 'rgba(100, 150, 250, 0.4)' : 'rgba(120, 120, 120, 0.2)',
-                  }}
-                  onClick={() => setTeleportAnimationType('spin')}
-                />
-
-                <IconButton
-                  aria-label="Slide animation"
-                  icon={<Text fontSize="lg">⬇️</Text>}
-                  size="sm"
-                  bg={teleportAnimationType === 'slide' ? 'rgba(100, 150, 250, 0.3)' : 'rgba(80, 80, 80, 0.1)'}
-                  borderColor={teleportAnimationType === 'slide' ? 'rgba(100, 150, 250, 0.5)' : 'rgba(255, 255, 255, 0.1)'}
-                  borderWidth="1px"
-                  _hover={{
-                    bg: teleportAnimationType === 'slide' ? 'rgba(100, 150, 250, 0.4)' : 'rgba(120, 120, 120, 0.2)',
-                  }}
-                  onClick={() => setTeleportAnimationType('slide')}
-                />
-
-                <IconButton
-                  aria-label="Burst animation"
-                  icon={<Text fontSize="lg">✨</Text>}
-                  size="sm"
-                  bg={teleportAnimationType === 'burst' ? 'rgba(100, 150, 250, 0.3)' : 'rgba(80, 80, 80, 0.1)'}
-                  borderColor={teleportAnimationType === 'burst' ? 'rgba(100, 150, 250, 0.5)' : 'rgba(255, 255, 255, 0.1)'}
-                  borderWidth="1px"
-                  _hover={{
-                    bg: teleportAnimationType === 'burst' ? 'rgba(100, 150, 250, 0.4)' : 'rgba(120, 120, 120, 0.2)',
-                  }}
-                  onClick={() => setTeleportAnimationType('burst')}
-                />
-              </HStack>
-            </VStack>
               </VStack>
             </Collapse>
         </VStack>
