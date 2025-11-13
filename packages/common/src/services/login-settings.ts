@@ -80,22 +80,10 @@ export class LoginSettingsService {
    */
   static loadGuestAccount(): GuestAccountData | null {
     try {
-      // First check new location
       const stored = localStorage.getItem(GUEST_ACCOUNT_KEY)
       if (stored) {
         const data = JSON.parse(stored) as GuestAccountData
         console.log('[LoginSettings] Loaded guest account:', data.name)
-        return data
-      }
-
-      // Fallback to legacy location
-      const legacy = localStorage.getItem('guestAccount')
-      if (legacy) {
-        const data = JSON.parse(legacy) as GuestAccountData
-        console.log('[LoginSettings] Loaded legacy guest account:', data.name)
-        // Migrate to new location
-        this.saveGuestAccount(data)
-        localStorage.removeItem('guestAccount')
         return data
       }
 
@@ -112,7 +100,6 @@ export class LoginSettingsService {
   static clearGuestAccount(): void {
     try {
       localStorage.removeItem(GUEST_ACCOUNT_KEY)
-      localStorage.removeItem('guestAccount')
       console.log('[LoginSettings] Cleared guest account')
     } catch (error) {
       console.error('[LoginSettings] Failed to clear guest account:', error)

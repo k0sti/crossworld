@@ -158,28 +158,52 @@ export function ProfilePanel({ pubkey, isOpen, onClose, local_user = false, onLo
   const handleRestartConfirm = () => {
     onRestartClose()
 
-    // Clear avatar settings from localStorage
-    localStorage.removeItem('avatarSelection')
+    // Clear all data except login information
+    // This will clear: relays, camera state, world settings, avatar session
+    // But keep: login settings, guest account
+    try {
+      // Clear avatar settings
+      localStorage.removeItem('avatarSelection')
 
-    toast({
-      title: 'Avatar settings cleared',
-      description: 'Opening avatar selection...',
-      status: 'info',
-      duration: 2000,
-      isClosable: true,
-    })
+      // Clear avatar session storage
+      sessionStorage.removeItem('crossworld.avatar.session')
 
-    // Close profile panel
-    onClose()
+      // Clear camera & world state
+      localStorage.removeItem('cameraControllerState')
+      localStorage.removeItem('worldPanel.worldGridVisible')
+      localStorage.removeItem('worldPanel.wireframeEnabled')
+      localStorage.removeItem('worldPanel.texturesEnabled')
+      localStorage.removeItem('worldPanel.avatarTexturesEnabled')
 
-    // Call restart handler to reset avatar config
-    if (onRestart) {
-      onRestart()
-    }
+      toast({
+        title: 'Settings cleared',
+        description: 'Opening avatar selection...',
+        status: 'info',
+        duration: 2000,
+        isClosable: true,
+      })
 
-    // Open avatar selection
-    if (onOpenAvatarSelection) {
-      onOpenAvatarSelection()
+      // Close profile panel
+      onClose()
+
+      // Call restart handler to reset avatar config
+      if (onRestart) {
+        onRestart()
+      }
+
+      // Open avatar selection
+      if (onOpenAvatarSelection) {
+        onOpenAvatarSelection()
+      }
+    } catch (error) {
+      console.error('Failed to restart:', error)
+      toast({
+        title: 'Error',
+        description: 'Failed to clear settings',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      })
     }
   }
 

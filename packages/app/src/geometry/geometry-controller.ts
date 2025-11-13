@@ -86,15 +86,6 @@ export class GeometryController {
     return this.borderDepth;
   }
 
-  // Note: These methods are deprecated - face mesh mode is now always enabled
-  setGroundRenderMode(_useCube: boolean) {
-    logger.log('geometry', 'setGroundRenderMode is deprecated (face mesh mode always enabled)');
-  }
-
-  setFaceMeshMode(_enabled: boolean) {
-    logger.log('geometry', 'setFaceMeshMode is deprecated (face mesh mode always enabled)');
-  }
-
   setVoxelAtDepth(x: number, y: number, z: number, depth: number, colorIndex: number) {
     logger.log('geometry', '[GeometryController] setVoxelAtDepth', { x, y, z, depth, colorIndex, hasWorker: !!this.worker });
     if (this.worker) {

@@ -3,16 +3,19 @@
  *
  * Handles the waterfall approach for avatar restoration:
  * 1. Try to fetch from Nostr (with timeout)
- * 2. Fall back to browser session storage
- * 3. Show avatar selector as last resort
+ * 2. Fall back to localStorage persistent state (includes position)
+ * 3. Fall back to browser session storage (config only)
+ * 4. Show avatar selector as last resort
  */
 
-import type { AvatarConfig, AvatarState } from './avatar-state';
+import type { AvatarConfig, AvatarState, Position } from './avatar-state';
 import { loadAvatarFromSession, saveAvatarToSession } from './avatar-session-storage';
+import { loadPersistentAvatarState, savePersistentFromNostrState } from './avatar-state-storage';
 import * as logger from '../utils/logger';
 
 export type RestoreStatus =
   | 'fetching-nostr'
+  | 'using-persistent'
   | 'using-session'
   | 'need-selection'
   | 'restored'
@@ -21,8 +24,9 @@ export type RestoreStatus =
 export interface RestoreResult {
   status: RestoreStatus;
   config?: AvatarConfig;
+  position?: Position;
   state?: Partial<AvatarState>;
-  source?: 'nostr' | 'session' | 'none';
+  source?: 'nostr' | 'persistent' | 'session' | 'none';
   message: string;
 }
 
@@ -37,8 +41,9 @@ interface RestoreOptions {
 /**
  * Restore avatar config with waterfall approach:
  * 1. Try Nostr (with timeout)
- * 2. Try session storage
- * 3. Return null (triggers avatar selector)
+ * 2. Try localStorage persistent state (includes position)
+ * 3. Try session storage (config only)
+ * 4. Return null (triggers avatar selector)
  */
 export async function restoreAvatarConfig(
   pubkey: string,
@@ -75,7 +80,10 @@ export async function restoreAvatarConfig(
         avatarTexture: state.avatarTexture,
       };
 
-      // Save to session for future fallback
+      const position: Position = state.position || { x: 4, y: 0, z: 4 };
+
+      // Save to both persistent storage and session for future fallback
+      savePersistentFromNostrState(state);
       saveAvatarToSession(pubkey, config);
 
       onStatusChange?.('restored', 'Avatar restored from network');
@@ -83,19 +91,39 @@ export async function restoreAvatarConfig(
       return {
         status: 'restored',
         config,
+        position,
         state,
         source: 'nostr',
         message: 'Avatar restored from network',
       };
     }
 
-    logger.log('ui', '[AvatarRestore] No Nostr state found, trying session...');
+    logger.log('ui', '[AvatarRestore] No Nostr state found, trying persistent storage...');
   } catch (error) {
     logger.warn('ui', '[AvatarRestore] Nostr query failed or timed out:', error);
-    // Continue to session storage fallback
+    // Continue to persistent storage fallback
   }
 
-  // Step 2: Try session storage
+  // Step 2: Try persistent storage (localStorage with position)
+  onStatusChange?.('using-persistent', 'Loading avatar from storage...');
+  logger.log('ui', '[AvatarRestore] Checking persistent storage...');
+
+  const persistentState = loadPersistentAvatarState(pubkey);
+  if (persistentState) {
+    logger.log('ui', '[AvatarRestore] Successfully restored from persistent storage');
+
+    onStatusChange?.('restored', 'Avatar loaded from storage');
+
+    return {
+      status: 'restored',
+      config: persistentState.avatarConfig,
+      position: persistentState.position,
+      source: 'persistent',
+      message: 'Avatar loaded from persistent storage',
+    };
+  }
+
+  // Step 3: Try session storage (config only, no position)
   onStatusChange?.('using-session', 'Loading avatar from session...');
   logger.log('ui', '[AvatarRestore] Checking session storage...');
 
@@ -113,7 +141,7 @@ export async function restoreAvatarConfig(
     };
   }
 
-  // Step 3: No avatar found - need selection
+  // Step 4: No avatar found - need selection
   logger.log('ui', '[AvatarRestore] No avatar found, need selection');
   onStatusChange?.('need-selection', 'Please select an avatar');
 

@@ -85,10 +85,10 @@ function createTextureArray(textures: (THREE.Texture | undefined)[], renderer: T
  */
 export function createTexturedVoxelMaterial(textures: (THREE.Texture | undefined)[], enableTextures: boolean = true, renderer?: THREE.WebGLRenderer): THREE.ShaderMaterial | THREE.RawShaderMaterial {
   // Debug: Log texture availability
-  const validTextureIndices = textures
-    .map((tex, idx) => tex ? idx : -1)
-    .filter(idx => idx >= 0);
-  console.log('[textured-voxel-material] Creating material with textures at indices:', validTextureIndices);
+  // const validTextureIndices = textures
+  //   .map((tex, idx) => tex ? idx : -1)
+  //   .filter(idx => idx >= 0);
+  // console.log('[textured-voxel-material] Creating material with textures at indices:', validTextureIndices);
   console.log('[textured-voxel-material] enableTextures:', enableTextures);
 
   // Create texture array if renderer is provided (WebGL 2.0 mode)

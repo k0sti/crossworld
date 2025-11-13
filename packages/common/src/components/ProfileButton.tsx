@@ -119,7 +119,8 @@ export function ProfileButton({ pubkey, onLogin, onOpenProfile }: ProfileButtonP
 
       const signedEvent = await account.signer.signEvent(metadataEvent)
 
-      for (const relayUrl of DEFAULT_RELAYS) {
+      const relays = getEnabledProfileRelays()
+      for (const relayUrl of relays) {
         try {
           const relay = new Relay(relayUrl)
           relay.publish(signedEvent)

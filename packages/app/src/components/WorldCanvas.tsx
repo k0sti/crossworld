@@ -7,7 +7,8 @@ import { AppInitializer } from '../initialization/AppInitializer';
 import type { InitializationState } from '../initialization/types';
 import type { AvatarStateService, AvatarConfig } from '../services/avatar-state';
 import type { TeleportAnimationType } from '../renderer/teleport-animation';
-import { DebugPanel, type DebugInfo } from './WorldPanel';
+import { Transform } from '../renderer/transform';
+import { WorldPanel, type DebugInfo } from './WorldPanel';
 import { InitializationOverlay } from './InitializationOverlay';
 import { onDepthChange, onSeedChange, getSeed } from '../config/depth-config';
 import type { MainMode } from '@crossworld/common';
@@ -19,6 +20,7 @@ interface WorldCanvasProps {
   mainMode: MainMode;
   isCameraMode: boolean;
   avatarConfig: AvatarConfig;
+  restoredPosition?: { x: number; y: number; z: number; quaternion?: [number, number, number, number] } | null;
   teleportAnimationType: TeleportAnimationType;
   avatarStateService?: AvatarStateService;
   currentUserPubkey?: string | null;
@@ -37,6 +39,7 @@ export function WorldCanvas({
   mainMode,
   isCameraMode,
   avatarConfig,
+  restoredPosition,
   teleportAnimationType,
   avatarStateService,
   currentUserPubkey,
@@ -339,7 +342,7 @@ export function WorldCanvas({
     sceneManager.setMainMode(mainMode);
   }, [mainMode]);
 
-  // Handle edit mode changes (for backward compatibility)
+  // Handle edit mode changes
   useEffect(() => {
     const sceneManager = localSceneManagerRef.current;
     if (!sceneManager) return;
@@ -432,8 +435,17 @@ export function WorldCanvas({
 
     const loadAvatar = async () => {
       if (isLoggedIn) {
-      // Preserve current transform (position + rotation) if avatar exists
-      const currentTransform = sceneManager.getCurrentTransform();
+      // Use restored position if available, otherwise preserve current transform
+      const currentTransform = restoredPosition
+        ? Transform.fromEventData({
+            x: restoredPosition.x,
+            y: restoredPosition.y,
+            z: restoredPosition.z,
+            quaternion: restoredPosition.quaternion
+          })
+        : sceneManager.getCurrentTransform();
+
+      logger.log('renderer', '[WorldCanvas] Loading avatar with position:', currentTransform?.getPosition());
 
       // Priority loading order:
       // 1. Load from avatarId (predefined models)
@@ -563,7 +575,7 @@ export function WorldCanvas({
     };
 
     loadAvatar();
-  }, [isLoggedIn, avatarConfig.avatarType, avatarConfig.avatarId, avatarConfig.avatarUrl, avatarConfig.avatarData, avatarConfig.avatarMod, avatarConfig.avatarTexture]);
+  }, [isLoggedIn, avatarConfig.avatarType, avatarConfig.avatarId, avatarConfig.avatarUrl, avatarConfig.avatarData, avatarConfig.avatarMod, avatarConfig.avatarTexture, restoredPosition]);
 
   return (
     <Box
@@ -580,7 +592,7 @@ export function WorldCanvas({
       <InitializationOverlay initState={initState} show={showInitOverlay} />
 
       {isEditMode && (
-        <DebugPanel
+        <WorldPanel
           info={debugInfo}
           onApplyDepthSettings={handleApplyDepthSettings}
           worldGridVisible={worldGridVisible}

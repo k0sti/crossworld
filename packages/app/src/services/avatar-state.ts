@@ -3,6 +3,7 @@ import { SimplePool, type Event } from 'nostr-tools'
 import { npubEncode } from 'nostr-tools/nip19'
 import { getLiveChatATag, getAvatarStateDTag, AVATAR_STATE_CONFIG } from '../config'
 import { getEnabledWorldRelays } from './relay-settings'
+import { savePersistentAvatarState } from './avatar-state-storage'
 import type { AccountManager } from 'applesauce-accounts'
 
 export type AvatarType = 'vox' | 'glb' | 'csm'
@@ -658,6 +659,17 @@ export class AvatarStateService {
         micEnabled,
         customMessage,
       }
+
+      // Save to persistent storage for offline fallback
+      savePersistentAvatarState(
+        account.pubkey,
+        avatarConfig,
+        position,
+        status,
+        customMessage,
+        now
+      )
+      logger.log('service', '[AvatarState] Saved state to persistent storage')
     } catch (err) {
       logger.warn('service', '[AvatarState] Failed to publish state event (relay may be unavailable):', err)
       // Update local state even if we can't publish
@@ -669,6 +681,17 @@ export class AvatarStateService {
         micEnabled,
         customMessage,
       }
+
+      // Still save to persistent storage even if publish fails
+      savePersistentAvatarState(
+        account.pubkey,
+        avatarConfig,
+        position,
+        status,
+        customMessage,
+        now
+      )
+      logger.log('service', '[AvatarState] Saved state to persistent storage (offline)')
       // Don't throw - allow app to continue working offline
     }
   }
@@ -745,6 +768,11 @@ export class AvatarStateService {
     if (worldRelays.length === 0) {
       // Update local state even if we can't publish
       Object.assign(this.currentState, update)
+
+      // Update persistent storage if position changed (even without relays)
+      if (update.position) {
+        this.updatePersistentPosition(account.pubkey, update.position)
+      }
       return
     }
 
@@ -754,11 +782,42 @@ export class AvatarStateService {
 
       // Update current state
       Object.assign(this.currentState, update)
+
+      // Update persistent storage if position changed
+      if (update.position) {
+        this.updatePersistentPosition(account.pubkey, update.position)
+      }
     } catch (err) {
       logger.warn('service', '[AvatarState] Failed to publish update event (relay may be unavailable):', err)
       // Update local state even if we can't publish
       Object.assign(this.currentState, update)
+
+      // Update persistent storage if position changed (even offline)
+      if (update.position) {
+        this.updatePersistentPosition(account.pubkey, update.position)
+      }
       // Don't throw - allow app to continue working offline
+    }
+  }
+
+  /**
+   * Update position in persistent storage without republishing full state
+   * This is called when position UPDATE events are published
+   */
+  private updatePersistentPosition(pubkey: string, position: Position): void {
+    try {
+      const stored = localStorage.getItem('crossworld.avatar.persistent-state')
+      if (stored) {
+        const data = JSON.parse(stored)
+        if (data.pubkey === pubkey) {
+          data.position = position
+          data.savedAt = Date.now()
+          localStorage.setItem('crossworld.avatar.persistent-state', JSON.stringify(data))
+          logger.log('service', '[AvatarState] Updated position in persistent storage:', position)
+        }
+      }
+    } catch (error) {
+      logger.error('service', '[AvatarState] Failed to update persistent position:', error)
     }
   }
 

@@ -1,5 +1,4 @@
 import * as logger from './logger';
-import cubeInit from 'cube'
 import * as cubeWasm from 'cube'
 import type { CubeCoord } from '../types/cube-coord'
 import { ensureCubeWasmInitialized } from './cubeWasm'

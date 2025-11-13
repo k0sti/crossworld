@@ -38,8 +38,6 @@ function App() {
   const [viewedProfilePubkey, setViewedProfilePubkey] = useState<string | null>(null)
   const accountManager = useAccountManager()
 
-  // Avatar state service is now created by AppInitializer during network phase
-  // We create it here for backward compatibility until full refactor
   const avatarStateService = useMemo(() => new AvatarStateService(accountManager), [accountManager])
   const toast = useToast()
 
@@ -57,6 +55,7 @@ function App() {
     avatarTexture: 'grass', // Default texture
   })
   const [teleportAnimationType, setTeleportAnimationType] = useState<TeleportAnimationType>('fade')
+  const [restoredPosition, setRestoredPosition] = useState<{ x: number; y: number; z: number; quaternion?: [number, number, number, number] } | null>(null)
 
   // Avatar selection modal
   const [showSelectAvatar, setShowSelectAvatar] = useState(false)
@@ -77,8 +76,6 @@ function App() {
 
   const geometryControllerRef = useRef<any>(null)
   const sceneManagerRef = useRef<any>(null)
-
-  // Derived value for backward compatibility
   const isEditMode = mainMode === 'edit'
 
   // World CSM state
@@ -231,15 +228,37 @@ function App() {
         setShowRestoreModal(false)
 
         if (result.config) {
-          // Avatar restored from Nostr or session
+          // Avatar restored from Nostr, persistent storage, or session
           setAvatarConfig(result.config)
 
-          if (result.state) {
-            // We have full state from Nostr - publish it
-            publishInitialState(result.state)
+          // Store restored position so WorldCanvas can use it
+          if (result.position) {
+            setRestoredPosition(result.position)
+            logger.log('ui', '[App] Restored position:', result.position)
+          } else if (result.state?.position) {
+            setRestoredPosition(result.state.position)
+            logger.log('ui', '[App] Restored position from state:', result.state.position)
           }
 
-          const sourceLabel = result.source === 'nostr' ? 'network' : 'session'
+          // Build state object for publishing (includes position if available)
+          const restoredState: Partial<AvatarState> = {
+            ...result.state,
+            avatarType: result.config.avatarType,
+            avatarId: result.config.avatarId,
+            avatarUrl: result.config.avatarUrl,
+            avatarData: result.config.avatarData,
+            avatarMod: result.config.avatarMod,
+            avatarTexture: result.config.avatarTexture,
+            position: result.position || result.state?.position,
+          }
+
+          // Publish initial state with restored data
+          publishInitialState(restoredState)
+
+          const sourceLabel =
+            result.source === 'nostr' ? 'network' :
+            result.source === 'persistent' ? 'storage' :
+            'session'
           toast({
             title: 'Avatar restored',
             description: `Your avatar was loaded from ${sourceLabel}`,
@@ -539,6 +558,9 @@ function App() {
       avatarData: undefined,
     })
     setTeleportAnimationType('fade')
+
+    // Note: Avatar selector will be opened by ProfilePanel's onOpenAvatarSelection callback
+    // Session storage has already been cleared by ProfilePanel
   }
 
   const handleViewProfile = (profilePubkey: string) => {
@@ -558,14 +580,6 @@ function App() {
       logger.log('ui', `[App] Model selected: ${modelPath}`)
     }
   }
-
-  // Initialize ground render mode when geometry controller is ready
-  useEffect(() => {
-    if (geometryControllerRef.current) {
-      // Always use combined ground mode (cube + flat)
-      geometryControllerRef.current.setGroundRenderMode(true)
-    }
-  }, [])
 
   const handlePublishWorld = () => {
     // Ensure geometry controller is initialized before opening modal
@@ -589,6 +603,7 @@ function App() {
           mainMode={mainMode}
           isCameraMode={isCameraMode}
           avatarConfig={avatarConfig}
+          restoredPosition={restoredPosition}
           teleportAnimationType={teleportAnimationType}
           avatarStateService={avatarStateService}
           currentUserPubkey={pubkey}

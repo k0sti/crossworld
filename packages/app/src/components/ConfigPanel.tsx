@@ -2,8 +2,7 @@ import { Box, Text, VStack, HStack, Slider, SliderTrack, SliderFilledTrack, Slid
 import { useState, useEffect, useRef } from 'react'
 import type { ConfigPanelType } from '@crossworld/common'
 import { type LogTag, isLogEnabled, setLogEnabled, subscribeToLogConfig, isMasterLogEnabled, setMasterLogEnabled } from '../utils/logger'
-import { LoginSettingsService } from '../services/login-settings'
-import { profileCache } from '../services/profile-cache'
+import { clearAllData } from '../services/storage-manager'
 
 export type { ConfigPanelType } from '@crossworld/common'
 
@@ -121,32 +120,36 @@ export function ConfigPanel({
   };
 
   const handleResetAllData = () => {
-    // Clear all localStorage
-    LoginSettingsService.clear()
-    LoginSettingsService.clearGuestAccount()
-    localStorage.removeItem('crossworld_relays')
-    localStorage.removeItem('crossworld:log-config')
-    localStorage.removeItem('cameraControllerState')
+    try {
+      // Clear all persistent data using centralized storage manager
+      clearAllData()
 
-    // Clear in-memory caches
-    profileCache.clearCache()
+      // Close dialog
+      setIsResetDialogOpen(false)
 
-    // Close dialog
-    setIsResetDialogOpen(false)
+      // Show toast
+      toast({
+        title: 'All data cleared',
+        description: 'Page will reload in 2 seconds...',
+        status: 'success',
+        duration: 2000,
+        isClosable: true,
+      })
 
-    // Show toast
-    toast({
-      title: 'All data cleared',
-      description: 'Page will reload in 2 seconds...',
-      status: 'success',
-      duration: 2000,
-      isClosable: true,
-    })
-
-    // Reload page after short delay
-    setTimeout(() => {
-      window.location.reload()
-    }, 2000)
+      // Reload page after short delay
+      setTimeout(() => {
+        window.location.reload()
+      }, 2000)
+    } catch (error) {
+      console.error('Failed to reset data:', error)
+      toast({
+        title: 'Error',
+        description: 'Failed to clear all data',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      })
+    }
   };
 
   return (
@@ -334,12 +337,13 @@ export function ConfigPanel({
                 <VStack align="start" mt={2} spacing={1} fontSize="sm" color="gray.300">
                   <Text>• Login settings and guest accounts</Text>
                   <Text>• Network relay configurations</Text>
-                  <Text>• Camera position</Text>
+                  <Text>• Camera position and world view settings</Text>
+                  <Text>• Avatar configuration and session data</Text>
                   <Text>• Logging preferences</Text>
                   <Text>• Profile cache</Text>
                 </VStack>
                 <Text mt={3} fontWeight="bold" color="red.300">
-                  The page will reload after clearing data.
+                  The page will reload and you'll need to log in again.
                 </Text>
               </AlertDialogBody>
 

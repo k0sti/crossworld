@@ -417,6 +417,3 @@ export function WorldPanel({
     </Box>
   );
 }
-
-// Re-export as DebugPanel for backward compatibility
-export { WorldPanel as DebugPanel };

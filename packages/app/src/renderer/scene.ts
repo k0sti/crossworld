@@ -12,7 +12,6 @@ import {
   worldToCube,
   cubeToWorld,
   type CubeCoord,
-  isWithinWorldBounds,
   snapToGrid,
   getVoxelSize as getVoxelSizeFromCubeCoord
 } from '../types/cube-coord';
@@ -74,11 +73,9 @@ export class SceneManager {
 
   // Mode system
   private currentMode: MainMode = 'walk';
-  // private voxelCursor: VoxelCursor | null = null;
-  // private editMode: EditMode | null = null; // TODO: Use EditMode class instead of legacy edit mode
   private placementMode: PlacementMode | null = null;
 
-  // Legacy edit mode properties (TODO: migrate to EditMode class)
+  // Edit mode properties
   private isEditMode: boolean = false;
   private previewCube: THREE.LineSegments | null = null;
   private faceHighlightMesh: THREE.Mesh | null = null;
@@ -158,8 +155,8 @@ export class SceneManager {
   // Materials and textures
   private materialsLoader: MaterialsLoader = new MaterialsLoader();
   private texturesLoaded: boolean = false;
-  private texturesEnabled: boolean = true;
-  private avatarTexturesEnabled: boolean = true;
+  private texturesEnabled: boolean = false;
+  private avatarTexturesEnabled: boolean = false;
   private texturesLoadingPromise: Promise<void> | null = null;
 
   constructor(world?: World) {
@@ -174,7 +171,7 @@ export class SceneManager {
     this.raycaster = new THREE.Raycaster();
     this.mouse = new THREE.Vector2();
 
-    // Use provided physics world or create a new one (for backwards compatibility)
+    // Use provided physics world or create a new one
     if (world) {
       this.physicsBridge = world;
     } else {
@@ -246,9 +243,7 @@ export class SceneManager {
       logger.error('renderer', 'Failed to load materials/textures:', error);
     });
 
-    // Initialize cursor and mode system
-    // this.voxelCursor = new VoxelCursor(this.scene, this.cursorDepth);
-    // this.editMode = new EditMode(this.voxelCursor); // TODO: Use EditMode class instead of legacy edit mode
+    // Initialize mode system
     this.placementMode = new PlacementMode(this.scene);
 
     // Initialize camera controller for both walk and edit modes
@@ -1532,7 +1527,7 @@ export class SceneManager {
     logger.log('renderer', `Colors: ${colors?.length || 0}, UVs: ${uvs?.length || 0}, MaterialIds: ${materialIds?.length || 0}`);
     logger.log('renderer', `Textures loaded: ${this.texturesLoaded}`);
 
-    // Clean up old geometry mesh (legacy - kept for backwards compatibility)
+    // Clean up old geometry mesh
     if (this.geometryMesh) {
       this.scene.remove(this.geometryMesh);
       this.geometryMesh.geometry.dispose();
@@ -1680,7 +1675,7 @@ export class SceneManager {
       logger.log('renderer', `Created solid color mesh with ${solidIndices.length / 3} triangles`);
     }
 
-    // For backwards compatibility, set geometryMesh to the primary mesh (prefer textured if available)
+    // Set geometryMesh to the primary mesh (prefer textured if available)
     this.geometryMesh = this.texturedMesh || this.solidColorMesh;
 
     // Update raycast mesh for avatar ground detection
@@ -1787,16 +1782,13 @@ export class SceneManager {
           const newX = currentPos.x + moveDirection.x * distance;
           const newZ = currentPos.z + moveDirection.z * distance;
 
-          // Check if within world bounds
-          if (isWithinWorldBounds(newX, newZ, 0)) {
-            // Move avatar to new position
-            this.currentAvatar.setRunSpeed(isRunning);
-            this.currentAvatar.setTargetPosition(newX, newZ);
-            this.currentMoveStyle = isRunning ? 'run' : 'walk';
+          // Move avatar to new position (no bounds check)
+          this.currentAvatar.setRunSpeed(isRunning);
+          this.currentAvatar.setTargetPosition(newX, newZ);
+          this.currentMoveStyle = isRunning ? 'run' : 'walk';
 
-            // Publish position update
-            this.publishPlayerPositionAt(newX, newZ, this.currentMoveStyle);
-          }
+          // Publish position update
+          this.publishPlayerPositionAt(newX, newZ, this.currentMoveStyle);
         }
       }
 
@@ -2061,7 +2053,7 @@ export class SceneManager {
       this.placementMode.hide();
     }
 
-    // Update legacy isEditMode flag for backward compatibility
+    // Update isEditMode flag
     this.isEditMode = (mode === 'edit');
 
     // Reset mouse mode when switching modes
@@ -2083,7 +2075,7 @@ export class SceneManager {
   }
 
   setEditMode(isEditMode: boolean): void {
-    // Map to MainMode for backward compatibility
+    // Map to MainMode
     this.setMainMode(isEditMode ? 'edit' : 'walk');
 
     if (this.previewCube && !isEditMode) {
@@ -2115,11 +2107,11 @@ export class SceneManager {
 
   /**
    * Set camera mode to enable/disable free camera movement
-   * Note: Camera controller is now always enabled, this is kept for compatibility
+   * Note: Camera controller is now always enabled
    */
   setCameraMode(_isCameraMode: boolean): void {
     // Camera controller stays enabled all the time now
-    // This method is kept for compatibility but does nothing
+    // This method does nothing
   }
 
   /**
