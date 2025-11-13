@@ -12,6 +12,7 @@ import { InitializationOverlay } from './InitializationOverlay';
 import { onDepthChange, onSeedChange, getSeed } from '../config/depth-config';
 import type { MainMode } from '@crossworld/common';
 import { useAccountManager } from 'applesauce-react/hooks';
+import { getWorldPanelSetting, setWorldPanelSetting } from '../config/world-panel-settings';
 
 interface WorldCanvasProps {
   isLoggedIn: boolean;
@@ -56,39 +57,27 @@ export function WorldCanvas({
   const [initState, setInitState] = useState<InitializationState | null>(null);
   const [showInitOverlay, setShowInitOverlay] = useState(true);
 
-  // Scene configuration state with localStorage persistence
-  const [worldGridVisible, setWorldGridVisible] = useState(() => {
-    const saved = localStorage.getItem('worldPanel.worldGridVisible');
-    return saved !== null ? JSON.parse(saved) : false; // Hidden by default
-  });
-  const [wireframeEnabled, setWireframeEnabled] = useState(() => {
-    const saved = localStorage.getItem('worldPanel.wireframeEnabled');
-    return saved !== null ? JSON.parse(saved) : false;
-  });
-  const [texturesEnabled, setTexturesEnabled] = useState(() => {
-    const saved = localStorage.getItem('worldPanel.texturesEnabled');
-    return saved !== null ? JSON.parse(saved) : false;
-  });
-  const [avatarTexturesEnabled, setAvatarTexturesEnabled] = useState(() => {
-    const saved = localStorage.getItem('worldPanel.avatarTexturesEnabled');
-    return saved !== null ? JSON.parse(saved) : false;
-  });
+  // Scene configuration state with centralized settings management
+  const [worldGridVisible, setWorldGridVisible] = useState(() => getWorldPanelSetting('worldGridVisible'));
+  const [wireframeEnabled, setWireframeEnabled] = useState(() => getWorldPanelSetting('wireframeEnabled'));
+  const [texturesEnabled, setTexturesEnabled] = useState(() => getWorldPanelSetting('texturesEnabled'));
+  const [avatarTexturesEnabled, setAvatarTexturesEnabled] = useState(() => getWorldPanelSetting('avatarTexturesEnabled'));
 
   // Save settings to localStorage when they change
   useEffect(() => {
-    localStorage.setItem('worldPanel.worldGridVisible', JSON.stringify(worldGridVisible));
+    setWorldPanelSetting('worldGridVisible', worldGridVisible);
   }, [worldGridVisible]);
 
   useEffect(() => {
-    localStorage.setItem('worldPanel.wireframeEnabled', JSON.stringify(wireframeEnabled));
+    setWorldPanelSetting('wireframeEnabled', wireframeEnabled);
   }, [wireframeEnabled]);
 
   useEffect(() => {
-    localStorage.setItem('worldPanel.texturesEnabled', JSON.stringify(texturesEnabled));
+    setWorldPanelSetting('texturesEnabled', texturesEnabled);
   }, [texturesEnabled]);
 
   useEffect(() => {
-    localStorage.setItem('worldPanel.avatarTexturesEnabled', JSON.stringify(avatarTexturesEnabled));
+    setWorldPanelSetting('avatarTexturesEnabled', avatarTexturesEnabled);
   }, [avatarTexturesEnabled]);
 
   const handleApplyDepthSettings = async (worldDepth: number, scaleDepth: number) => {
