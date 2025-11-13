@@ -41,6 +41,7 @@ import { createTexturedVoxelMaterial, updateShaderLighting } from './textured-vo
 // import { EditMode } from './edit-mode';
 import { PlacementMode } from './placement-mode';
 import type { MainMode } from '@crossworld/common';
+import { getWorldPanelSetting } from '../config/world-panel-settings';
 
 /**
  * SceneManager - Manages the 3D scene with centered coordinate system
@@ -100,7 +101,7 @@ export class SceneManager {
   private shiftKeyPressed: boolean = false;
 
   // Wireframe mode
-  private wireframeMode: boolean = false;
+  private wireframeMode: boolean = getWorldPanelSetting('wireframeEnabled');
 
   // World cube for WASM raycasting
   private worldCube: any | null = null;
@@ -158,8 +159,8 @@ export class SceneManager {
   // Materials and textures
   private materialsLoader: MaterialsLoader = new MaterialsLoader();
   private texturesLoaded: boolean = false;
-  private texturesEnabled: boolean = true;
-  private avatarTexturesEnabled: boolean = true;
+  private texturesEnabled: boolean = getWorldPanelSetting('texturesEnabled');
+  private avatarTexturesEnabled: boolean = getWorldPanelSetting('avatarTexturesEnabled');
   private texturesLoadingPromise: Promise<void> | null = null;
 
   constructor(world?: World) {
