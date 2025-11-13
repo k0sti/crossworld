@@ -72,7 +72,7 @@ function createTextureArray(textures: (THREE.Texture | undefined)[], renderer: T
   textureArray.magFilter = THREE.NearestFilter;
   textureArray.wrapS = THREE.RepeatWrapping;
   textureArray.wrapT = THREE.RepeatWrapping;
-  textureArray.flipY = false; // Required for 3D textures
+  textureArray.flipY = false;
   textureArray.needsUpdate = true;
 
   console.log('[textured-voxel-material] Texture array created successfully');
