@@ -1,5 +1,6 @@
 use crate::{Cube, IVec3Ext};
 use glam::IVec3;
+use serde::{Deserialize, Serialize};
 use std::rc::Rc;
 
 /// Index multiplier for converting 3D position to linear index: x + y*4 + z*16
@@ -217,7 +218,7 @@ impl<'a> NeighborView<'a> {
 }
 
 /// Coordinate for tracking position during traversal
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CubeCoord {
     /// Position in octree space
     pub pos: IVec3,

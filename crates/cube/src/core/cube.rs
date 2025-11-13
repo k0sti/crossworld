@@ -1,5 +1,6 @@
 use crate::CubeCoord;
 use glam::IVec3;
+use serde::{Deserialize, Serialize};
 use std::rc::Rc;
 
 /// Pre-computed octant positions for fast lookup
@@ -51,7 +52,7 @@ impl IVec3Ext for IVec3 {
 }
 
 /// Axis for 2D (Planes) and 1D (Slices) subdivision
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Axis {
     X,
     Y,
@@ -78,7 +79,7 @@ impl Axis {
 }
 
 /// 2D quadtree for plane subdivision
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Quad<T> {
     Solid(T),
     Quads(Box<[Rc<Quad<T>>; 4]>),
@@ -95,7 +96,7 @@ impl<T> Quad<T> {
 }
 
 /// 3D cube structure with multiple subdivision strategies
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Cube<T> {
     Solid(T),
     Cubes(Box<[Rc<Cube<T>>; 8]>),
