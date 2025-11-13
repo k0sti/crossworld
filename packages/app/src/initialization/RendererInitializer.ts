@@ -46,12 +46,18 @@ export async function initializeRenderer(config: RendererConfig): Promise<Initia
   logger.log('common', '[RendererInit] Initializing renderer and scene...');
   const startTime = performance.now();
 
-  // Check for WebGL 2.0 support
+  // Check for WebGL 2.0 support and configure pixel storage parameters
   const gl = canvas.getContext('webgl2');
   if (!gl) {
     logger.warn('renderer', '[RendererInit] WebGL 2.0 not available, falling back to WebGL 1.0');
   } else {
     logger.log('renderer', '[RendererInit] Using WebGL 2.0 context');
+
+    // CRITICAL: Disable FLIP_Y and PREMULTIPLY_ALPHA before any texture creation
+    // These parameters are not allowed with texImage3D (3D textures) per WebGL 2.0 spec.
+    // Three.js creates internal 3D textures during WebGLRenderer initialization.
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
   }
 
   // Create scene manager

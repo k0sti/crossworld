@@ -52,8 +52,6 @@ export function getEnabledWorldRelays(): string[] {
     .filter(relay => relay.enabledForWorld)
     .map(relay => relay.url);
 
-  console.log(`[RelaySettings] World relays enabled: ${enabled.length > 0 ? enabled.join(', ') : 'NONE - world features disabled'}`);
-
   // Return enabled relays, even if empty (user choice)
   // Services should handle empty array gracefully
   return enabled;
@@ -69,8 +67,6 @@ export function getEnabledProfileRelays(): string[] {
     .filter(relay => relay.enabledForProfile)
     .map(relay => relay.url);
 
-  console.log(`[RelaySettings] Profile relays enabled: ${enabled.length > 0 ? enabled.join(', ') : 'NONE - profile features disabled'}`);
-
   // Return enabled relays, even if empty (user choice)
   return enabled;
 }
@@ -83,8 +79,6 @@ export function getAllEnabledRelays(): string[] {
   const enabled = settings
     .filter(relay => relay.enabledForProfile || relay.enabledForWorld)
     .map(relay => relay.url);
-
-  console.log(`[RelaySettings] All enabled relays: ${enabled.length > 0 ? enabled.join(', ') : 'NONE'}`);
 
   // Return enabled relays, even if empty (user choice)
   return enabled;

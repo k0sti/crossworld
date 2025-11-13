@@ -25,7 +25,6 @@ export async function ensureWorldWasmInitialized(): Promise<void> {
   if (!worldInitialized) {
     await initWorldWasm();
     worldInitialized = true;
-    logger.log('common', '[WorldWasm] WASM module initialized');
   }
 }
 

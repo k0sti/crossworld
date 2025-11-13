@@ -60,7 +60,7 @@ import { getWorldPanelSetting } from '../config/world-panel-settings';
 export class SceneManager {
   private scene: THREE.Scene;
   private camera: THREE.PerspectiveCamera;
-  private renderer: THREE.WebGLRenderer;
+  private renderer!: THREE.WebGLRenderer; // Initialized in initialize()
   private geometryMesh: THREE.Mesh | null = null;
   private texturedMesh: THREE.Mesh | null = null;
   private solidColorMesh: THREE.Mesh | null = null;
@@ -171,7 +171,7 @@ export class SceneManager {
       0.1,
       1000
     );
-    this.renderer = new THREE.WebGLRenderer();
+    // Note: renderer is created in initialize() after WebGL context is properly configured
     this.raycaster = new THREE.Raycaster();
     this.mouse = new THREE.Vector2();
 
