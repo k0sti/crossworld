@@ -104,3 +104,48 @@ struct EditLogEntry {
     author: String,
     operation: EditOperation,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cube::{glam::IVec3, Cube, CubeCoord};
+    use tempfile::tempdir;
+
+    #[test]
+    fn file_storage_roundtrip() {
+        let dir = tempdir().unwrap();
+        let world_path = dir.path().join("world.bin");
+        let log_path = dir.path().join("world.log");
+        let storage = FileStorage::new(&world_path, &log_path);
+
+        let cube = Cube::Solid(42);
+        storage.save_world(&cube).unwrap();
+        let loaded = storage.load_world().unwrap();
+        assert_eq!(loaded, cube);
+    }
+
+    #[test]
+    fn file_storage_writes_edit_log() {
+        let dir = tempdir().unwrap();
+        let world_path = dir.path().join("world.bin");
+        let log_path = dir.path().join("world.log");
+        let storage = FileStorage::new(&world_path, &log_path);
+
+        storage.save_world(&Cube::Solid(0)).unwrap();
+
+        let edit = EditOperation::SetCube {
+            coord: CubeCoord::new(IVec3::new(0, 0, 0), 0),
+            cube: Cube::Solid(1),
+        };
+        storage
+            .save_edit(&edit, 1234, "author")
+            .expect("write edit log");
+
+        let size = std::fs::metadata(&log_path).unwrap().len();
+        assert!(size > 0);
+
+        storage.compact().unwrap();
+        let cleared = std::fs::metadata(&log_path).unwrap().len();
+        assert_eq!(cleared, 0);
+    }
+}

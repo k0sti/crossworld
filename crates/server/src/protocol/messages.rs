@@ -2,7 +2,7 @@ use cube::{Cube, CubeCoord};
 use serde::{Deserialize, Serialize};
 
 /// Client -> Server handshake message.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Handshake {
     pub npub: String,
     pub timestamp: u64,
@@ -19,7 +19,7 @@ pub enum AuthLevel {
 }
 
 /// Server -> Client handshake acknowledgement.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct HandshakeAck {
     pub session_id: u64,
     pub world_info: WorldInfo,
@@ -27,7 +27,7 @@ pub struct HandshakeAck {
 }
 
 /// Description of the world served by this instance.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct WorldInfo {
     pub world_id: String,
     pub max_depth: u32,
@@ -36,7 +36,7 @@ pub struct WorldInfo {
 }
 
 /// Client -> Server request for a portion of the world.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct WorldRequest {
     pub session_id: u64,
     pub coord: CubeCoord,
@@ -44,7 +44,7 @@ pub struct WorldRequest {
 }
 
 /// Server -> Client response containing world data.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct WorldData {
     pub coord: CubeCoord,
     pub root: Cube<u8>,
@@ -52,7 +52,7 @@ pub struct WorldData {
 }
 
 /// Client -> Server edit request.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct WorldEdit {
     pub session_id: u64,
     pub operation: EditOperation,
@@ -60,25 +60,25 @@ pub struct WorldEdit {
 }
 
 /// Supported edit operations.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum EditOperation {
     SetCube { coord: CubeCoord, cube: Cube<u8> },
 }
 
 /// Server -> Client edit acknowledgement.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct WorldEditAck {
     pub transaction_id: u64,
     pub result: EditResult,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum EditResult {
     Success,
     Error(EditError),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum EditError {
     Unauthorized,
     InvalidCoordinates,
@@ -87,7 +87,7 @@ pub enum EditError {
 }
 
 /// Broadcast update sent to subscribed clients.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct WorldUpdate {
     pub subscription_id: u64,
     pub operation: EditOperation,
@@ -96,7 +96,7 @@ pub struct WorldUpdate {
 }
 
 /// Messages clients can send after the initial handshake.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ClientMessage {
     WorldRequest(WorldRequest),
     WorldEdit(WorldEdit),
@@ -104,11 +104,44 @@ pub enum ClientMessage {
 }
 
 /// Messages the server sends back to clients.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ServerMessage {
     HandshakeAck(HandshakeAck),
     WorldData(WorldData),
     WorldEditAck(WorldEditAck),
     WorldUpdate(WorldUpdate),
     Error(String),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn roundtrip<T: Serialize + for<'de> Deserialize<'de> + PartialEq + std::fmt::Debug>(value: T) {
+        let bytes = bincode::serialize(&value).expect("serialize");
+        let decoded: T = bincode::deserialize(&bytes).expect("deserialize");
+        assert_eq!(value, decoded);
+    }
+
+    #[test]
+    fn client_message_roundtrip() {
+        let coord = CubeCoord::new(cube::glam::IVec3::new(1, 2, 3), 4);
+        let msg = ClientMessage::WorldRequest(WorldRequest {
+            session_id: 42,
+            coord,
+            subscribe: true,
+        });
+        roundtrip(msg);
+    }
+
+    #[test]
+    fn server_message_roundtrip() {
+        let coord = CubeCoord::new(cube::glam::IVec3::new(0, 0, 0), 0);
+        let msg = ServerMessage::WorldData(WorldData {
+            coord,
+            root: Cube::Solid(7),
+            subscription_id: Some(99),
+        });
+        roundtrip(msg);
+    }
 }

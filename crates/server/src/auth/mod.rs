@@ -135,3 +135,74 @@ impl AuthManager {
         Ok(self.config.determine_auth_level(&handshake.npub))
     }
 }
+
+#[cfg(all(test, feature = "nostr"))]
+mod tests {
+    use super::*;
+    use crate::protocol::{handshake_message, Handshake};
+    use nostr_sdk::{prelude::*, secp256k1::Message};
+    use sha2::{Digest, Sha256};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn build_handshake(keys: &Keys, server_url: &str, timestamp: u64) -> Handshake {
+        let message = handshake_message(server_url, timestamp);
+        let hash = Sha256::digest(message.as_bytes());
+        let msg = Message::from_digest_slice(&hash).expect("digest slice");
+        let sig = keys.sign_schnorr(&msg).as_ref().to_vec();
+
+        Handshake {
+            npub: keys.public_key().to_bech32().expect("bech32 conversion"),
+            timestamp,
+            signature: sig,
+            display_name: None,
+        }
+    }
+
+    #[test]
+    fn auth_manager_accepts_valid_signature() {
+        let keys = Keys::generate();
+        let server_url = "https://example.com";
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        let auth_config = AuthConfig {
+            admin_npubs: vec![keys.public_key().to_bech32().unwrap()],
+            user_npubs: None,
+            allow_anonymous_read: false,
+            max_timestamp_age: 120,
+        };
+        let manager = AuthManager::new(auth_config);
+        let handshake = build_handshake(&keys, server_url, timestamp);
+
+        let level = manager.verify_handshake(server_url, &handshake).unwrap();
+        assert_eq!(level, AuthLevel::Admin);
+    }
+
+    #[test]
+    fn auth_manager_rejects_expired_timestamp() {
+        let keys = Keys::generate();
+        let server_url = "https://example.com";
+        let max_age = 5;
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let old_ts = now - (max_age + 10);
+
+        let auth_config = AuthConfig {
+            admin_npubs: vec![keys.public_key().to_bech32().unwrap()],
+            user_npubs: None,
+            allow_anonymous_read: false,
+            max_timestamp_age: max_age,
+        };
+        let manager = AuthManager::new(auth_config);
+        let handshake = build_handshake(&keys, server_url, old_ts);
+
+        let err = manager
+            .verify_handshake(server_url, &handshake)
+            .unwrap_err();
+        assert!(matches!(err, AuthError::ExpiredTimestamp));
+    }
+}
