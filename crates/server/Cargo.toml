@@ -1,0 +1,43 @@
+[package]
+name = "crossworld-server"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "server"
+path = "src/main.rs"
+
+[dependencies]
+# WebTransport (using wtransport for simplicity)
+# Using latest version
+wtransport = "0.6"
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+futures = "0.3"
+
+# Game state
+dashmap = "6.1"
+
+# Serialization
+bincode = "1.3"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Nostr for discovery
+nostr-sdk = "0.39"
+
+# Utilities
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+anyhow = "1.0"
+clap = { version = "4.0", features = ["derive"] }
+
+# Math
+glam = { version = "0.30", features = ["serde"] }
+
+# Metrics
+prometheus = { version = "0.13", default-features = false }
+
+# Time
+tokio-util = "0.7"

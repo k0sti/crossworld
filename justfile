@@ -13,6 +13,9 @@ default:
     @echo "  just check            - Check everything before deployment"
     @echo "  just start-live       - Initialize live event with default parameters"
     @echo "  just moq-relay        - Run local MoQ relay server"
+    @echo "  just server           - Run game server (development mode)"
+    @echo "  just server-prod      - Run game server (production mode)"
+    @echo "  just gen-cert         - Generate self-signed certificate for development"
     @echo ""
 
 # Build WASM module in development mode
@@ -84,3 +87,29 @@ moq-relay:
     @echo "Press Ctrl+C to stop"
     @echo ""
     cd moq-relay/rs && cargo run --release --bin moq-relay -- moq-relay/cfg/dev.toml
+
+# Generate self-signed certificate for development
+gen-cert:
+    @echo "Generating self-signed certificate for localhost..."
+    openssl req -x509 -newkey rsa:4096 -keyout localhost-key.pem -out localhost.pem -days 365 -nodes -subj '/CN=localhost'
+    @echo "✅ Certificate generated: localhost.pem"
+    @echo "✅ Private key generated: localhost-key.pem"
+
+# Run game server in development mode
+server:
+    @if [ ! -f localhost.pem ] || [ ! -f localhost-key.pem ]; then \
+        echo "Certificate not found. Generating..."; \
+        just gen-cert; \
+    fi
+    cargo run --bin server -- --log-level debug
+
+# Run game server in production mode
+server-prod:
+    cargo run --release --bin server -- \
+        --bind 0.0.0.0:4433 \
+        --max-players 100 \
+        --interest-radius 200 \
+        --validate-positions \
+        --max-move-speed 20.0 \
+        --enable-discovery \
+        --relays wss://relay.damus.io,wss://nos.lol
