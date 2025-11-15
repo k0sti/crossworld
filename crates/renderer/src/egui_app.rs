@@ -69,11 +69,8 @@ impl DualRendererApp {
 
         // Initialize camera looking at the cube (origin)
         let camera_target = glam::Vec3::ZERO;
-        let camera = CameraConfig::look_at(
-            glam::Vec3::new(3.0, 2.0, 3.0),
-            camera_target,
-            glam::Vec3::Y,
-        );
+        let camera =
+            CameraConfig::look_at(glam::Vec3::new(3.0, 2.0, 3.0), camera_target, glam::Vec3::Y);
 
         // Create shared Mutex slots for CPU renderer thread communication
         let cpu_sync_request = Arc::new(Mutex::new(None));
@@ -217,8 +214,12 @@ impl DualRendererApp {
 
             // Use current camera state
             if self.use_manual_camera {
-                self.gl_renderer
-                    .render_to_gl_with_camera(gl, width as i32, height as i32, &self.camera);
+                self.gl_renderer.render_to_gl_with_camera(
+                    gl,
+                    width as i32,
+                    height as i32,
+                    &self.camera,
+                );
             } else {
                 self.gl_renderer
                     .render_to_gl(gl, width as i32, height as i32, time);
@@ -393,7 +394,9 @@ impl DualRendererApp {
                 ui.separator();
                 ui.checkbox(&mut self.use_manual_camera, "Manual Camera");
                 if self.use_manual_camera {
-                    ui.label("(Drag left/right: rotate Y-axis, up/down: camera angle, scroll: zoom)");
+                    ui.label(
+                        "(Drag left/right: rotate Y-axis, up/down: camera angle, scroll: zoom)",
+                    );
                 }
             });
         });
@@ -499,7 +502,8 @@ impl DualRendererApp {
             let pitch_delta = -delta.y * self.mouse_sensitivity;
 
             // Orbit around the target (cube center)
-            self.camera.orbit(self.camera_target, yaw_delta, pitch_delta);
+            self.camera
+                .orbit(self.camera_target, yaw_delta, pitch_delta);
         }
 
         // Handle scroll for zoom (move closer/farther from target)
