@@ -1,6 +1,7 @@
 use crate::cpu_tracer::CpuCubeTracer;
-use crate::gl_tracer::GlCubeTracer;
+use crate::gpu_tracer::GpuTracer;
 use crate::renderer::{CameraConfig, Renderer};
+use crate::scenes::create_octa_cube;
 use egui::{ColorImage, TextureHandle, TextureOptions};
 use glow::*;
 use std::sync::{Arc, Mutex};
@@ -21,7 +22,7 @@ struct RenderResponse {
 }
 
 pub struct DualRendererApp {
-    gl_renderer: GlCubeTracer,
+    gpu_renderer: GpuTracer,
 
     // CPU renderer runs in separate thread
     // Only stores the latest sync frame request, drops old ones
@@ -63,7 +64,14 @@ pub struct DualRendererApp {
 
 impl DualRendererApp {
     pub unsafe fn new(gl: &Arc<Context>) -> Result<Self, String> {
-        let gl_renderer = unsafe { GlCubeTracer::new(gl)? };
+        // Create octa cube scene
+        let cube = create_octa_cube();
+        let mut gpu_renderer = GpuTracer::new(cube);
+
+        // Initialize GL resources for GPU renderer
+        unsafe {
+            gpu_renderer.init_gl(gl)?;
+        }
 
         let render_size = (400, 300);
 
@@ -117,7 +125,7 @@ impl DualRendererApp {
         });
 
         Ok(Self {
-            gl_renderer,
+            gpu_renderer,
             cpu_sync_request,
             cpu_sync_response,
             gl_framebuffer: None,
@@ -214,14 +222,14 @@ impl DualRendererApp {
 
             // Use current camera state
             if self.use_manual_camera {
-                self.gl_renderer.render_to_gl_with_camera(
+                self.gpu_renderer.render_to_gl_with_camera(
                     gl,
                     width as i32,
                     height as i32,
                     &self.camera,
                 );
             } else {
-                self.gl_renderer
+                self.gpu_renderer
                     .render_to_gl(gl, width as i32, height as i32, time);
             }
 
@@ -524,7 +532,7 @@ impl DualRendererApp {
         }
     }
 
-    pub unsafe fn destroy(&self, gl: &Arc<Context>) {
+    pub unsafe fn destroy(&mut self, gl: &Arc<Context>) {
         unsafe {
             if let Some(fb) = self.gl_framebuffer {
                 gl.delete_framebuffer(fb);
@@ -532,7 +540,7 @@ impl DualRendererApp {
             if let Some(tex) = self.gl_texture {
                 gl.delete_texture(tex);
             }
-            self.gl_renderer.destroy(gl);
+            self.gpu_renderer.destroy_gl(gl);
         }
     }
 }

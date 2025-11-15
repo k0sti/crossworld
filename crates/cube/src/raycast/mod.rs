@@ -147,33 +147,19 @@ where
             }
             Cube::Cubes(children) if current_depth > 0 => {
                 // Calculate which octant we're in
-                let pos2 = pos * 2.0;
-                let sign = dir.signum();
-
-                // Calculate octant bit using floor and sign adjustment
-                let sign_int = IVec3::new(
-                    if dir.x >= 0.0 { 1 } else { -1 },
-                    if dir.y >= 0.0 { 1 } else { -1 },
-                    if dir.z >= 0.0 { 1 } else { -1 },
+                // Simple octant calculation: check if each component is in lower (0) or upper (1) half
+                let bit = IVec3::new(
+                    if pos.x < 0.5 { 0 } else { 1 },
+                    if pos.y < 0.5 { 0 } else { 1 },
+                    if pos.z < 0.5 { 0 } else { 1 },
                 );
-                let sign10 = IVec3::new(
-                    if dir.x >= 0.0 { 0 } else { 1 },
-                    if dir.y >= 0.0 { 0 } else { 1 },
-                    if dir.z >= 0.0 { 0 } else { 1 },
-                );
-
-                let mut bit = (pos2 * Vec3::new(sign.x, sign.y, sign.z))
-                    .floor()
-                    .as_ivec3();
-                bit = bit * sign_int + sign10;
-
-                // Check octant validity
-                if bit.x < 0 || bit.x > 1 || bit.y < 0 || bit.y > 1 || bit.z < 0 || bit.z > 1 {
-                    return None;
-                }
 
                 // Calculate octant index (0-7)
                 let index = bit.to_octant_index();
+
+                // Calculate pos2 for child coordinate transformation
+                let pos2 = pos * 2.0;
+                let sign = dir.signum();
 
                 // Transform to child coordinate space
                 let child_pos = (pos2 - bit.as_vec3()) / 2.0;
@@ -193,6 +179,18 @@ where
 
                 // Miss in this octant - step to next boundary
                 let next_pos = calculate_next_position(pos2, dir, sign);
+
+                // Check if next position is still within valid bounds or if we've made no progress
+                // If it's outside [0,1]³ or identical to current position, we've exited/stuck
+                if !next_pos.cmpge(Vec3::ZERO).all() || !next_pos.cmple(Vec3::ONE).all() {
+                    return None;
+                }
+
+                // Prevent infinite recursion: if next_pos is same as pos, we haven't moved
+                const EPSILON: f32 = 1e-10;
+                if (next_pos - pos).length() < EPSILON {
+                    return None;
+                }
 
                 // Continue raycasting from new position
                 self.raycast_recursive(
