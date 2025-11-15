@@ -3,6 +3,7 @@ mod egui_app;
 mod gl_tracer;
 mod gpu_tracer;
 mod renderer;
+mod scenes;
 
 use cpu_tracer::CpuCubeTracer;
 use egui_app::DualRendererApp;
@@ -246,7 +247,7 @@ impl ApplicationHandler for App {
 
 impl Drop for App {
     fn drop(&mut self) {
-        if let (Some(gl), Some(dual_renderer)) = (self.gl.as_ref(), self.dual_renderer.as_ref()) {
+        if let (Some(gl), Some(dual_renderer)) = (self.gl.as_ref(), self.dual_renderer.as_mut()) {
             unsafe {
                 dual_renderer.destroy(gl);
             }

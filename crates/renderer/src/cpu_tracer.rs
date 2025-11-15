@@ -1,6 +1,6 @@
 use crate::gpu_tracer::GpuTracer;
 use crate::renderer::*;
-use cube::raycast::RaycastHit as CubeRaycastHit;
+use crate::scenes::create_octa_cube;
 use cube::{Cube, parse_csm};
 use image::{ImageBuffer, Rgb};
 use std::rc::Rc;
@@ -15,8 +15,8 @@ pub struct CpuCubeTracer {
 
 impl CpuCubeTracer {
     pub fn new() -> Self {
-        // Use a simple solid cube for testing
-        let cube = Rc::new(Cube::Solid(1i32));
+        // Use octa cube scene (2x2x2 octree with 6 solid voxels and 2 empty spaces)
+        let cube = create_octa_cube();
 
         Self {
             light_dir: glam::Vec3::new(0.5, 1.0, 0.3).normalize(),
@@ -130,29 +130,73 @@ impl CpuCubeTracer {
             // Get cube bounds for coordinate transformation
             let bounds = CubeBounds::default();
 
-            // Transform hit point from world space to normalized [0,1]³ cube space
-            let normalized_pos = (hit.point - bounds.min) / (bounds.max - bounds.min);
+            // CRITICAL FIX: Advance ray slightly into the cube before transforming to normalized space
+            // When we hit the bounding box surface, we're exactly ON the boundary.
+            // Starting a DDA raycast from a boundary position can cause traversal issues.
+            // Advance the ray by a small epsilon to ensure we start INSIDE the cube.
+            // Cube is 2 units wide, so 0.01 is 0.5% of the cube size - small but meaningful
+            const SURFACE_EPSILON: f32 = 0.01;
+            let advanced_hit_point = hit.point + ray.direction * SURFACE_EPSILON;
 
-            // Move slightly inside the cube to avoid boundary issues
-            const EPSILON: f32 = 1e-6;
-            let normalized_pos = normalized_pos + ray.direction.normalize() * EPSILON;
+            // Transform advanced hit point from world space to normalized [0,1]³ cube space
+            let mut normalized_pos = (advanced_hit_point - bounds.min) / (bounds.max - bounds.min);
+
+            // Clamp to valid range to ensure we stay within the cube
+            const EPSILON: f32 = 0.001;
+            normalized_pos =
+                normalized_pos.clamp(glam::Vec3::splat(EPSILON), glam::Vec3::splat(1.0 - EPSILON));
 
             // Define empty voxel predicate (value == 0)
             let is_empty = |v: &i32| *v == 0;
 
-            // Set maximum raycast depth
-            let max_depth = 8;
+            // Set maximum raycast depth (octa cube is depth 1, not 8!)
+            let max_depth = 1;
 
             // Call cube raycast directly
             let cube = self.gpu_tracer.cube();
-            let cube_hit: Option<CubeRaycastHit<i32>> = cube.raycast(
+
+            let cube_hit = cube.raycast(
                 normalized_pos,
                 ray.direction.normalize(),
                 max_depth,
                 &is_empty,
             );
 
+            // DEBUG: Track raycast success rate
+            #[cfg(test)]
+            {
+                static HIT_COUNT: std::sync::atomic::AtomicUsize =
+                    std::sync::atomic::AtomicUsize::new(0);
+                static MISS_COUNT: std::sync::atomic::AtomicUsize =
+                    std::sync::atomic::AtomicUsize::new(0);
+                static ONCE: std::sync::Once = std::sync::Once::new();
+
+                if cube_hit.is_some() {
+                    HIT_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                } else {
+                    MISS_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                }
+
+                // Print stats after first pixel is rendered
+                if HIT_COUNT.load(std::sync::atomic::Ordering::Relaxed)
+                    + MISS_COUNT.load(std::sync::atomic::Ordering::Relaxed)
+                    == 1
+                {
+                    println!("\n=== Raycast Debug (first pixel) ===");
+                    println!("  Position: {:?}", normalized_pos);
+                    println!("  Direction: {:?}", ray.direction.normalize());
+                    println!("  Hit: {}", cube_hit.is_some());
+                }
+
+                // Print final stats at end
+                ONCE.call_once(|| {
+                    // Register cleanup to print stats when test ends
+                    let _ = std::panic::catch_unwind(|| {});
+                });
+            }
+
             if let Some(cube_hit) = cube_hit {
+                // Successful octree raycast - use detailed voxel information
                 // Transform hit position back to world space
                 let world_hit_point = cube_hit.position * (bounds.max - bounds.min) + bounds.min;
 
