@@ -246,23 +246,31 @@ crossworld/
 
 ## Documentation Files
 
+### Overview
+- `doc/README.md` - Documentation index and navigation guide
+
 ### Getting Started
-- `doc/QUICKSTART.md` - Voice chat setup guide
-- `packages/app/README.md` - App-specific information
+- `doc/QUICKSTART.md` - Voice chat setup and first-run guide
+- `packages/app/README.md` - App-specific information and setup
 
 ### Architecture
-- `doc/project-structure.md` - Project organization
-- `doc/design-master.md` - Core technical design decisions
-- `doc/CONVENTIONS.md` - Detailed coding conventions (authoritative source)
+- `doc/architecture/overview.md` - High-level system architecture and components
+- `doc/architecture/voxel-system.md` - Voxel octree engine and CSM format
+- `doc/architecture/physics.md` - Physics integration with Rapier3D
+- `doc/architecture/raycast.md` - Ray-octree intersection system
+- `doc/architecture/rendering.md` - Rendering pipeline and Three.js integration
 
 ### Features
-- `doc/vox-avatar-system.md` - Avatar system design
-- `doc/avatar-physics.md` - Avatar physics integration
-- `doc/voice-moq/` - Voice chat documentation
-- `doc/csm-*.md` - Cube Script Model format
-- `doc/physics.md` - Physics system overview
+- `doc/features/avatar-system.md` - Avatar design, physics, and animation
+- `doc/features/voice-chat.md` - MoQ-based spatial voice chat setup and debugging
+- `doc/features/nostr-integration.md` - Nostr identity, discovery, and worldtool CLI
+
+### Reference
+- `doc/reference/project-structure.md` - Repository organization and crate layout
+- `doc/reference/build-system.md` - Build process, justfile commands, and WASM compilation
+- `doc/reference/materials.md` - Material system and shader specifications
 
 ### Development
-- `doc/EDITOR_SETUP.md` - Editor configuration
 - `CLAUDE.md` - OpenSpec instructions for AI assistants
 - `openspec/AGENTS.md` - Detailed OpenSpec workflow
+- `doc/design-master.md` - Historical design decisions
