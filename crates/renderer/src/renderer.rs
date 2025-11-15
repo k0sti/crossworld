@@ -99,11 +99,7 @@ impl CameraConfig {
                     let new_y = distance * clamped_angle.sin();
                     let new_xz = distance * clamped_angle.cos();
                     let xz_ratio = new_xz / xz_length;
-                    offset = glam::Vec3::new(
-                        offset.x * xz_ratio,
-                        new_y,
-                        offset.z * xz_ratio,
-                    );
+                    offset = glam::Vec3::new(offset.x * xz_ratio, new_y, offset.z * xz_ratio);
                 }
             }
         }
