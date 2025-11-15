@@ -3,6 +3,14 @@ name = "renderer"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+name = "renderer"
+path = "src/lib.rs"
+
+[[bin]]
+name = "renderer"
+path = "src/main.rs"
+
 [dependencies]
 glow = "0.14"
 glutin = "0.32"
