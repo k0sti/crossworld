@@ -235,20 +235,15 @@ Defines kinds 30311 (live event) and 1311 (live chat message).
 
 **Format**: Parameterized replaceable (NIP-78)
 
-**d-tag Format**: `[octant]:[macro][:micro]`
-- `octant` - Octant path (optional, e.g., "abc", "efg")
-- `macro` - Macro depth (required, 1-10)
-- `micro` - Micro depth (optional, 0-3, default 0)
+**d-tag Format**: Arbitrary textual model identifier chosen by user
 
-**Examples**: `:3`, `:3:2`, `abc:4`, `abc:4:1`
+**Examples**: `"my-castle"`, `"world-1"`, `"test-terrain"`, `"spawn-area"`
 
 **Tags**:
-- `d` (required) - World identifier (format above)
+- `d` (required) - Model identifier (arbitrary text)
 - `a` - Reference to live event (optional)
-- `title` - World name
+- `title` - Human-readable world name
 - `description` - World description
-- `macro` - Macro depth value (for filtering)
-- `micro` - Micro depth value (for filtering)
 - `thumbnail` - Preview image URL (optional)
 
 **Content**: CSM (Cube Script Model) code
@@ -260,11 +255,10 @@ Defines kinds 30311 (live event) and 1311 (live chat message).
   "pubkey": "def456...",
   "created_at": 1234567894,
   "tags": [
-    ["d", ":3:2"],
+    ["d", "my-castle"],
     ["title", "My Castle"],
     ["description", "Medieval castle with gardens"],
-    ["macro", "3"],
-    ["micro", "2"]
+    ["thumbnail", "https://example.com/castle.png"]
   ],
   "content": ">d [100 100 100 100 100 100 100 100]\n>dd [150 150 150 150 150 150 150 150]\n..."
 }
@@ -277,7 +271,7 @@ Defines kinds 30311 (live event) and 1311 (live chat message).
 
 **Queries** (specific world):
 ```json
-{"kinds": [30078], "authors": ["<user-pubkey>"], "#d": [":3:2"]}
+{"kinds": [30078], "authors": ["<user-pubkey>"], "#d": ["my-castle"]}
 ```
 
 **CSM Format**: See `doc/architecture/voxel-system.md` for complete specification
@@ -375,7 +369,7 @@ Defines kinds 30311 (live event) and 1311 (live chat message).
 ```
 Save:
 1. Generate CSM from voxel data
-2. Build d-tag from current config
+2. Choose model identifier (d-tag)
 3. Publish World Model (30078)
 
 Load:
