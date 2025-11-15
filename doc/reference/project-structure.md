@@ -154,13 +154,6 @@ doc/
     ├── build-system.md      # Justfile commands and WASM builds
     ├── materials.md         # Voxel material definitions
     └── server.md            # Game server design
-│   ├── voice-chat.md        # MoQ voice chat
-│   └── nostr-integration.md # Nostr protocol
-│
-└── reference/               # Technical references
-    ├── project-structure.md # This file
-    ├── build-system.md      # Build process
-    └── materials.md         # Material system
 ```
 
 ## OpenSpec System (openspec/)
