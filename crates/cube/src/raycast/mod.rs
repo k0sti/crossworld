@@ -49,11 +49,12 @@
 //! // Cast ray from bottom going up
 //! let pos = Vec3::new(0.5, 0.5, 0.0);
 //! let dir = Vec3::new(0.0, 0.0, 1.0);
-//! let hit = cube.raycast(pos, dir, 3, &is_empty);
+//! let hit: Option<RaycastHit<i32>> = cube.raycast(pos, dir, 3, &is_empty);
 //!
 //! if let Some(hit) = hit {
 //!     println!("Hit at {:?}", hit.position);
 //!     println!("Normal: {:?}", hit.normal);
+//!     println!("Voxel value: {:?}", hit.value);
 //! }
 //! ```
 //!
@@ -67,14 +68,19 @@ use crate::{Cube, CubeCoord, IVec3Ext};
 use glam::{IVec3, Vec3};
 
 /// Result of a raycast hit
+///
+/// Generic over the voxel type `T`, allowing different voxel data types
+/// (e.g., `i32`, custom materials, colors, etc.)
 #[derive(Debug, Clone)]
-pub struct RaycastHit {
+pub struct RaycastHit<T> {
     /// Coordinate of the hit voxel in octree space
     pub coord: CubeCoord,
     /// Hit position in world space (normalized [0,1] cube space)
     pub position: Vec3,
     /// Surface normal at hit point
     pub normal: Vec3,
+    /// Voxel value at the hit position
+    pub value: T,
 }
 
 impl<T> Cube<T>
@@ -90,14 +96,14 @@ where
     /// * `is_empty` - Function to test if a voxel value is considered empty
     ///
     /// # Returns
-    /// `Some(RaycastHit)` if a non-empty voxel is hit, `None` otherwise
+    /// `Some(RaycastHit<T>)` if a non-empty voxel is hit, `None` otherwise
     pub fn raycast<F>(
         &self,
         pos: Vec3,
         dir: Vec3,
         max_depth: u32,
         is_empty: &F,
-    ) -> Option<RaycastHit>
+    ) -> Option<RaycastHit<T>>
     where
         F: Fn(&T) -> bool,
     {
@@ -113,7 +119,7 @@ where
         octree_pos: IVec3,
         current_depth: u32,
         is_empty: &F,
-    ) -> Option<RaycastHit>
+    ) -> Option<RaycastHit<T>>
     where
         F: Fn(&T) -> bool,
     {
@@ -132,6 +138,7 @@ where
                         coord: CubeCoord::new(octree_pos, current_depth),
                         position: pos,
                         normal,
+                        value: value.clone(),
                     })
                 } else {
                     // Empty voxel

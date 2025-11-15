@@ -291,7 +291,12 @@ impl Renderer for GlCubeTracer {
         // This is here to satisfy the trait, but actual rendering needs GL context
     }
 
-    fn render_with_camera(&mut self, _width: u32, _height: u32, _camera: &crate::renderer::CameraConfig) {
+    fn render_with_camera(
+        &mut self,
+        _width: u32,
+        _height: u32,
+        _camera: &crate::renderer::CameraConfig,
+    ) {
         // Note: GL rendering is handled by render_to_gl_with_camera in the app loop
         // This is here to satisfy the trait, but actual rendering needs GL context
     }
