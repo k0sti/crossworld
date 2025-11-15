@@ -32,6 +32,7 @@ Learn about specific features:
 
 Technical references and specifications:
 
+- **[nostr.md](nostr.md)** - Complete Nostr event specifications (NIP-style)
 - **[project-structure.md](reference/project-structure.md)** - Repository organization and crate layout
 - **[build-system.md](reference/build-system.md)** - Build process, justfile commands, and WASM compilation
 - **[materials.md](reference/materials.md)** - Material system and shader specifications
