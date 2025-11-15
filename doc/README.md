@@ -7,8 +7,8 @@ Welcome to the Crossworld documentation! This guide will help you navigate the p
 New to Crossworld? Start here:
 
 1. **[QUICKSTART.md](QUICKSTART.md)** - Voice chat setup and first-run guide
-2. **[EDITOR_SETUP.md](EDITOR_SETUP.md)** - Configure your development environment
-3. **[CONVENTIONS.md](CONVENTIONS.md)** - Coding standards and project conventions
+2. **[reference/build-system.md](reference/build-system.md)** - Build commands and development workflow
+3. **[CLAUDE.md](../CLAUDE.md)** - Project conventions and AI assistant guidance
 
 ## Architecture
 
@@ -36,6 +36,7 @@ Technical references and specifications:
 - **[project-structure.md](reference/project-structure.md)** - Repository organization and crate layout
 - **[build-system.md](reference/build-system.md)** - Build process, justfile commands, and WASM compilation
 - **[materials.md](reference/materials.md)** - Material system and shader specifications
+- **[server.md](reference/server.md)** - Game server technical design and deployment
 
 ## Change Proposals
 

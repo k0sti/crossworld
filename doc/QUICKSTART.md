@@ -7,7 +7,7 @@ Get voice chat running in 5 minutes!
 - Rust toolchain (for worldtool)
 - Git
 - OpenSSL (usually pre-installed)
-- Node.js/npm (for running the app)
+- Bun (package manager and runtime)
 
 ## Step 1: Initialize MoQ Relay Server
 
@@ -75,10 +75,10 @@ Voice streaming configured:
 cd packages/app
 
 # Install dependencies (first time only)
-npm install
+bun install
 
 # Start the app
-npm run dev
+bun run dev
 ```
 
 Open browser to `http://localhost:5173` (or the URL shown)
@@ -155,8 +155,8 @@ cargo run -- init-live --streaming https://localhost:4443/anon
 ## Production Deployment
 
 For production, see:
-- **Full guide**: `doc/moq-relay-setup.md`
-- **Architecture**: `doc/voicechat.md`
+- **Voice Chat Guide**: [doc/features/voice-chat.md](features/voice-chat.md)
+- **Server Design**: [doc/reference/server.md](reference/server.md)
 
 Quick production checklist:
 - ✅ Get a domain (e.g., moq.yourdomain.com)

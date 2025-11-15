@@ -662,7 +662,7 @@ When developing server features:
 
 ### Future Enhancements
 
-Based on `doc/server.md`, planned features include:
+Based on `doc/reference/server.md`, planned features include:
 
 - **World persistence**: Save/load world state from disk or database
 - **Client authentication**: Verify Nostr signatures on join
