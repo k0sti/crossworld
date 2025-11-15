@@ -1,0 +1,32 @@
+[package]
+name = "crossworld-test-client"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "test-client"
+path = "src/main.rs"
+
+[dependencies]
+# WebTransport client
+wtransport = { version = "0.6", features = ["dangerous-configuration"] }
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Serialization (must match server)
+bincode = "1.3"
+serde = { version = "1.0", features = ["derive"] }
+
+# Math (must match server)
+glam = { version = "0.30", features = ["serde"] }
+
+# Utilities
+anyhow = "1.0"
+clap = { version = "4.0", features = ["derive"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+rand = "0.8"
+
+# Share message types with server
+crossworld-server = { path = "../server" }
