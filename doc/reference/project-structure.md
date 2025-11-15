@@ -6,13 +6,15 @@ This document describes the organization of the Crossworld project repository.
 
 ```
 crossworld/
-├── crates/              # Rust crates (compiled to WASM)
+├── crates/              # Rust crates
 │   ├── world/          # Main world simulation + WASM bindings
-│   ├── cube/           # Voxel octree engine
-│   ├── physics/        # Rapier3D integration
-│   ├── renderer/       # CPU raytracer (experimental)
-│   ├── assets/         # Asset management
-│   └── worldtool/      # CLI tool (not compiled to WASM)
+│   ├── cube/           # Voxel octree engine (WASM)
+│   ├── physics/        # Rapier3D integration (WASM)
+│   ├── renderer/       # CPU raytracer (native, experimental)
+│   ├── server/         # Game server (WebTransport multiplayer)
+│   ├── test-client/    # Server test client
+│   ├── assets/         # Asset management tools
+│   └── worldtool/      # CLI tool (Nostr, MoQ relay)
 ├── packages/
 │   ├── app/            # Main React application
 │   ├── common/         # Shared UI components
@@ -132,19 +134,26 @@ app/
 ```
 doc/
 ├── README.md                # Documentation index
-├── QUICKSTART.md            # Getting started
-├── CONVENTIONS.md           # Coding standards
-├── EDITOR_SETUP.md          # Development environment
+├── QUICKSTART.md            # Voice chat quick start
+├── nostr.md                 # Nostr events specification
 │
 ├── architecture/            # System design
 │   ├── overview.md          # High-level architecture
-│   ├── voxel-system.md      # Voxel engine
-│   ├── physics.md           # Physics integration
-│   ├── raycast.md           # Raycasting system
-│   └── rendering.md         # Rendering pipeline
+│   ├── voxel-system.md      # Voxel octree and CSM format
+│   ├── physics.md           # Physics system (Rapier3D)
+│   ├── raycast.md           # Ray-octree intersection
+│   └── rendering.md         # Three.js rendering pipeline
 │
 ├── features/                # Feature documentation
-│   ├── avatar-system.md     # Avatar implementation
+│   ├── avatar-system.md     # Avatar design and physics
+│   ├── voice-chat.md        # MoQ voice chat (Media over QUIC)
+│   └── nostr-integration.md # Nostr identity and discovery
+│
+└── reference/               # Technical references
+    ├── project-structure.md # Repository organization (this file)
+    ├── build-system.md      # Justfile commands and WASM builds
+    ├── materials.md         # Voxel material definitions
+    └── server.md            # Game server design
 │   ├── voice-chat.md        # MoQ voice chat
 │   └── nostr-integration.md # Nostr protocol
 │

@@ -1,8 +1,8 @@
-# Physics System Design for Crossworld
+# Physics System
 
 ## Overview
 
-This document outlines the design and implementation plan for a physics system for Crossworld, integrating Rapier physics engine with the existing octree-based voxel system.
+This document describes the implemented physics system for Crossworld, which integrates the Rapier physics engine with the octree-based voxel system.
 
 ## Goals
 
@@ -19,14 +19,13 @@ This document outlines the design and implementation plan for a physics system f
 ```
 crates/physics/
 ├── Cargo.toml
-├── src/
-│   ├── lib.rs              # Core physics engine wrapper
-│   ├── collider.rs         # Voxel collision geometry generation
-│   ├── rigid_body.rs       # Rigid body management
-│   ├── world.rs            # Physics world state
-│   └── wasm.rs             # WASM bindings (feature-gated)
-└── examples/
-    └── basic_simulation.rs
+└── src/
+    ├── lib.rs                    # Module exports
+    ├── character_controller.rs   # Character physics and movement
+    ├── collider.rs               # Voxel collision geometry generation
+    ├── cube_object.rs            # Cube rigid body wrapper
+    ├── world.rs                  # Physics world state
+    └── wasm.rs                   # WASM bindings for web
 ```
 
 ### Dependencies
@@ -621,6 +620,6 @@ cargo run --example basic_simulation
 
 ---
 
-**Document Status**: Initial draft - Ready for review and implementation
-**Last Updated**: 2025-11-07
-**Author**: Physics System Team
+**Implementation Status**: Complete and integrated
+**Location**: `crates/physics/`
+**WASM Package**: `packages/wasm-physics/` (generated)
