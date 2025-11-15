@@ -1010,6 +1010,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "crossworld-test-client"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bincode",
+ "clap",
+ "crossworld-server",
+ "glam 0.30.9",
+ "rand 0.8.5",
+ "serde",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "wtransport",
+]
+
+[[package]]
 name = "crossworld-world"
 version = "0.0.1"
 dependencies = [

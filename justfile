@@ -16,6 +16,7 @@ default:
     @echo "  just server           - Run game server (development mode)"
     @echo "  just server-prod      - Run game server (production mode)"
     @echo "  just gen-cert         - Generate self-signed certificate for development"
+    @echo "  just test-client      - Run test client to connect to server"
     @echo ""
 
 # Build WASM module in development mode
@@ -113,3 +114,7 @@ server-prod:
         --max-move-speed 20.0 \
         --enable-discovery \
         --relays wss://relay.damus.io,wss://nos.lol
+
+# Run test client
+test-client:
+    cargo run --bin test-client
