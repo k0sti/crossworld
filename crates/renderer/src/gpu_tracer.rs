@@ -12,6 +12,7 @@ pub struct GpuTracer {
 
 /// Raycast hit result for cube intersection
 #[derive(Debug, Clone, Copy)]
+#[allow(dead_code)]
 pub struct RaycastHit {
     pub hit: bool,
     pub t: f32,
@@ -56,8 +57,9 @@ impl RaycastHit {
     }
 }
 
-/// Raycast function with correct signature
+/// Raycast function stub - left for future GPU implementation
 /// Returns RaycastHit with voxel intersection information
+#[allow(dead_code)]
 pub fn raycast(cube: &Cube<i32>, pos: glam::Vec3, _dir: glam::Vec3) -> RaycastHit {
     // Stub implementation - traverse the octree to find voxel intersection
     // For now, return a miss

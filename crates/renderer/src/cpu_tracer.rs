@@ -1,6 +1,7 @@
-use crate::gpu_tracer::{raycast, GpuTracer};
+use crate::gpu_tracer::GpuTracer;
 use crate::renderer::*;
-use cube::{parse_csm, Cube};
+use cube::raycast::RaycastHit as CubeRaycastHit;
+use cube::{Cube, parse_csm};
 use image::{ImageBuffer, Rgb};
 use std::rc::Rc;
 
@@ -14,9 +15,8 @@ pub struct CpuCubeTracer {
 
 impl CpuCubeTracer {
     pub fn new() -> Self {
-        // Generate a simple cube using cubscript
-        let cubscript = ">a [1 2 3 4 5 6 7 8]";
-        let cube = Self::parse_cube(cubscript);
+        // Use a simple solid cube for testing
+        let cube = Rc::new(Cube::Solid(1i32));
 
         Self {
             light_dir: glam::Vec3::new(0.5, 1.0, 0.3).normalize(),
@@ -120,36 +120,57 @@ impl CpuCubeTracer {
 
     /// Render a ray and return the color
     fn render_ray(&self, ray: Ray) -> glam::Vec3 {
-        // Use GPU tracer's raycast function for initial bounding box hit
+        // Use GPU tracer's bounding box intersection
         let hit = self.gpu_tracer.raycast(ray.origin, ray.direction);
 
         // Background color
         let mut color = self.background_color;
 
         if hit.hit {
-            // Recursive raycast into the cube octree structure
-            let cube = self.gpu_tracer.cube();
-            let result = raycast(cube, hit.point, ray.direction);
+            // Get cube bounds for coordinate transformation
+            let bounds = CubeBounds::default();
 
-            if result.hit {
-                // Convert RaycastHit to HitInfo for lighting calculation
+            // Transform hit point from world space to normalized [0,1]³ cube space
+            let normalized_pos = (hit.point - bounds.min) / (bounds.max - bounds.min);
+
+            // Move slightly inside the cube to avoid boundary issues
+            const EPSILON: f32 = 1e-6;
+            let normalized_pos = normalized_pos + ray.direction.normalize() * EPSILON;
+
+            // Define empty voxel predicate (value == 0)
+            let is_empty = |v: &i32| *v == 0;
+
+            // Set maximum raycast depth
+            let max_depth = 8;
+
+            // Call cube raycast directly
+            let cube = self.gpu_tracer.cube();
+            let cube_hit: Option<CubeRaycastHit<i32>> = cube.raycast(
+                normalized_pos,
+                ray.direction.normalize(),
+                max_depth,
+                &is_empty,
+            );
+
+            if let Some(cube_hit) = cube_hit {
+                // Transform hit position back to world space
+                let world_hit_point = cube_hit.position * (bounds.max - bounds.min) + bounds.min;
+
+                // Calculate distance from ray origin
+                let t = (world_hit_point - ray.origin).length();
+
+                // Create HitInfo for lighting calculation
                 let hit_info = HitInfo {
-                    hit: result.hit,
-                    t: result.t,
-                    point: result.point,
-                    normal: result.normal,
+                    hit: true,
+                    t,
+                    point: world_hit_point,
+                    normal: cube_hit.normal,
                 };
-                color = calculate_lighting(&hit_info, ray.direction, self.light_dir);
-            } else {
-                // Use initial hit for lighting if recursive raycast missed
-                let hit_info = HitInfo {
-                    hit: hit.hit,
-                    t: hit.t,
-                    point: hit.point,
-                    normal: hit.normal,
-                };
+
+                // Note: cube_hit.value contains voxel data for future material systems
                 color = calculate_lighting(&hit_info, ray.direction, self.light_dir);
             }
+            // If cube raycast misses, use background color (no fallback to bounding box)
         }
 
         // Gamma correction
