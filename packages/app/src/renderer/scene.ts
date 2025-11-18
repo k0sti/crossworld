@@ -95,10 +95,9 @@ export class SceneManager {
   private isRightMousePressed: boolean = false;
   private lastPaintedVoxel: { x: number; y: number; z: number } | null = null;
 
-  // Mouse mode: 1 = free pointer (paint/erase), 2 = grabbed pointer (camera rotation)
+  // Mouse mode: 1 = free pointer (paint), 2 = grabbed pointer (camera rotation)
   private mouseMode: 1 | 2 = 1;
   private crosshair: HTMLElement | null = null;
-  private shiftKeyPressed: boolean = false;
 
   // Wireframe mode
   private wireframeMode: boolean = getWorldPanelSetting('wireframeEnabled');
@@ -417,22 +416,27 @@ export class SceneManager {
 
     // Mouse down handler - track continuous paint and set edit plane
     canvas.addEventListener('mousedown', (event) => {
-      if (this.isEditMode) {
-        if (event.button === 0) {
-          // Left mouse button - detect plane and paint
-          this.isLeftMousePressed = true;
-          this.lastPaintedVoxel = null;
-          this.detectAndSetEditPlane(event, canvas);
-          // Also trigger initial paint
-          this.handleEditModeClick(event, canvas, true);
-        } else if (event.button === 2) {
-          // Right mouse button - detect plane and erase
-          this.isRightMousePressed = true;
-          this.lastPaintedVoxel = null;
-          this.detectAndSetEditPlane(event, canvas);
-          // Also trigger initial erase
-          this.handleEditModeClick(event, canvas, false);
+      // Right-click enables mouse look in both walk and edit modes
+      if (event.button === 2) {
+        this.isRightMousePressed = true;
+        this.mouseMode = 2;
+        canvas.requestPointerLock();
+        if (this.crosshair) {
+          this.crosshair.style.display = 'block';
         }
+        // Reset avatar movement state when entering camera mode
+        this.resetAvatarMovementState();
+        logger.log('renderer', '[Mouse Mode] Right-click: Switched to mode 2 (first-person camera rotation)');
+        return;
+      }
+
+      // Left mouse button in edit mode - detect plane and paint
+      if (this.isEditMode && event.button === 0) {
+        this.isLeftMousePressed = true;
+        this.lastPaintedVoxel = null;
+        this.detectAndSetEditPlane(event, canvas);
+        // Also trigger initial paint
+        this.handleEditModeClick(event, canvas, true);
       }
     });
 
@@ -446,6 +450,12 @@ export class SceneManager {
         this.isRightMousePressed = false;
         this.lastPaintedVoxel = null;
         this.clearActiveEditPlane();
+
+        // Release right-click exits mouse look
+        if (this.mouseMode === 2) {
+          this.resetMouseMode();
+          logger.log('renderer', '[Mouse Mode] Right-click released: Switched to mode 1 (free pointer)');
+        }
       }
     });
 
@@ -455,13 +465,17 @@ export class SceneManager {
       this.isRightMousePressed = false;
       this.lastPaintedVoxel = null;
       this.clearActiveEditPlane();
+
+      // If mouse leaves while in mouse look mode, exit
+      if (this.mouseMode === 2) {
+        this.resetMouseMode();
+        logger.log('renderer', '[Mouse Mode] Mouse left canvas: Switched to mode 1 (free pointer)');
+      }
     });
 
-    // Right click handler - prevent context menu in edit and placement modes
+    // Right click handler - prevent context menu (used for mouse look and editing)
     canvas.addEventListener('contextmenu', (event) => {
-      if (this.isEditMode || this.currentMode === 'placement') {
-        event.preventDefault();
-      }
+      event.preventDefault();
     });
   }
 
@@ -953,36 +967,9 @@ export class SceneManager {
     this.onVoxelEdit?.(coord, 0);
   }
 
-  private setupKeyboardListener(canvas: HTMLCanvasElement): void {
+  private setupKeyboardListener(_canvas: HTMLCanvasElement): void {
     this.boundKeyDown = (event: KeyboardEvent) => {
       // WASD movement removed - use gamepad left stick instead
-
-      // Toggle mouse mode with Shift key (works in both walk and edit modes)
-      // Only toggle once per key press, not on repeated keydown events
-      if (event.key === 'Shift') {
-        if (this.shiftKeyPressed) {
-          // Already handled this key press, ignore repeated keydown events
-          return;
-        }
-        this.shiftKeyPressed = true;
-
-        if (this.mouseMode === 1) {
-          // Enter camera rotation mode
-          this.mouseMode = 2;
-          canvas.requestPointerLock();
-          if (this.crosshair) {
-            this.crosshair.style.display = 'block';
-          }
-          // Reset avatar movement state when entering camera mode
-          this.resetAvatarMovementState();
-          logger.log('renderer', '[Mouse Mode] Switched to mode 2 (first-person camera rotation)');
-        } else if (this.mouseMode === 2) {
-          // Exit camera rotation mode
-          this.resetMouseMode();
-          logger.log('renderer', '[Mouse Mode] Switched to mode 1 (paint/erase)');
-        }
-        return;
-      }
 
       // Toggle edit mode with 'e' key (works in both walk and edit modes)
       if (event.key === 'e' || event.key === 'E') {
@@ -1030,12 +1017,7 @@ export class SceneManager {
       }
     };
 
-    this.boundKeyUp = (event: KeyboardEvent) => {
-      // Reset shift key flag when released
-      if (event.key === 'Shift') {
-        this.shiftKeyPressed = false;
-      }
-
+    this.boundKeyUp = (_event: KeyboardEvent) => {
       // WASD movement removed - use gamepad left stick instead
     };
 
@@ -2602,11 +2584,11 @@ export class SceneManager {
   }
 
   /**
-   * Handle continuous paint/erase at cursor position
-   * Only paints/erases if the position has changed since last operation
+   * Handle continuous paint at cursor position
+   * Only paints if the position has changed since last operation
    */
   private handleContinuousPaint(voxelCorner: THREE.Vector3, size: number): void {
-    if (!this.isLeftMousePressed && !this.isRightMousePressed) return;
+    if (!this.isLeftMousePressed) return;
 
     const isNewPosition = !this.lastPaintedVoxel ||
       this.lastPaintedVoxel.x !== voxelCorner.x ||
@@ -2614,11 +2596,7 @@ export class SceneManager {
       this.lastPaintedVoxel.z !== voxelCorner.z;
 
     if (isNewPosition) {
-      if (this.isLeftMousePressed) {
-        this.paintVoxelWithSize(voxelCorner.x, voxelCorner.y, voxelCorner.z, size);
-      } else if (this.isRightMousePressed) {
-        this.eraseVoxelWithSize(voxelCorner.x, voxelCorner.y, voxelCorner.z, size);
-      }
+      this.paintVoxelWithSize(voxelCorner.x, voxelCorner.y, voxelCorner.z, size);
       this.lastPaintedVoxel = { x: voxelCorner.x, y: voxelCorner.y, z: voxelCorner.z };
     }
   }

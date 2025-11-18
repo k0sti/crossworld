@@ -56,6 +56,7 @@ export function WorldCanvas({
   const [debugInfo, setDebugInfo] = useState<DebugInfo>({});
   const [initState, setInitState] = useState<InitializationState | null>(null);
   const [showInitOverlay, setShowInitOverlay] = useState(true);
+  const [isInitialized, setIsInitialized] = useState(false);
 
   // Scene configuration state with centralized settings management
   const [worldGridVisible, setWorldGridVisible] = useState(() => getWorldPanelSetting('worldGridVisible'));
@@ -148,6 +149,9 @@ export function WorldCanvas({
         // Get initialized subsystems
         const sceneManager = initializer.getSceneManager();
         localSceneManagerRef.current = sceneManager;
+
+        // Mark initialization as complete (enables config subscriptions)
+        setIsInitialized(true);
 
         // Expose refs to parent if provided
         if (geometryControllerRef) {
@@ -250,10 +254,14 @@ export function WorldCanvas({
 
   // Subscribe to depth config changes and reinitialize when macro or border depth changes
   useEffect(() => {
+    if (!isInitialized) return;
+
     const geometryController = localGeometryControllerRef.current;
     const sceneManager = localSceneManagerRef.current;
 
     if (!geometryController || !sceneManager) return;
+
+    logger.log('renderer', '[WorldCanvas] Setting up depth change subscription');
 
     const unsubscribe = onDepthChange((macroDepth, microDepth, borderDepth) => {
       const currentMacro = geometryController.getMacroDepth();
@@ -278,14 +286,18 @@ export function WorldCanvas({
     });
 
     return unsubscribe;
-  }, []);
+  }, [isInitialized]);
 
   // Subscribe to seed changes and reinitialize when seed changes
   useEffect(() => {
+    if (!isInitialized) return;
+
     const geometryController = localGeometryControllerRef.current;
     const sceneManager = localSceneManagerRef.current;
 
     if (!geometryController || !sceneManager) return;
+
+    logger.log('renderer', '[WorldCanvas] Setting up seed change subscription');
 
     const unsubscribe = onSeedChange((seed) => {
       logger.log('renderer', `[WorldCanvas] Seed changed to ${seed}, reinitializing world...`);
@@ -310,7 +322,7 @@ export function WorldCanvas({
     });
 
     return unsubscribe;
-  }, []);
+  }, [isInitialized]);
 
   // Handle current user pubkey changes
   useEffect(() => {
