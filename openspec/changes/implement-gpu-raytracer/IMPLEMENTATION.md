@@ -108,18 +108,77 @@ crates/renderer/src/shaders/README.md      - Shader documentation
 openspec/changes/implement-gpu-raytracer/tasks.md - Updated task list
 ```
 
-## Next Steps
+## Architecture Refactoring (2025-11-18)
 
-1. Integrate GPU tracer into application render loop
-2. Add renderer selection UI (CPU vs GPU)
-3. Create test scenes for validation
-4. Implement pixel diff comparison
-5. Run performance benchmarks
-6. Verify identical output to CPU tracer
+The original implementation has been refactored into a cleaner 3-tracer architecture:
+
+### Changes Made
+
+**1. Code Organization**
+- Created `shader_utils.rs` - Shared shader compilation utilities
+  - `compile_shader()` - Compile individual shaders
+  - `create_program()` - Link vertex + fragment shaders
+  - `create_compute_program()` - Link compute shaders (future)
+
+**2. Tracer Responsibilities**
+- `cpu_tracer.rs` - Pure Rust software raytracer (unchanged functionality)
+- `gl_tracer.rs` - **NEW ROLE**: WebGL 2.0 fragment shader raytracer
+  - Moved from original `gpu_tracer.rs` implementation
+  - Fragment shader octree traversal (OpenGL ES 3.0+)
+  - 3D texture-based octree encoding
+- `gpu_tracer.rs` - **NEW ROLE**: Compute shader stub
+  - Placeholder for future OpenGL 4.3+ compute shader implementation
+  - Returns "Not Available" error until implemented
+
+**3. UI Integration (`egui_app.rs`)**
+- 2x2 grid layout showing all tracers simultaneously:
+  ```
+  ┌─────────────┬─────────────┐
+  │ CPU         │ GL          │
+  │ Pure Rust   │ WebGL 2.0   │
+  ├─────────────┼─────────────┤
+  │ GPU         │ Difference  │
+  │ Compute     │ [L] vs [R]  │
+  └─────────────┴─────────────┘
+  ```
+- Dropdown ComboBoxes for selecting diff comparison sources
+- Unified camera controls (drag to orbit, scroll to zoom)
+- Performance metrics displayed for each renderer
+
+### Files Changed (Refactoring)
+
+```
+crates/renderer/src/shader_utils.rs     - NEW: Shared shader utilities
+crates/renderer/src/gl_tracer.rs        - REFACTORED: Now WebGL 2.0 fragment shader
+crates/renderer/src/gpu_tracer.rs       - REFACTORED: Now compute shader stub
+crates/renderer/src/cpu_tracer.rs       - Updated to use cube.raycast() directly
+crates/renderer/src/egui_app.rs         - Complete rewrite for 3-tracer UI
+crates/renderer/src/lib.rs              - Export shader_utils module
+crates/renderer/src/main.rs             - Include shader_utils module
+```
+
+### Commit
+
+**`6c2f590`** - Refactor renderer into 3-tracer architecture with 2x2 grid UI
+
+### Status
+
+**✅ Completed:**
+- WebGL 2.0 fragment shader raytracer (in `gl_tracer.rs`)
+- 2x2 grid UI with simultaneous rendering
+- Pixel diff comparison with dropdown selection
+- Camera controls and performance metrics
+- Single-frame test mode verified working
+
+**⏳ Deferred:**
+- Compute shader implementation (requires OpenGL 4.3+/WebGPU)
+- Comprehensive octree depth testing
+- Performance benchmarks beyond basic timing
 
 ## Notes
 
-- The implementation is complete and ready for integration
-- Testing phase requires actual rendering in the application
-- Performance gains expected to be 10x+ for typical scenes
-- The shader code is portable to WebGL/WebGPU with minimal changes
+- WebGL 2.0 fragment shader implementation is complete and tested
+- Compute shader stub is ready for future implementation
+- The 3-tracer architecture provides clean separation of concerns
+- UI allows easy visual comparison between rendering approaches
+- Shader code is portable to WebGPU with minimal changes
