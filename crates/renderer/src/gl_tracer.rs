@@ -1,185 +1,166 @@
-use crate::renderer::Renderer;
+//! WebGL 2.0 octree raytracer using fragment shaders
+//!
+//! This tracer uses OpenGL ES 3.0 (WebGL 2.0) fragment shaders to render octree voxel data.
+//! The octree is serialized to a 3D texture and traversed on the GPU for real-time rendering.
+
+use crate::renderer::*;
+use crate::shader_utils;
+use cube::Cube;
+use glam::IVec3;
 use glow::*;
+use std::rc::Rc;
 
-// Vertex shader - simple fullscreen quad
-const VERTEX_SHADER_SOURCE: &str = r#"#version 300 es
-precision highp float;
+// Shader sources - include from files at compile time
+const VERTEX_SHADER_SOURCE: &str = include_str!("shaders/octree_raycast.vert");
+const FRAGMENT_SHADER_SOURCE: &str = include_str!("shaders/octree_raycast.frag");
 
-const vec2 positions[3] = vec2[3](
-    vec2(-1.0, -1.0),
-    vec2(3.0, -1.0),
-    vec2(-1.0, 3.0)
-);
-
-void main() {
-    gl_Position = vec4(positions[gl_VertexID], 0.0, 1.0);
-}
-"#;
-
-// Fragment shader - raytracing a cube with directional lighting
-const FRAGMENT_SHADER_SOURCE: &str = r#"#version 300 es
-precision highp float;
-
-out vec4 FragColor;
-
-uniform vec2 u_resolution;
-uniform float u_time;
-uniform vec3 u_camera_pos;
-uniform vec4 u_camera_rot;  // quaternion (x, y, z, w)
-uniform bool u_use_camera;
-
-// Ray structure
-struct Ray {
-    vec3 origin;
-    vec3 direction;
-};
-
-// Hit information
-struct HitInfo {
-    bool hit;
-    float t;
-    vec3 point;
-    vec3 normal;
-};
-
-// Rotate vector by quaternion
-vec3 quat_rotate(vec4 q, vec3 v) {
-    vec3 qv = q.xyz;
-    vec3 uv = cross(qv, v);
-    vec3 uuv = cross(qv, uv);
-    return v + 2.0 * (uv * q.w + uuv);
-}
-
-// Ray-box intersection
-HitInfo intersectBox(Ray ray, vec3 boxMin, vec3 boxMax) {
-    HitInfo hitInfo;
-    hitInfo.hit = false;
-    hitInfo.t = 1e10;
-
-    vec3 invDir = 1.0 / ray.direction;
-    vec3 tMin = (boxMin - ray.origin) * invDir;
-    vec3 tMax = (boxMax - ray.origin) * invDir;
-
-    vec3 t1 = min(tMin, tMax);
-    vec3 t2 = max(tMin, tMax);
-
-    float tNear = max(max(t1.x, t1.y), t1.z);
-    float tFar = min(min(t2.x, t2.y), t2.z);
-
-    if (tNear > tFar || tFar < 0.0) {
-        return hitInfo;
-    }
-
-    hitInfo.hit = true;
-    hitInfo.t = tNear > 0.0 ? tNear : tFar;
-    hitInfo.point = ray.origin + ray.direction * hitInfo.t;
-
-    // Calculate normal
-    vec3 center = (boxMin + boxMax) * 0.5;
-    vec3 localPoint = hitInfo.point - center;
-    vec3 size = (boxMax - boxMin) * 0.5;
-    vec3 d = abs(localPoint / size);
-
-    float maxComponent = max(max(d.x, d.y), d.z);
-    if (abs(maxComponent - d.x) < 0.0001) {
-        hitInfo.normal = vec3(sign(localPoint.x), 0.0, 0.0);
-    } else if (abs(maxComponent - d.y) < 0.0001) {
-        hitInfo.normal = vec3(0.0, sign(localPoint.y), 0.0);
-    } else {
-        hitInfo.normal = vec3(0.0, 0.0, sign(localPoint.z));
-    }
-
-    return hitInfo;
-}
-
-void main() {
-    // Normalized pixel coordinates
-    vec2 uv = (gl_FragCoord.xy - 0.5 * u_resolution) / u_resolution.y;
-
-    // Camera setup
-    vec3 cameraPos;
-    vec3 forward, right, camUp;
-
-    if (u_use_camera) {
-        // Use explicit camera configuration
-        cameraPos = u_camera_pos;
-
-        // Get camera basis vectors from quaternion
-        forward = quat_rotate(u_camera_rot, vec3(0.0, 0.0, -1.0));
-        right = quat_rotate(u_camera_rot, vec3(1.0, 0.0, 0.0));
-        camUp = quat_rotate(u_camera_rot, vec3(0.0, 1.0, 0.0));
-    } else {
-        // Use time-based orbiting camera
-        cameraPos = vec3(3.0 * cos(u_time * 0.3), 2.0, 3.0 * sin(u_time * 0.3));
-        vec3 target = vec3(0.0, 0.0, 0.0);
-        vec3 up = vec3(0.0, 1.0, 0.0);
-
-        forward = normalize(target - cameraPos);
-        right = normalize(cross(forward, up));
-        camUp = cross(right, forward);
-    }
-
-    // Create ray
-    Ray ray;
-    ray.origin = cameraPos;
-    ray.direction = normalize(forward + uv.x * right + uv.y * camUp);
-
-    // Cube bounds
-    vec3 boxMin = vec3(-1.0, -1.0, -1.0);
-    vec3 boxMax = vec3(1.0, 1.0, 1.0);
-
-    // Intersect with cube
-    HitInfo hit = intersectBox(ray, boxMin, boxMax);
-
-    // Background color
-    vec3 color = vec3(0.2, 0.3, 0.4);
-
-    if (hit.hit) {
-        // Directional light
-        vec3 lightDir = normalize(vec3(0.5, 1.0, 0.3));
-
-        // Diffuse lighting
-        float diffuse = max(dot(hit.normal, lightDir), 0.0);
-
-        // Ambient - increased for brighter appearance
-        float ambient = 0.5;
-
-        // Base cube color with some variation based on normal
-        vec3 baseColor = vec3(0.8, 0.4, 0.2);
-        baseColor = mix(baseColor, vec3(1.0, 0.6, 0.3), abs(hit.normal.x));
-        baseColor = mix(baseColor, vec3(0.6, 0.8, 0.4), abs(hit.normal.y));
-        baseColor = mix(baseColor, vec3(0.4, 0.5, 0.9), abs(hit.normal.z));
-
-        // Combine lighting - increased diffuse contribution
-        color = baseColor * (ambient + diffuse * 1.2);
-
-        // Add some edge highlighting
-        float fresnel = pow(1.0 - abs(dot(-ray.direction, hit.normal)), 3.0);
-        color += vec3(0.1) * fresnel;
-    }
-
-    // Gamma correction
-    color = pow(color, vec3(1.0 / 2.2));
-
-    FragColor = vec4(color, 1.0);
-}
-"#;
-
+/// WebGL 2.0 fragment shader raytracer with octree support
 pub struct GlCubeTracer {
+    cube: Rc<Cube<i32>>,
+    bounds: CubeBounds,
+    // GL resources (Option for cases where GL context isn't available)
+    gl_program: Option<GlTracerGl>,
+}
+
+/// GPU-specific OpenGL resources
+pub struct GlTracerGl {
     program: Program,
     vao: VertexArray,
+    octree_texture: Option<Texture>,
+    // Uniform locations
     resolution_location: Option<UniformLocation>,
     time_location: Option<UniformLocation>,
     camera_pos_location: Option<UniformLocation>,
     camera_rot_location: Option<UniformLocation>,
     use_camera_location: Option<UniformLocation>,
+    max_depth_location: Option<UniformLocation>,
+    octree_texture_location: Option<UniformLocation>,
+    octree_size_location: Option<UniformLocation>,
+}
+
+/// Raycast hit result for cube intersection
+#[derive(Debug, Clone, Copy)]
+#[allow(dead_code)]
+pub struct RaycastHit {
+    pub hit: bool,
+    pub t: f32,
+    pub point: glam::Vec3,
+    pub normal: glam::Vec3,
+    pub voxel_pos: IVec3,
+    pub voxel_value: i32,
+}
+
+impl Default for RaycastHit {
+    fn default() -> Self {
+        Self {
+            hit: false,
+            t: f32::MAX,
+            point: glam::Vec3::ZERO,
+            normal: glam::Vec3::ZERO,
+            voxel_pos: IVec3::ZERO,
+            voxel_value: 0,
+        }
+    }
+}
+
+impl From<HitInfo> for RaycastHit {
+    fn from(hit_info: HitInfo) -> Self {
+        Self {
+            hit: hit_info.hit,
+            t: hit_info.t,
+            point: hit_info.point,
+            normal: hit_info.normal,
+            voxel_pos: IVec3::ZERO,
+            voxel_value: 0,
+        }
+    }
+}
+
+impl RaycastHit {
+    #[allow(dead_code)]
+    pub fn with_voxel(mut self, pos: IVec3, value: i32) -> Self {
+        self.voxel_pos = pos;
+        self.voxel_value = value;
+        self
+    }
 }
 
 impl GlCubeTracer {
-    pub unsafe fn new(gl: &Context) -> Result<Self, String> {
+    pub fn new(cube: Rc<Cube<i32>>) -> Self {
+        Self {
+            cube,
+            bounds: CubeBounds::default(),
+            gl_program: None,
+        }
+    }
+
+    /// Initialize OpenGL resources for GPU raytracing
+    /// Must be called with an active GL context
+    pub unsafe fn init_gl(&mut self, gl: &Context) -> Result<(), String> {
         unsafe {
-            // Create shader program
-            let program = create_program(gl, VERTEX_SHADER_SOURCE, FRAGMENT_SHADER_SOURCE)?;
+            let gl_program = GlTracerGl::new(gl, &self.cube)?;
+            self.gl_program = Some(gl_program);
+            Ok(())
+        }
+    }
+
+    /// Get reference to the cube
+    pub fn cube(&self) -> &Rc<Cube<i32>> {
+        &self.cube
+    }
+
+    /// Raycast against the cube (CPU fallback for when GL not available)
+    /// Returns RaycastHit with intersection information
+    pub fn raycast(&self, pos: glam::Vec3, dir: glam::Vec3) -> RaycastHit {
+        let ray = Ray {
+            origin: pos,
+            direction: dir.normalize(),
+        };
+
+        let hit_info = intersect_box(ray, self.bounds.min, self.bounds.max);
+
+        RaycastHit::from(hit_info)
+    }
+
+    /// Render to OpenGL context
+    pub unsafe fn render_to_gl(&self, gl: &Context, width: i32, height: i32, time: f32) {
+        unsafe {
+            if let Some(gl_program) = &self.gl_program {
+                gl_program.render_to_gl(gl, width, height, time);
+            }
+        }
+    }
+
+    /// Render to OpenGL context with explicit camera
+    pub unsafe fn render_to_gl_with_camera(
+        &self,
+        gl: &Context,
+        width: i32,
+        height: i32,
+        camera: &CameraConfig,
+    ) {
+        unsafe {
+            if let Some(gl_program) = &self.gl_program {
+                gl_program.render_to_gl_with_camera(gl, width, height, camera);
+            }
+        }
+    }
+
+    /// Clean up GL resources
+    pub unsafe fn destroy_gl(&mut self, gl: &Context) {
+        unsafe {
+            if let Some(gl_program) = self.gl_program.take() {
+                gl_program.destroy(gl);
+            }
+        }
+    }
+}
+
+impl GlTracerGl {
+    pub unsafe fn new(gl: &Context, cube: &Cube<i32>) -> Result<Self, String> {
+        unsafe {
+            // Create shader program using shared utilities
+            let program = shader_utils::create_program(gl, VERTEX_SHADER_SOURCE, FRAGMENT_SHADER_SOURCE)?;
 
             // Create VAO (required for OpenGL core profile)
             let vao = gl
@@ -192,27 +173,106 @@ impl GlCubeTracer {
             let camera_pos_location = gl.get_uniform_location(program, "u_camera_pos");
             let camera_rot_location = gl.get_uniform_location(program, "u_camera_rot");
             let use_camera_location = gl.get_uniform_location(program, "u_use_camera");
+            let max_depth_location = gl.get_uniform_location(program, "u_max_depth");
+            let octree_texture_location = gl.get_uniform_location(program, "u_octree_texture");
+            let octree_size_location = gl.get_uniform_location(program, "u_octree_size");
+
+            // Create and upload octree texture
+            let octree_texture = Some(Self::create_octree_texture(gl, cube)?);
 
             Ok(Self {
                 program,
                 vao,
+                octree_texture,
                 resolution_location,
                 time_location,
                 camera_pos_location,
                 camera_rot_location,
                 use_camera_location,
+                max_depth_location,
+                octree_texture_location,
+                octree_size_location,
             })
+        }
+    }
+
+    /// Create a 3D texture from the octree data
+    /// For simplicity, we'll serialize the octree to a 3D grid
+    unsafe fn create_octree_texture(gl: &Context, cube: &Cube<i32>) -> Result<Texture, String> {
+        unsafe {
+            // For now, create a simple 8x8x8 voxel grid (depth 3)
+            // This will be expanded to support arbitrary octree depths
+            const SIZE: usize = 8;
+            let mut voxel_data = vec![0u8; SIZE * SIZE * SIZE];
+
+            // Serialize octree to voxel grid
+            // Sample each voxel position
+            for z in 0..SIZE {
+                for y in 0..SIZE {
+                    for x in 0..SIZE {
+                        // Convert to normalized [0,1] coordinates
+                        let pos = glam::Vec3::new(
+                            (x as f32 + 0.5) / SIZE as f32,
+                            (y as f32 + 0.5) / SIZE as f32,
+                            (z as f32 + 0.5) / SIZE as f32,
+                        );
+
+                        // Sample cube at this position
+                        let value = sample_cube_at_position(cube, pos, 3);
+                        let idx = x + y * SIZE + z * SIZE * SIZE;
+                        voxel_data[idx] = if value != 0 { 255 } else { 0 };
+                    }
+                }
+            }
+
+            // Create 3D texture
+            let texture = gl
+                .create_texture()
+                .map_err(|e| format!("Failed to create texture: {}", e))?;
+
+            gl.bind_texture(TEXTURE_3D, Some(texture));
+
+            // Upload texture data
+            gl.tex_image_3d(
+                TEXTURE_3D,
+                0,                 // mip level
+                RED as i32,        // internal format
+                SIZE as i32,       // width
+                SIZE as i32,       // height
+                SIZE as i32,       // depth
+                0,                 // border
+                RED,               // format
+                UNSIGNED_BYTE,     // type
+                Some(&voxel_data), // data
+            );
+
+            // Set texture parameters
+            gl.tex_parameter_i32(TEXTURE_3D, TEXTURE_MIN_FILTER, NEAREST as i32);
+            gl.tex_parameter_i32(TEXTURE_3D, TEXTURE_MAG_FILTER, NEAREST as i32);
+            gl.tex_parameter_i32(TEXTURE_3D, TEXTURE_WRAP_S, CLAMP_TO_EDGE as i32);
+            gl.tex_parameter_i32(TEXTURE_3D, TEXTURE_WRAP_T, CLAMP_TO_EDGE as i32);
+            gl.tex_parameter_i32(TEXTURE_3D, TEXTURE_WRAP_R, CLAMP_TO_EDGE as i32);
+
+            gl.bind_texture(TEXTURE_3D, None);
+
+            Ok(texture)
         }
     }
 
     pub unsafe fn render_to_gl(&self, gl: &Context, width: i32, height: i32, time: f32) {
         unsafe {
-            // Clear to black (background for raytraced scene)
-            gl.clear_color(0.1, 0.1, 0.1, 1.0);
+            // Clear to background color
+            gl.clear_color(0.2, 0.3, 0.4, 1.0);
             gl.clear(COLOR_BUFFER_BIT);
 
             gl.use_program(Some(self.program));
             gl.bind_vertex_array(Some(self.vao));
+
+            // Bind octree texture
+            if let Some(texture) = self.octree_texture {
+                gl.active_texture(TEXTURE0);
+                gl.bind_texture(TEXTURE_3D, Some(texture));
+            }
 
             // Set uniforms
             if let Some(loc) = &self.resolution_location {
@@ -221,13 +281,24 @@ impl GlCubeTracer {
             if let Some(loc) = &self.time_location {
                 gl.uniform_1_f32(Some(loc), time);
             }
-            // Disable camera mode (use time-based animation)
             if let Some(loc) = &self.use_camera_location {
                 gl.uniform_1_i32(Some(loc), 0);
+            }
+            if let Some(loc) = &self.max_depth_location {
+                gl.uniform_1_i32(Some(loc), 3); // Default depth 3
+            }
+            if let Some(loc) = &self.octree_texture_location {
+                gl.uniform_1_i32(Some(loc), 0); // Texture unit 0
+            }
+            if let Some(loc) = &self.octree_size_location {
+                gl.uniform_1_i32(Some(loc), 8); // 8x8x8 grid
             }
 
             // Draw fullscreen triangle
             gl.draw_arrays(TRIANGLES, 0, 3);
+
+            // Unbind
+            gl.bind_texture(TEXTURE_3D, None);
         }
     }
 
@@ -236,15 +307,21 @@ impl GlCubeTracer {
         gl: &Context,
         width: i32,
         height: i32,
-        camera: &crate::renderer::CameraConfig,
+        camera: &CameraConfig,
     ) {
         unsafe {
-            // Clear to black (background for raytraced scene)
-            gl.clear_color(0.1, 0.1, 0.1, 1.0);
+            // Clear to background color
+            gl.clear_color(0.2, 0.3, 0.4, 1.0);
             gl.clear(COLOR_BUFFER_BIT);
 
             gl.use_program(Some(self.program));
             gl.bind_vertex_array(Some(self.vao));
+
+            // Bind octree texture
+            if let Some(texture) = self.octree_texture {
+                gl.active_texture(TEXTURE0);
+                gl.bind_texture(TEXTURE_3D, Some(texture));
+            }
 
             // Set uniforms
             if let Some(loc) = &self.resolution_location {
@@ -267,20 +344,34 @@ impl GlCubeTracer {
                     camera.rotation.w,
                 );
             }
-            // Enable camera mode
             if let Some(loc) = &self.use_camera_location {
                 gl.uniform_1_i32(Some(loc), 1);
+            }
+            if let Some(loc) = &self.max_depth_location {
+                gl.uniform_1_i32(Some(loc), 3);
+            }
+            if let Some(loc) = &self.octree_texture_location {
+                gl.uniform_1_i32(Some(loc), 0);
+            }
+            if let Some(loc) = &self.octree_size_location {
+                gl.uniform_1_i32(Some(loc), 8);
             }
 
             // Draw fullscreen triangle
             gl.draw_arrays(TRIANGLES, 0, 3);
+
+            // Unbind
+            gl.bind_texture(TEXTURE_3D, None);
         }
     }
 
-    pub unsafe fn destroy(&self, gl: &Context) {
+    pub unsafe fn destroy(self, gl: &Context) {
         unsafe {
             gl.delete_program(self.program);
             gl.delete_vertex_array(self.vao);
+            if let Some(texture) = self.octree_texture {
+                gl.delete_texture(texture);
+            }
         }
     }
 }
@@ -295,58 +386,94 @@ impl Renderer for GlCubeTracer {
         &mut self,
         _width: u32,
         _height: u32,
-        _camera: &crate::renderer::CameraConfig,
+        _camera: &CameraConfig,
     ) {
         // Note: GL rendering is handled by render_to_gl_with_camera in the app loop
         // This is here to satisfy the trait, but actual rendering needs GL context
     }
 
     fn name(&self) -> &str {
-        "GlCubeTracer"
+        "GlCubeTracer (WebGL 2.0 Fragment Shader)"
     }
 }
 
-unsafe fn create_program(
-    gl: &Context,
-    vertex_src: &str,
-    fragment_src: &str,
-) -> Result<Program, String> {
-    unsafe {
-        let program = gl.create_program().map_err(|e| e.to_string())?;
+/// Sample cube at a given normalized position
+///
+/// Converts the octree structure to a voxel value at a specific position
+/// by using the cube's raycast functionality. This is used to serialize
+/// the octree data into a 3D texture that can be uploaded to the GPU.
+///
+/// # Arguments
+///
+/// * `cube` - The octree cube to sample
+/// * `pos` - Normalized [0,1]³ position to sample
+/// * `max_depth` - Maximum octree depth to traverse
+///
+/// # Returns
+///
+/// The voxel value (i32) at the given position, or 0 if empty
+fn sample_cube_at_position(cube: &Cube<i32>, pos: glam::Vec3, max_depth: u32) -> i32 {
+    use glam::IVec3;
 
-        let vertex_shader = compile_shader(gl, VERTEX_SHADER, vertex_src)?;
-        let fragment_shader = compile_shader(gl, FRAGMENT_SHADER, fragment_src)?;
+    match cube {
+        Cube::Solid(value) => *value,
+        _ => {
+            // Convert normalized [0,1] coordinates to octree integer coordinates
+            // For max_depth=3, grid is 2^3 = 8, so coordinates are in [0,8)
+            let grid_size = 1 << max_depth; // 2^max_depth
+            let octree_pos = IVec3::new(
+                (pos.x * grid_size as f32).floor() as i32,
+                (pos.y * grid_size as f32).floor() as i32,
+                (pos.z * grid_size as f32).floor() as i32,
+            );
 
-        gl.attach_shader(program, vertex_shader);
-        gl.attach_shader(program, fragment_shader);
-        gl.link_program(program);
+            // Clamp to valid range [0, grid_size)
+            let octree_pos = octree_pos.clamp(IVec3::ZERO, IVec3::splat(grid_size - 1));
 
-        if !gl.get_program_link_status(program) {
-            let log = gl.get_program_info_log(program);
-            return Err(format!("Program link error: {}", log));
+            // Sample the cube at this position at the given depth
+            // depth determines resolution: depth=3 means 8x8x8 grid (2^3)
+            cube.get_id(max_depth, octree_pos)
         }
-
-        gl.detach_shader(program, vertex_shader);
-        gl.detach_shader(program, fragment_shader);
-        gl.delete_shader(vertex_shader);
-        gl.delete_shader(fragment_shader);
-
-        Ok(program)
     }
 }
 
-unsafe fn compile_shader(gl: &Context, shader_type: u32, source: &str) -> Result<Shader, String> {
-    unsafe {
-        let shader = gl.create_shader(shader_type).map_err(|e| e.to_string())?;
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-        gl.shader_source(shader, source);
-        gl.compile_shader(shader);
+    #[test]
+    fn test_sample_octa_cube() {
+        // Create octa cube: 6 solid, 2 empty
+        // Octant indexing: index = x*4 + y*2 + z
+        let children: [Rc<Cube<i32>>; 8] = [
+            Rc::new(Cube::Solid(1)), // 0: (0,0,0)
+            Rc::new(Cube::Solid(1)), // 1: (0,0,1)
+            Rc::new(Cube::Solid(1)), // 2: (0,1,0)
+            Rc::new(Cube::Solid(0)), // 3: (0,1,1) - EMPTY
+            Rc::new(Cube::Solid(1)), // 4: (1,0,0)
+            Rc::new(Cube::Solid(1)), // 5: (1,0,1)
+            Rc::new(Cube::Solid(1)), // 6: (1,1,0)
+            Rc::new(Cube::Solid(0)), // 7: (1,1,1) - EMPTY
+        ];
+        let cube = Cube::Cubes(Box::new(children));
 
-        if !gl.get_shader_compile_status(shader) {
-            let log = gl.get_shader_info_log(shader);
-            return Err(format!("Shader compilation error: {}", log));
-        }
+        // Test sampling solid voxels
+        // Octant 0 (0,0,0) -> grid positions (x: 0-3, y: 0-3, z: 0-3)
+        let pos_octant_0 = glam::Vec3::new(0.125, 0.125, 0.125);
+        assert_eq!(sample_cube_at_position(&cube, pos_octant_0, 3), 1);
 
-        Ok(shader)
+        // Test sampling empty voxels
+        // Octant 3 (0,1,1) -> grid positions (x: 0-3, y: 4-7, z: 4-7)
+        let pos_octant_3 = glam::Vec3::new(0.1875, 0.6875, 0.6875);
+        assert_eq!(sample_cube_at_position(&cube, pos_octant_3, 3), 0);
+
+        // Octant 7 (1,1,1) -> grid positions (x: 4-7, y: 4-7, z: 4-7)
+        let pos_octant_7 = glam::Vec3::new(0.6875, 0.6875, 0.6875);
+        assert_eq!(sample_cube_at_position(&cube, pos_octant_7, 3), 0);
+
+        // Test another solid octant
+        // Octant 4 (1,0,0) -> grid positions (x: 4-7, y: 0-3, z: 0-3)
+        let pos_octant_4 = glam::Vec3::new(0.625, 0.125, 0.125);
+        assert_eq!(sample_cube_at_position(&cube, pos_octant_4, 3), 1);
     }
 }
