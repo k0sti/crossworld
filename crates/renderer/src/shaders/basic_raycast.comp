@@ -1,0 +1,180 @@
+#version 310 es
+
+// OpenGL ES 3.1 compute shader for GPU raytracing
+// Phase 1: Basic ray-cube bounding box intersection
+
+// Precision qualifiers (required for OpenGL ES)
+precision highp float;
+precision highp int;
+precision highp image2D;
+
+// Work group size (8x8 threads per work group)
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+// Output image (writeonly for compute shader)
+layout(rgba8) uniform highp writeonly image2D outputImage;
+
+// Uniforms
+uniform vec2 uResolution;      // Screen resolution
+uniform float uTime;           // Time for orbit camera
+uniform vec3 uCameraPos;       // Explicit camera position
+uniform vec4 uCameraRot;       // Explicit camera rotation (quaternion)
+uniform int uUseCamera;        // 0 = orbit camera, 1 = explicit camera
+
+// Cube bounds (centered at origin, matching CubeBounds::default())
+const float CUBE_SIZE = 2.0;
+const vec3 CUBE_MIN = vec3(-CUBE_SIZE * 0.5);  // vec3(-1.0, -1.0, -1.0)
+const vec3 CUBE_MAX = vec3(CUBE_SIZE * 0.5);   // vec3(1.0, 1.0, 1.0)
+
+// Lighting parameters
+const vec3 LIGHT_DIR = normalize(vec3(0.5, 1.0, 0.3));
+const vec3 LIGHT_COLOR = vec3(1.0, 0.95, 0.9);
+const vec3 AMBIENT = vec3(0.3, 0.3, 0.35);
+const float SPECULAR_STRENGTH = 0.5;
+const float SHININESS = 32.0;
+
+// Rotate vector by quaternion
+vec3 rotateByQuat(vec3 v, vec4 q) {
+    vec3 qvec = q.xyz;
+    float qw = q.w;
+    vec3 uv = cross(qvec, v);
+    vec3 uuv = cross(qvec, uv);
+    return v + ((uv * qw) + uuv) * 2.0;
+}
+
+// Ray-box intersection using slab method
+// Returns: vec2(tmin, tmax) where tmin is entry, tmax is exit
+// If tmin > tmax or tmax < 0, no intersection
+vec2 rayBoxIntersection(vec3 rayOrigin, vec3 rayDir, vec3 boxMin, vec3 boxMax) {
+    vec3 invDir = 1.0 / rayDir;
+    vec3 t0 = (boxMin - rayOrigin) * invDir;
+    vec3 t1 = (boxMax - rayOrigin) * invDir;
+
+    vec3 tmin3 = min(t0, t1);
+    vec3 tmax3 = max(t0, t1);
+
+    float tmin = max(max(tmin3.x, tmin3.y), tmin3.z);
+    float tmax = min(min(tmax3.x, tmax3.y), tmax3.z);
+
+    return vec2(tmin, tmax);
+}
+
+// Calculate surface normal from ray entry point
+vec3 calculateBoxNormal(vec3 point, vec3 boxMin, vec3 boxMax) {
+    const float epsilon = 0.001;
+    vec3 center = (boxMin + boxMax) * 0.5;
+    vec3 size = boxMax - boxMin;
+    vec3 p = (point - center) / (size * 0.5);
+
+    vec3 normal = vec3(0.0);
+
+    // Find which face we're closest to
+    if (abs(p.x - 1.0) < epsilon) normal = vec3(1.0, 0.0, 0.0);
+    else if (abs(p.x + 1.0) < epsilon) normal = vec3(-1.0, 0.0, 0.0);
+    else if (abs(p.y - 1.0) < epsilon) normal = vec3(0.0, 1.0, 0.0);
+    else if (abs(p.y + 1.0) < epsilon) normal = vec3(0.0, -1.0, 0.0);
+    else if (abs(p.z - 1.0) < epsilon) normal = vec3(0.0, 0.0, 1.0);
+    else if (abs(p.z + 1.0) < epsilon) normal = vec3(0.0, 0.0, -1.0);
+
+    return normalize(normal);
+}
+
+// Blinn-Phong lighting calculation
+vec3 calculateLighting(vec3 normal, vec3 viewDir) {
+    // Ambient
+    vec3 ambient = AMBIENT;
+
+    // Diffuse
+    float diff = max(dot(normal, LIGHT_DIR), 0.0);
+    vec3 diffuse = diff * LIGHT_COLOR;
+
+    // Specular (Blinn-Phong)
+    vec3 halfDir = normalize(LIGHT_DIR + viewDir);
+    float spec = pow(max(dot(normal, halfDir), 0.0), SHININESS);
+    vec3 specular = SPECULAR_STRENGTH * spec * LIGHT_COLOR;
+
+    return ambient + diffuse + specular;
+}
+
+// Generate camera ray for pixel coordinates
+void getCameraRay(vec2 pixelCoords, out vec3 rayOrigin, out vec3 rayDir) {
+    // Normalized pixel coordinates (matching CPU and GL tracers)
+    // Center coordinates and normalize by height to preserve aspect ratio
+    vec2 uv = (pixelCoords - 0.5 * uResolution) / uResolution.y;
+
+    if (uUseCamera == 0) {
+        // Time-based orbit camera (matches CPU and GL tracers exactly)
+        rayOrigin = vec3(3.0 * cos(uTime * 0.3), 2.0, 3.0 * sin(uTime * 0.3));
+        vec3 target = vec3(0.0, 0.0, 0.0);
+        vec3 up = vec3(0.0, 1.0, 0.0);
+
+        // Look at target
+        vec3 forward = normalize(target - rayOrigin);
+        vec3 right = normalize(cross(forward, up));
+        vec3 camUp = cross(right, forward);
+
+        // Simple ray direction (no FOV calculation needed)
+        rayDir = normalize(forward + uv.x * right + uv.y * camUp);
+    } else {
+        // Explicit camera with quaternion rotation
+        rayOrigin = uCameraPos;
+
+        // Base camera direction (looking down -Z)
+        vec3 baseForward = vec3(0.0, 0.0, -1.0);
+        vec3 baseRight = vec3(1.0, 0.0, 0.0);
+        vec3 baseUp = vec3(0.0, 1.0, 0.0);
+
+        // Rotate camera vectors by quaternion
+        vec3 forward = rotateByQuat(baseForward, uCameraRot);
+        vec3 right = rotateByQuat(baseRight, uCameraRot);
+        vec3 camUp = rotateByQuat(baseUp, uCameraRot);
+
+        // Simple ray direction (no FOV calculation needed)
+        rayDir = normalize(forward + uv.x * right + uv.y * camUp);
+    }
+}
+
+void main() {
+    ivec2 pixelCoords = ivec2(gl_GlobalInvocationID.xy);
+
+    // Bounds check
+    if (pixelCoords.x >= int(uResolution.x) || pixelCoords.y >= int(uResolution.y)) {
+        return;
+    }
+
+    // Generate camera ray
+    vec3 rayOrigin, rayDir;
+    getCameraRay(vec2(pixelCoords) + 0.5, rayOrigin, rayDir);
+
+    // Ray-box intersection
+    vec2 intersection = rayBoxIntersection(rayOrigin, rayDir, CUBE_MIN, CUBE_MAX);
+    float tmin = intersection.x;
+    float tmax = intersection.y;
+
+    vec3 color;
+
+    // Check if ray hits the box
+    if (tmin <= tmax && tmax >= 0.0) {
+        // Hit! Calculate shading
+        float t = tmin > 0.0 ? tmin : 0.0;
+        vec3 hitPoint = rayOrigin + rayDir * t;
+        vec3 normal = calculateBoxNormal(hitPoint, CUBE_MIN, CUBE_MAX);
+        vec3 viewDir = -rayDir;
+
+        // Base cube color
+        vec3 cubeColor = vec3(0.8, 0.7, 0.6);
+
+        // Apply lighting
+        vec3 lighting = calculateLighting(normal, viewDir);
+        color = cubeColor * lighting;
+
+        // Gamma correction
+        color = pow(color, vec3(1.0 / 2.2));
+    } else {
+        // Miss - background color
+        color = vec3(0.1, 0.1, 0.15);
+    }
+
+    // Write to output image
+    imageStore(outputImage, pixelCoords, vec4(color, 1.0));
+}

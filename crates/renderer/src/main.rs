@@ -56,9 +56,17 @@ impl ApplicationHandler for App {
             return;
         }
 
+        // Calculate window size based on content
+        // 2x2 grid: each cell is 400x300 render + ~80px for text/controls per cell
+        // Grid spacing: 10px between cells
+        // Top panel: ~50px
+        // Side padding: ~20px per side
+        let content_width = 400 * 2 + 10 + 40; // 2 renders + spacing + padding
+        let content_height = (300 + 80) * 2 + 10 + 50 + 20; // 2 rows + spacing + top panel + padding
+
         let window_attributes = Window::default_attributes()
-            .with_title("Dual Cube Raytracer - GPU vs CPU")
-            .with_inner_size(winit::dpi::LogicalSize::new(1000, 700));
+            .with_title("Triple Cube Raytracer - CPU | GL | GPU")
+            .with_inner_size(winit::dpi::LogicalSize::new(content_width, content_height));
 
         let template = ConfigTemplateBuilder::new()
             .with_alpha_size(8)
