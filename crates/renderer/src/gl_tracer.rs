@@ -160,7 +160,9 @@ impl GlTracerGl {
     pub unsafe fn new(gl: &Context, cube: &Cube<i32>) -> Result<Self, String> {
         unsafe {
             // Create shader program using shared utilities
+            println!("[GL Tracer] Compiling vertex and fragment shaders...");
             let program = shader_utils::create_program(gl, VERTEX_SHADER_SOURCE, FRAGMENT_SHADER_SOURCE)?;
+            println!("[GL Tracer] ✓ Shaders compiled and linked successfully!");
 
             // Create VAO (required for OpenGL core profile)
             let vao = gl
@@ -177,8 +179,16 @@ impl GlTracerGl {
             let octree_texture_location = gl.get_uniform_location(program, "u_octree_texture");
             let octree_size_location = gl.get_uniform_location(program, "u_octree_size");
 
+            // Debug: Print uniform locations
+            println!("[GL Tracer] Uniform locations:");
+            println!("  u_octree_texture: {:?}", octree_texture_location);
+            println!("  u_max_depth: {:?}", max_depth_location);
+            println!("  u_octree_size: {:?}", octree_size_location);
+
             // Create and upload octree texture
+            println!("[GL Tracer] Creating octree texture...");
             let octree_texture = Some(Self::create_octree_texture(gl, cube)?);
+            println!("[GL Tracer] Octree texture created successfully!");
 
             Ok(Self {
                 program,
@@ -203,7 +213,8 @@ impl GlTracerGl {
             // For now, create a simple 8x8x8 voxel grid (depth 3)
             // This will be expanded to support arbitrary octree depths
             const SIZE: usize = 8;
-            let mut voxel_data = vec![0u8; SIZE * SIZE * SIZE];
+            // Use RGBA format for better compatibility (4 bytes per voxel)
+            let mut voxel_data = vec![0u8; SIZE * SIZE * SIZE * 4];
 
             // Serialize octree to voxel grid
             // Sample each voxel position
@@ -219,8 +230,12 @@ impl GlTracerGl {
 
                         // Sample cube at this position
                         let value = sample_cube_at_position(cube, pos, 3);
-                        let idx = x + y * SIZE + z * SIZE * SIZE;
-                        voxel_data[idx] = if value != 0 { 255 } else { 0 };
+                        let idx = (x + y * SIZE + z * SIZE * SIZE) * 4;
+                        let voxel_value = if value != 0 { 255 } else { 0 };
+                        voxel_data[idx] = voxel_value;     // R
+                        voxel_data[idx + 1] = voxel_value; // G
+                        voxel_data[idx + 2] = voxel_value; // B
+                        voxel_data[idx + 3] = 255;         // A
                     }
                 }
             }
@@ -233,15 +248,16 @@ impl GlTracerGl {
             gl.bind_texture(TEXTURE_3D, Some(texture));
 
             // Upload texture data
+            // Use RGBA8 format for better OpenGL ES compatibility
             gl.tex_image_3d(
                 TEXTURE_3D,
                 0,                 // mip level
-                RED as i32,        // internal format
+                RGBA8 as i32,      // internal format
                 SIZE as i32,       // width
                 SIZE as i32,       // height
                 SIZE as i32,       // depth
                 0,                 // border
-                RED,               // format
+                RGBA,              // format
                 UNSIGNED_BYTE,     // type
                 Some(&voxel_data), // data
             );
@@ -255,12 +271,25 @@ impl GlTracerGl {
 
             gl.bind_texture(TEXTURE_3D, None);
 
+            // Log texture creation
+            println!("[GL Tracer] 3D texture uploaded: {}x{}x{} = {} voxels", SIZE, SIZE, SIZE, SIZE * SIZE * SIZE);
+            // Count solid voxels (check R channel, which is every 4th byte)
+            let solid_count = voxel_data.iter().step_by(4).filter(|&&v| v != 0).count();
+            println!("[GL Tracer] Solid voxels: {} ({:.1}%)", solid_count, (solid_count as f32 / (SIZE * SIZE * SIZE) as f32) * 100.0);
+
             Ok(texture)
         }
     }
 
     pub unsafe fn render_to_gl(&self, gl: &Context, width: i32, height: i32, time: f32) {
         unsafe {
+            // Set viewport
+            gl.viewport(0, 0, width, height);
+
+            // Disable depth test and blending (we're rendering a fullscreen quad)
+            gl.disable(DEPTH_TEST);
+            gl.disable(BLEND);
+
             // Clear to background color
             gl.clear_color(0.2, 0.3, 0.4, 1.0);
             gl.clear(COLOR_BUFFER_BIT);
@@ -285,7 +314,7 @@ impl GlTracerGl {
                 gl.uniform_1_i32(Some(loc), 0);
             }
             if let Some(loc) = &self.max_depth_location {
-                gl.uniform_1_i32(Some(loc), 3); // Default depth 3
+                gl.uniform_1_i32(Some(loc), 0); // Depth 0 for flat 8x8x8 grid
             }
             if let Some(loc) = &self.octree_texture_location {
                 gl.uniform_1_i32(Some(loc), 0); // Texture unit 0
@@ -310,6 +339,13 @@ impl GlTracerGl {
         camera: &CameraConfig,
     ) {
         unsafe {
+            // Set viewport
+            gl.viewport(0, 0, width, height);
+
+            // Disable depth test and blending (we're rendering a fullscreen quad)
+            gl.disable(DEPTH_TEST);
+            gl.disable(BLEND);
+
             // Clear to background color
             gl.clear_color(0.2, 0.3, 0.4, 1.0);
             gl.clear(COLOR_BUFFER_BIT);
@@ -348,7 +384,7 @@ impl GlTracerGl {
                 gl.uniform_1_i32(Some(loc), 1);
             }
             if let Some(loc) = &self.max_depth_location {
-                gl.uniform_1_i32(Some(loc), 3);
+                gl.uniform_1_i32(Some(loc), 0); // Depth 0 for flat 8x8x8 grid
             }
             if let Some(loc) = &self.octree_texture_location {
                 gl.uniform_1_i32(Some(loc), 0);
