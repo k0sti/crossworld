@@ -171,14 +171,93 @@ crates/renderer/src/main.rs             - Include shader_utils module
 - Single-frame test mode verified working
 
 **⏳ Deferred:**
-- Compute shader implementation (requires OpenGL 4.3+/WebGPU)
 - Comprehensive octree depth testing
 - Performance benchmarks beyond basic timing
+
+## GPU Tracer Phase 1: Basic Ray-Cube Intersection (2025-11-18)
+
+This phase implements basic ray-cube bounding box intersection detection using OpenGL compute shaders.
+
+### Implementation Details
+
+**Compute Shader (`basic_raycast.comp`):**
+- OpenGL 4.3+ compute shader (8x8 local work group size)
+- Ray-box intersection using slab method
+- Blinn-Phong lighting with ambient, diffuse, and specular components
+- Camera support:
+  - Time-based orbit camera (automatic rotation)
+  - Explicit camera with quaternion rotation
+- Output to RGBA8 texture via imageStore()
+
+**Blit Shaders:**
+- Vertex shader: Generates fullscreen triangle positions
+- Fragment shader: Samples compute shader output texture
+- Displays compute shader result on screen
+
+**Rust Integration (`gpu_tracer.rs`):**
+- `GpuTracerGl` struct holding compute shader resources:
+  - Compute shader program
+  - Blit shader program (vertex + fragment)
+  - Output texture (RGBA8)
+  - Vertex array object for blit quad
+  - Uniform locations for camera, time, resolution
+- `init_gl()` - Compile shaders and create resources
+- `render_to_gl()` - Dispatch compute shader and blit to screen
+- `render_to_gl_with_camera()` - Explicit camera support
+- `destroy_gl()` - Clean up GL resources
+
+### Architecture
+
+```
+┌──────────────────────────────────────┐
+│  GpuTracer::render_to_gl()           │
+└──────────┬───────────────────────────┘
+           │
+           ├─► 1. Setup output texture (RGBA8, width×height)
+           │
+           ├─► 2. Dispatch compute shader
+           │     - Work groups: (width+7)/8 × (height+7)/8
+           │     - Each thread: imageStore(outputImage, pixel, color)
+           │     - Uniforms: resolution, time, camera
+           │
+           ├─► 3. Memory barrier (SHADER_IMAGE_ACCESS_BARRIER_BIT)
+           │
+           └─► 4. Blit texture to screen
+                 - Bind blit shader
+                 - Draw fullscreen triangle
+                 - Sample output texture
+```
+
+### Files Modified
+
+```
+crates/renderer/src/shaders/basic_raycast.comp  - NEW: Compute shader
+crates/renderer/src/gpu_tracer.rs               - Implemented from stub
+  - Added GpuTracerGl struct
+  - Added BLIT_VERTEX_SHADER constant
+  - Added BLIT_FRAGMENT_SHADER constant
+  - Implemented all GL methods (init, render, destroy)
+```
+
+### Status
+
+**✅ Phase 1 Complete:**
+- Basic ray-cube bounding box intersection
+- Compute shader with slab method
+- Full rendering pipeline (dispatch + blit)
+- Camera support (orbit + explicit)
+- Builds successfully with no errors
+
+**⏳ Pending:**
+- Integration into egui app (test rendering)
+- Phase 2: Full octree traversal in compute shader
+- Performance comparison with GL fragment shader tracer
 
 ## Notes
 
 - WebGL 2.0 fragment shader implementation is complete and tested
-- Compute shader stub is ready for future implementation
+- **NEW:** Compute shader Phase 1 implementation is complete (basic ray-cube)
 - The 3-tracer architecture provides clean separation of concerns
 - UI allows easy visual comparison between rendering approaches
 - Shader code is portable to WebGPU with minimal changes
+- Phase 2 will add full octree traversal to compute shader
