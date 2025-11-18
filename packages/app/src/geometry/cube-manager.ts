@@ -45,13 +45,13 @@ export class CubeManager {
    * Initialize the world cube
    */
   async initialize(): Promise<void> {
-    logger.log('geometry', `Initializing WorldCube: macro=${this.macroDepth}, micro=${this.microDepth}, border=${this.borderDepth}, seed=${this.seed}`);
+    logger.log('geometry', `[CubeManager] Initializing WorldCube: macro=${this.macroDepth}, micro=${this.microDepth}, border=${this.borderDepth}, seed=${this.seed}`);
     this.worldCube = new WorldCube(this.macroDepth, this.microDepth, this.borderDepth, this.seed);
 
     // Load material colors from materials.json
     await this.loadMaterialColors();
 
-    logger.log('geometry', 'WorldCube initialized');
+    logger.log('geometry', '[CubeManager] WorldCube initialized with seed:', this.seed);
   }
 
   /**

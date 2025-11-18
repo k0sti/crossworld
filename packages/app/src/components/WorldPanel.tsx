@@ -55,6 +55,7 @@ export function WorldPanel({
   const [microDepth, setMicroDepth] = useState(getMicroDepth());
   const [borderDepth, setBorderDepth] = useState(getBorderDepth());
   const [seed, setSeed] = useState(getSeed());
+  const [seedInput, setSeedInput] = useState(getSeed().toString());
 
   // Subscribe to depth changes from config
   useEffect(() => {
@@ -70,6 +71,7 @@ export function WorldPanel({
   useEffect(() => {
     const unsubscribe = onSeedChange((newSeed) => {
       setSeed(newSeed);
+      setSeedInput(newSeed.toString());
     });
     return unsubscribe;
   }, []);
@@ -99,10 +101,21 @@ export function WorldPanel({
 
   const handleSeedChange = (newSeed: number) => {
     setSeed(newSeed);
+    setSeedInput(newSeed.toString());
     setGlobalSeed(newSeed);
     if (onApplyDepthSettings) {
       const totalDepth = macroDepth + microDepth;
       onApplyDepthSettings(totalDepth, microDepth);
+    }
+  };
+
+  const validateAndApplySeed = () => {
+    const value = parseInt(seedInput);
+    if (!isNaN(value) && value >= 0 && value <= 4294967295) {
+      handleSeedChange(value);
+    } else {
+      // Invalid input - reset to current seed
+      setSeedInput(seed.toString());
     }
   };
 
@@ -275,16 +288,15 @@ export function WorldPanel({
                       <Text fontSize="xs" color="gray.400">World Seed (0-4294967295)</Text>
                       <Input
                         size="xs"
-                        type="number"
-                        min={0}
-                        max={4294967295}
-                        value={seed}
+                        type="text"
+                        value={seedInput}
                         onChange={(e) => {
-                          const value = parseInt(e.target.value) || 0;
-                          handleSeedChange(Math.max(0, Math.min(4294967295, value)));
+                          setSeedInput(e.target.value);
                         }}
-                        onKeyPress={(e) => {
+                        onBlur={validateAndApplySeed}
+                        onKeyDown={(e) => {
                           if (e.key === 'Enter') {
+                            validateAndApplySeed();
                             onClose();
                           }
                         }}
