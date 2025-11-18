@@ -1,14 +1,6 @@
 import { Box, Grid, VStack, Text, Accordion, AccordionItem, AccordionButton, AccordionPanel, AccordionIcon } from '@chakra-ui/react'
 import { useState, useEffect } from 'react'
 
-// Dawnbringer 32 palette mapped to closest R2G3B2 indices (128-255)
-const DAWNBRINGER_R2G3B2_INDICES = [
-  128, 133, 165, 169, 201, 236, 241, 246,
-  253, 217, 181, 177, 173, 168, 169, 169,
-  174, 175, 179, 187, 219, 255, 214, 206,
-  173, 169, 170, 197, 233, 238, 209, 205,
-]
-
 interface Material {
   index: number;
   id: string;
@@ -123,11 +115,7 @@ export function ColorPalette({ isVisible, onColorSelect }: ColorPaletteProps) {
   // Get materials by range
   const transparentMaterials = materials.filter(m => m.index >= 0 && m.index <= 31)
   const materialRangeMaterials = materials.filter(m => m.index >= 32 && m.index <= 127)
-
-  // Get Dawnbringer 32 palette materials for color section
-  const colorPaletteMaterials = DAWNBRINGER_R2G3B2_INDICES
-    .map(idx => materials.find(m => m.index === idx))
-    .filter((m): m is Material => m !== undefined)
+  const colorPaletteMaterials = materials.filter(m => m.index >= 128 && m.index <= 255)
 
   return (
     <Box
@@ -183,12 +171,12 @@ export function ColorPalette({ isVisible, onColorSelect }: ColorPaletteProps) {
             </AccordionPanel>
           </AccordionItem>
 
-          {/* Dawnbringer 32 Color Palette */}
+          {/* Color Palette: 128-255 */}
           <AccordionItem border="1px solid rgba(255, 255, 255, 0.2)" borderRadius="md">
             <AccordionButton bg="rgba(255, 128, 128, 0.2)" _hover={{ bg: 'rgba(255, 128, 128, 0.3)' }}>
               <Box flex="1" textAlign="left">
                 <Text color="white" fontSize="xs" fontWeight="bold">
-                  Dawnbringer 32
+                  Colors (128-255)
                 </Text>
               </Box>
               <AccordionIcon color="white" />
