@@ -1,4 +1,7 @@
+//! Egui application for comparing three raytracer implementations side-by-side
+
 use crate::cpu_tracer::CpuCubeTracer;
+use crate::gl_tracer::GlCubeTracer;
 use crate::gpu_tracer::GpuTracer;
 use crate::renderer::{CameraConfig, Renderer};
 use crate::scenes::create_octa_cube;
@@ -21,22 +24,42 @@ struct RenderResponse {
     render_time_ms: f32,
 }
 
-pub struct DualRendererApp {
-    gpu_renderer: GpuTracer,
+/// Which renderer to use for diff comparison
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum DiffSource {
+    Cpu,
+    Gl,
+    Gpu,
+}
 
-    // CPU renderer runs in separate thread
-    // Only stores the latest sync frame request, drops old ones
+impl DiffSource {
+    fn name(&self) -> &str {
+        match self {
+            DiffSource::Cpu => "CPU",
+            DiffSource::Gl => "GL (WebGL 2.0)",
+            DiffSource::Gpu => "GPU (Compute)",
+        }
+    }
+}
+
+pub struct DualRendererApp {
+    // Three renderers
     cpu_sync_request: Arc<Mutex<Option<RenderRequest>>>,
     cpu_sync_response: Arc<Mutex<Option<RenderResponse>>>,
+    gl_renderer: GlCubeTracer,
+    gpu_renderer: GpuTracer,
 
-    // GL texture for rendering
+    // GL framebuffers for each renderer
     gl_framebuffer: Option<Framebuffer>,
     gl_texture: Option<Texture>,
-    gl_texture_size: (i32, i32),
+    gpu_framebuffer: Option<Framebuffer>,
+    gpu_texture: Option<Texture>,
+    framebuffer_size: (i32, i32),
 
     // egui textures
-    gl_egui_texture: Option<TextureHandle>,
     cpu_texture: Option<TextureHandle>,
+    gl_egui_texture: Option<TextureHandle>,
+    gpu_egui_texture: Option<TextureHandle>,
     diff_texture: Option<TextureHandle>,
 
     // Timing
@@ -44,43 +67,61 @@ pub struct DualRendererApp {
     frame_count: u64,
     last_fps_update: std::time::Instant,
     fps: f32,
-    gl_render_time_ms: f32,
     cpu_render_time_ms: f32,
+    gl_render_time_ms: f32,
+    gpu_render_time_ms: f32,
 
     // Settings
     render_size: (u32, u32),
 
     // Camera control
     camera: CameraConfig,
-    camera_target: glam::Vec3, // Point camera orbits around
+    camera_target: glam::Vec3,
     use_manual_camera: bool,
     mouse_sensitivity: f32,
     zoom_sensitivity: f32,
 
-    // Current display frames (updated every frame)
-    gl_latest_frame: Option<ColorImage>,
+    // Current display frames
     cpu_latest_frame: Option<ColorImage>,
+    gl_latest_frame: Option<ColorImage>,
+    gpu_latest_frame: Option<ColorImage>,
+
+    // Diff comparison settings
+    diff_left: DiffSource,
+    diff_right: DiffSource,
 }
 
 impl DualRendererApp {
     pub unsafe fn new(gl: &Arc<Context>) -> Result<Self, String> {
         // Create octa cube scene
         let cube = create_octa_cube();
-        let mut gpu_renderer = GpuTracer::new(cube);
 
-        // Initialize GL resources for GPU renderer
+        // Initialize GL renderer (WebGL 2.0 fragment shader)
+        let mut gl_renderer = GlCubeTracer::new(cube.clone());
         unsafe {
-            gpu_renderer.init_gl(gl)?;
+            gl_renderer.init_gl(gl)?;
         }
+
+        // Initialize GPU renderer (compute shader stub)
+        let mut gpu_renderer = GpuTracer::new(cube.clone());
+        let gpu_available = unsafe {
+            match gpu_renderer.init_gl(gl) {
+                Ok(_) => true,
+                Err(e) => {
+                    println!("GPU compute shader not available: {}", e);
+                    false
+                }
+            }
+        };
 
         let render_size = (400, 300);
 
-        // Initialize camera looking at the cube (origin)
+        // Initialize camera
         let camera_target = glam::Vec3::ZERO;
         let camera =
             CameraConfig::look_at(glam::Vec3::new(3.0, 2.0, 3.0), camera_target, glam::Vec3::Y);
 
-        // Create shared Mutex slots for CPU renderer thread communication
+        // Create CPU renderer thread
         let cpu_sync_request = Arc::new(Mutex::new(None));
         let cpu_sync_response = Arc::new(Mutex::new(None));
 
@@ -91,16 +132,14 @@ impl DualRendererApp {
             let mut cpu_renderer = CpuCubeTracer::new();
 
             loop {
-                // Check for new render request (non-blocking)
                 let request: Option<RenderRequest> = {
                     let mut req_lock = request_clone.lock().unwrap();
-                    req_lock.take() // Take the request, leaving None
+                    req_lock.take()
                 };
 
                 if let Some(request) = request {
                     let start = std::time::Instant::now();
 
-                    // Render based on whether we have a manual camera or not
                     if let Some(camera) = request.camera {
                         cpu_renderer.render_with_camera(request.width, request.height, &camera);
                     } else {
@@ -109,7 +148,6 @@ impl DualRendererApp {
 
                     let render_time = start.elapsed();
 
-                    // Store result in response slot
                     if let Some(image) = cpu_renderer.image_buffer() {
                         let response = RenderResponse {
                             image: image.clone(),
@@ -118,41 +156,48 @@ impl DualRendererApp {
                         *response_clone.lock().unwrap() = Some(response);
                     }
                 } else {
-                    // No request available, sleep briefly to avoid busy-waiting
                     std::thread::sleep(std::time::Duration::from_millis(10));
                 }
             }
         });
 
         Ok(Self {
-            gpu_renderer,
             cpu_sync_request,
             cpu_sync_response,
+            gl_renderer,
+            gpu_renderer,
             gl_framebuffer: None,
             gl_texture: None,
-            gl_texture_size: (0, 0),
-            gl_egui_texture: None,
+            gpu_framebuffer: None,
+            gpu_texture: None,
+            framebuffer_size: (0, 0),
             cpu_texture: None,
+            gl_egui_texture: None,
+            gpu_egui_texture: None,
             diff_texture: None,
             start_time: std::time::Instant::now(),
             frame_count: 0,
             last_fps_update: std::time::Instant::now(),
             fps: 0.0,
-            gl_render_time_ms: 0.0,
             cpu_render_time_ms: 0.0,
+            gl_render_time_ms: 0.0,
+            gpu_render_time_ms: if gpu_available { 0.0 } else { -1.0 },
             render_size,
             camera,
             camera_target,
             use_manual_camera: false,
             mouse_sensitivity: 0.005,
             zoom_sensitivity: 0.5,
-            gl_latest_frame: None,
             cpu_latest_frame: None,
+            gl_latest_frame: None,
+            gpu_latest_frame: None,
+            diff_left: DiffSource::Cpu,
+            diff_right: DiffSource::Gl,
         })
     }
 
-    unsafe fn ensure_gl_framebuffer(&mut self, gl: &Arc<Context>, width: i32, height: i32) {
-        if self.gl_texture_size != (width, height) || self.gl_framebuffer.is_none() {
+    unsafe fn ensure_framebuffer(&mut self, gl: &Arc<Context>, width: i32, height: i32) {
+        if self.framebuffer_size != (width, height) || self.gl_framebuffer.is_none() {
             unsafe {
                 // Clean up old resources
                 if let Some(fb) = self.gl_framebuffer {
@@ -161,10 +206,16 @@ impl DualRendererApp {
                 if let Some(tex) = self.gl_texture {
                     gl.delete_texture(tex);
                 }
+                if let Some(fb) = self.gpu_framebuffer {
+                    gl.delete_framebuffer(fb);
+                }
+                if let Some(tex) = self.gpu_texture {
+                    gl.delete_texture(tex);
+                }
 
-                // Create texture (use RGBA for better compatibility)
-                let texture = gl.create_texture().unwrap();
-                gl.bind_texture(TEXTURE_2D, Some(texture));
+                // Create GL renderer texture and framebuffer
+                let gl_texture = gl.create_texture().unwrap();
+                gl.bind_texture(TEXTURE_2D, Some(gl_texture));
                 gl.tex_image_2d(
                     TEXTURE_2D,
                     0,
@@ -179,31 +230,50 @@ impl DualRendererApp {
                 gl.tex_parameter_i32(TEXTURE_2D, TEXTURE_MIN_FILTER, LINEAR as i32);
                 gl.tex_parameter_i32(TEXTURE_2D, TEXTURE_MAG_FILTER, LINEAR as i32);
 
-                // Create framebuffer
-                let framebuffer = gl.create_framebuffer().unwrap();
-                gl.bind_framebuffer(FRAMEBUFFER, Some(framebuffer));
+                let gl_framebuffer = gl.create_framebuffer().unwrap();
+                gl.bind_framebuffer(FRAMEBUFFER, Some(gl_framebuffer));
                 gl.framebuffer_texture_2d(
                     FRAMEBUFFER,
                     COLOR_ATTACHMENT0,
                     TEXTURE_2D,
-                    Some(texture),
+                    Some(gl_texture),
                     0,
                 );
 
-                // Set draw buffer
-                gl.draw_buffers(&[COLOR_ATTACHMENT0]);
+                // Create GPU renderer texture and framebuffer
+                let gpu_texture = gl.create_texture().unwrap();
+                gl.bind_texture(TEXTURE_2D, Some(gpu_texture));
+                gl.tex_image_2d(
+                    TEXTURE_2D,
+                    0,
+                    RGBA as i32,
+                    width,
+                    height,
+                    0,
+                    RGBA,
+                    UNSIGNED_BYTE,
+                    None,
+                );
+                gl.tex_parameter_i32(TEXTURE_2D, TEXTURE_MIN_FILTER, LINEAR as i32);
+                gl.tex_parameter_i32(TEXTURE_2D, TEXTURE_MAG_FILTER, LINEAR as i32);
 
-                // Check framebuffer status
-                let status = gl.check_framebuffer_status(FRAMEBUFFER);
-                if status != FRAMEBUFFER_COMPLETE {
-                    panic!("Framebuffer not complete: {:?}", status);
-                }
+                let gpu_framebuffer = gl.create_framebuffer().unwrap();
+                gl.bind_framebuffer(FRAMEBUFFER, Some(gpu_framebuffer));
+                gl.framebuffer_texture_2d(
+                    FRAMEBUFFER,
+                    COLOR_ATTACHMENT0,
+                    TEXTURE_2D,
+                    Some(gpu_texture),
+                    0,
+                );
 
                 gl.bind_framebuffer(FRAMEBUFFER, None);
 
-                self.gl_texture = Some(texture);
-                self.gl_framebuffer = Some(framebuffer);
-                self.gl_texture_size = (width, height);
+                self.gl_texture = Some(gl_texture);
+                self.gl_framebuffer = Some(gl_framebuffer);
+                self.gpu_texture = Some(gpu_texture);
+                self.gpu_framebuffer = Some(gpu_framebuffer);
+                self.framebuffer_size = (width, height);
             }
         }
     }
@@ -212,15 +282,48 @@ impl DualRendererApp {
         let (width, height) = self.render_size;
 
         unsafe {
-            self.ensure_gl_framebuffer(gl, width as i32, height as i32);
+            self.ensure_framebuffer(gl, width as i32, height as i32);
 
-            // Render to framebuffer
+            // Render GL tracer
             gl.bind_framebuffer(FRAMEBUFFER, self.gl_framebuffer);
             gl.viewport(0, 0, width as i32, height as i32);
 
             let start = std::time::Instant::now();
 
-            // Use current camera state
+            if self.use_manual_camera {
+                self.gl_renderer.render_to_gl_with_camera(
+                    gl,
+                    width as i32,
+                    height as i32,
+                    &self.camera,
+                );
+            } else {
+                self.gl_renderer
+                    .render_to_gl(gl, width as i32, height as i32, time);
+            }
+
+            gl.finish();
+            self.gl_render_time_ms = start.elapsed().as_secs_f32() * 1000.0;
+
+            gl.bind_framebuffer(FRAMEBUFFER, None);
+        }
+    }
+
+    pub unsafe fn render_gpu_to_texture(&mut self, gl: &Arc<Context>, time: f32) {
+        if self.gpu_render_time_ms < 0.0 {
+            // GPU renderer not available
+            return;
+        }
+
+        let (width, height) = self.render_size;
+
+        unsafe {
+            // Render GPU tracer (compute shader stub - will do nothing currently)
+            gl.bind_framebuffer(FRAMEBUFFER, self.gpu_framebuffer);
+            gl.viewport(0, 0, width as i32, height as i32);
+
+            let start = std::time::Instant::now();
+
             if self.use_manual_camera {
                 self.gpu_renderer.render_to_gl_with_camera(
                     gl,
@@ -233,23 +336,25 @@ impl DualRendererApp {
                     .render_to_gl(gl, width as i32, height as i32, time);
             }
 
-            // Make sure rendering is complete before measuring time
             gl.finish();
-            self.gl_render_time_ms = start.elapsed().as_secs_f32() * 1000.0;
+            self.gpu_render_time_ms = start.elapsed().as_secs_f32() * 1000.0;
 
             gl.bind_framebuffer(FRAMEBUFFER, None);
         }
     }
 
-    pub unsafe fn read_gl_texture_to_image(&self, gl: &Arc<Context>) -> Option<ColorImage> {
-        self.gl_framebuffer?;
+    unsafe fn read_framebuffer_to_image(
+        &self,
+        gl: &Arc<Context>,
+        framebuffer: Option<Framebuffer>,
+    ) -> Option<ColorImage> {
+        framebuffer?;
 
         let (width, height) = self.render_size;
         let mut pixels = vec![0u8; (width * height * 4) as usize];
 
         unsafe {
-            // Bind framebuffer and read pixels
-            gl.bind_framebuffer(FRAMEBUFFER, self.gl_framebuffer);
+            gl.bind_framebuffer(FRAMEBUFFER, framebuffer);
             gl.read_pixels(
                 0,
                 0,
@@ -285,7 +390,6 @@ impl DualRendererApp {
     pub fn render_cpu(&mut self, time: f32) {
         let (width, height) = self.render_size;
 
-        // Use current camera state
         let camera = if self.use_manual_camera {
             Some(self.camera)
         } else {
@@ -299,20 +403,16 @@ impl DualRendererApp {
             camera,
         };
 
-        // Write request to Mutex slot (overwrites any pending request)
-        // This drops old requests if CPU hasn't processed them yet
         *self.cpu_sync_request.lock().unwrap() = Some(request);
 
-        // Try to read completed render (non-blocking)
         let response = {
             let mut resp_lock = self.cpu_sync_response.lock().unwrap();
-            resp_lock.take() // Take the response, leaving None
+            resp_lock.take()
         };
 
         if let Some(response) = response {
             self.cpu_render_time_ms = response.render_time_ms;
 
-            // Convert to ColorImage and store
             let image_buffer = response.image;
             let (width, height) = (
                 image_buffer.width() as usize,
@@ -346,23 +446,22 @@ impl DualRendererApp {
 
     fn compute_difference_image(
         &self,
-        gl_image: &ColorImage,
-        cpu_image: &ColorImage,
+        left_image: &ColorImage,
+        right_image: &ColorImage,
     ) -> ColorImage {
-        assert_eq!(gl_image.size, cpu_image.size);
-        let size = gl_image.size;
+        assert_eq!(left_image.size, right_image.size);
+        let size = left_image.size;
 
-        let diff_pixels: Vec<egui::Color32> = gl_image
+        let diff_pixels: Vec<egui::Color32> = left_image
             .pixels
             .iter()
-            .zip(cpu_image.pixels.iter())
-            .map(|(gl_pixel, cpu_pixel)| {
-                // Compute absolute difference per channel
-                let r_diff = (gl_pixel.r() as i16 - cpu_pixel.r() as i16).unsigned_abs();
-                let g_diff = (gl_pixel.g() as i16 - cpu_pixel.g() as i16).unsigned_abs();
-                let b_diff = (gl_pixel.b() as i16 - cpu_pixel.b() as i16).unsigned_abs();
+            .zip(right_image.pixels.iter())
+            .map(|(left_pixel, right_pixel)| {
+                let r_diff = (left_pixel.r() as i16 - right_pixel.r() as i16).unsigned_abs();
+                let g_diff = (left_pixel.g() as i16 - right_pixel.g() as i16).unsigned_abs();
+                let b_diff = (left_pixel.b() as i16 - right_pixel.b() as i16).unsigned_abs();
 
-                // Amplify differences for visibility (multiply by 10, capped at 255)
+                // Amplify differences for visibility
                 let r_amp = (r_diff * 10).min(255) as u8;
                 let g_amp = (g_diff * 10).min(255) as u8;
                 let b_amp = (b_diff * 10).min(255) as u8;
@@ -377,19 +476,30 @@ impl DualRendererApp {
         }
     }
 
+    fn get_frame(&self, source: DiffSource) -> Option<&ColorImage> {
+        match source {
+            DiffSource::Cpu => self.cpu_latest_frame.as_ref(),
+            DiffSource::Gl => self.gl_latest_frame.as_ref(),
+            DiffSource::Gpu => self.gpu_latest_frame.as_ref(),
+        }
+    }
+
     pub fn show_ui(&mut self, ctx: &egui::Context, gl: &Arc<Context>) {
         let time = self.start_time.elapsed().as_secs_f32();
 
-        // Render both GL and CPU
-        unsafe { self.render_gl_to_texture(gl, time) };
+        // Render all tracers
+        unsafe {
+            self.render_gl_to_texture(gl, time);
+            self.render_gpu_to_texture(gl, time);
+        }
         self.render_cpu(time);
 
         self.update_fps();
 
-        // Top panel with info
+        // Top panel
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             ui.horizontal(|ui| {
-                ui.heading("Dual Cube Raytracer");
+                ui.heading("Triple Cube Raytracer");
                 ui.separator();
                 ui.label(format!("FPS: {:.1}", self.fps));
                 ui.separator();
@@ -402,131 +512,192 @@ impl DualRendererApp {
                 ui.separator();
                 ui.checkbox(&mut self.use_manual_camera, "Manual Camera");
                 if self.use_manual_camera {
-                    ui.label(
-                        "(Drag left/right: rotate Y-axis, up/down: camera angle, scroll: zoom)",
-                    );
+                    ui.label("(Drag: orbit, Scroll: zoom)");
                 }
             });
         });
 
-        // Main panel with three columns
+        // Main panel with 2x2 grid
         egui::CentralPanel::default().show(ctx, |ui| {
-            // Read and update GL frame
-            if let Some(gl_img) = unsafe { self.read_gl_texture_to_image(gl) } {
+            // Read frames from framebuffers
+            if let Some(gl_img) = unsafe { self.read_framebuffer_to_image(gl, self.gl_framebuffer) }
+            {
                 self.gl_latest_frame = Some(gl_img);
             }
+            if let Some(gpu_img) =
+                unsafe { self.read_framebuffer_to_image(gl, self.gpu_framebuffer) }
+            {
+                self.gpu_latest_frame = Some(gpu_img);
+            }
 
-            // Calculate diff when BOTH renderers have latest frames available
-            if let (Some(gl_img), Some(cpu_img)) = (&self.gl_latest_frame, &self.cpu_latest_frame) {
-                let diff_image = self.compute_difference_image(gl_img, cpu_img);
+            // Calculate diff
+            if let (Some(left_img), Some(right_img)) =
+                (self.get_frame(self.diff_left), self.get_frame(self.diff_right))
+            {
+                let diff_image = self.compute_difference_image(left_img, right_img);
                 self.diff_texture =
                     Some(ctx.load_texture("diff_render", diff_image, TextureOptions::LINEAR));
             }
 
-            // Create/update display textures from latest frames
-            if let Some(ref gl_img) = self.gl_latest_frame {
-                self.gl_egui_texture =
-                    Some(ctx.load_texture("gl_render", gl_img.clone(), TextureOptions::LINEAR));
-            }
+            // Create textures
             if let Some(ref cpu_img) = self.cpu_latest_frame {
                 self.cpu_texture =
                     Some(ctx.load_texture("cpu_render", cpu_img.clone(), TextureOptions::LINEAR));
             }
+            if let Some(ref gl_img) = self.gl_latest_frame {
+                self.gl_egui_texture =
+                    Some(ctx.load_texture("gl_render", gl_img.clone(), TextureOptions::LINEAR));
+            }
+            if let Some(ref gpu_img) = self.gpu_latest_frame {
+                self.gpu_egui_texture =
+                    Some(ctx.load_texture("gpu_render", gpu_img.clone(), TextureOptions::LINEAR));
+            }
 
-            ui.columns(3, |columns| {
-                // Left: GL Renderer
-                columns[0].vertical_centered(|ui| {
-                    ui.heading("GPU");
-                    ui.label("OpenGL shader");
-                    ui.label(format!("Render: {:.2}ms", self.gl_render_time_ms));
-
-                    if let Some(texture) = &self.gl_egui_texture {
-                        let response = ui.add(
-                            egui::Image::from_texture(egui::load::SizedTexture {
-                                id: texture.id(),
-                                size: [self.render_size.0 as f32, self.render_size.1 as f32].into(),
-                            })
-                            .sense(egui::Sense::click_and_drag()),
-                        );
-
-                        // Handle mouse interaction for camera control
-                        if self.use_manual_camera {
-                            self.handle_camera_input(&response);
-                        }
-                    } else {
-                        ui.label("N/A");
+            // 2x2 Grid layout
+            let mut responses = Vec::new();
+            egui::Grid::new("tracer_grid")
+                .spacing([10.0, 10.0])
+                .show(ui, |ui| {
+                    // Row 1: CPU | GL
+                    let cpu_response = Self::render_view_static(
+                        ui,
+                        "CPU",
+                        "Pure Rust",
+                        self.cpu_render_time_ms,
+                        &self.cpu_texture,
+                        self.render_size,
+                    );
+                    if let Some(r) = cpu_response {
+                        responses.push(r);
                     }
+
+                    let gl_response = Self::render_view_static(
+                        ui,
+                        "GL",
+                        "WebGL 2.0 Fragment",
+                        self.gl_render_time_ms,
+                        &self.gl_egui_texture,
+                        self.render_size,
+                    );
+                    if let Some(r) = gl_response {
+                        responses.push(r);
+                    }
+                    ui.end_row();
+
+                    // Row 2: GPU | Diff
+                    let gpu_response = Self::render_view_static(
+                        ui,
+                        "GPU",
+                        "Compute Shader",
+                        self.gpu_render_time_ms,
+                        &self.gpu_egui_texture,
+                        self.render_size,
+                    );
+                    if let Some(r) = gpu_response {
+                        responses.push(r);
+                    }
+                    self.render_diff_view(ui);
+                    ui.end_row();
                 });
 
-                // Center: Difference
-                columns[1].vertical_centered(|ui| {
-                    ui.heading("Difference");
-                    ui.label("Amplified 10x");
+            // Handle camera input after all views are rendered
+            if self.use_manual_camera {
+                for response in responses {
+                    self.handle_camera_input(&response);
+                }
+            }
+        });
+    }
 
-                    if let Some(texture) = &self.diff_texture {
-                        ui.image(egui::ImageSource::Texture(egui::load::SizedTexture {
-                            id: texture.id(),
-                            size: [self.render_size.0 as f32, self.render_size.1 as f32].into(),
-                        }));
-                    } else {
-                        ui.label("N/A");
-                    }
-                });
+    fn render_view_static(
+        ui: &mut egui::Ui,
+        title: &str,
+        subtitle: &str,
+        render_time: f32,
+        texture: &Option<TextureHandle>,
+        render_size: (u32, u32),
+    ) -> Option<egui::Response> {
+        let mut image_response = None;
+        ui.vertical(|ui| {
+            ui.heading(title);
+            ui.label(subtitle);
+            if render_time >= 0.0 {
+                ui.label(format!("Render: {:.2}ms", render_time));
+            } else {
+                ui.label("Not Available");
+            }
 
-                // Right: CPU Renderer
-                columns[2].vertical_centered(|ui| {
-                    ui.heading("CPU");
-                    ui.label("Pure Rust (async)");
-                    ui.label(format!("Render: {:.2}ms", self.cpu_render_time_ms));
+            if let Some(tex) = texture {
+                let response = ui.add(
+                    egui::Image::from_texture(egui::load::SizedTexture {
+                        id: tex.id(),
+                        size: [render_size.0 as f32, render_size.1 as f32].into(),
+                    })
+                    .sense(egui::Sense::click_and_drag()),
+                );
+                image_response = Some(response);
+            } else {
+                ui.label("N/A");
+            }
+        });
+        image_response
+    }
 
-                    if let Some(texture) = &self.cpu_texture {
-                        let response = ui.add(
-                            egui::Image::from_texture(egui::load::SizedTexture {
-                                id: texture.id(),
-                                size: [self.render_size.0 as f32, self.render_size.1 as f32].into(),
-                            })
-                            .sense(egui::Sense::click_and_drag()),
-                        );
+    fn render_diff_view(&mut self, ui: &mut egui::Ui) {
+        ui.vertical(|ui| {
+            ui.heading("Difference");
 
-                        // Handle mouse interaction for camera control
-                        if self.use_manual_camera {
-                            self.handle_camera_input(&response);
-                        }
-                    } else {
-                        ui.label("N/A");
-                    }
-                });
+            // Dropdown selectors for diff comparison
+            ui.horizontal(|ui| {
+                egui::ComboBox::from_label("Left")
+                    .selected_text(self.diff_left.name())
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut self.diff_left, DiffSource::Cpu, DiffSource::Cpu.name());
+                        ui.selectable_value(&mut self.diff_left, DiffSource::Gl, DiffSource::Gl.name());
+                        ui.selectable_value(&mut self.diff_left, DiffSource::Gpu, DiffSource::Gpu.name());
+                    });
+
+                ui.label("vs");
+
+                egui::ComboBox::from_label("Right")
+                    .selected_text(self.diff_right.name())
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut self.diff_right, DiffSource::Cpu, DiffSource::Cpu.name());
+                        ui.selectable_value(&mut self.diff_right, DiffSource::Gl, DiffSource::Gl.name());
+                        ui.selectable_value(&mut self.diff_right, DiffSource::Gpu, DiffSource::Gpu.name());
+                    });
             });
+
+            ui.label("Amplified 10x");
+
+            if let Some(texture) = &self.diff_texture {
+                ui.image(egui::ImageSource::Texture(egui::load::SizedTexture {
+                    id: texture.id(),
+                    size: [self.render_size.0 as f32, self.render_size.1 as f32].into(),
+                }));
+            } else {
+                ui.label("N/A");
+            }
         });
     }
 
     fn handle_camera_input(&mut self, response: &egui::Response) {
-        // Handle mouse drag for orbit rotation
         if response.dragged() {
             let delta = response.drag_delta();
-
-            // Calculate yaw (horizontal) and pitch (vertical) changes
             let yaw_delta = -delta.x * self.mouse_sensitivity;
             let pitch_delta = -delta.y * self.mouse_sensitivity;
-
-            // Orbit around the target (cube center)
             self.camera
                 .orbit(self.camera_target, yaw_delta, pitch_delta);
         }
 
-        // Handle scroll for zoom (move closer/farther from target)
         if response.hovered() {
             let scroll_delta = response.ctx.input(|i| i.smooth_scroll_delta.y);
             if scroll_delta.abs() > 0.01 {
-                // Calculate zoom by moving along the camera-to-target direction
                 let to_target = self.camera_target - self.camera.position;
                 let distance = to_target.length();
                 let zoom_amount = scroll_delta * self.zoom_sensitivity * 0.01;
-
-                // Don't zoom too close (min distance of 0.5) or too far (max distance of 20)
                 let new_distance = (distance - zoom_amount).clamp(0.5, 20.0);
                 let zoom_factor = new_distance / distance;
-
                 self.camera.position = self.camera_target - to_target * zoom_factor;
             }
         }
@@ -540,6 +711,13 @@ impl DualRendererApp {
             if let Some(tex) = self.gl_texture {
                 gl.delete_texture(tex);
             }
+            if let Some(fb) = self.gpu_framebuffer {
+                gl.delete_framebuffer(fb);
+            }
+            if let Some(tex) = self.gpu_texture {
+                gl.delete_texture(tex);
+            }
+            self.gl_renderer.destroy_gl(gl);
             self.gpu_renderer.destroy_gl(gl);
         }
     }

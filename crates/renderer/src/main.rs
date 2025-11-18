@@ -4,6 +4,7 @@ mod gl_tracer;
 mod gpu_tracer;
 mod renderer;
 mod scenes;
+mod shader_utils;
 
 use cpu_tracer::CpuCubeTracer;
 use egui_app::DualRendererApp;

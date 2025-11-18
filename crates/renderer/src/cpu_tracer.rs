@@ -1,4 +1,3 @@
-use crate::gpu_tracer::GpuTracer;
 use crate::renderer::*;
 use crate::scenes::create_octa_cube;
 use cube::{Cube, parse_csm};
@@ -7,10 +6,11 @@ use std::rc::Rc;
 
 /// Pure Rust CPU raytracer that renders to an image buffer
 pub struct CpuCubeTracer {
+    cube: Rc<Cube<i32>>,
+    bounds: CubeBounds,
     light_dir: glam::Vec3,
     background_color: glam::Vec3,
     image_buffer: Option<ImageBuffer<Rgb<u8>, Vec<u8>>>,
-    gpu_tracer: GpuTracer,
 }
 
 impl CpuCubeTracer {
@@ -19,20 +19,22 @@ impl CpuCubeTracer {
         let cube = create_octa_cube();
 
         Self {
+            cube,
+            bounds: CubeBounds::default(),
             light_dir: glam::Vec3::new(0.5, 1.0, 0.3).normalize(),
             background_color: glam::Vec3::new(0.2, 0.3, 0.4),
             image_buffer: None,
-            gpu_tracer: GpuTracer::new(cube),
         }
     }
 
     #[allow(dead_code)]
     pub fn new_with_cube(cube: Rc<Cube<i32>>) -> Self {
         Self {
+            cube,
+            bounds: CubeBounds::default(),
             light_dir: glam::Vec3::new(0.5, 1.0, 0.3).normalize(),
             background_color: glam::Vec3::new(0.2, 0.3, 0.4),
             image_buffer: None,
-            gpu_tracer: GpuTracer::new(cube),
         }
     }
 
@@ -40,10 +42,11 @@ impl CpuCubeTracer {
     pub fn new_with_cubscript(cubscript: &str) -> Self {
         let cube = Self::parse_cube(cubscript);
         Self {
+            cube,
+            bounds: CubeBounds::default(),
             light_dir: glam::Vec3::new(0.5, 1.0, 0.3).normalize(),
             background_color: glam::Vec3::new(0.2, 0.3, 0.4),
             image_buffer: None,
-            gpu_tracer: GpuTracer::new(cube),
         }
     }
 
@@ -120,15 +123,15 @@ impl CpuCubeTracer {
 
     /// Render a ray and return the color
     fn render_ray(&self, ray: Ray) -> glam::Vec3 {
-        // Use GPU tracer's bounding box intersection
-        let hit = self.gpu_tracer.raycast(ray.origin, ray.direction);
+        // Intersect with bounding box
+        let hit_info = intersect_box(ray, self.bounds.min, self.bounds.max);
 
         // Background color
         let mut color = self.background_color;
 
-        if hit.hit {
+        if hit_info.hit {
             // Get cube bounds for coordinate transformation
-            let bounds = CubeBounds::default();
+            let bounds = self.bounds;
 
             // CRITICAL FIX: Advance ray slightly into the cube before transforming to normalized space
             // When we hit the bounding box surface, we're exactly ON the boundary.
@@ -136,7 +139,7 @@ impl CpuCubeTracer {
             // Advance the ray by a small epsilon to ensure we start INSIDE the cube.
             // Cube is 2 units wide, so 0.01 is 0.5% of the cube size - small but meaningful
             const SURFACE_EPSILON: f32 = 0.01;
-            let advanced_hit_point = hit.point + ray.direction * SURFACE_EPSILON;
+            let advanced_hit_point = hit_info.point + ray.direction * SURFACE_EPSILON;
 
             // Transform advanced hit point from world space to normalized [0,1]³ cube space
             let mut normalized_pos = (advanced_hit_point - bounds.min) / (bounds.max - bounds.min);
@@ -153,9 +156,7 @@ impl CpuCubeTracer {
             let max_depth = 1;
 
             // Call cube raycast directly
-            let cube = self.gpu_tracer.cube();
-
-            let cube_hit = cube.raycast(
+            let cube_hit = self.cube.raycast(
                 normalized_pos,
                 ray.direction.normalize(),
                 max_depth,
