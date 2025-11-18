@@ -7,9 +7,10 @@ import * as cubeWasm from 'cube'
  * Load a .vox file from a URL and generate Three.js geometry
  * @param url URL to the .vox file
  * @param _userNpub Optional user npub for color customization (not used - kept for API compatibility)
+ * @param maxDepth Maximum octree depth (default: 3 for 8x8x8 avatars). Higher = supports larger models but increases scale.
  * @returns GeometryData with vertices, indices, normals, and colors
  */
-export async function loadVoxFromUrl(url: string, _userNpub?: string): Promise<GeometryData> {
+export async function loadVoxFromUrl(url: string, _userNpub?: string, maxDepth: number = 3): Promise<GeometryData> {
   // Ensure WASM is initialized
   await cubeInit()
 
@@ -26,28 +27,48 @@ export async function loadVoxFromUrl(url: string, _userNpub?: string): Promise<G
   // @ts-ignore - WASM module exports loadVox
   const wasmCube = cubeWasm.loadVox(bytes, 0.5, 0.5, 0.5)
 
-  // Generate mesh from the cube (maxDepth=3 for 8x8x8 avatars, null palette = HSV colors)
-  const result = wasmCube.generateMesh(null, 3)
+  // Generate mesh from the cube (null palette = original colors)
+  // maxDepth determines resolution: 2^maxDepth = max voxels per axis
+  // Common values: 4 (16x16x16), 5 (32x32x32), 6 (64x64x64)
+  const result = wasmCube.generateMesh(null, maxDepth)
 
   if ('error' in result) {
+    logger.error('common', `[voxLoader] Failed to parse VOX file from ${url}: ${result.error}`)
     throw new Error(`Failed to parse VOX file: ${result.error}`)
   }
 
-  return {
+  const geometryData = {
     vertices: new Float32Array(result.vertices),
     indices: new Uint32Array(result.indices),
     normals: new Float32Array(result.normals),
     colors: new Float32Array(result.colors),
   } as GeometryData
+
+  // Log warning if geometry is empty
+  if (geometryData.vertices.length === 0 || geometryData.indices.length === 0) {
+    logger.warn('common', `[voxLoader] VOX file loaded but has no geometry: ${url}`, {
+      vertices: geometryData.vertices.length / 3,
+      indices: geometryData.indices.length,
+      fileSize: bytes.length,
+    })
+  } else {
+    logger.log('common', `[voxLoader] VOX file loaded successfully: ${url}`, {
+      vertices: geometryData.vertices.length / 3,
+      triangles: geometryData.indices.length / 3,
+    })
+  }
+
+  return geometryData
 }
 
 /**
  * Load a .vox file from a File object (e.g., from file input)
  * @param file File object containing .vox data
  * @param _userNpub Optional user npub for color customization (not used - kept for API compatibility)
+ * @param maxDepth Maximum octree depth (default: 3 for 8x8x8 avatars). Higher = supports larger models but increases scale.
  * @returns GeometryData with vertices, indices, normals, and colors
  */
-export async function loadVoxFromFile(file: File, _userNpub?: string): Promise<GeometryData> {
+export async function loadVoxFromFile(file: File, _userNpub?: string, maxDepth: number = 3): Promise<GeometryData> {
   // Ensure WASM is initialized
   await cubeInit()
 
@@ -59,19 +80,38 @@ export async function loadVoxFromFile(file: File, _userNpub?: string): Promise<G
   // @ts-ignore - WASM module exports loadVox
   const wasmCube = cubeWasm.loadVox(bytes, 0.5, 0.5, 0.5)
 
-  // Generate mesh from the cube (maxDepth=3 for 8x8x8 avatars, null palette = HSV colors)
-  const result = wasmCube.generateMesh(null, 3)
+  // Generate mesh from the cube (null palette = original colors)
+  // maxDepth determines resolution: 2^maxDepth = max voxels per axis
+  // Common values: 4 (16x16x16), 5 (32x32x32), 6 (64x64x64)
+  const result = wasmCube.generateMesh(null, maxDepth)
 
   if ('error' in result) {
+    logger.error('common', `[voxLoader] Failed to parse VOX file from ${file.name}: ${result.error}`)
     throw new Error(`Failed to parse VOX file: ${result.error}`)
   }
 
-  return {
+  const geometryData = {
     vertices: new Float32Array(result.vertices),
     indices: new Uint32Array(result.indices),
     normals: new Float32Array(result.normals),
     colors: new Float32Array(result.colors),
   } as GeometryData
+
+  // Log warning if geometry is empty
+  if (geometryData.vertices.length === 0 || geometryData.indices.length === 0) {
+    logger.warn('common', `[voxLoader] VOX file loaded but has no geometry: ${file.name}`, {
+      vertices: geometryData.vertices.length / 3,
+      indices: geometryData.indices.length,
+      fileSize: bytes.length,
+    })
+  } else {
+    logger.log('common', `[voxLoader] VOX file loaded successfully: ${file.name}`, {
+      vertices: geometryData.vertices.length / 3,
+      triangles: geometryData.indices.length / 3,
+    })
+  }
+
+  return geometryData
 }
 
 /**

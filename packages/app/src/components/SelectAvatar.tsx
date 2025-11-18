@@ -22,6 +22,7 @@ import { ENABLE_AVATAR_COLOR_SELECTION } from '../constants/features';
 import { ResponsivePanel } from './ResponsivePanel';
 import { MaterialsLoader } from '../renderer/materials-loader';
 import { createTexturedVoxelMaterial, updateShaderLighting } from '../renderer/textured-voxel-material';
+import { getWorldPanelSetting } from '../config/world-panel-settings';
 
 export interface AvatarSelection {
   avatarType: 'vox' | 'glb' | 'csm';
@@ -72,6 +73,7 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
   const [materialsLoader] = useState(() => new MaterialsLoader());
   const [texturesLoaded, setTexturesLoaded] = useState(false);
   const [textureDepth, setTextureDepth] = useState<number>(0); // 0-5, scales texture by 2^depth
+  const [avatarTexturesEnabled] = useState(() => getWorldPanelSetting('avatarTexturesEnabled'));
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -86,24 +88,47 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
 
   // Randomize avatar selection
   const randomizeAvatar = () => {
+    logger.log('ui', '[SelectAvatar] Randomizing avatar:', {
+      avatarType,
+      voxModelsCount: voxModels.length,
+      glbModelsCount: glbModels.length,
+    });
+
     // Randomize avatar model
     let selectedModel = '';
     if (avatarType === 'vox' && voxModels.length > 0) {
       const randomIndex = Math.floor(Math.random() * voxModels.length);
       selectedModel = voxModels[randomIndex].label;
+      logger.log('ui', '[SelectAvatar] Selected random VOX:', {
+        index: randomIndex,
+        id: voxModels[randomIndex].id,
+        label: selectedModel,
+      });
       setSelectedId(voxModels[randomIndex].id);
       setAvatarUrl('');
     } else if (avatarType === 'glb' && glbModels.length > 0) {
       const randomIndex = Math.floor(Math.random() * glbModels.length);
       selectedModel = glbModels[randomIndex].label;
+      logger.log('ui', '[SelectAvatar] Selected random GLB:', {
+        index: randomIndex,
+        id: glbModels[randomIndex].id,
+        label: selectedModel,
+      });
       setSelectedId(glbModels[randomIndex].id);
       setAvatarUrl('');
+    } else {
+      logger.warn('ui', '[SelectAvatar] Cannot randomize: no models available');
     }
 
-    // Randomize texture
-    const randomTextureIndex = Math.floor(Math.random() * AVATAR_TEXTURES.length);
-    const selectedTexture = AVATAR_TEXTURES[randomTextureIndex];
-    setAvatarTexture(selectedTexture);
+    // Randomize texture (only if textures are enabled)
+    let selectedTexture = '0';
+    if (avatarTexturesEnabled) {
+      const randomTextureIndex = Math.floor(Math.random() * AVATAR_TEXTURES.length);
+      selectedTexture = AVATAR_TEXTURES[randomTextureIndex];
+      setAvatarTexture(selectedTexture);
+    } else {
+      setAvatarTexture('0');
+    }
 
     // Randomize teleport animation
     const teleportTypes: TeleportAnimationType[] = ['fade', 'scale', 'spin', 'slide', 'burst'];
@@ -114,27 +139,33 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
     logger.log('ui', `[SelectAvatar] Randomized avatar: model="${selectedModel}", texture="${selectedTexture}", teleport="${selectedTeleport}"`);
   };
 
-  // Load materials and textures
+  // Load materials and textures (only if avatar textures are enabled)
   useEffect(() => {
     if (!isOpen) return;
 
     const loadTextures = async () => {
       try {
-        logger.log('ui', '[SelectAvatar] Loading materials and textures...');
-        await materialsLoader.loadMaterialsJson();
-        await materialsLoader.loadTextures(true); // Use high-res textures for avatar selector
-        setTexturesLoaded(true);
-        logger.log('ui', '[SelectAvatar] Materials and textures loaded successfully');
+        if (avatarTexturesEnabled) {
+          logger.log('ui', '[SelectAvatar] Loading materials and textures...');
+          await materialsLoader.loadMaterialsJson();
+          await materialsLoader.loadTextures(true); // Use high-res textures for avatar selector
+          setTexturesLoaded(true);
+          logger.log('ui', '[SelectAvatar] Materials and textures loaded successfully');
+        } else {
+          logger.log('ui', '[SelectAvatar] Avatar textures disabled, skipping texture load');
+          setTexturesLoaded(false);
+        }
       } catch (error) {
         logger.error('ui', '[SelectAvatar] Failed to load materials/textures:', error);
       }
     };
 
     loadTextures();
-  }, [isOpen, materialsLoader]);
+  }, [isOpen, materialsLoader, avatarTexturesEnabled]);
 
   // Load models configuration
   useEffect(() => {
+    logger.log('ui', '[SelectAvatar] Loading models config...');
     loadModelsConfig().then(config => {
       const vox = config.vox?.map(([label, filename]) => ({
         id: filename.replace('.vox', ''),
@@ -146,19 +177,38 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
         label,
         filename
       })) || [];
+
+      logger.log('ui', '[SelectAvatar] Models loaded:', {
+        voxCount: vox.length,
+        glbCount: glb.length,
+      });
+
       setVoxModels(vox);
       setGlbModels(glb);
 
-      // Always select random VOX model when opening selector
-      if (vox.length > 0) {
+      // Only auto-select if no previous selection exists
+      if (!hasPreviousSelection && vox.length > 0) {
         const randomIndex = Math.floor(Math.random() * vox.length);
-        setSelectedId(vox[randomIndex].id);
+        const selectedModel = vox[randomIndex];
+        logger.log('ui', '[SelectAvatar] Auto-selecting random model (no previous selection):', {
+          id: selectedModel.id,
+          label: selectedModel.label,
+        });
+        setSelectedId(selectedModel.id);
         setAvatarType('vox');
+      } else if (hasPreviousSelection) {
+        logger.log('ui', '[SelectAvatar] Keeping previous selection:', {
+          avatarType: currentSelection?.avatarType,
+          avatarId: currentSelection?.avatarId,
+          avatarUrl: currentSelection?.avatarUrl,
+        });
+      } else {
+        logger.warn('ui', '[SelectAvatar] No VOX models available for auto-selection');
       }
     }).catch(error => {
       logger.error('ui', '[SelectAvatar] Failed to load models config:', error);
     });
-  }, []);
+  }, [hasPreviousSelection, currentSelection]);
 
   // Preview canvas - use callback ref to detect when canvas is mounted
   const [previewCanvas, setPreviewCanvas] = useState<HTMLCanvasElement | null>(null);
@@ -257,12 +307,25 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
 
   // Update preview when selection changes (but NOT when just switching tabs)
   useEffect(() => {
+    logger.log('ui', '[SelectAvatar] Preview effect triggered:', {
+      isOpen,
+      sceneReady,
+      hasScene: !!previewSceneRef.current,
+      selectedId,
+      avatarUrl,
+      avatarType,
+      voxModelsCount: voxModels.length,
+      glbModelsCount: glbModels.length,
+    });
+
     if (!isOpen || !sceneReady || !previewSceneRef.current) {
+      logger.log('ui', '[SelectAvatar] Preview effect skipped: not ready');
       return;
     }
 
     // Don't reload preview if no model is selected yet
     if (!selectedId && !avatarUrl) {
+      logger.log('ui', '[SelectAvatar] Preview effect skipped: no model selected');
       return;
     }
 
@@ -298,24 +361,46 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
 
       let modelUrl: string | undefined;
 
+      logger.log('ui', '[SelectAvatar] Loading preview:', {
+        selectedId,
+        avatarUrl,
+        avatarType,
+        voxModelsCount: voxModels.length,
+        glbModelsCount: glbModels.length,
+      });
+
       // Determine the model URL based on selection
       if (avatarUrl) {
         modelUrl = avatarUrl;
+        logger.log('ui', '[SelectAvatar] Using avatarUrl:', modelUrl);
       } else if (selectedId && selectedId !== 'file') {
         if (avatarType === 'vox') {
           const model = voxModels.find(m => m.id === selectedId);
+          logger.log('ui', '[SelectAvatar] Looking for VOX model:', {
+            selectedId,
+            found: !!model,
+            model: model?.filename,
+          });
           if (model) {
             modelUrl = `${import.meta.env.BASE_URL}assets/models/vox/${model.filename}`;
           }
         } else if (avatarType === 'glb') {
           const model = glbModels.find(m => m.id === selectedId);
+          logger.log('ui', '[SelectAvatar] Looking for GLB model:', {
+            selectedId,
+            found: !!model,
+            model: model?.filename,
+          });
           if (model) {
             modelUrl = `${import.meta.env.BASE_URL}assets/models/glb/${model.filename}`;
           }
         }
       }
 
+      logger.log('ui', '[SelectAvatar] Final modelUrl:', modelUrl);
+
       if (!modelUrl) {
+        logger.warn('ui', '[SelectAvatar] No modelUrl found, showing placeholder');
         // Show placeholder (wrapped in group for consistent rotation)
         const geometry = new THREE.BoxGeometry(0.5, 1, 0.5);
         const material = new THREE.MeshStandardMaterial({ color: 0x6496fa });
@@ -334,8 +419,31 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
       if (avatarType === 'vox' || modelUrl.endsWith('.vox')) {
         // Load VOX file
         try {
+          logger.log('ui', '[SelectAvatar] Loading VOX file:', modelUrl);
           const { loadVoxFromUrl } = await import('../utils/voxLoader');
-          const geometryData = await loadVoxFromUrl(modelUrl);
+          // Use maxDepth=6 for avatar selector to support larger models in preview
+          const geometryData = await loadVoxFromUrl(modelUrl, undefined, 6);
+          logger.log('ui', '[SelectAvatar] VOX file loaded:', {
+            vertices: geometryData.vertices.length / 3,
+            indices: geometryData.indices.length,
+          });
+
+          // Check for empty geometry
+          if (geometryData.vertices.length === 0 || geometryData.indices.length === 0) {
+            logger.error('ui', '[SelectAvatar] VOX file has no geometry (empty model):', modelUrl);
+            // Show error placeholder (wrapped in group for consistent rotation)
+            const geometry = new THREE.BoxGeometry(0.5, 1, 0.5);
+            const material = new THREE.MeshStandardMaterial({ color: 0xff9900 }); // Orange for "empty file"
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.position.y = 0.5;
+
+            const group = new THREE.Group();
+            group.add(mesh);
+            group.rotation.y = Math.PI;
+            scene.add(group);
+            previewSceneRef.current.mesh = group;
+            return;
+          }
 
           if (!previewSceneRef.current) return; // Component unmounted
 
@@ -392,9 +500,9 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
 
           geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
 
-          // Get material ID from selected texture
+          // Get material ID from selected texture (only if textures are enabled)
           let materialId = 0; // Default to vertex colors only
-          if (avatarTexture && avatarTexture !== '0' && texturesLoaded) {
+          if (avatarTexturesEnabled && avatarTexture && avatarTexture !== '0' && texturesLoaded) {
             const materialsData = (materialsLoader as any).materialsData;
             if (materialsData) {
               const material = materialsData.materials.find((m: any) => m.id === avatarTexture);
@@ -415,9 +523,9 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
           geometry.boundingBox!.getCenter(geoCenter);
           geometry.translate(-geoCenter.x, 0, -geoCenter.z); // Only center horizontally
 
-          // Create material using textured shader if textures are loaded
+          // Create material using textured shader if textures are enabled and loaded
           let material: THREE.Material;
-          if (texturesLoaded && previewSceneRef.current.renderer) {
+          if (avatarTexturesEnabled && texturesLoaded && previewSceneRef.current.renderer) {
             const textureArray = materialsLoader.getTextureArray();
             material = createTexturedVoxelMaterial(textureArray, true, previewSceneRef.current.renderer);
             logger.log('ui', '[SelectAvatar] Using textured material');
@@ -427,7 +535,7 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
               specular: 0x111111,
               shininess: 30,
             });
-            logger.log('ui', '[SelectAvatar] Using fallback phong material');
+            logger.log('ui', '[SelectAvatar] Using vertex color material (textures disabled)');
           }
 
           const mesh = new THREE.Mesh(geometry, material);
@@ -459,6 +567,12 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
           scene.add(mesh);
           previewSceneRef.current.mesh = mesh;
 
+          logger.log('ui', '[SelectAvatar] VOX mesh added to scene:', {
+            position: mesh.position.toArray(),
+            scale: mesh.scale.toArray(),
+            materialType: material.type,
+          });
+
           // Update shader lighting AFTER mesh is added to scene
           if (material instanceof THREE.ShaderMaterial) {
             updateShaderLighting(material, scene);
@@ -482,7 +596,7 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
     };
 
     loadPreview();
-  }, [isOpen, sceneReady, selectedId, avatarUrl, voxModels, glbModels, avatarType, avatarTexture, texturesLoaded, materialsLoader, textureDepth]);
+  }, [isOpen, sceneReady, selectedId, avatarUrl, voxModels, glbModels, avatarType, avatarTexture, texturesLoaded, materialsLoader, textureDepth, avatarTexturesEnabled]);
 
   const handleSave = () => {
     const selection: AvatarSelection = {
@@ -627,105 +741,109 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
               </Popover>
             </HStack>
 
-            {/* Material Selector */}
-            <HStack spacing={2} justify="space-between">
-              <Text fontSize="sm" color="white">
-                Material
-              </Text>
-              <Popover placement="top">
-                {({ onClose }) => (
-                  <>
-                    <PopoverTrigger>
-                      <Badge
-                        colorScheme="purple"
-                        fontSize="xs"
-                        cursor="pointer"
-                        _hover={{ opacity: 0.8 }}
-                      >
-                        {avatarTexture === '0' ? 'None' : avatarTexture.replace(/_/g, ' ')}
-                      </Badge>
-                    </PopoverTrigger>
-                    <PopoverContent bg="gray.800" borderColor="purple.500" width="auto" maxH="300px" overflowY="auto">
-                      <PopoverBody p={1}>
-                        <VStack spacing={1}>
-                          <Button
-                            size="xs"
-                            variant={avatarTexture === '0' ? 'solid' : 'ghost'}
+            {/* Material Selector - Only show when textures are enabled */}
+            {avatarTexturesEnabled && (
+              <>
+                <HStack spacing={2} justify="space-between">
+                  <Text fontSize="sm" color="white">
+                    Material
+                  </Text>
+                  <Popover placement="top">
+                    {({ onClose }) => (
+                      <>
+                        <PopoverTrigger>
+                          <Badge
                             colorScheme="purple"
-                            onClick={() => {
-                              handleTextureSelect('0');
-                              onClose();
-                            }}
-                            width="100%"
+                            fontSize="xs"
+                            cursor="pointer"
+                            _hover={{ opacity: 0.8 }}
                           >
-                            None
-                          </Button>
-                          {AVATAR_TEXTURES.map((texture) => (
-                            <Button
-                              key={texture}
-                              size="xs"
-                              variant={avatarTexture === texture ? 'solid' : 'ghost'}
-                              colorScheme="purple"
-                              onClick={() => {
-                                handleTextureSelect(texture);
-                                onClose();
-                              }}
-                              width="100%"
-                            >
-                              {texture.replace(/_/g, ' ')}
-                            </Button>
-                          ))}
-                        </VStack>
-                      </PopoverBody>
-                    </PopoverContent>
-                  </>
-                )}
-              </Popover>
-            </HStack>
+                            {avatarTexture === '0' ? 'None' : avatarTexture.replace(/_/g, ' ')}
+                          </Badge>
+                        </PopoverTrigger>
+                        <PopoverContent bg="gray.800" borderColor="purple.500" width="auto" maxH="300px" overflowY="auto">
+                          <PopoverBody p={1}>
+                            <VStack spacing={1}>
+                              <Button
+                                size="xs"
+                                variant={avatarTexture === '0' ? 'solid' : 'ghost'}
+                                colorScheme="purple"
+                                onClick={() => {
+                                  handleTextureSelect('0');
+                                  onClose();
+                                }}
+                                width="100%"
+                              >
+                                None
+                              </Button>
+                              {AVATAR_TEXTURES.map((texture) => (
+                                <Button
+                                  key={texture}
+                                  size="xs"
+                                  variant={avatarTexture === texture ? 'solid' : 'ghost'}
+                                  colorScheme="purple"
+                                  onClick={() => {
+                                    handleTextureSelect(texture);
+                                    onClose();
+                                  }}
+                                  width="100%"
+                                >
+                                  {texture.replace(/_/g, ' ')}
+                                </Button>
+                              ))}
+                            </VStack>
+                          </PopoverBody>
+                        </PopoverContent>
+                      </>
+                    )}
+                  </Popover>
+                </HStack>
 
-            {/* Texture Scale Control */}
-            <HStack spacing={2} justify="space-between">
-              <Text fontSize="sm" color="white">
-                Texture Scale
-              </Text>
-              <Popover placement="top">
-                {({ onClose }) => (
-                  <>
-                    <PopoverTrigger>
-                      <Badge
-                        colorScheme="orange"
-                        fontSize="xs"
-                        cursor="pointer"
-                        _hover={{ opacity: 0.8 }}
-                      >
-                        {Math.pow(2, textureDepth).toFixed(1)}x
-                      </Badge>
-                    </PopoverTrigger>
-                    <PopoverContent bg="gray.800" borderColor="orange.500" width="auto">
-                      <PopoverBody p={1}>
-                        <VStack spacing={1}>
-                          {[0, 1, 2, 3, 4, 5].map((depth) => (
-                            <Button
-                              key={depth}
-                              size="xs"
-                              variant={textureDepth === depth ? 'solid' : 'ghost'}
-                              colorScheme="orange"
-                              onClick={() => {
-                                setTextureDepth(depth);
-                                onClose();
-                              }}
-                              width="100%"
-                            >
-                              {Math.pow(2, depth).toFixed(1)}x
-                            </Button>
-                          ))}
-                        </VStack>
-                      </PopoverBody>
-                    </PopoverContent>
-                  </>
-                )}
-              </Popover>
-            </HStack>
+                {/* Texture Scale Control */}
+                <HStack spacing={2} justify="space-between">
+                  <Text fontSize="sm" color="white">
+                    Texture Scale
+                  </Text>
+                  <Popover placement="top">
+                    {({ onClose }) => (
+                      <>
+                        <PopoverTrigger>
+                          <Badge
+                            colorScheme="orange"
+                            fontSize="xs"
+                            cursor="pointer"
+                            _hover={{ opacity: 0.8 }}
+                          >
+                            {Math.pow(2, textureDepth).toFixed(1)}x
+                          </Badge>
+                        </PopoverTrigger>
+                        <PopoverContent bg="gray.800" borderColor="orange.500" width="auto">
+                          <PopoverBody p={1}>
+                            <VStack spacing={1}>
+                              {[0, 1, 2, 3, 4, 5].map((depth) => (
+                                <Button
+                                  key={depth}
+                                  size="xs"
+                                  variant={textureDepth === depth ? 'solid' : 'ghost'}
+                                  colorScheme="orange"
+                                  onClick={() => {
+                                    setTextureDepth(depth);
+                                    onClose();
+                                  }}
+                                  width="100%"
+                                >
+                                  {Math.pow(2, depth).toFixed(1)}x
+                                </Button>
+                              ))}
+                            </VStack>
+                          </PopoverBody>
+                        </PopoverContent>
+                      </>
+                    )}
+                  </Popover>
+                </HStack>
+              </>
+            )}
 
             {/* Teleport Animation */}
             <HStack spacing={2} justify="space-between">
