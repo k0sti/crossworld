@@ -33,6 +33,7 @@ impl WorldCube {
     /// - 4 bottom cubes + 4 top cubes surround the world
     /// - Original world placed at octant 0 (bottom-front-left)
     pub fn new(macro_depth: u32, micro_depth: u32, border_depth: u32, seed: u32) -> Self {
+        tracing::info!("WorldCube::new called with seed: {}", seed);
         let noise = Perlin::new(seed);
         let fbm = Fbm::new(seed);
 

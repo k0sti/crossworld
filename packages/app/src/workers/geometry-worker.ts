@@ -39,6 +39,7 @@ class GeometryWorkerManager {
   private saveDebounceMs = 2000; // Save 2 seconds after last modification
 
   async initialize(macroDepth: number = getMacroDepth(), microDepth: number = 0, borderDepth: number = 0, seed: number = 0) {
+    logger.log('worker', `[GeometryWorker] Initializing with: macro=${macroDepth}, micro=${microDepth}, border=${borderDepth}, seed=${seed}`);
     this.generator = new GeometryGenerator(macroDepth, microDepth, borderDepth, seed);
     await this.generator.initialize();
     self.postMessage({ type: 'ready' });
