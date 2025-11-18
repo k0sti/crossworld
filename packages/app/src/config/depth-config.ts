@@ -4,17 +4,65 @@ import * as logger from '../utils/logger';
  * This is the single source of truth for macro and micro depth values.
  */
 
+// localStorage keys
+const STORAGE_KEYS = {
+  macroDepth: 'worldConfig.macroDepth',
+  microDepth: 'worldConfig.microDepth',
+  borderDepth: 'worldConfig.borderDepth',
+  seed: 'worldConfig.seed',
+} as const;
+
+// Default values
+const DEFAULTS = {
+  macroDepth: 4,
+  microDepth: 0,
+  borderDepth: 4,
+  seed: 0,
+} as const;
+
+/**
+ * Load a number from localStorage with validation
+ */
+function loadFromStorage(key: string, defaultValue: number, min: number, max: number): number {
+  try {
+    const saved = localStorage.getItem(key);
+    if (saved !== null) {
+      const value = parseInt(saved);
+      if (!isNaN(value) && value >= min && value <= max) {
+        return value;
+      }
+    }
+  } catch (error) {
+    logger.warn('common', `Failed to load ${key} from localStorage:`, error);
+  }
+  return defaultValue;
+}
+
+/**
+ * Save a number to localStorage
+ */
+function saveToStorage(key: string, value: number): void {
+  try {
+    localStorage.setItem(key, value.toString());
+  } catch (error) {
+    logger.error('common', `Failed to save ${key} to localStorage:`, error);
+  }
+}
+
 /** Current macro depth - octree subdivision levels */
-let currentMacroDepth = 4;
+let currentMacroDepth = loadFromStorage(STORAGE_KEYS.macroDepth, DEFAULTS.macroDepth, 1, 10);
 
 /** Current micro depth - rendering scale depth */
-let currentMicroDepth = 0;
+let currentMicroDepth = loadFromStorage(STORAGE_KEYS.microDepth, DEFAULTS.microDepth, 0, 3);
 
 /** Current border depth - number of border cube layers */
-let currentBorderDepth = 4;
+let currentBorderDepth = loadFromStorage(STORAGE_KEYS.borderDepth, DEFAULTS.borderDepth, 0, 5);
 
 /** Current world generation seed - for deterministic world generation */
-let currentSeed = 0;
+let currentSeed = loadFromStorage(STORAGE_KEYS.seed, DEFAULTS.seed, 0, 4294967295);
+
+// Log loaded configuration
+logger.log('common', `[depth-config] Loaded from localStorage: macro=${currentMacroDepth}, micro=${currentMicroDepth}, border=${currentBorderDepth}, seed=${currentSeed}`);
 
 /** Callbacks to notify when depth changes */
 const depthChangeListeners: Array<(macroDepth: number, microDepth: number, borderDepth: number) => void> = [];
@@ -108,6 +156,7 @@ export function setMacroDepth(depth: number): void {
     return;
   }
   currentMacroDepth = depth;
+  saveToStorage(STORAGE_KEYS.macroDepth, depth);
   notifyListeners();
 }
 
@@ -120,6 +169,7 @@ export function setMicroDepth(depth: number): void {
     return;
   }
   currentMicroDepth = depth;
+  saveToStorage(STORAGE_KEYS.microDepth, depth);
   notifyListeners();
 }
 
@@ -132,6 +182,7 @@ export function setBorderDepth(depth: number): void {
     return;
   }
   currentBorderDepth = depth;
+  saveToStorage(STORAGE_KEYS.borderDepth, depth);
   notifyListeners();
 }
 
@@ -151,6 +202,7 @@ export function setSeed(seed: number): void {
     return;
   }
   currentSeed = seed;
+  saveToStorage(STORAGE_KEYS.seed, seed);
   notifySeedListeners();
 }
 

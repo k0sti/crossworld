@@ -18,6 +18,7 @@ export class GeometryController {
     this.microDepth = microDepth;
     this.borderDepth = borderDepth;
     this.seed = seed;
+    logger.log('geometry', `[GeometryController] Created with: macro=${macroDepth}, micro=${microDepth}, border=${borderDepth}, seed=${seed}`);
   }
 
   async initialize(
