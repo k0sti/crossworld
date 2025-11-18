@@ -164,3 +164,62 @@ The raycast implementation was completely reimplemented from scratch following t
 - **Documentation**: Comprehensive module docs with algorithm explanation and examples
 - **Build**: WASM compilation successful
 - **Implementation**: Brand new code following docs/raycast.md design
+
+## Current Usage (2025-11-18)
+
+### Active Integration
+
+The cube raycast implementation is actively used in production code:
+
+**1. CPU Tracer (crates/renderer/src/cpu_tracer.rs)**
+```rust
+// Line 159: Direct usage for software raytracing
+let cube_hit = self.cube.raycast(
+    normalized_pos,
+    ray.direction.normalize(),
+    max_depth,
+    &is_empty,
+);
+```
+- Renders octa cube scene successfully
+- All renderer tests pass
+- Verified in single-frame test mode
+
+**2. GL Tracer (crates/renderer/src/gl_tracer.rs)**
+- Uses same algorithm implemented in GLSL fragment shader
+- 3D texture-based octree encoding
+- Matches CPU tracer output visually
+
+**3. Test Coverage**
+- 30 raycast-specific tests
+- 78 total cube tests
+- All passing with 100% success rate
+
+### Features Implemented
+
+**Core Algorithm:**
+- ✅ DDA octree traversal
+- ✅ Empty voxel filtering (value == 0)
+- ✅ Surface normal calculation from entry face
+- ✅ Coordinate transformations (parent ↔ child space)
+- ✅ Depth limiting
+- ✅ Generic RaycastHit<T> with voxel values
+
+**Robustness:**
+- ✅ Epsilon handling for floating-point precision
+- ✅ Position clamping to [0,1]³ bounds
+- ✅ Division by zero protection
+- ✅ Axis-aligned ray support
+- ✅ Boundary position handling
+
+### Related Changes
+- Change `integrate-cube-raycast`: Integration into cpu_tracer (completed)
+- Change `add-octa-cube-rendering`: Test scene using raycast (completed)
+- Change `implement-gpu-raytracer`: GPU shader using same algorithm (completed for GL, pending for compute)
+- Commit `6c2f590`: 3-tracer refactoring using cube.raycast()
+
+### Future Enhancements
+- [ ] Performance optimization for deep octrees (depth > 5)
+- [ ] Material system using voxel values
+- [ ] Shadow ray optimization
+- [ ] Batch raycast operations
