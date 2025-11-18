@@ -5,7 +5,7 @@ use cube::Cube;
 #[test]
 fn test_basic_voxel_operations() {
     // Create WorldCube directly (no WASM wrapper needed for tests)
-    let mut world_cube = WorldCubeInternal::new(3, 2, 0, Some(12345)); // macro_depth=3, micro_depth=2, seed=12345
+    let mut world_cube = WorldCubeInternal::new(3, 2, 0, 12345); // macro_depth=3, micro_depth=2, seed=12345
 
     // Test setting a voxel at depth 5 (macro 3 + micro 2)
     world_cube.set_voxel_at_depth(9, 23, 13, 5, 52);
@@ -22,7 +22,7 @@ fn test_basic_voxel_operations() {
 
 #[test]
 fn test_rapid_updates() {
-    let mut world_cube = WorldCubeInternal::new(3, 2, 0, Some(12345));
+    let mut world_cube = WorldCubeInternal::new(3, 2, 0, 12345);
 
     // Simulate rapid voxel updates like user drawing
     for i in 0..10 {
@@ -43,7 +43,7 @@ fn test_rapid_updates() {
 
 #[test]
 fn test_boundary_coordinates() {
-    let mut world_cube = WorldCubeInternal::new(3, 2, 0, Some(12345));
+    let mut world_cube = WorldCubeInternal::new(3, 2, 0, 12345);
 
     // Test at depth 5, max coord should be 31 (2^5 - 1)
     world_cube.set_voxel_at_depth(31, 31, 31, 5, 52); // Should work
@@ -54,7 +54,7 @@ fn test_boundary_coordinates() {
 
 #[test]
 fn test_nested_depths() {
-    let mut world_cube = WorldCubeInternal::new(3, 2, 0, Some(12345));
+    let mut world_cube = WorldCubeInternal::new(3, 2, 0, 12345);
 
     // Test updating at different depths
     world_cube.set_voxel_at_depth(4, 4, 4, 3, 10); // Macro depth
@@ -68,7 +68,7 @@ fn test_nested_depths() {
 #[should_panic(expected = "already borrowed")]
 fn test_refcell_borrow_conflict() {
     // Test the WASM wrapper's RefCell behavior
-    let world_cube = WorldCube::new(3, 2, 0, Some(12345));
+    let world_cube = WorldCube::new(3, 2, 0, 12345);
 
     // Try to borrow mutably while holding an immutable borrow
     // This simulates what might happen if generate_frame is called
@@ -80,7 +80,7 @@ fn test_refcell_borrow_conflict() {
 #[test]
 fn test_border_layers() {
     // Create WorldCube with 1 border layer
-    let world_cube = WorldCubeInternal::new(3, 2, 1, Some(12345));
+    let world_cube = WorldCubeInternal::new(3, 2, 1, 12345);
 
     // The root should be a Cubes variant (octa) with border colors
     let root = world_cube.get_root();
@@ -117,7 +117,7 @@ fn test_border_layers() {
 #[test]
 fn test_multiple_border_layers() {
     // Create WorldCube with 2 border layers
-    let world_cube = WorldCubeInternal::new(3, 2, 2, Some(12345));
+    let world_cube = WorldCubeInternal::new(3, 2, 2, 12345);
 
     // With 2 layers, the outer layer wraps the inner layer which wraps the world
     let root = world_cube.get_root();
@@ -152,7 +152,7 @@ fn test_multiple_border_layers() {
 #[test]
 fn test_no_border_layers() {
     // Create WorldCube with 0 border layers (original behavior)
-    let world_cube = WorldCubeInternal::new(3, 2, 0, Some(12345));
+    let world_cube = WorldCubeInternal::new(3, 2, 0, 12345);
 
     // Root should be the original world structure, not wrapped in an octa
     // It will be subdivided terrain, not a simple octa of solid colors

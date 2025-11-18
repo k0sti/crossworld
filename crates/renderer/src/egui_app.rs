@@ -318,7 +318,9 @@ impl DualRendererApp {
         let (width, height) = self.render_size;
 
         unsafe {
-            // Render GPU tracer (compute shader stub - will do nothing currently)
+            self.ensure_framebuffer(gl, width as i32, height as i32);
+
+            // Render GPU tracer
             gl.bind_framebuffer(FRAMEBUFFER, self.gpu_framebuffer);
             gl.viewport(0, 0, width as i32, height as i32);
 
