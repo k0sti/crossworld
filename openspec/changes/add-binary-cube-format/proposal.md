@@ -47,7 +47,21 @@ The existing CSM (Cube Script Model) format is text-based, which is human-readab
         - `0xA2` = 4-byte pointers (33 bytes total)
         - `0xA3` = 8-byte pointers (65 bytes total)
 
-    - **Types 3-7** (`0xB0-0xFF`): Reserved for future use
+    - **Type 3** (`0xB0-0xBF`): Planes with Quad<T> (4 children + axis)
+      - `1011AAAA` where AAAA encodes axis (0=X, 1=Y, 2=Z, rest reserved)
+      - Followed by Quad<T> encoding (recursive quadtree)
+      - Quad::Solid → single value byte
+      - Quad::Quads → 4 pointers (size determined by SSSS calculation)
+      - Total size: 1 + axis encoding + Quad data
+
+    - **Type 4** (`0xC0-0xCF`): Slices with layers (2+ children + axis)
+      - `1100AAAA` where AAAA encodes axis (0=X, 1=Y, 2=Z, rest reserved)
+      - Followed by layer count byte (N ∈ [2, 255])
+      - Followed by N pointers to Cube<T> children
+      - Pointer size determined by SSSS calculation
+      - Total size: 1 + 1 (count) + (N * pointer_size)
+
+    - **Types 5-7** (`0xD0-0xFF`): Reserved for future use
 
 - **Pointer encoding**:
   - All pointers are little-endian unsigned integers
@@ -103,10 +117,42 @@ The existing CSM (Cube Script Model) format is text-based, which is human-readab
   - Add `pub mod bcf;` to io module
   - Make BCF format available alongside CSM
 
+### Phase 5: Planes (Quad) Node Type (NEW)
+- **`crates/cube/src/io/bcf/serializer.rs`** - Add Planes support
+  - Handle `Cube::Planes { axis, quad }` variant
+  - Encode axis as 2 bits in type byte (X=0, Y=1, Z=2)
+  - Recursively serialize `Quad<T>` structure:
+    - `Quad::Solid(T)` → single value byte
+    - `Quad::Quads([Rc<Quad<T>>; 4])` → 4 pointers
+  - Calculate pointer size for 4 children
+  - Write type byte `0xB0 | (axis as u8)`
+
+- **`crates/cube/src/io/bcf/parser.rs`** - Parse Planes nodes
+  - Detect type byte `0xB0-0xBF`
+  - Extract axis from lower 4 bits
+  - Recursively parse Quad structure
+  - Reconstruct `Cube::Planes { axis, quad: Rc<Quad<T>> }`
+
+### Phase 6: Slices (Layers) Node Type (NEW)
+- **`crates/cube/src/io/bcf/serializer.rs`** - Add Slices support
+  - Handle `Cube::Slices { axis, layers }` variant
+  - Encode axis as 2 bits in type byte
+  - Write layer count (N ∈ [2, 255]) as 1 byte
+  - Calculate pointer size for N children
+  - Write N pointers to child Cube nodes
+  - Write type byte `0xC0 | (axis as u8)`
+
+- **`crates/cube/src/io/bcf/parser.rs`** - Parse Slices nodes
+  - Detect type byte `0xC0-0xCF`
+  - Extract axis from lower 4 bits
+  - Read layer count byte
+  - Read N pointers
+  - Recursively parse N child Cube nodes
+  - Reconstruct `Cube::Slices { axis, layers: Rc<Vec<Rc<Cube<T>>>> }`
+
 ### Not Changed
 - CSM text format (remains available for human editing)
 - `Cube<T>` enum structure (no API changes)
-- Other subdivision variants (Planes, Slices) - future work
 - Existing serialization/deserialization APIs
 
 ## Impact
@@ -143,3 +189,45 @@ None - binary format is additive
 - Parsing speed improvement of 5x or more vs CSM
 - All tests pass (`cargo test --workspace`)
 - Code passes clippy with no warnings
+
+## Implementation Status (2025-11-18)
+
+### Completed (Phases 1-4)
+- ✅ Binary format specification documented
+- ✅ Module structure created (`crates/cube/src/io/bcf/`)
+- ✅ Serialization for Solid and Cubes (octree) variants
+- ✅ Deserialization for Solid and Cubes variants
+- ✅ Error handling (BcfError with variants)
+- ✅ Basic tests (9 tests passing):
+  - Inline/extended leaf encoding
+  - Octa-with-leaves encoding
+  - Octa-with-pointers encoding
+  - Round-trip tests
+  - Error validation (invalid magic, version, truncated data)
+- ✅ Documentation in `docs/bcf-format.md`
+- ✅ Code quality (clippy, fmt, inline docs)
+
+### Renderer Integration Status
+- ✅ Renderer uses `Cube<i32>` successfully (octa cube scene)
+- ✅ All three tracers (CPU, GL, GPU stub) render correctly
+- ✅ Renderer tests pass (1 test in gl_tracer)
+- ⚠️ BCF format NOT yet used in renderer (only CSM format)
+- 📋 BCF integration is a future enhancement
+
+### Pending (Phases 5-6)
+- ⏳ Planes (Quad) node type support (Type 3, 0xB0-0xBF)
+  - Needs serialization of `Cube::Planes { axis, quad }`
+  - Needs recursive Quad encoding/decoding
+  - Requires tests for all axes and Quad depths
+- ⏳ Slices (Layers) node type support (Type 4, 0xC0-0xCF)
+  - Needs serialization of `Cube::Slices { axis, layers }`
+  - Needs variable-length layer encoding (2-255 layers)
+  - Requires tests for various layer counts and types
+- ⏳ Extended testing for mixed node types
+- ⏳ Performance benchmarks (BCF vs CSM comparison)
+
+### Current Limitation
+The serializer currently defaults Planes and Slices variants to `write_leaf(0)`
+(see `serializer.rs:62`), meaning these node types are serialized as empty leaves
+and lose their structure. This must be fixed before BCF can fully support the
+complete Cube<T> enum.
