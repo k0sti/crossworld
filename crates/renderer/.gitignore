@@ -1,1 +1,2 @@
-output_frame_*.png
+# Output directory for all rendered images
+output/
