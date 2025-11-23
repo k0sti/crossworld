@@ -143,6 +143,14 @@ impl GpuTracer {
         &self.cube
     }
 
+    /// Raycast against the octree structure (CPU-side)
+    /// This uses the cube's octree traversal algorithm for accurate voxel intersection
+    /// Returns Some(RaycastHit) if a non-empty voxel is hit, None otherwise
+    pub fn raycast_octree(&self, pos: glam::Vec3, dir: glam::Vec3, max_depth: u32) -> Option<cube::RaycastHit<i32>> {
+        let is_empty = |v: &i32| *v == 0;
+        self.cube.raycast_debug(pos, dir, max_depth, &is_empty)
+    }
+
     /// Render to OpenGL context using compute shader with time-based orbit camera
     pub unsafe fn render_to_gl(&mut self, gl: &Context, width: i32, height: i32, time: f32) {
         let Some(gl_state) = &mut self.gl_state else {
