@@ -1,0 +1,1 @@
+/home/k0/Obsidian/vault/Specifications/crossworld-spec.md
