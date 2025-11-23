@@ -109,7 +109,7 @@ impl GlCubeTracer {
         &self.cube
     }
 
-    /// Raycast against the cube (CPU fallback for when GL not available)
+    /// Raycast against the cube's bounding box (simple box intersection)
     /// Returns RaycastHit with intersection information
     pub fn raycast(&self, pos: glam::Vec3, dir: glam::Vec3) -> RaycastHit {
         let ray = Ray {
@@ -120,6 +120,14 @@ impl GlCubeTracer {
         let hit_info = intersect_box(ray, self.bounds.min, self.bounds.max);
 
         RaycastHit::from(hit_info)
+    }
+
+    /// Raycast against the octree structure (CPU-side)
+    /// This uses the cube's octree traversal algorithm for accurate voxel intersection
+    /// Returns Some(RaycastHit) if a non-empty voxel is hit, None otherwise
+    pub fn raycast_octree(&self, pos: glam::Vec3, dir: glam::Vec3, max_depth: u32) -> Option<cube::RaycastHit<i32>> {
+        let is_empty = |v: &i32| *v == 0;
+        self.cube.raycast_debug(pos, dir, max_depth, &is_empty)
     }
 
     /// Render to OpenGL context

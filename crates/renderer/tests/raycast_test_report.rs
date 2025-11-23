@@ -80,44 +80,82 @@ impl Tracer for CpuTracer {
 }
 
 // ============================================================================
-// GL Tracer Stub (requires OpenGL context)
+// GL Tracer Implementation
 // ============================================================================
 
-struct GlTracer;
+use renderer::gl_tracer::GlCubeTracer;
+
+struct GlTracer {
+    tracer: GlCubeTracer,
+}
+
+impl GlTracer {
+    fn new(cube: Cube<i32>) -> Self {
+        use std::rc::Rc;
+        Self {
+            tracer: GlCubeTracer::new(Rc::new(cube)),
+        }
+    }
+}
 
 impl Tracer for GlTracer {
     fn name(&self) -> &str {
         "GL"
     }
 
-    fn raycast(&self, _pos: Vec3, _dir: Vec3, _max_depth: u32) -> Option<RaycastHit> {
-        // GL tracer requires OpenGL context - not available in test environment
-        None
+    fn raycast(&self, pos: Vec3, dir: Vec3, max_depth: u32) -> Option<RaycastHit> {
+        let hit = self.tracer.raycast_octree(pos, dir, max_depth)?;
+
+        Some(RaycastHit {
+            position: hit.position,
+            normal: hit.normal,
+            value: hit.value,
+            enter_count: hit.debug.as_ref().map(|d| d.enter_count),
+        })
     }
 
     fn is_available(&self) -> bool {
-        false // Requires OpenGL context
+        true // Now available with CPU-side octree raycast
     }
 }
 
 // ============================================================================
-// GPU Tracer Stub (requires OpenGL context)
+// GPU Tracer Implementation
 // ============================================================================
 
-struct GpuTracer;
+use renderer::gpu_tracer::GpuTracer as GpuTracerImpl;
+
+struct GpuTracer {
+    tracer: GpuTracerImpl,
+}
+
+impl GpuTracer {
+    fn new(cube: Cube<i32>) -> Self {
+        use std::rc::Rc;
+        Self {
+            tracer: GpuTracerImpl::new(Rc::new(cube)),
+        }
+    }
+}
 
 impl Tracer for GpuTracer {
     fn name(&self) -> &str {
         "GPU"
     }
 
-    fn raycast(&self, _pos: Vec3, _dir: Vec3, _max_depth: u32) -> Option<RaycastHit> {
-        // GPU tracer requires OpenGL context - not available in test environment
-        None
+    fn raycast(&self, pos: Vec3, dir: Vec3, max_depth: u32) -> Option<RaycastHit> {
+        let hit = self.tracer.raycast_octree(pos, dir, max_depth)?;
+
+        Some(RaycastHit {
+            position: hit.position,
+            normal: hit.normal,
+            value: hit.value,
+            enter_count: hit.debug.as_ref().map(|d| d.enter_count),
+        })
     }
 
     fn is_available(&self) -> bool {
-        false // Requires OpenGL context
+        true // Now available with CPU-side octree raycast
     }
 }
 
@@ -501,11 +539,15 @@ fn print_summary(all_results: &[TracerResults], total_tests: usize) {
 
     println!("{}└──────────┴──────┴──────┴──────┘{}", DIM, RESET);
 
-    let cpu_results = &all_results[0];
-    println!(
-        "\n{}Total tests: {}{}{} | CPU: {}{}/{}{} passed",
-        BOLD, CYAN, total_tests, RESET, GREEN, cpu_results.pass_count(), total_tests, RESET
-    );
+    // Print per-tracer stats
+    print!("\n{}Total tests: {}{}{}", BOLD, CYAN, total_tests, RESET);
+    for tracer_results in all_results {
+        print!(" | {}: {}{}/{}{}",
+            tracer_results.tracer_name,
+            GREEN, tracer_results.pass_count(), total_tests, RESET
+        );
+    }
+    println!(" passed");
 }
 
 // ============================================================================
@@ -519,9 +561,9 @@ fn test_raycast_report() {
 
     // Create tracers
     let tracers: Vec<Box<dyn Tracer>> = vec![
-        Box::new(CpuTracer::new(cube)),
-        Box::new(GlTracer),
-        Box::new(GpuTracer),
+        Box::new(CpuTracer::new(cube.clone())),
+        Box::new(GlTracer::new(cube.clone())),
+        Box::new(GpuTracer::new(cube)),
     ];
 
     // Run all tests for all tracers
@@ -544,10 +586,16 @@ fn test_raycast_report() {
     print_failures(&all_results);
     print_summary(&all_results, test_cases.len());
 
-    println!("\n{}{}Note:{} GL and GPU tracers require OpenGL context for testing.", BOLD, YELLOW, RESET);
-    println!("{}      Run renderer integration tests for full coverage.{}\n", DIM, RESET);
+    println!("\n{}{}Note:{} All tracers use CPU-side octree raycast for testing.", BOLD, YELLOW, RESET);
+    println!("{}      GL/GPU tracers also have shader-based implementations for rendering.{}\n", DIM, RESET);
 
-    // Assert that CPU tests pass
-    let cpu_results = &all_results[0];
-    assert_eq!(cpu_results.fail_count(), 0, "CPU tracer has failures");
+    // Assert that all tracers pass
+    for tracer_results in &all_results {
+        assert_eq!(
+            tracer_results.fail_count(),
+            0,
+            "{} tracer has failures",
+            tracer_results.tracer_name
+        );
+    }
 }
