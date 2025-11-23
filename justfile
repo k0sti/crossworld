@@ -17,6 +17,7 @@ default:
     @echo "  just server-prod      - Run game server (production mode)"
     @echo "  just gen-cert         - Generate self-signed certificate for development"
     @echo "  just test-client      - Run test client to connect to server"
+    @echo "  just raycast-report   - Generate comprehensive raycast test report for all tracers"
     @echo ""
 
 # Build WASM module in development mode
@@ -118,3 +119,9 @@ server-prod:
 # Run test client
 test-client:
     cargo run --bin test-client
+
+# Generate comprehensive raycast test report for all tracers
+raycast-report:
+    @echo "Generating raycast test report for all tracers..."
+    @echo ""
+    cargo test --test raycast_test_report -- --nocapture --test-threads=1
