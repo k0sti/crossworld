@@ -2,6 +2,8 @@
 
 Instructions for AI coding assistants using OpenSpec for spec-driven development.
 
+Additionally read crossworld-specs.md for high level and important and override specs.
+
 ## TL;DR Quick Checklist
 
 - Search existing work: `openspec spec list --long`, `openspec list` (use `rg` only for full-text search)
