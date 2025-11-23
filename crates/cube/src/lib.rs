@@ -30,7 +30,7 @@ pub use mesh::{
 };
 
 // Re-export raycast types
-pub use raycast::RaycastHit;
+pub use raycast::{RaycastDebugState, RaycastHit};
 
 // Re-export IO types
 pub use io::{load_vox_to_cube, parse_csm, serialize_csm, CsmError};
