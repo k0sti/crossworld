@@ -1,3 +1,9 @@
+## Status (2025-11-22)
+
+⚠️ **BROKEN**: GPU raytracer is currently non-functional. See `standardize-material-system` change for fix plan.
+
+---
+
 ## ADDED Requirements
 
 ### Requirement: GPU Shader Octree Traversal
