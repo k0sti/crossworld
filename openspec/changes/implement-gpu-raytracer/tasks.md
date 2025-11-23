@@ -61,6 +61,14 @@
 - [ ] 6.13 Test GPU tracer in egui app (integration pending)
 - [ ] 6.14 Verify ray-cube hit detection working
 
+## 7. CPU-Side Raycast Testing (NEW - 2025-11-23)
+- [x] 7.1 Add `raycast_octree()` method to GlCubeTracer using cube.raycast_debug()
+- [x] 7.2 Add `raycast_octree()` method to GpuTracer using cube.raycast_debug()
+- [x] 7.3 Update raycast test report to use real tracer implementations
+- [x] 7.4 Wire up all three tracers (CPU, GL, GPU) to test framework
+- [x] 7.5 Verify all 16 raycast tests pass for all 3 tracers
+- [x] 7.6 Update test report summary to show results for all tracers
+
 ## Status Notes
 
 **Completed (2025-11-18):**
@@ -83,8 +91,16 @@
   - `crates/renderer/src/gpu_tracer.rs` (implemented from stub)
   - Added blit shaders (vertex + fragment) for texture display
 
+**Completed CPU-Side Testing (2025-11-23):**
+- Added `raycast_octree()` methods to GL and GPU tracers for CPU-side testing
+- Wired up all three tracers to comprehensive raycast test report
+- All 16 tests passing for CPU, GL, and GPU tracers
+- Test report validates: axis-aligned rays, diagonal rays, boundary misses, edge cases
+- Commits:
+  - `d392da8` - Wire up all three tracers (CPU, GL, GPU) to raycast test report
+
 **Pending:**
 - GPU tracer integration into egui app (test Phase 1)
 - Phase 2: Full octree traversal in compute shader
-- Comprehensive edge case testing
-- Performance benchmarks beyond basic timing
+- Comprehensive edge case testing (4.7, 4.8)
+- Performance benchmarks beyond basic timing (4.6)
