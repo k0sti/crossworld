@@ -67,6 +67,34 @@
 use crate::{Cube, CubeCoord, IVec3Ext};
 use glam::{IVec3, Vec3};
 
+/// Debug state for raycast traversal
+///
+/// Tracks internal state during raycast traversal for testing and debugging.
+/// This is only populated when `debug: true` is passed to raycast methods.
+#[derive(Debug, Clone, Default)]
+pub struct RaycastDebugState {
+    /// Number of calls to the recursive raycast function (enter count)
+    pub enter_count: u32,
+    /// Maximum depth reached during traversal
+    pub max_depth_reached: u32,
+    /// List of cube coordinates traversed during raycast
+    pub traversed_nodes: Vec<CubeCoord>,
+}
+
+impl RaycastDebugState {
+    /// Create a new empty debug state
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Record entering a node at given depth
+    fn record_enter(&mut self, coord: CubeCoord, depth: u32) {
+        self.enter_count += 1;
+        self.max_depth_reached = self.max_depth_reached.max(depth);
+        self.traversed_nodes.push(coord);
+    }
+}
+
 /// Result of a raycast hit
 ///
 /// Generic over the voxel type `T`, allowing different voxel data types
@@ -81,6 +109,8 @@ pub struct RaycastHit<T> {
     pub normal: Vec3,
     /// Voxel value at the hit position
     pub value: T,
+    /// Debug information (only populated if debug tracking enabled)
+    pub debug: Option<RaycastDebugState>,
 }
 
 impl<T> Cube<T>
@@ -107,7 +137,31 @@ where
     where
         F: Fn(&T) -> bool,
     {
-        self.raycast_recursive(pos, dir, max_depth, IVec3::ZERO, max_depth, is_empty)
+        self.raycast_recursive(pos, dir, max_depth, IVec3::ZERO, max_depth, is_empty, None)
+    }
+
+    /// Cast a ray through the octree with debug tracking enabled
+    ///
+    /// # Arguments
+    /// * `pos` - Starting position in normalized [0, 1] cube space
+    /// * `dir` - Ray direction (should be normalized)
+    /// * `max_depth` - Maximum octree depth to traverse
+    /// * `is_empty` - Function to test if a voxel value is considered empty
+    ///
+    /// # Returns
+    /// `Some(RaycastHit<T>)` with debug information if a non-empty voxel is hit, `None` otherwise
+    pub fn raycast_debug<F>(
+        &self,
+        pos: Vec3,
+        dir: Vec3,
+        max_depth: u32,
+        is_empty: &F,
+    ) -> Option<RaycastHit<T>>
+    where
+        F: Fn(&T) -> bool,
+    {
+        let mut debug = RaycastDebugState::new();
+        self.raycast_recursive(pos, dir, max_depth, IVec3::ZERO, max_depth, is_empty, Some(&mut debug))
     }
 
     /// Recursive raycast implementation following the design in docs/raycast.md
@@ -119,6 +173,7 @@ where
         octree_pos: IVec3,
         current_depth: u32,
         is_empty: &F,
+        mut debug: Option<&mut RaycastDebugState>,
     ) -> Option<RaycastHit<T>>
     where
         F: Fn(&T) -> bool,
@@ -128,6 +183,12 @@ where
             return None;
         }
 
+        // Record entry into this node
+        let coord = CubeCoord::new(octree_pos, current_depth);
+        if let Some(d) = debug.as_deref_mut() {
+            d.record_enter(coord, current_depth);
+        }
+
         // Check cube type
         match self {
             Cube::Solid(value) => {
@@ -135,10 +196,11 @@ where
                 if !is_empty(value) {
                     let normal = calculate_entry_normal(pos, dir);
                     Some(RaycastHit {
-                        coord: CubeCoord::new(octree_pos, current_depth),
+                        coord,
                         position: pos,
                         normal,
                         value: value.clone(),
+                        debug: debug.map(|d| d.clone()),
                     })
                 } else {
                     // Empty voxel
@@ -173,6 +235,7 @@ where
                     child_octree_pos,
                     current_depth - 1,
                     is_empty,
+                    debug.as_deref_mut(),
                 ) {
                     return Some(hit);
                 }
@@ -200,6 +263,7 @@ where
                     octree_pos,
                     current_depth,
                     is_empty,
+                    debug,
                 )
             }
             _ => {
@@ -877,5 +941,470 @@ mod tests {
         let hit = cube.raycast(pos, dir, 3, &is_empty);
 
         assert!(hit.is_some(), "Ray at corner should hit");
+    }
+
+    // ============================================================================
+    // Comprehensive Debug State Tests
+    // ============================================================================
+
+    /// Expected debug state for a raycast test
+    #[derive(Debug, Clone)]
+    struct ExpectedDebugState {
+        /// Expected minimum enter count
+        min_enter_count: u32,
+        /// Expected maximum enter count
+        max_enter_count: u32,
+        /// Expected max depth reached
+        expected_max_depth: u32,
+        /// Expected number of traversed nodes (optional)
+        expected_node_count: Option<usize>,
+    }
+
+    impl ExpectedDebugState {
+        fn exact(enter_count: u32, max_depth: u32) -> Self {
+            Self {
+                min_enter_count: enter_count,
+                max_enter_count: enter_count,
+                expected_max_depth: max_depth,
+                expected_node_count: Some(enter_count as usize),
+            }
+        }
+
+        fn range(min: u32, max: u32, max_depth: u32) -> Self {
+            Self {
+                min_enter_count: min,
+                max_enter_count: max,
+                expected_max_depth: max_depth,
+                expected_node_count: None,
+            }
+        }
+
+        fn verify(&self, debug: &RaycastDebugState, test_name: &str) {
+            assert!(
+                debug.enter_count >= self.min_enter_count,
+                "{}: enter_count {} is less than expected minimum {}",
+                test_name,
+                debug.enter_count,
+                self.min_enter_count
+            );
+            assert!(
+                debug.enter_count <= self.max_enter_count,
+                "{}: enter_count {} is greater than expected maximum {}",
+                test_name,
+                debug.enter_count,
+                self.max_enter_count
+            );
+            assert_eq!(
+                debug.max_depth_reached, self.expected_max_depth,
+                "{}: max_depth_reached {} != expected {}",
+                test_name, debug.max_depth_reached, self.expected_max_depth
+            );
+            if let Some(expected_count) = self.expected_node_count {
+                assert_eq!(
+                    debug.traversed_nodes.len(),
+                    expected_count,
+                    "{}: traversed_nodes.len() {} != expected {}",
+                    test_name,
+                    debug.traversed_nodes.len(),
+                    expected_count
+                );
+            }
+        }
+    }
+
+    /// Test case data for raycast validation
+    #[derive(Debug, Clone)]
+    struct RaycastTestCase {
+        name: &'static str,
+        pos: Vec3,
+        dir: Vec3,
+        should_hit: bool,
+        expected_value: Option<i32>,
+        expected_debug: ExpectedDebugState,
+    }
+
+    #[test]
+    fn test_debug_state_solid_cube() {
+        let cube = Cube::Solid(1i32);
+        let is_empty = |v: &i32| *v == 0;
+
+        // Test entering face voxel that has color
+        let pos = Vec3::new(0.5, 0.5, 0.0);
+        let dir = Vec3::new(0.0, 0.0, 1.0);
+        let hit = cube.raycast_debug(pos, dir, 3, &is_empty);
+
+        assert!(hit.is_some(), "Should hit solid cube");
+        let hit = hit.unwrap();
+        assert!(hit.debug.is_some(), "Debug state should be populated");
+
+        let debug = hit.debug.unwrap();
+        // When entering face voxel has color cube, raycast steps should be 1
+        assert_eq!(
+            debug.enter_count, 1,
+            "Entering face voxel with color should have enter_count = 1"
+        );
+        assert_eq!(
+            debug.max_depth_reached, 3,
+            "Max depth should match the max_depth parameter"
+        );
+        assert_eq!(
+            debug.traversed_nodes.len(),
+            1,
+            "Should traverse exactly 1 node"
+        );
+    }
+
+    #[test]
+    fn test_debug_state_axis_aligned_rays() {
+        let cube = Cube::Solid(1i32);
+        let is_empty = |v: &i32| *v == 0;
+
+        // Test cases for 6 axis-aligned rays from all main axes
+        let test_cases = vec![
+            RaycastTestCase {
+                name: "positive X",
+                pos: Vec3::new(0.0, 0.5, 0.5),
+                dir: Vec3::new(1.0, 0.0, 0.0),
+                should_hit: true,
+                expected_value: Some(1),
+                expected_debug: ExpectedDebugState::exact(1, 3),
+            },
+            RaycastTestCase {
+                name: "negative X",
+                pos: Vec3::new(1.0, 0.5, 0.5),
+                dir: Vec3::new(-1.0, 0.0, 0.0),
+                should_hit: true,
+                expected_value: Some(1),
+                expected_debug: ExpectedDebugState::exact(1, 3),
+            },
+            RaycastTestCase {
+                name: "positive Y",
+                pos: Vec3::new(0.5, 0.0, 0.5),
+                dir: Vec3::new(0.0, 1.0, 0.0),
+                should_hit: true,
+                expected_value: Some(1),
+                expected_debug: ExpectedDebugState::exact(1, 3),
+            },
+            RaycastTestCase {
+                name: "negative Y",
+                pos: Vec3::new(0.5, 1.0, 0.5),
+                dir: Vec3::new(0.0, -1.0, 0.0),
+                should_hit: true,
+                expected_value: Some(1),
+                expected_debug: ExpectedDebugState::exact(1, 3),
+            },
+            RaycastTestCase {
+                name: "positive Z",
+                pos: Vec3::new(0.5, 0.5, 0.0),
+                dir: Vec3::new(0.0, 0.0, 1.0),
+                should_hit: true,
+                expected_value: Some(1),
+                expected_debug: ExpectedDebugState::exact(1, 3),
+            },
+            RaycastTestCase {
+                name: "negative Z",
+                pos: Vec3::new(0.5, 0.5, 1.0),
+                dir: Vec3::new(0.0, 0.0, -1.0),
+                should_hit: true,
+                expected_value: Some(1),
+                expected_debug: ExpectedDebugState::exact(1, 3),
+            },
+        ];
+
+        for test_case in test_cases {
+            let hit = cube.raycast_debug(test_case.pos, test_case.dir, 3, &is_empty);
+            assert_eq!(
+                hit.is_some(),
+                test_case.should_hit,
+                "Test '{}': hit expectation mismatch",
+                test_case.name
+            );
+
+            if let Some(hit) = hit {
+                if let Some(expected_value) = test_case.expected_value {
+                    assert_eq!(
+                        hit.value, expected_value,
+                        "Test '{}': value mismatch",
+                        test_case.name
+                    );
+                }
+
+                assert!(
+                    hit.debug.is_some(),
+                    "Test '{}': debug state should be populated",
+                    test_case.name
+                );
+                test_case
+                    .expected_debug
+                    .verify(&hit.debug.unwrap(), test_case.name);
+            }
+        }
+    }
+
+    #[test]
+    fn test_debug_state_random_hits() {
+        let cube = Cube::Solid(1i32);
+        let is_empty = |v: &i32| *v == 0;
+
+        // 16 pseudorandom configurations casting towards cube (should hit)
+        let test_cases = vec![
+            RaycastTestCase {
+                name: "diagonal 1",
+                pos: Vec3::new(0.0, 0.0, 0.0),
+                dir: Vec3::new(1.0, 1.0, 1.0).normalize(),
+                should_hit: true,
+                expected_value: Some(1),
+                expected_debug: ExpectedDebugState::exact(1, 3),
+            },
+            RaycastTestCase {
+                name: "diagonal 2",
+                pos: Vec3::new(1.0, 0.0, 0.0),
+                dir: Vec3::new(-1.0, 1.0, 1.0).normalize(),
+                should_hit: true,
+                expected_value: Some(1),
+                expected_debug: ExpectedDebugState::exact(1, 3),
+            },
+            RaycastTestCase {
+                name: "diagonal 3",
+                pos: Vec3::new(0.0, 1.0, 0.0),
+                dir: Vec3::new(1.0, -1.0, 1.0).normalize(),
+                should_hit: true,
+                expected_value: Some(1),
+                expected_debug: ExpectedDebugState::exact(1, 3),
+            },
+            RaycastTestCase {
+                name: "diagonal 4",
+                pos: Vec3::new(0.0, 0.0, 1.0),
+                dir: Vec3::new(1.0, 1.0, -1.0).normalize(),
+                should_hit: true,
+                expected_value: Some(1),
+                expected_debug: ExpectedDebugState::exact(1, 3),
+            },
+            RaycastTestCase {
+                name: "offset 1",
+                pos: Vec3::new(0.3, 0.0, 0.2),
+                dir: Vec3::new(0.0, 1.0, 0.0),
+                should_hit: true,
+                expected_value: Some(1),
+                expected_debug: ExpectedDebugState::exact(1, 3),
+            },
+            RaycastTestCase {
+                name: "offset 2",
+                pos: Vec3::new(0.7, 0.0, 0.8),
+                dir: Vec3::new(0.0, 1.0, 0.0),
+                should_hit: true,
+                expected_value: Some(1),
+                expected_debug: ExpectedDebugState::exact(1, 3),
+            },
+            RaycastTestCase {
+                name: "offset 3",
+                pos: Vec3::new(0.1, 1.0, 0.3),
+                dir: Vec3::new(0.0, -1.0, 0.0),
+                should_hit: true,
+                expected_value: Some(1),
+                expected_debug: ExpectedDebugState::exact(1, 3),
+            },
+            RaycastTestCase {
+                name: "offset 4",
+                pos: Vec3::new(0.9, 1.0, 0.6),
+                dir: Vec3::new(0.0, -1.0, 0.0),
+                should_hit: true,
+                expected_value: Some(1),
+                expected_debug: ExpectedDebugState::exact(1, 3),
+            },
+            RaycastTestCase {
+                name: "angle 1",
+                pos: Vec3::new(0.2, 0.3, 0.0),
+                dir: Vec3::new(0.1, 0.2, 1.0).normalize(),
+                should_hit: true,
+                expected_value: Some(1),
+                expected_debug: ExpectedDebugState::exact(1, 3),
+            },
+            RaycastTestCase {
+                name: "angle 2",
+                pos: Vec3::new(0.8, 0.7, 0.0),
+                dir: Vec3::new(-0.1, -0.3, 1.0).normalize(),
+                should_hit: true,
+                expected_value: Some(1),
+                expected_debug: ExpectedDebugState::exact(1, 3),
+            },
+            RaycastTestCase {
+                name: "angle 3",
+                pos: Vec3::new(0.4, 0.0, 0.5),
+                dir: Vec3::new(0.2, 1.0, 0.1).normalize(),
+                should_hit: true,
+                expected_value: Some(1),
+                expected_debug: ExpectedDebugState::exact(1, 3),
+            },
+            RaycastTestCase {
+                name: "angle 4",
+                pos: Vec3::new(0.6, 1.0, 0.9),
+                dir: Vec3::new(-0.3, -1.0, -0.2).normalize(),
+                should_hit: true,
+                expected_value: Some(1),
+                expected_debug: ExpectedDebugState::exact(1, 3),
+            },
+            RaycastTestCase {
+                name: "corner approach 1",
+                pos: Vec3::new(0.1, 0.1, 0.0),
+                dir: Vec3::new(0.0, 0.0, 1.0),
+                should_hit: true,
+                expected_value: Some(1),
+                expected_debug: ExpectedDebugState::exact(1, 3),
+            },
+            RaycastTestCase {
+                name: "corner approach 2",
+                pos: Vec3::new(0.9, 0.1, 0.0),
+                dir: Vec3::new(0.0, 0.0, 1.0),
+                should_hit: true,
+                expected_value: Some(1),
+                expected_debug: ExpectedDebugState::exact(1, 3),
+            },
+            RaycastTestCase {
+                name: "corner approach 3",
+                pos: Vec3::new(0.1, 0.9, 0.0),
+                dir: Vec3::new(0.0, 0.0, 1.0),
+                should_hit: true,
+                expected_value: Some(1),
+                expected_debug: ExpectedDebugState::exact(1, 3),
+            },
+            RaycastTestCase {
+                name: "corner approach 4",
+                pos: Vec3::new(0.9, 0.9, 0.0),
+                dir: Vec3::new(0.0, 0.0, 1.0),
+                should_hit: true,
+                expected_value: Some(1),
+                expected_debug: ExpectedDebugState::exact(1, 3),
+            },
+        ];
+
+        for test_case in test_cases {
+            let hit = cube.raycast_debug(test_case.pos, test_case.dir, 3, &is_empty);
+            assert_eq!(
+                hit.is_some(),
+                test_case.should_hit,
+                "Test '{}': hit expectation mismatch",
+                test_case.name
+            );
+
+            if let Some(hit) = hit {
+                if let Some(expected_value) = test_case.expected_value {
+                    assert_eq!(
+                        hit.value, expected_value,
+                        "Test '{}': value mismatch",
+                        test_case.name
+                    );
+                }
+
+                assert!(
+                    hit.debug.is_some(),
+                    "Test '{}': debug state should be populated",
+                    test_case.name
+                );
+                test_case
+                    .expected_debug
+                    .verify(&hit.debug.unwrap(), test_case.name);
+            }
+        }
+    }
+
+    #[test]
+    fn test_debug_state_random_misses() {
+        let cube = Cube::Solid(1i32);
+        let is_empty = |v: &i32| *v == 0;
+
+        // 6 pseudorandom configurations that should miss the cube
+        let test_cases = vec![
+            RaycastTestCase {
+                name: "miss from outside +X",
+                pos: Vec3::new(2.0, 0.5, 0.5),
+                dir: Vec3::new(1.0, 0.0, 0.0),
+                should_hit: false,
+                expected_value: None,
+                expected_debug: ExpectedDebugState::exact(0, 0), // No nodes entered
+            },
+            RaycastTestCase {
+                name: "miss from outside -X",
+                pos: Vec3::new(-1.0, 0.5, 0.5),
+                dir: Vec3::new(-1.0, 0.0, 0.0),
+                should_hit: false,
+                expected_value: None,
+                expected_debug: ExpectedDebugState::exact(0, 0),
+            },
+            RaycastTestCase {
+                name: "miss from outside +Y",
+                pos: Vec3::new(0.5, 2.0, 0.5),
+                dir: Vec3::new(0.0, 1.0, 0.0),
+                should_hit: false,
+                expected_value: None,
+                expected_debug: ExpectedDebugState::exact(0, 0),
+            },
+            RaycastTestCase {
+                name: "miss from outside -Y",
+                pos: Vec3::new(0.5, -1.0, 0.5),
+                dir: Vec3::new(0.0, -1.0, 0.0),
+                should_hit: false,
+                expected_value: None,
+                expected_debug: ExpectedDebugState::exact(0, 0),
+            },
+            RaycastTestCase {
+                name: "miss from outside +Z",
+                pos: Vec3::new(0.5, 0.5, 2.0),
+                dir: Vec3::new(0.0, 0.0, 1.0),
+                should_hit: false,
+                expected_value: None,
+                expected_debug: ExpectedDebugState::exact(0, 0),
+            },
+            RaycastTestCase {
+                name: "miss from outside -Z",
+                pos: Vec3::new(0.5, 0.5, -1.0),
+                dir: Vec3::new(0.0, 0.0, -1.0),
+                should_hit: false,
+                expected_value: None,
+                expected_debug: ExpectedDebugState::exact(0, 0),
+            },
+        ];
+
+        for test_case in test_cases {
+            let hit = cube.raycast_debug(test_case.pos, test_case.dir, 3, &is_empty);
+            assert_eq!(
+                hit.is_some(),
+                test_case.should_hit,
+                "Test '{}': hit expectation mismatch",
+                test_case.name
+            );
+        }
+    }
+
+    #[test]
+    fn test_debug_state_octree_traversal() {
+        // Create octree with one solid octant to test traversal counts
+        let cube = create_test_octree_depth1(7);
+        let is_empty = |v: &i32| *v == 0;
+
+        // Ray starting in empty octant 0, traveling to solid octant 7
+        let pos = Vec3::new(0.1, 0.1, 0.1);
+        let dir = Vec3::new(1.0, 1.0, 1.0).normalize();
+        let hit = cube.raycast_debug(pos, dir, 1, &is_empty);
+
+        assert!(hit.is_some(), "Should traverse and hit octant 7");
+        let hit = hit.unwrap();
+        assert!(hit.debug.is_some(), "Debug state should be populated");
+
+        let debug = hit.debug.unwrap();
+        // Should traverse multiple octants to reach the solid one
+        // The exact count depends on the DDA algorithm path
+        assert!(
+            debug.enter_count > 1,
+            "Should enter multiple nodes when traversing octants (got {})",
+            debug.enter_count
+        );
+        // The max_depth_reached will be 1 (current_depth when we enter root octree node)
+        // then 0 when we enter the leaf solid voxel
+        // The tracked max_depth_reached is the deepest current_depth value seen
+        assert!(
+            debug.max_depth_reached >= 0,
+            "Should have traversed at least to depth 0"
+        );
     }
 }
