@@ -8,6 +8,7 @@
 pub mod cpu_tracer;
 pub mod gl_tracer;
 pub mod gpu_tracer;
+pub mod materials;
 pub mod renderer;
 pub mod scenes;
 pub mod shader_utils;
@@ -16,5 +17,6 @@ pub mod shader_utils;
 pub use cpu_tracer::CpuCubeTracer;
 pub use gl_tracer::GlCubeTracer;
 pub use gpu_tracer::GpuTracer;
-pub use renderer::{CameraConfig, Renderer};
+pub use materials::{get_material_color, MATERIAL_PALETTE};
+pub use renderer::{CameraConfig, Renderer, AMBIENT, BACKGROUND_COLOR, DIFFUSE_STRENGTH, LIGHT_DIR};
 pub use scenes::create_octa_cube;

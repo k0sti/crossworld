@@ -1,10 +1,8 @@
 //! Egui application for comparing three raytracer implementations side-by-side
 
-use crate::cpu_tracer::CpuCubeTracer;
-use crate::gl_tracer::GlCubeTracer;
-use crate::gpu_tracer::GpuTracer;
-use crate::renderer::{CameraConfig, Renderer};
-use crate::scenes::create_octa_cube;
+use renderer::{
+    create_octa_cube, CameraConfig, CpuCubeTracer, GlCubeTracer, GpuTracer, Renderer,
+};
 use egui::{ColorImage, TextureHandle, TextureOptions};
 use glow::*;
 use std::sync::{Arc, Mutex};
@@ -73,6 +71,7 @@ pub struct DualRendererApp {
 
     // Settings
     render_size: (u32, u32),
+    sync_mode: bool,  // If true, wait for CPU renderer to complete each frame
 
     // Camera control
     camera: CameraConfig,
@@ -93,6 +92,10 @@ pub struct DualRendererApp {
 
 impl DualRendererApp {
     pub unsafe fn new(gl: &Arc<Context>) -> Result<Self, String> {
+        unsafe { Self::new_with_sync(gl, false) }
+    }
+
+    pub unsafe fn new_with_sync(gl: &Arc<Context>, sync_mode: bool) -> Result<Self, String> {
         // Create octa cube scene
         let cube = create_octa_cube();
 
@@ -183,6 +186,7 @@ impl DualRendererApp {
             gl_render_time_ms: 0.0,
             gpu_render_time_ms: if gpu_available { 0.0 } else { -1.0 },
             render_size,
+            sync_mode,
             camera,
             camera_target,
             use_manual_camera: false,
@@ -407,30 +411,67 @@ impl DualRendererApp {
 
         *self.cpu_sync_request.lock().unwrap() = Some(request);
 
-        let response = {
-            let mut resp_lock = self.cpu_sync_response.lock().unwrap();
-            resp_lock.take()
-        };
+        // In sync mode, wait for the CPU renderer to complete
+        if self.sync_mode {
+            // Poll until response is ready (blocking)
+            loop {
+                let response = {
+                    let mut resp_lock = self.cpu_sync_response.lock().unwrap();
+                    resp_lock.take()
+                };
 
-        if let Some(response) = response {
-            self.cpu_render_time_ms = response.render_time_ms;
+                if let Some(response) = response {
+                    self.cpu_render_time_ms = response.render_time_ms;
 
-            let image_buffer = response.image;
-            let (width, height) = (
-                image_buffer.width() as usize,
-                image_buffer.height() as usize,
-            );
-            let pixels: Vec<egui::Color32> = image_buffer
-                .pixels()
-                .map(|p| egui::Color32::from_rgb(p[0], p[1], p[2]))
-                .collect();
+                    let image_buffer = response.image;
+                    let (width, height) = (
+                        image_buffer.width() as usize,
+                        image_buffer.height() as usize,
+                    );
+                    let pixels: Vec<egui::Color32> = image_buffer
+                        .pixels()
+                        .map(|p| egui::Color32::from_rgb(p[0], p[1], p[2]))
+                        .collect();
 
-            let color_image = ColorImage {
-                size: [width, height],
-                pixels,
+                    let color_image = ColorImage {
+                        size: [width, height],
+                        pixels,
+                    };
+
+                    self.cpu_latest_frame = Some(color_image);
+                    break;
+                }
+
+                // Small sleep to avoid busy waiting
+                std::thread::sleep(std::time::Duration::from_micros(100));
+            }
+        } else {
+            // Async mode: just check if there's a response ready
+            let response = {
+                let mut resp_lock = self.cpu_sync_response.lock().unwrap();
+                resp_lock.take()
             };
 
-            self.cpu_latest_frame = Some(color_image);
+            if let Some(response) = response {
+                self.cpu_render_time_ms = response.render_time_ms;
+
+                let image_buffer = response.image;
+                let (width, height) = (
+                    image_buffer.width() as usize,
+                    image_buffer.height() as usize,
+                );
+                let pixels: Vec<egui::Color32> = image_buffer
+                    .pixels()
+                    .map(|p| egui::Color32::from_rgb(p[0], p[1], p[2]))
+                    .collect();
+
+                let color_image = ColorImage {
+                    size: [width, height],
+                    pixels,
+                };
+
+                self.cpu_latest_frame = Some(color_image);
+            }
         }
     }
 

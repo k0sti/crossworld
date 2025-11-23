@@ -231,11 +231,12 @@ impl GlTracerGl {
                         // Sample cube at this position
                         let value = sample_cube_at_position(cube, pos, 3);
                         let idx = (x + y * SIZE + z * SIZE * SIZE) * 4;
-                        let voxel_value = if value != 0 { 255 } else { 0 };
-                        voxel_data[idx] = voxel_value;     // R
-                        voxel_data[idx + 1] = voxel_value; // G
-                        voxel_data[idx + 2] = voxel_value; // B
-                        voxel_data[idx + 3] = 255;         // A
+                        // Encode material value in R channel (0-255)
+                        // Fragment shader will decode this to get material index
+                        voxel_data[idx] = value.clamp(0, 255) as u8;  // R: material index
+                        voxel_data[idx + 1] = 0;                       // G: unused
+                        voxel_data[idx + 2] = 0;                       // B: unused
+                        voxel_data[idx + 3] = 255;                     // A: unused
                     }
                 }
             }
@@ -290,8 +291,8 @@ impl GlTracerGl {
             gl.disable(DEPTH_TEST);
             gl.disable(BLEND);
 
-            // Clear to background color
-            gl.clear_color(0.2, 0.3, 0.4, 1.0);
+            // Clear to background color (matches BACKGROUND_COLOR in Rust)
+            gl.clear_color(0.4, 0.5, 0.6, 1.0);
             gl.clear(COLOR_BUFFER_BIT);
 
             gl.use_program(Some(self.program));
@@ -346,8 +347,8 @@ impl GlTracerGl {
             gl.disable(DEPTH_TEST);
             gl.disable(BLEND);
 
-            // Clear to background color
-            gl.clear_color(0.2, 0.3, 0.4, 1.0);
+            // Clear to background color (matches BACKGROUND_COLOR in Rust)
+            gl.clear_color(0.4, 0.5, 0.6, 1.0);
             gl.clear(COLOR_BUFFER_BIT);
 
             gl.use_program(Some(self.program));

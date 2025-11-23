@@ -10,6 +10,10 @@ path = "src/lib.rs"
 [[bin]]
 name = "renderer"
 path = "src/main.rs"
+# Note: Bin target has module resolution issues. To run tests, temporarily:
+# - Rename src/main.rs to src/main.rs.disabled
+# - Run: cargo test
+# - Restore: mv src/main.rs.disabled src/main.rs
 
 [dependencies]
 glow = "0.14"

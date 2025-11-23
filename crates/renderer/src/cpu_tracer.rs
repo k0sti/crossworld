@@ -1,3 +1,4 @@
+use crate::materials::get_material_color;
 use crate::renderer::*;
 use crate::scenes::create_octa_cube;
 use cube::{Cube, parse_csm};
@@ -8,8 +9,6 @@ use std::rc::Rc;
 pub struct CpuCubeTracer {
     cube: Rc<Cube<i32>>,
     bounds: CubeBounds,
-    light_dir: glam::Vec3,
-    background_color: glam::Vec3,
     image_buffer: Option<ImageBuffer<Rgb<u8>, Vec<u8>>>,
 }
 
@@ -21,8 +20,6 @@ impl CpuCubeTracer {
         Self {
             cube,
             bounds: CubeBounds::default(),
-            light_dir: glam::Vec3::new(0.5, 1.0, 0.3).normalize(),
-            background_color: glam::Vec3::new(0.2, 0.3, 0.4),
             image_buffer: None,
         }
     }
@@ -32,8 +29,6 @@ impl CpuCubeTracer {
         Self {
             cube,
             bounds: CubeBounds::default(),
-            light_dir: glam::Vec3::new(0.5, 1.0, 0.3).normalize(),
-            background_color: glam::Vec3::new(0.2, 0.3, 0.4),
             image_buffer: None,
         }
     }
@@ -44,8 +39,6 @@ impl CpuCubeTracer {
         Self {
             cube,
             bounds: CubeBounds::default(),
-            light_dir: glam::Vec3::new(0.5, 1.0, 0.3).normalize(),
-            background_color: glam::Vec3::new(0.2, 0.3, 0.4),
             image_buffer: None,
         }
     }
@@ -126,8 +119,8 @@ impl CpuCubeTracer {
         // Intersect with bounding box
         let hit_info = intersect_box(ray, self.bounds.min, self.bounds.max);
 
-        // Background color
-        let mut color = self.background_color;
+        // Background color from constants
+        let mut color = BACKGROUND_COLOR;
 
         if hit_info.hit {
             // Get cube bounds for coordinate transformation
@@ -212,8 +205,11 @@ impl CpuCubeTracer {
                     normal: cube_hit.normal,
                 };
 
-                // Note: cube_hit.value contains voxel data for future material systems
-                color = calculate_lighting(&hit_info, ray.direction, self.light_dir);
+                // Get material color from voxel value
+                let material_color = get_material_color(cube_hit.value);
+
+                // Apply lighting
+                color = calculate_lighting(&hit_info, material_color);
             }
             // If cube raycast misses, use background color (no fallback to bounding box)
         }

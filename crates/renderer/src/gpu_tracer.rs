@@ -47,6 +47,7 @@ void main() {
 /// Compute shader raytracer
 pub struct GpuTracer {
     cube: Rc<Cube<i32>>,
+    #[allow(dead_code)]
     bounds: CubeBounds,
     gl_state: Option<GpuTracerGl>,
 }

@@ -1,3 +1,33 @@
+use glam::Vec3;
+
+/// Lighting constants for standardized rendering across all tracers
+///
+/// These constants define a simple directional lighting model with ambient
+/// and diffuse components. All tracers (CPU, GL, GPU) use these same values
+/// to ensure consistent visual output.
+
+/// Directional light direction (normalized)
+///
+/// Light comes from upper-right-front direction.
+/// Pre-normalized: normalize(0.5, 1.0, 0.3) = (0.431934, 0.863868, 0.259161)
+pub const LIGHT_DIR: Vec3 = Vec3::new(0.431934, 0.863868, 0.259161);
+
+/// Ambient lighting term (0.0-1.0)
+///
+/// 30% ambient illumination ensures all surfaces are visible even when
+/// facing away from the light.
+pub const AMBIENT: f32 = 0.3;
+
+/// Diffuse lighting strength multiplier
+///
+/// Applied to the diffuse term before adding to ambient.
+pub const DIFFUSE_STRENGTH: f32 = 0.7;
+
+/// Background color for empty space
+///
+/// Bluish-gray color rendered when rays miss all voxels.
+pub const BACKGROUND_COLOR: Vec3 = Vec3::new(0.4, 0.5, 0.6);
+
 /// Camera configuration for rendering
 #[derive(Debug, Clone, Copy)]
 pub struct CameraConfig {
@@ -250,30 +280,37 @@ pub fn create_camera_ray(
     }
 }
 
-/// Calculate lighting for a hit point
-pub fn calculate_lighting(
-    hit: &HitInfo,
-    ray_direction: glam::Vec3,
-    light_dir: glam::Vec3,
-) -> glam::Vec3 {
-    // Diffuse lighting
-    let diffuse = hit.normal.dot(light_dir).max(0.0);
+/// Calculate lighting for a hit point with material color
+///
+/// Applies standardized lighting model: `materialColor * (AMBIENT + diffuse * DIFFUSE_STRENGTH)`
+///
+/// # Arguments
+///
+/// * `hit` - Hit information including position and normal
+/// * `material_color` - Base material color from palette
+///
+/// # Returns
+///
+/// Final lit color (before gamma correction)
+pub fn calculate_lighting(hit: &HitInfo, material_color: Vec3) -> Vec3 {
+    // Diffuse lighting using Lambert's cosine law
+    let diffuse = hit.normal.dot(LIGHT_DIR).max(0.0);
 
-    // Ambient - increased for brighter appearance
-    let ambient = 0.5;
+    // Combine lighting: material color * (ambient + diffuse)
+    material_color * (AMBIENT + diffuse * DIFFUSE_STRENGTH)
+}
 
-    // Base cube color with variation based on normal
-    let mut base_color = glam::Vec3::new(0.8, 0.4, 0.2);
-    base_color = base_color.lerp(glam::Vec3::new(1.0, 0.6, 0.3), hit.normal.x.abs());
-    base_color = base_color.lerp(glam::Vec3::new(0.6, 0.8, 0.4), hit.normal.y.abs());
-    base_color = base_color.lerp(glam::Vec3::new(0.4, 0.5, 0.9), hit.normal.z.abs());
-
-    // Combine lighting - increased diffuse contribution
-    let mut color = base_color * (ambient + diffuse * 1.2);
-
-    // Fresnel effect
-    let fresnel = (1.0 - (-ray_direction).dot(hit.normal).abs()).powf(3.0);
-    color += glam::Vec3::splat(0.1 * fresnel);
-
-    color
+/// Calculate unlit material color (for debug mode)
+///
+/// Returns the pure material color without any lighting applied.
+///
+/// # Arguments
+///
+/// * `material_color` - Base material color from palette
+///
+/// # Returns
+///
+/// Unmodified material color
+pub fn calculate_lighting_unlit(material_color: Vec3) -> Vec3 {
+    material_color
 }

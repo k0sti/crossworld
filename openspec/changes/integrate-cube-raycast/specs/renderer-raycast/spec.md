@@ -1,5 +1,11 @@
 # Spec: Renderer Raycast Integration
 
+## Status (2025-11-22)
+
+⚠️ **BROKEN**: Renderer raycast integration is currently non-functional. All tracers (CPU, GL, GPU) are broken. See `standardize-material-system` change for fix plan.
+
+---
+
 ## MODIFIED Requirements
 
 ### Requirement: Voxel Value in RaycastHit

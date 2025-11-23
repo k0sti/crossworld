@@ -85,6 +85,25 @@ HitInfo intersectBox(Ray ray, vec3 boxMin, vec3 boxMax) {
     return hitInfo;
 }
 
+// Material palette (matches MATERIAL_PALETTE in Rust)
+const vec3 MATERIAL_PALETTE[7] = vec3[7](
+    vec3(0.0, 0.0, 0.0), // 0: Empty
+    vec3(1.0, 0.0, 0.0), // 1: Red
+    vec3(0.0, 1.0, 0.0), // 2: Green
+    vec3(0.0, 0.0, 1.0), // 3: Blue
+    vec3(1.0, 1.0, 0.0), // 4: Yellow
+    vec3(1.0, 1.0, 1.0), // 5: White
+    vec3(0.0, 0.0, 0.0)  // 6: Black
+);
+
+// Get material color from value
+vec3 getMaterialColor(int value) {
+    if (value < 0 || value >= 7) {
+        return vec3(0.0);
+    }
+    return MATERIAL_PALETTE[value];
+}
+
 // Calculate surface normal from entry point
 // The normal points towards the direction the ray came from
 vec3 calculateEntryNormal(vec3 pos, vec3 dir) {
@@ -283,8 +302,8 @@ void main() {
     // Intersect with bounding box first
     HitInfo boxHit = intersectBox(ray, boxMin, boxMax);
 
-    // Background color
-    vec3 color = vec3(0.2, 0.3, 0.4);
+    // Background color (matches BACKGROUND_COLOR in Rust)
+    vec3 color = vec3(0.4, 0.5, 0.6);
 
     if (boxHit.hit) {
         // Transform hit point to normalized [0,1]³ cube space
@@ -302,27 +321,19 @@ void main() {
             // Transform hit position back to world space
             vec3 worldHitPoint = octreeHit.point * (boxMax - boxMin) + boxMin;
 
-            // Directional light
-            vec3 lightDir = normalize(vec3(0.5, 1.0, 0.3));
+            // Get material color from voxel value
+            vec3 materialColor = getMaterialColor(octreeHit.value);
+
+            // Lighting constants (match Rust constants)
+            vec3 lightDir = normalize(vec3(0.431934, 0.863868, 0.259161));
+            float ambient = 0.3;
+            float diffuseStrength = 0.7;
 
             // Diffuse lighting
             float diffuse = max(dot(octreeHit.normal, lightDir), 0.0);
 
-            // Ambient
-            float ambient = 0.5;
-
-            // Base cube color with variation based on normal
-            vec3 baseColor = vec3(0.8, 0.4, 0.2);
-            baseColor = mix(baseColor, vec3(1.0, 0.6, 0.3), abs(octreeHit.normal.x));
-            baseColor = mix(baseColor, vec3(0.6, 0.8, 0.4), abs(octreeHit.normal.y));
-            baseColor = mix(baseColor, vec3(0.4, 0.5, 0.9), abs(octreeHit.normal.z));
-
-            // Combine lighting
-            color = baseColor * (ambient + diffuse * 1.2);
-
-            // Add edge highlighting
-            float fresnel = pow(1.0 - abs(dot(-ray.direction, octreeHit.normal)), 3.0);
-            color += vec3(0.1) * fresnel;
+            // Combine lighting (simplified Lambert model)
+            color = materialColor * (ambient + diffuse * diffuseStrength);
         }
     }
 
