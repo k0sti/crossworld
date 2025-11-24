@@ -5,7 +5,6 @@
 
 use cube::{Cube, RaycastDebugState};
 use glam::Vec3;
-use std::rc::Rc;
 
 /// Expected debug state for a raycast test
 #[derive(Debug, Clone)]
@@ -198,15 +197,14 @@ fn get_miss_test_cases() -> Vec<RaycastTestCase> {
 // Generic Test Runner
 // ============================================================================
 
-fn run_test_cases_on_cube(
-    cube: &Cube<i32>,
-    test_cases: Vec<RaycastTestCase>,
-    tracer_name: &str,
-) {
+fn run_test_cases_on_cube(cube: &Cube<i32>, test_cases: Vec<RaycastTestCase>, tracer_name: &str) {
     let is_empty = |v: &i32| *v == 0;
 
     for test_case in test_cases {
         let hit = cube.raycast_debug(test_case.pos, test_case.dir, 3, &is_empty);
+
+        assert!(hit.is_ok());
+        let hit = hit.unwrap();
 
         assert_eq!(
             hit.is_some(),
@@ -271,12 +269,11 @@ fn test_cube_tracer_immediate_hit() {
     let dir = Vec3::new(0.0, 0.0, 1.0);
     let hit = cube.raycast_debug(pos, dir, 3, &is_empty);
 
+    assert!(hit.is_ok());
+    let hit = hit.unwrap();
     assert!(hit.is_some(), "Cube: Should hit solid cube");
     let hit = hit.unwrap();
-    assert!(
-        hit.debug.is_some(),
-        "Cube: Debug state should be populated"
-    );
+    assert!(hit.debug.is_some(), "Cube: Debug state should be populated");
 
     let debug = hit.debug.unwrap();
     // When entering face voxel has color cube, raycast steps should be 1

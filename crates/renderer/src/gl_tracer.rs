@@ -36,6 +36,8 @@ pub struct GlTracerGl {
     max_depth_location: Option<UniformLocation>,
     octree_texture_location: Option<UniformLocation>,
     octree_size_location: Option<UniformLocation>,
+    material_palette_location: Option<UniformLocation>,
+    material_palette_texture: Option<Texture>,
 }
 
 /// Raycast hit result for cube intersection
@@ -124,8 +126,13 @@ impl GlCubeTracer {
 
     /// Raycast against the octree structure (CPU-side)
     /// This uses the cube's octree traversal algorithm for accurate voxel intersection
-    /// Returns Some(RaycastHit) if a non-empty voxel is hit, None otherwise
-    pub fn raycast_octree(&self, pos: glam::Vec3, dir: glam::Vec3, max_depth: u32) -> Option<cube::RaycastHit<i32>> {
+    /// Returns Result<Option<RaycastHit>, RaycastError>
+    pub fn raycast_octree(
+        &self,
+        pos: glam::Vec3,
+        dir: glam::Vec3,
+        max_depth: u32,
+    ) -> Result<Option<cube::RaycastHit<i32>>, cube::RaycastError> {
         let is_empty = |v: &i32| *v == 0;
         self.cube.raycast_debug(pos, dir, max_depth, &is_empty)
     }
@@ -169,7 +176,8 @@ impl GlTracerGl {
         unsafe {
             // Create shader program using shared utilities
             println!("[GL Tracer] Compiling vertex and fragment shaders...");
-            let program = shader_utils::create_program(gl, VERTEX_SHADER_SOURCE, FRAGMENT_SHADER_SOURCE)?;
+            let program =
+                shader_utils::create_program(gl, VERTEX_SHADER_SOURCE, FRAGMENT_SHADER_SOURCE)?;
             println!("[GL Tracer] ✓ Shaders compiled and linked successfully!");
 
             // Create VAO (required for OpenGL core profile)
@@ -197,6 +205,12 @@ impl GlTracerGl {
             println!("[GL Tracer] Creating octree texture...");
             let octree_texture = Some(Self::create_octree_texture(gl, cube)?);
             println!("[GL Tracer] Octree texture created successfully!");
+            let material_palette_location = gl.get_uniform_location(program, "u_material_palette");
+
+            // Create and upload material palette texture
+            println!("[GL Tracer] Creating material palette texture...");
+            let material_palette_texture = Some(Self::create_material_palette_texture(gl)?);
+            println!("[GL Tracer] Material palette texture created successfully!");
 
             Ok(Self {
                 program,
@@ -210,6 +224,8 @@ impl GlTracerGl {
                 max_depth_location,
                 octree_texture_location,
                 octree_size_location,
+                material_palette_location,
+                material_palette_texture,
             })
         }
     }
@@ -241,10 +257,10 @@ impl GlTracerGl {
                         let idx = (x + y * SIZE + z * SIZE * SIZE) * 4;
                         // Encode material value in R channel (0-255)
                         // Fragment shader will decode this to get material index
-                        voxel_data[idx] = value.clamp(0, 255) as u8;  // R: material index
-                        voxel_data[idx + 1] = 0;                       // G: unused
-                        voxel_data[idx + 2] = 0;                       // B: unused
-                        voxel_data[idx + 3] = 255;                     // A: unused
+                        voxel_data[idx] = value.clamp(0, 255) as u8; // R: material index
+                        voxel_data[idx + 1] = 0; // G: unused
+                        voxel_data[idx + 2] = 0; // B: unused
+                        voxel_data[idx + 3] = 255; // A: unused
                     }
                 }
             }
@@ -281,10 +297,61 @@ impl GlTracerGl {
             gl.bind_texture(TEXTURE_3D, None);
 
             // Log texture creation
-            println!("[GL Tracer] 3D texture uploaded: {}x{}x{} = {} voxels", SIZE, SIZE, SIZE, SIZE * SIZE * SIZE);
+            println!(
+                "[GL Tracer] 3D texture uploaded: {}x{}x{} = {} voxels",
+                SIZE,
+                SIZE,
+                SIZE,
+                SIZE * SIZE * SIZE
+            );
             // Count solid voxels (check R channel, which is every 4th byte)
             let solid_count = voxel_data.iter().step_by(4).filter(|&&v| v != 0).count();
-            println!("[GL Tracer] Solid voxels: {} ({:.1}%)", solid_count, (solid_count as f32 / (SIZE * SIZE * SIZE) as f32) * 100.0);
+            println!(
+                "[GL Tracer] Solid voxels: {} ({:.1}%)",
+                solid_count,
+                (solid_count as f32 / (SIZE * SIZE * SIZE) as f32) * 100.0
+            );
+
+            Ok(texture)
+        }
+    }
+
+    /// Create a 1D texture for the material palette
+    unsafe fn create_material_palette_texture(gl: &Context) -> Result<Texture, String> {
+        unsafe {
+            let texture = gl
+                .create_texture()
+                .map_err(|e| format!("Failed to create material palette texture: {}", e))?;
+
+            gl.bind_texture(TEXTURE_2D, Some(texture));
+
+            // Create data buffer from MATERIAL_REGISTRY
+            // 128 materials * 3 floats (RGB) = 384 floats
+            let mut data = Vec::with_capacity(128 * 3);
+            for material in cube::material::MATERIAL_REGISTRY.iter() {
+                data.push(material.color.x);
+                data.push(material.color.y);
+                data.push(material.color.z);
+            }
+
+            gl.tex_image_2d(
+                TEXTURE_2D,
+                0,
+                RGB32F as i32, // Use floating point texture for precision
+                128,
+                1,
+                0,
+                RGB,
+                FLOAT,
+                Some(bytemuck::cast_slice(&data)),
+            );
+
+            gl.tex_parameter_i32(TEXTURE_2D, TEXTURE_MIN_FILTER, NEAREST as i32);
+            gl.tex_parameter_i32(TEXTURE_2D, TEXTURE_MAG_FILTER, NEAREST as i32);
+            gl.tex_parameter_i32(TEXTURE_2D, TEXTURE_WRAP_S, CLAMP_TO_EDGE as i32);
+            gl.tex_parameter_i32(TEXTURE_2D, TEXTURE_WRAP_T, CLAMP_TO_EDGE as i32);
+
+            gl.bind_texture(TEXTURE_2D, None);
 
             Ok(texture)
         }
@@ -330,6 +397,15 @@ impl GlTracerGl {
             }
             if let Some(loc) = &self.octree_size_location {
                 gl.uniform_1_i32(Some(loc), 8); // 8x8x8 grid
+            }
+
+            // Bind material palette texture to unit 1
+            if let Some(texture) = self.material_palette_texture {
+                gl.active_texture(TEXTURE1);
+                gl.bind_texture(TEXTURE_2D, Some(texture));
+                if let Some(loc) = &self.material_palette_location {
+                    gl.uniform_1_i32(Some(loc), 1);
+                }
             }
 
             // Draw fullscreen triangle
@@ -402,6 +478,15 @@ impl GlTracerGl {
                 gl.uniform_1_i32(Some(loc), 8);
             }
 
+            // Bind material palette texture to unit 1
+            if let Some(texture) = self.material_palette_texture {
+                gl.active_texture(TEXTURE1);
+                gl.bind_texture(TEXTURE_2D, Some(texture));
+                if let Some(loc) = &self.material_palette_location {
+                    gl.uniform_1_i32(Some(loc), 1);
+                }
+            }
+
             // Draw fullscreen triangle
             gl.draw_arrays(TRIANGLES, 0, 3);
 
@@ -417,6 +502,9 @@ impl GlTracerGl {
             if let Some(texture) = self.octree_texture {
                 gl.delete_texture(texture);
             }
+            if let Some(texture) = self.material_palette_texture {
+                gl.delete_texture(texture);
+            }
         }
     }
 }
@@ -427,12 +515,7 @@ impl Renderer for GlCubeTracer {
         // This is here to satisfy the trait, but actual rendering needs GL context
     }
 
-    fn render_with_camera(
-        &mut self,
-        _width: u32,
-        _height: u32,
-        _camera: &CameraConfig,
-    ) {
+    fn render_with_camera(&mut self, _width: u32, _height: u32, _camera: &CameraConfig) {
         // Note: GL rendering is handled by render_to_gl_with_camera in the app loop
         // This is here to satisfy the trait, but actual rendering needs GL context
     }

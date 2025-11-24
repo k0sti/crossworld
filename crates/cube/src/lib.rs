@@ -1,8 +1,10 @@
 // Cube crate - Voxel octree data structure and operations
 
 // New module structure
+pub mod axis;
 pub mod core;
 pub mod io;
+pub mod material;
 pub mod mesh;
 pub mod raycast;
 pub mod render;
@@ -13,9 +15,11 @@ pub mod wasm;
 
 // Re-export main types from core
 pub use core::{
-    octant_char_to_index, octant_index_to_char, Axis, Cube, IVec3Ext, Octree, Quad,
-    OCTANT_POSITIONS,
+    octant_char_to_index, octant_index_to_char, Cube, IVec3Ext, Octree, Quad, OCTANT_POSITIONS,
 };
+
+// Re-export axis types
+pub use axis::Axis;
 
 // Re-export traversal types
 pub use traversal::{
@@ -30,7 +34,7 @@ pub use mesh::{
 };
 
 // Re-export raycast types
-pub use raycast::{RaycastDebugState, RaycastHit};
+pub use raycast::{RaycastDebugState, RaycastError, RaycastHit};
 
 // Re-export IO types
 pub use io::{load_vox_to_cube, parse_csm, serialize_csm, CsmError};

@@ -1,4 +1,3 @@
-use crate::materials::get_material_color;
 use crate::renderer::*;
 use crate::scenes::create_octa_cube;
 use cube::{Cube, parse_csm};
@@ -149,7 +148,7 @@ impl CpuCubeTracer {
             let max_depth = 1;
 
             // Call cube raycast directly
-            let cube_hit = self.cube.raycast(
+            let raycast_result = self.cube.raycast(
                 normalized_pos,
                 ray.direction.normalize(),
                 max_depth,
@@ -163,23 +162,35 @@ impl CpuCubeTracer {
                     std::sync::atomic::AtomicUsize::new(0);
                 static MISS_COUNT: std::sync::atomic::AtomicUsize =
                     std::sync::atomic::AtomicUsize::new(0);
+                static ERROR_COUNT: std::sync::atomic::AtomicUsize =
+                    std::sync::atomic::AtomicUsize::new(0);
                 static ONCE: std::sync::Once = std::sync::Once::new();
 
-                if cube_hit.is_some() {
-                    HIT_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                } else {
-                    MISS_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                match &raycast_result {
+                    Ok(Some(_)) => {
+                        HIT_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    }
+                    Ok(None) => {
+                        MISS_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    }
+                    Err(_) => {
+                        ERROR_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    }
                 }
 
                 // Print stats after first pixel is rendered
                 if HIT_COUNT.load(std::sync::atomic::Ordering::Relaxed)
                     + MISS_COUNT.load(std::sync::atomic::Ordering::Relaxed)
+                    + ERROR_COUNT.load(std::sync::atomic::Ordering::Relaxed)
                     == 1
                 {
                     println!("\n=== Raycast Debug (first pixel) ===");
                     println!("  Position: {:?}", normalized_pos);
                     println!("  Direction: {:?}", ray.direction.normalize());
-                    println!("  Hit: {}", cube_hit.is_some());
+                    println!(
+                        "  Result: {:?}",
+                        raycast_result.as_ref().map(|o| o.is_some())
+                    );
                 }
 
                 // Print final stats at end
@@ -189,29 +200,38 @@ impl CpuCubeTracer {
                 });
             }
 
-            if let Some(cube_hit) = cube_hit {
-                // Successful octree raycast - use detailed voxel information
-                // Transform hit position back to world space
-                let world_hit_point = cube_hit.position * (bounds.max - bounds.min) + bounds.min;
+            match raycast_result {
+                Ok(Some(cube_hit)) => {
+                    // Successful octree raycast - use detailed voxel information
+                    // Transform hit position back to world space
+                    let world_hit_point =
+                        cube_hit.position * (bounds.max - bounds.min) + bounds.min;
 
-                // Calculate distance from ray origin
-                let t = (world_hit_point - ray.origin).length();
+                    // Calculate distance from ray origin
+                    let t = (world_hit_point - ray.origin).length();
 
-                // Create HitInfo for lighting calculation
-                let hit_info = HitInfo {
-                    hit: true,
-                    t,
-                    point: world_hit_point,
-                    normal: cube_hit.normal,
-                };
+                    // Create HitInfo for lighting calculation
+                    let hit_info = HitInfo {
+                        hit: true,
+                        t,
+                        point: world_hit_point,
+                        normal: cube_hit.normal.as_vec3(),
+                    };
 
-                // Get material color from voxel value
-                let material_color = get_material_color(cube_hit.value);
+                    // Get material color from voxel value
+                    let material_color = cube::material::get_material_color(cube_hit.value);
 
-                // Apply lighting
-                color = calculate_lighting(&hit_info, material_color);
+                    // Apply lighting
+                    color = calculate_lighting(&hit_info, material_color);
+                }
+                Ok(None) => {
+                    // Miss - do nothing (color remains background)
+                }
+                Err(_) => {
+                    // Error - render debug purple
+                    color = glam::Vec3::new(1.0, 0.0, 1.0);
+                }
             }
-            // If cube raycast misses, use background color (no fallback to bounding box)
         }
 
         // Gamma correction

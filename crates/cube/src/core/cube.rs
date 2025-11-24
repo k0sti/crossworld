@@ -1,3 +1,4 @@
+use crate::axis::Axis;
 use crate::CubeCoord;
 use glam::IVec3;
 use std::rc::Rc;
@@ -50,32 +51,6 @@ impl IVec3Ext for IVec3 {
     }
 }
 
-/// Axis for 2D (Planes) and 1D (Slices) subdivision
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Axis {
-    X,
-    Y,
-    Z,
-}
-
-impl Axis {
-    pub fn from_char(c: char) -> Option<Self> {
-        match c {
-            'x' | 'X' => Some(Axis::X),
-            'y' | 'Y' => Some(Axis::Y),
-            'z' | 'Z' => Some(Axis::Z),
-            _ => None,
-        }
-    }
-
-    pub fn to_char(self) -> char {
-        match self {
-            Axis::X => 'x',
-            Axis::Y => 'y',
-            Axis::Z => 'z',
-        }
-    }
-}
 
 /// 2D quadtree for plane subdivision
 #[derive(Debug, Clone, PartialEq)]
@@ -549,21 +524,21 @@ impl Cube<i32> {
 
                 for axis in axes {
                     match axis {
-                        Axis::X => {
+                        Axis::PosX | Axis::NegX => {
                             // Swap along X: a<->e, b<->f, c<->g, d<->h (0<->4, 1<->5, 2<->6, 3<->7)
                             new_children.swap(0, 4);
                             new_children.swap(1, 5);
                             new_children.swap(2, 6);
                             new_children.swap(3, 7);
                         }
-                        Axis::Y => {
+                        Axis::PosY | Axis::NegY => {
                             // Swap along Y: a<->c, b<->d, e<->g, f<->h (0<->2, 1<->3, 4<->6, 5<->7)
                             new_children.swap(0, 2);
                             new_children.swap(1, 3);
                             new_children.swap(4, 6);
                             new_children.swap(5, 7);
                         }
-                        Axis::Z => {
+                        Axis::PosZ | Axis::NegZ => {
                             // Swap along Z: a<->b, c<->d, e<->f, g<->h (0<->1, 2<->3, 4<->5, 6<->7)
                             new_children.swap(0, 1);
                             new_children.swap(2, 3);
@@ -598,21 +573,21 @@ impl Cube<i32> {
 
                 for axis in axes {
                     match axis {
-                        Axis::X => {
+                        Axis::PosX | Axis::NegX => {
                             // Mirror along X: swap a<->e, b<->f, c<->g, d<->h (0<->4, 1<->5, 2<->6, 3<->7)
                             new_children.swap(0, 4);
                             new_children.swap(1, 5);
                             new_children.swap(2, 6);
                             new_children.swap(3, 7);
                         }
-                        Axis::Y => {
+                        Axis::PosY | Axis::NegY => {
                             // Mirror along Y: a<->c, b<->d, e<->g, f<->h (0<->2, 1<->3, 4<->6, 5<->7)
                             new_children.swap(0, 2);
                             new_children.swap(1, 3);
                             new_children.swap(4, 6);
                             new_children.swap(5, 7);
                         }
-                        Axis::Z => {
+                        Axis::PosZ | Axis::NegZ => {
                             // Mirror along Z: a<->b, c<->d, e<->f, g<->h (0<->1, 2<->3, 4<->5, 6<->7)
                             new_children.swap(0, 1);
                             new_children.swap(2, 3);
@@ -762,7 +737,7 @@ mod tests {
         ]);
 
         // Swap: only swaps top-level children, inner structure unchanged
-        let swapped = outer.apply_swap(&[Axis::X]);
+        let swapped = outer.apply_swap(&[Axis::PosX]);
         if let Cube::Cubes(children) = &swapped {
             // Child 0 and 4 should be swapped
             assert!(matches!(&*children[4], Cube::Cubes(_))); // inner moved to position 4
@@ -772,7 +747,7 @@ mod tests {
         }
 
         // Mirror: swaps children AND recursively mirrors inner structure
-        let mirrored = outer.apply_mirror(&[Axis::X]);
+        let mirrored = outer.apply_mirror(&[Axis::PosX]);
         if let Cube::Cubes(children) = &mirrored {
             // Child 0 and 4 should be swapped
             assert!(matches!(&*children[4], Cube::Cubes(_))); // inner moved to position 4

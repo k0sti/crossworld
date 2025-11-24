@@ -1,4 +1,5 @@
-use crate::core::{octant_char_to_index, Axis, Cube, Octree};
+use crate::axis::Axis;
+use crate::core::{octant_char_to_index, Cube, Octree};
 use nom::{
     branch::alt,
     bytes::complete::take_while,

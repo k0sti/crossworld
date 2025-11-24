@@ -87,27 +87,29 @@ fn test_cpu_tracer_material_colors() {
     println!("Bottom-right RGB: ({}, {}, {})", bottom_right.0, bottom_right.1, bottom_right.2);
 
     // Check for distinct colors (accounting for lighting which dims RGB values)
-    // Red: R dominant, G and B low
-    // Green: G dominant, R and B low
-    // Blue: B dominant, R and G low
-    // Yellow: R and G high, B low
+    // 1: set_empty (Black)
+    // 2: glass (White)
+    // 3: ice (Light Blue)
+    // 4: water_surface (Blue)
+    // 5: slime (Green)
 
     let samples = [center_color, top_left, top_right, bottom_left, bottom_right];
 
-    // Adjusted thresholds for lit colors (lighting reduces max values from 255 to ~170-200)
-    let has_red = samples.iter().any(|&(r, g, b)| r > 140 && g < 50 && b < 50);
-    let has_green = samples.iter().any(|&(r, g, b)| r < 50 && g > 100 && b < 50);
-    let has_blue = samples.iter().any(|&(r, g, b)| r < 50 && g < 50 && b > 100);
-    let has_yellow = samples.iter().any(|&(r, g, b)| r > 100 && g > 100 && b < 50);
+    // Adjusted thresholds for lit colors
+    let has_white = samples.iter().any(|&(r, g, b)| r > 150 && g > 150 && b > 150);
+    let has_green = samples.iter().any(|&(r, g, b)| r < 100 && g > 100 && b < 100);
+    let has_blue = samples.iter().any(|&(r, g, b)| r < 100 && g < 150 && b > 150);
+    // Light blue (ice) is high G and B
+    let has_light_blue = samples.iter().any(|&(r, g, b)| r > 100 && g > 150 && b > 150);
 
-    println!("Has red: {}", has_red);
+    println!("Has white: {}", has_white);
     println!("Has green: {}", has_green);
     println!("Has blue: {}", has_blue);
-    println!("Has yellow: {}", has_yellow);
+    println!("Has light blue: {}", has_light_blue);
 
     // At least one distinct color should be visible
-    assert!(has_red || has_green || has_blue || has_yellow,
-        "At least one sampled region should show a distinct color (red, green, blue, or yellow)");
+    assert!(has_white || has_green || has_blue || has_light_blue,
+        "At least one sampled region should show a distinct color");
 
     println!("✓ CPU tracer renders distinct colors");
 }
@@ -175,21 +177,25 @@ fn test_cpu_tracer_renders_without_crash() {
 
 #[test]
 fn test_material_palette_accessibility() {
-    use renderer::{get_material_color, MATERIAL_PALETTE};
+    // Use centralized material system
+    use cube::material::get_material_color;
 
     println!("\n=== Testing Material Palette ===");
 
-    // Test palette size
-    assert_eq!(MATERIAL_PALETTE.len(), 7, "Palette should have 7 materials");
+    // Test some primary materials from the new registry
+    // 0: empty (Black)
+    // 1: set_empty (Black)
+    // 2: glass (White)
+    // 3: ice (Light Blue)
+    // 4: water_surface (Blue)
+    // 5: slime (Green)
 
-    // Test each primary color
     assert_eq!(get_material_color(0), Vec3::new(0.0, 0.0, 0.0)); // Empty
-    assert_eq!(get_material_color(1), Vec3::new(1.0, 0.0, 0.0)); // Red
-    assert_eq!(get_material_color(2), Vec3::new(0.0, 1.0, 0.0)); // Green
-    assert_eq!(get_material_color(3), Vec3::new(0.0, 0.0, 1.0)); // Blue
-    assert_eq!(get_material_color(4), Vec3::new(1.0, 1.0, 0.0)); // Yellow
-    assert_eq!(get_material_color(5), Vec3::new(1.0, 1.0, 1.0)); // White
-    assert_eq!(get_material_color(6), Vec3::new(0.0, 0.0, 0.0)); // Black
+    assert_eq!(get_material_color(1), Vec3::new(0.0, 0.0, 0.0)); // set_empty
+    assert_eq!(get_material_color(2), Vec3::new(1.0, 1.0, 1.0)); // glass
+    assert_eq!(get_material_color(3), Vec3::new(0.816, 1.0, 1.0)); // ice
+    assert_eq!(get_material_color(4), Vec3::new(0.0, 0.498, 1.0)); // water_surface
+    assert_eq!(get_material_color(5), Vec3::new(0.0, 1.0, 0.0)); // slime
 
     println!("✓ Material palette has correct colors");
 }

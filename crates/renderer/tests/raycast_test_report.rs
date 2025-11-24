@@ -68,11 +68,15 @@ impl Tracer for CpuTracer {
 
     fn raycast(&self, pos: Vec3, dir: Vec3, max_depth: u32) -> Option<RaycastHit> {
         let is_empty = |v: &i32| *v == 0;
-        let hit = self.cube.raycast_debug(pos, dir, max_depth, &is_empty)?;
+        let hit = self
+            .cube
+            .raycast_debug(pos, dir, max_depth, &is_empty)
+            .ok()
+            .flatten()?;
 
         Some(RaycastHit {
             position: hit.position,
-            normal: hit.normal,
+            normal: hit.normal.as_vec3(),
             value: hit.value,
             enter_count: hit.debug.as_ref().map(|d| d.enter_count),
         })
@@ -104,11 +108,15 @@ impl Tracer for GlTracer {
     }
 
     fn raycast(&self, pos: Vec3, dir: Vec3, max_depth: u32) -> Option<RaycastHit> {
-        let hit = self.tracer.raycast_octree(pos, dir, max_depth)?;
+        let hit = self
+            .tracer
+            .raycast_octree(pos, dir, max_depth)
+            .ok()
+            .flatten()?;
 
         Some(RaycastHit {
             position: hit.position,
-            normal: hit.normal,
+            normal: hit.normal.as_vec3(),
             value: hit.value,
             enter_count: hit.debug.as_ref().map(|d| d.enter_count),
         })
@@ -144,11 +152,15 @@ impl Tracer for GpuTracer {
     }
 
     fn raycast(&self, pos: Vec3, dir: Vec3, max_depth: u32) -> Option<RaycastHit> {
-        let hit = self.tracer.raycast_octree(pos, dir, max_depth)?;
+        let hit = self
+            .tracer
+            .raycast_octree(pos, dir, max_depth)
+            .ok()
+            .flatten()?;
 
         Some(RaycastHit {
             position: hit.position,
-            normal: hit.normal,
+            normal: hit.normal.as_vec3(),
             value: hit.value,
             enter_count: hit.debug.as_ref().map(|d| d.enter_count),
         })
@@ -306,12 +318,36 @@ fn create_test_cases() -> Vec<TestCase> {
 
     // Axis-aligned rays
     let axis_tests = vec![
-        ("Axis +X", Vec3::new(0.0, 0.5, 0.5), Vec3::new(1.0, 0.0, 0.0)),
-        ("Axis -X", Vec3::new(1.0, 0.5, 0.5), Vec3::new(-1.0, 0.0, 0.0)),
-        ("Axis +Y", Vec3::new(0.5, 0.0, 0.5), Vec3::new(0.0, 1.0, 0.0)),
-        ("Axis -Y", Vec3::new(0.5, 1.0, 0.5), Vec3::new(0.0, -1.0, 0.0)),
-        ("Axis +Z", Vec3::new(0.5, 0.5, 0.0), Vec3::new(0.0, 0.0, 1.0)),
-        ("Axis -Z", Vec3::new(0.5, 0.5, 1.0), Vec3::new(0.0, 0.0, -1.0)),
+        (
+            "Axis +X",
+            Vec3::new(0.0, 0.5, 0.5),
+            Vec3::new(1.0, 0.0, 0.0),
+        ),
+        (
+            "Axis -X",
+            Vec3::new(1.0, 0.5, 0.5),
+            Vec3::new(-1.0, 0.0, 0.0),
+        ),
+        (
+            "Axis +Y",
+            Vec3::new(0.5, 0.0, 0.5),
+            Vec3::new(0.0, 1.0, 0.0),
+        ),
+        (
+            "Axis -Y",
+            Vec3::new(0.5, 1.0, 0.5),
+            Vec3::new(0.0, -1.0, 0.0),
+        ),
+        (
+            "Axis +Z",
+            Vec3::new(0.5, 0.5, 0.0),
+            Vec3::new(0.0, 0.0, 1.0),
+        ),
+        (
+            "Axis -Z",
+            Vec3::new(0.5, 0.5, 1.0),
+            Vec3::new(0.0, 0.0, -1.0),
+        ),
     ];
 
     for (name, pos, dir) in axis_tests {
@@ -331,10 +367,26 @@ fn create_test_cases() -> Vec<TestCase> {
 
     // Diagonal rays
     let diagonal_tests = vec![
-        ("Diagonal (+++)", Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 1.0, 1.0).normalize()),
-        ("Diagonal (-++)", Vec3::new(1.0, 0.0, 0.0), Vec3::new(-1.0, 1.0, 1.0).normalize()),
-        ("Diagonal (+-+)", Vec3::new(0.0, 1.0, 0.0), Vec3::new(1.0, -1.0, 1.0).normalize()),
-        ("Diagonal (++-)", Vec3::new(0.0, 0.0, 1.0), Vec3::new(1.0, 1.0, -1.0).normalize()),
+        (
+            "Diagonal (+++)",
+            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::new(1.0, 1.0, 1.0).normalize(),
+        ),
+        (
+            "Diagonal (-++)",
+            Vec3::new(1.0, 0.0, 0.0),
+            Vec3::new(-1.0, 1.0, 1.0).normalize(),
+        ),
+        (
+            "Diagonal (+-+)",
+            Vec3::new(0.0, 1.0, 0.0),
+            Vec3::new(1.0, -1.0, 1.0).normalize(),
+        ),
+        (
+            "Diagonal (++-)",
+            Vec3::new(0.0, 0.0, 1.0),
+            Vec3::new(1.0, 1.0, -1.0).normalize(),
+        ),
     ];
 
     for (name, pos, dir) in diagonal_tests {
@@ -354,9 +406,21 @@ fn create_test_cases() -> Vec<TestCase> {
 
     // Miss cases
     let miss_tests = vec![
-        ("Miss +X outside", Vec3::new(2.0, 0.5, 0.5), Vec3::new(1.0, 0.0, 0.0)),
-        ("Miss -Y outside", Vec3::new(0.5, -1.0, 0.5), Vec3::new(0.0, -1.0, 0.0)),
-        ("Miss +Z outside", Vec3::new(0.5, 0.5, 2.0), Vec3::new(0.0, 0.0, 1.0)),
+        (
+            "Miss +X outside",
+            Vec3::new(2.0, 0.5, 0.5),
+            Vec3::new(1.0, 0.0, 0.0),
+        ),
+        (
+            "Miss -Y outside",
+            Vec3::new(0.5, -1.0, 0.5),
+            Vec3::new(0.0, -1.0, 0.0),
+        ),
+        (
+            "Miss +Z outside",
+            Vec3::new(0.5, 0.5, 2.0),
+            Vec3::new(0.0, 0.0, 1.0),
+        ),
     ];
 
     for (name, pos, dir) in miss_tests {
@@ -376,9 +440,21 @@ fn create_test_cases() -> Vec<TestCase> {
 
     // Edge cases
     let edge_tests = vec![
-        ("Center hit", Vec3::new(0.5, 0.5, 0.0), Vec3::new(0.0, 0.0, 1.0)),
-        ("Corner entry", Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 1.0, 1.0).normalize()),
-        ("Boundary entry", Vec3::new(0.5, 0.5, 0.5), Vec3::new(0.0, 0.0, 1.0)),
+        (
+            "Center hit",
+            Vec3::new(0.5, 0.5, 0.0),
+            Vec3::new(0.0, 0.0, 1.0),
+        ),
+        (
+            "Corner entry",
+            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::new(1.0, 1.0, 1.0).normalize(),
+        ),
+        (
+            "Boundary entry",
+            Vec3::new(0.5, 0.5, 0.5),
+            Vec3::new(0.0, 0.0, 1.0),
+        ),
     ];
 
     for (name, pos, dir) in edge_tests {
@@ -410,19 +486,31 @@ struct TracerResults {
 
 impl TracerResults {
     fn pass_count(&self) -> usize {
-        self.results.iter().filter(|r| r.result == TestResult::Pass).count()
+        self.results
+            .iter()
+            .filter(|r| r.result == TestResult::Pass)
+            .count()
     }
 
     fn fail_count(&self) -> usize {
-        self.results.iter().filter(|r| r.result == TestResult::Fail).count()
+        self.results
+            .iter()
+            .filter(|r| r.result == TestResult::Fail)
+            .count()
     }
 
     fn na_count(&self) -> usize {
-        self.results.iter().filter(|r| r.result == TestResult::NotImplemented).count()
+        self.results
+            .iter()
+            .filter(|r| r.result == TestResult::NotImplemented)
+            .count()
     }
 
     fn failures(&self) -> Vec<&TestCaseResult> {
-        self.results.iter().filter(|r| r.result == TestResult::Fail).collect()
+        self.results
+            .iter()
+            .filter(|r| r.result == TestResult::Fail)
+            .collect()
     }
 }
 
@@ -436,9 +524,18 @@ fn print_header() {
 
 fn print_openspec_status() {
     println!("\n{}{}OpenSpec Change Status:{}", BOLD, BLUE, RESET);
-    println!("{}┌────────────────────────────────────────────┬──────────────┐{}", DIM, RESET);
-    println!("{}│{} Change                                    {}│{} Status       {}│{}", DIM, RESET, DIM, RESET, DIM, RESET);
-    println!("{}├────────────────────────────────────────────┼──────────────┤{}", DIM, RESET);
+    println!(
+        "{}┌────────────────────────────────────────────┬──────────────┐{}",
+        DIM, RESET
+    );
+    println!(
+        "{}│{} Change                                    {}│{} Status       {}│{}",
+        DIM, RESET, DIM, RESET, DIM, RESET
+    );
+    println!(
+        "{}├────────────────────────────────────────────┼──────────────┤{}",
+        DIM, RESET
+    );
 
     let changes = vec![
         ("reimplement-raycast", "89/97 tasks", YELLOW),
@@ -456,22 +553,36 @@ fn print_openspec_status() {
         );
     }
 
-    println!("{}└────────────────────────────────────────────┴──────────────┘{}", DIM, RESET);
+    println!(
+        "{}└────────────────────────────────────────────┴──────────────┘{}",
+        DIM, RESET
+    );
 }
 
 fn print_test_table(test_cases: &[TestCase], all_results: &[TracerResults]) {
     println!("\n{}{}Test Results by Category:{}", BOLD, BLUE, RESET);
-    println!("{}┌────┬─────────────────────────────┬──────┬──────┬──────┐{}", DIM, RESET);
-    println!("{}│{}  # {}│{} Test Case                  {}│{} CPU  {}│{} GL   {}│{} GPU  {}│{}",
-        DIM, RESET, DIM, RESET, DIM, RESET, DIM, RESET, DIM, RESET, DIM, RESET);
-    println!("{}├────┼─────────────────────────────┼──────┼──────┼──────┤{}", DIM, RESET);
+    println!(
+        "{}┌────┬─────────────────────────────┬──────┬──────┬──────┐{}",
+        DIM, RESET
+    );
+    println!(
+        "{}│{}  # {}│{} Test Case                  {}│{} CPU  {}│{} GL   {}│{} GPU  {}│{}",
+        DIM, RESET, DIM, RESET, DIM, RESET, DIM, RESET, DIM, RESET, DIM, RESET
+    );
+    println!(
+        "{}├────┼─────────────────────────────┼──────┼──────┼──────┤{}",
+        DIM, RESET
+    );
 
     let mut current_category = String::new();
     for test in test_cases {
         // Print category header if changed
         if test.category != current_category {
             if !current_category.is_empty() {
-                println!("{}├────┼─────────────────────────────┼──────┼──────┼──────┤{}", DIM, RESET);
+                println!(
+                    "{}├────┼─────────────────────────────┼──────┼──────┼──────┤{}",
+                    DIM, RESET
+                );
             }
             println!(
                 "{}│{}    {}│{} {}{:<27}{} {}│      │      │      {}│{}",
@@ -485,8 +596,10 @@ fn print_test_table(test_cases: &[TestCase], all_results: &[TracerResults]) {
         let gl_result = &all_results[1].results[test.number - 1];
         let gpu_result = &all_results[2].results[test.number - 1];
 
-        print!("{}│{} {:>2} {}│{} {:<27} {}│ ",
-            DIM, RESET, test.number, DIM, RESET, test.name, DIM);
+        print!(
+            "{}│{} {:>2} {}│{} {:<27} {}│ ",
+            DIM, RESET, test.number, DIM, RESET, test.name, DIM
+        );
         print!("{} ", cpu_result.result);
         print!("{}│ ", DIM);
         print!("{} ", gl_result.result);
@@ -495,7 +608,10 @@ fn print_test_table(test_cases: &[TestCase], all_results: &[TracerResults]) {
         println!("{}│{}", DIM, RESET);
     }
 
-    println!("{}└────┴─────────────────────────────┴──────┴──────┴──────┘{}", DIM, RESET);
+    println!(
+        "{}└────┴─────────────────────────────┴──────┴──────┴──────┘{}",
+        DIM, RESET
+    );
 }
 
 fn print_failures(all_results: &[TracerResults]) {
@@ -505,12 +621,20 @@ fn print_failures(all_results: &[TracerResults]) {
         let failures = tracer_results.failures();
         if !failures.is_empty() {
             has_failures = true;
-            println!("\n{}{}Failures for {} Tracer:{}", BOLD, RED, tracer_results.tracer_name, RESET);
+            println!(
+                "\n{}{}Failures for {} Tracer:{}",
+                BOLD, RED, tracer_results.tracer_name, RESET
+            );
             for failure in failures {
-                println!("  {}#{} {}{}: {}{}{}",
-                    DIM, failure.test_number, RESET,
+                println!(
+                    "  {}#{} {}{}: {}{}{}",
+                    DIM,
+                    failure.test_number,
+                    RESET,
                     failure.test_name,
-                    RED, failure.error.as_deref().unwrap_or("Unknown error"), RESET
+                    RED,
+                    failure.error.as_deref().unwrap_or("Unknown error"),
+                    RESET
                 );
             }
         }
@@ -524,11 +648,17 @@ fn print_failures(all_results: &[TracerResults]) {
 fn print_summary(all_results: &[TracerResults], total_tests: usize) {
     println!("\n{}{}Summary:{}", BOLD, BLUE, RESET);
     println!("{}┌──────────┬──────┬──────┬──────┐", DIM);
-    println!("{}│{} Tracer   {}│{} Pass {}│{} Fail {}│{} N/A  {}│", DIM, RESET, DIM, RESET, DIM, RESET, DIM, RESET, DIM);
+    println!(
+        "{}│{} Tracer   {}│{} Pass {}│{} Fail {}│{} N/A  {}│",
+        DIM, RESET, DIM, RESET, DIM, RESET, DIM, RESET, DIM
+    );
     println!("{}├──────────┼──────┼──────┼──────┤", DIM);
 
     for tracer_results in all_results {
-        print!("{}│{} {:<8} {}│ ", DIM, RESET, tracer_results.tracer_name, DIM);
+        print!(
+            "{}│{} {:<8} {}│ ",
+            DIM, RESET, tracer_results.tracer_name, DIM
+        );
         print!("{}{:>4}{} ", GREEN, tracer_results.pass_count(), RESET);
         print!("{}│ ", DIM);
         print!("{}{:>4}{} ", RED, tracer_results.fail_count(), RESET);
@@ -542,9 +672,13 @@ fn print_summary(all_results: &[TracerResults], total_tests: usize) {
     // Print per-tracer stats
     print!("\n{}Total tests: {}{}{}", BOLD, CYAN, total_tests, RESET);
     for tracer_results in all_results {
-        print!(" | {}: {}{}/{}{}",
+        print!(
+            " | {}: {}{}/{}{}",
             tracer_results.tracer_name,
-            GREEN, tracer_results.pass_count(), total_tests, RESET
+            GREEN,
+            tracer_results.pass_count(),
+            total_tests,
+            RESET
         );
     }
     println!(" passed");
@@ -586,8 +720,14 @@ fn test_raycast_report() {
     print_failures(&all_results);
     print_summary(&all_results, test_cases.len());
 
-    println!("\n{}{}Note:{} All tracers use CPU-side octree raycast for testing.", BOLD, YELLOW, RESET);
-    println!("{}      GL/GPU tracers also have shader-based implementations for rendering.{}\n", DIM, RESET);
+    println!(
+        "\n{}{}Note:{} All tracers use CPU-side octree raycast for testing.",
+        BOLD, YELLOW, RESET
+    );
+    println!(
+        "{}      GL/GPU tracers also have shader-based implementations for rendering.{}\n",
+        DIM, RESET
+    );
 
     // Assert that all tracers pass
     for tracer_results in &all_results {
