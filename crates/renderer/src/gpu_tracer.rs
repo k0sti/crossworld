@@ -145,8 +145,13 @@ impl GpuTracer {
 
     /// Raycast against the octree structure (CPU-side)
     /// This uses the cube's octree traversal algorithm for accurate voxel intersection
-    /// Returns Some(RaycastHit) if a non-empty voxel is hit, None otherwise
-    pub fn raycast_octree(&self, pos: glam::Vec3, dir: glam::Vec3, max_depth: u32) -> Option<cube::RaycastHit<i32>> {
+    /// Returns Result<Option<RaycastHit>, RaycastError>
+    pub fn raycast_octree(
+        &self,
+        pos: glam::Vec3,
+        dir: glam::Vec3,
+        max_depth: u32,
+    ) -> Result<Option<cube::RaycastHit<i32>>, cube::RaycastError> {
         let is_empty = |v: &i32| *v == 0;
         self.cube.raycast_debug(pos, dir, max_depth, &is_empty)
     }
@@ -173,11 +178,8 @@ impl GpuTracer {
 
                 // Use tex_storage_2d for immutable storage (required for glBindImageTexture)
                 gl.tex_storage_2d(
-                    TEXTURE_2D,
-                    1,  // 1 mipmap level
-                    RGBA8,
-                    width,
-                    height,
+                    TEXTURE_2D, 1, // 1 mipmap level
+                    RGBA8, width, height,
                 );
 
                 // Set texture parameters
@@ -199,15 +201,7 @@ impl GpuTracer {
             gl.use_program(Some(gl_state.compute_program));
 
             // Bind output texture as image
-            gl.bind_image_texture(
-                0,
-                gl_state.output_texture,
-                0,
-                false,
-                0,
-                WRITE_ONLY,
-                RGBA8,
-            );
+            gl.bind_image_texture(0, gl_state.output_texture, 0, false, 0, WRITE_ONLY, RGBA8);
 
             // Set uniforms
             if let Some(loc) = gl_state.uniform_resolution {
@@ -229,7 +223,7 @@ impl GpuTracer {
             gl.memory_barrier(SHADER_IMAGE_ACCESS_BARRIER_BIT);
 
             // Blit output texture to screen (simple fullscreen quad)
-            let output_texture = gl_state.output_texture;  // Copy texture handle to avoid borrow conflict
+            let output_texture = gl_state.output_texture; // Copy texture handle to avoid borrow conflict
             self.blit_texture_to_screen(gl, output_texture, width, height);
         }
     }
@@ -262,11 +256,8 @@ impl GpuTracer {
 
                 // Use tex_storage_2d for immutable storage (required for glBindImageTexture)
                 gl.tex_storage_2d(
-                    TEXTURE_2D,
-                    1,  // 1 mipmap level
-                    RGBA8,
-                    width,
-                    height,
+                    TEXTURE_2D, 1, // 1 mipmap level
+                    RGBA8, width, height,
                 );
 
                 // Set texture parameters
@@ -288,15 +279,7 @@ impl GpuTracer {
             gl.use_program(Some(gl_state.compute_program));
 
             // Bind output texture as image
-            gl.bind_image_texture(
-                0,
-                gl_state.output_texture,
-                0,
-                false,
-                0,
-                WRITE_ONLY,
-                RGBA8,
-            );
+            gl.bind_image_texture(0, gl_state.output_texture, 0, false, 0, WRITE_ONLY, RGBA8);
 
             // Set uniforms
             if let Some(loc) = gl_state.uniform_resolution {
@@ -332,13 +315,19 @@ impl GpuTracer {
             gl.memory_barrier(SHADER_IMAGE_ACCESS_BARRIER_BIT);
 
             // Blit output texture to screen
-            let output_texture = gl_state.output_texture;  // Copy texture handle to avoid borrow conflict
+            let output_texture = gl_state.output_texture; // Copy texture handle to avoid borrow conflict
             self.blit_texture_to_screen(gl, output_texture, width, height);
         }
     }
 
     /// Helper: Blit texture to screen using a fullscreen quad
-    unsafe fn blit_texture_to_screen(&self, gl: &Context, texture: Texture, width: i32, height: i32) {
+    unsafe fn blit_texture_to_screen(
+        &self,
+        gl: &Context,
+        texture: Texture,
+        width: i32,
+        height: i32,
+    ) {
         let Some(gl_state) = &self.gl_state else {
             return;
         };
@@ -389,12 +378,7 @@ impl Renderer for GpuTracer {
         // Use render_to_gl() method instead
     }
 
-    fn render_with_camera(
-        &mut self,
-        _width: u32,
-        _height: u32,
-        _camera: &CameraConfig,
-    ) {
+    fn render_with_camera(&mut self, _width: u32, _height: u32, _camera: &CameraConfig) {
         // Note: Compute shader rendering requires GL context
         // Use render_to_gl_with_camera() method instead
     }

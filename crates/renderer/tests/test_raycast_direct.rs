@@ -19,11 +19,14 @@ fn test_raycast_at_max_boundary_negative_dir() {
     let hit = cube.raycast(pos, dir, 1, &is_empty);
 
     match &hit {
-        Some(hit) => {
+        Ok(Some(hit)) => {
             println!("✓ HIT at {:?} with value {}", hit.position, hit.value);
         }
-        None => {
+        Ok(None) => {
             println!("✗ MISS - This reveals the bug!");
+        }
+        Err(e) => {
+            println!("⚠ ERROR: {:?}", e);
         }
     }
 
@@ -55,18 +58,25 @@ fn test_raycast_octa_cube_from_boundary() {
     let hit = cube.raycast(ray_origin, ray_dir, max_depth, &is_empty);
 
     match &hit {
-        Some(hit) => {
+        Ok(Some(hit)) => {
             println!("✓ HIT!");
             println!("  Position: {:?}", hit.position);
             println!("  Normal: {:?}", hit.normal);
             println!("  Value: {}", hit.value);
         }
-        None => {
+        Ok(None) => {
             println!("✗ MISS - Expected to hit solid octant 0!");
+        }
+        Err(e) => {
+            println!("⚠ ERROR: {:?}", e);
         }
     }
 
-    assert!(hit.is_some(), "Should hit solid octant 0 from boundary");
+    assert!(hit.is_ok());
+    assert!(
+        hit.unwrap().is_some(),
+        "Should hit solid octant 0 from boundary"
+    );
 
     // Test 2: Ray from inside cube through solid region
     println!("\n--- Test 2: From inside solid octant ---");
@@ -79,14 +89,17 @@ fn test_raycast_octa_cube_from_boundary() {
     let hit2 = cube.raycast(ray_origin2, ray_dir2, max_depth, &is_empty);
 
     match &hit2 {
-        Some(hit) => {
+        Ok(Some(hit)) => {
             println!("✓ HIT!");
             println!("  Position: {:?}", hit.position);
             println!("  Normal: {:?}", hit.normal);
             println!("  Value: {}", hit.value);
         }
-        None => {
+        Ok(None) => {
             println!("✗ MISS - Expected to hit when starting inside solid!");
+        }
+        Err(e) => {
+            println!("⚠ ERROR: {:?}", e);
         }
     }
 
@@ -104,11 +117,14 @@ fn test_raycast_octa_cube_from_boundary() {
     let hit3 = cube.raycast(ray_origin3, ray_dir3, max_depth, &is_empty);
 
     match &hit3 {
-        Some(hit) => {
+        Ok(Some(hit)) => {
             println!("  Hit at {:?} with value {}", hit.position, hit.value);
         }
-        None => {
+        Ok(None) => {
             println!("✓ MISS - Correctly missed empty octant 3");
+        }
+        Err(e) => {
+            println!("⚠ ERROR: {:?}", e);
         }
     }
 
@@ -123,13 +139,16 @@ fn test_raycast_octa_cube_from_boundary() {
     let hit4 = cube.raycast(ray_origin4, ray_dir4, max_depth, &is_empty);
 
     match &hit4 {
-        Some(hit) => {
+        Ok(Some(hit)) => {
             println!("✓ HIT!");
             println!("  Position: {:?}", hit.position);
             println!("  Value: {}", hit.value);
         }
-        None => {
+        Ok(None) => {
             println!("✗ MISS - Expected to hit solid voxel!");
+        }
+        Err(e) => {
+            println!("⚠ ERROR: {:?}", e);
         }
     }
 }

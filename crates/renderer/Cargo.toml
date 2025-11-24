@@ -27,3 +27,4 @@ egui = "0.29"
 egui_glow = "0.29"
 egui-winit = "0.29"
 cube = { path = "../cube" }
+bytemuck = "1.24.0"

@@ -107,14 +107,14 @@ fn test_specific_octants() {
 
     // Test all 8 octants (octant indexing: x*4 + y*2 + z)
     let octant_tests = [
-        (0, Vec3::new(0.125, 0.125, 0.125), 1), // Octant 0: solid
-        (1, Vec3::new(0.125, 0.125, 0.625), 1), // Octant 1: solid
-        (2, Vec3::new(0.125, 0.625, 0.125), 1), // Octant 2: solid
-        (3, Vec3::new(0.125, 0.625, 0.625), 0), // Octant 3: EMPTY
-        (4, Vec3::new(0.625, 0.125, 0.125), 1), // Octant 4: solid
-        (5, Vec3::new(0.625, 0.125, 0.625), 1), // Octant 5: solid
-        (6, Vec3::new(0.625, 0.625, 0.125), 1), // Octant 6: solid
-        (7, Vec3::new(0.625, 0.625, 0.625), 0), // Octant 7: EMPTY
+        (0, Vec3::new(0.125, 0.125, 0.125), 1), // Octant 0 (0,0,0): Child 0 -> 1
+        (1, Vec3::new(0.125, 0.125, 0.625), 5), // Octant 1 (0,0,1): Child 1 -> 5
+        (2, Vec3::new(0.125, 0.625, 0.125), 2), // Octant 2 (0,1,0): Child 2 -> 2
+        (3, Vec3::new(0.125, 0.625, 0.625), 0), // Octant 3 (0,1,1): Child 3 -> 0
+        (4, Vec3::new(0.625, 0.125, 0.125), 3), // Octant 4 (1,0,0): Child 4 -> 3
+        (5, Vec3::new(0.625, 0.125, 0.625), 5), // Octant 5 (1,0,1): Child 5 -> 5
+        (6, Vec3::new(0.625, 0.625, 0.125), 4), // Octant 6 (1,1,0): Child 6 -> 4
+        (7, Vec3::new(0.625, 0.625, 0.625), 0), // Octant 7 (1,1,1): Child 7 -> 0
     ];
 
     println!("Testing octant centers:");

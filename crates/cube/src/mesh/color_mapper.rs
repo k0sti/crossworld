@@ -158,30 +158,8 @@ impl Default for VoxColorMapper {
 
 impl ColorMapper for VoxColorMapper {
     fn map(&self, index: i32) -> [f32; 3] {
-        if index <= 0 {
-            // 0 or negative: transparent/black
-            return [0.0, 0.0, 0.0];
-        }
-
-        // All materials should be in range 128-255 for vox models
-        // Decode RGB from 7-bit R2G3B2 encoding
-        // This reverses the encoding done in vox_loader.rs:map_color_to_material
-        let clamped_index = index.clamp(128, 255);
-
-        let bits = (clamped_index - 128) as u8;
-        let r_bits = (bits >> 5) & 0b11; // Extract top 2 bits
-        let g_bits = (bits >> 2) & 0b111; // Extract middle 3 bits
-        let b_bits = bits & 0b11; // Extract bottom 2 bits
-
-        // Expand bits back to full 8-bit values by replicating bits
-        // For 2-bit values (r, b): replicate to fill 8 bits (xx -> xxxxxxxx)
-        // For 3-bit values (g): replicate to fill 8 bits (xxx -> xxxxxxxx)
-        let r = (r_bits << 6) | (r_bits << 4) | (r_bits << 2) | r_bits;
-        let g = (g_bits << 5) | (g_bits << 2) | (g_bits >> 1);
-        let b = (b_bits << 6) | (b_bits << 4) | (b_bits << 2) | b_bits;
-
-        // Convert to normalized float values (0.0-1.0)
-        [r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0]
+        let color = crate::material::get_material_color(index);
+        [color.x, color.y, color.z]
     }
 }
 

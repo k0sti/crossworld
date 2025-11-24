@@ -3,91 +3,26 @@
 //! This module provides efficient ray-octree intersection using a recursive DDA
 //! (Digital Differential Analyzer) algorithm. The raycast system finds the first
 //! solid voxel along a ray path by hierarchically traversing the octree structure.
-//!
-//! # Algorithm Overview
-//!
-//! The raycast uses recursive octree traversal with DDA stepping to efficiently
-//! skip empty space:
-//!
-//! 1. **Octant Selection**: Determine which child octant contains the ray position
-//! 2. **Recursive Descent**: Transform ray to child coordinate space and recurse
-//! 3. **DDA Stepping**: On miss, calculate next octant boundary and step to it
-//! 4. **Early Termination**: Stop immediately upon hitting first solid voxel
-//!
-//! # Coordinate Systems
-//!
-//! - **Normalized [0,1]³ Space**: Octree traversal uses normalized coordinates
-//!   where (0,0,0) is the cube minimum and (1,1,1) is the cube maximum
-//! - **Octree Coordinates**: Encoded as Morton code path through octree hierarchy
-//!
-//! # Octant Indexing
-//!
-//! Octants are indexed 0-7 using bit encoding: `(x_bit << 2) | (y_bit << 1) | z_bit`
-//!
-//! ```text
-//! Octant 0 (000): (-x, -y, -z)   Octant 4 (100): (+x, -y, -z)
-//! Octant 1 (001): (-x, -y, +z)   Octant 5 (101): (+x, -y, +z)
-//! Octant 2 (010): (-x, +y, -z)   Octant 6 (110): (+x, +y, -z)
-//! Octant 3 (011): (-x, +y, +z)   Octant 7 (111): (+x, +y, +z)
-//! ```
-//!
-//! # Performance
-//!
-//! - **Early Termination**: Exits on first solid hit, no full tree traversal
-//! - **Empty Space Skipping**: DDA stepping efficiently jumps over empty octants
-//! - **Depth Limiting**: `max_depth` parameter prevents excessive recursion
-//!
-//! # Example
-//!
-//! ```rust
-//! use cube::{Cube, raycast::RaycastHit};
-//! use glam::Vec3;
-//!
-//! let cube = Cube::Solid(1i32);
-//! let is_empty = |v: &i32| *v == 0;
-//!
-//! // Cast ray from bottom going up
-//! let pos = Vec3::new(0.5, 0.5, 0.0);
-//! let dir = Vec3::new(0.0, 0.0, 1.0);
-//! let hit: Option<RaycastHit<i32>> = cube.raycast(pos, dir, 3, &is_empty);
-//!
-//! if let Some(hit) = hit {
-//!     println!("Hit at {:?}", hit.position);
-//!     println!("Normal: {:?}", hit.normal);
-//!     println!("Voxel value: {:?}", hit.value);
-//! }
-//! ```
-//!
-//! # References
-//!
-//! - Design document: `docs/raycast.md`
-//! - "An Efficient Parametric Algorithm for Octree Traversal" - Revelles et al.
-//! - "A Fast Voxel Traversal Algorithm for Ray Tracing" - Amanatides & Woo
 
 use crate::{Cube, CubeCoord, IVec3Ext};
 use glam::{IVec3, Vec3};
 
+pub mod error;
+use crate::axis::Axis;
+pub use error::RaycastError;
+
 /// Debug state for raycast traversal
-///
-/// Tracks internal state during raycast traversal for testing and debugging.
-/// This is only populated when `debug: true` is passed to raycast methods.
 #[derive(Debug, Clone, Default)]
 pub struct RaycastDebugState {
-    /// Number of calls to the recursive raycast function (enter count)
     pub enter_count: u32,
-    /// Maximum depth reached during traversal
     pub max_depth_reached: u32,
-    /// List of cube coordinates traversed during raycast
     pub traversed_nodes: Vec<CubeCoord>,
 }
 
 impl RaycastDebugState {
-    /// Create a new empty debug state
     pub fn new() -> Self {
         Self::default()
     }
-
-    /// Record entering a node at given depth
     fn record_enter(&mut self, coord: CubeCoord, depth: u32) {
         self.enter_count += 1;
         self.max_depth_reached = self.max_depth_reached.max(depth);
@@ -96,20 +31,12 @@ impl RaycastDebugState {
 }
 
 /// Result of a raycast hit
-///
-/// Generic over the voxel type `T`, allowing different voxel data types
-/// (e.g., `i32`, custom materials, colors, etc.)
 #[derive(Debug, Clone)]
 pub struct RaycastHit<T> {
-    /// Coordinate of the hit voxel in octree space
     pub coord: CubeCoord,
-    /// Hit position in world space (normalized [0,1] cube space)
     pub position: Vec3,
-    /// Surface normal at hit point
-    pub normal: Vec3,
-    /// Voxel value at the hit position
+    pub normal: Axis,
     pub value: T,
-    /// Debug information (only populated if debug tracking enabled)
     pub debug: Option<RaycastDebugState>,
 }
 
@@ -117,54 +44,84 @@ impl<T> Cube<T>
 where
     T: Clone + PartialEq,
 {
-    /// Cast a ray through the octree and find the first non-empty voxel
-    ///
-    /// # Arguments
-    /// * `pos` - Starting position in normalized [0, 1] cube space
-    /// * `dir` - Ray direction (should be normalized)
-    /// * `max_depth` - Maximum octree depth to traverse
-    /// * `is_empty` - Function to test if a voxel value is considered empty
-    ///
-    /// # Returns
-    /// `Some(RaycastHit<T>)` if a non-empty voxel is hit, `None` otherwise
     pub fn raycast<F>(
         &self,
         pos: Vec3,
         dir: Vec3,
         max_depth: u32,
         is_empty: &F,
-    ) -> Option<RaycastHit<T>>
+    ) -> Result<Option<RaycastHit<T>>, RaycastError>
     where
         F: Fn(&T) -> bool,
     {
+        if dir.length_squared() < 1e-6 {
+            return Err(RaycastError::InvalidDirection);
+        }
         self.raycast_recursive(pos, dir, max_depth, IVec3::ZERO, max_depth, is_empty, None)
     }
 
-    /// Cast a ray through the octree with debug tracking enabled
-    ///
-    /// # Arguments
-    /// * `pos` - Starting position in normalized [0, 1] cube space
-    /// * `dir` - Ray direction (should be normalized)
-    /// * `max_depth` - Maximum octree depth to traverse
-    /// * `is_empty` - Function to test if a voxel value is considered empty
-    ///
-    /// # Returns
-    /// `Some(RaycastHit<T>)` with debug information if a non-empty voxel is hit, `None` otherwise
     pub fn raycast_debug<F>(
         &self,
         pos: Vec3,
         dir: Vec3,
         max_depth: u32,
         is_empty: &F,
-    ) -> Option<RaycastHit<T>>
+    ) -> Result<Option<RaycastHit<T>>, RaycastError>
     where
         F: Fn(&T) -> bool,
     {
+        if dir.length_squared() < 1e-6 {
+            return Err(RaycastError::InvalidDirection);
+        }
+
+        let mut start_pos = pos;
+
+        // Check if start position is outside [0, 1]³
+        if !pos.cmpge(Vec3::ZERO).all() || !pos.cmple(Vec3::ONE).all() {
+            // Ray starts outside, check intersection with bounding box
+            if let Some((t_entry, _)) = Self::intersect_aabb(pos, dir, Vec3::ZERO, Vec3::ONE) {
+                // Move start position to entry point (plus tiny epsilon to ensure inside)
+                start_pos = pos + dir * (t_entry + 1e-6);
+            } else {
+                // Ray misses the box completely
+                return Ok(None);
+            }
+        }
+
         let mut debug = RaycastDebugState::new();
-        self.raycast_recursive(pos, dir, max_depth, IVec3::ZERO, max_depth, is_empty, Some(&mut debug))
+        self.raycast_recursive(
+            start_pos,
+            dir,
+            max_depth,
+            IVec3::ZERO,
+            max_depth,
+            is_empty,
+            Some(&mut debug),
+        )
     }
 
-    /// Recursive raycast implementation following the design in docs/raycast.md
+    fn intersect_aabb(
+        ray_origin: Vec3,
+        ray_dir: Vec3,
+        box_min: Vec3,
+        box_max: Vec3,
+    ) -> Option<(f32, f32)> {
+        let t_min = (box_min - ray_origin) / ray_dir;
+        let t_max = (box_max - ray_origin) / ray_dir;
+
+        let t1 = t_min.min(t_max);
+        let t2 = t_min.max(t_max);
+
+        let t_near = t1.max_element();
+        let t_far = t2.min_element();
+
+        if t_near > t_far || t_far < 0.0 {
+            None
+        } else {
+            Some((t_near, t_far))
+        }
+    }
+
     fn raycast_recursive<F>(
         &self,
         pos: Vec3,
@@ -174,13 +131,18 @@ where
         current_depth: u32,
         is_empty: &F,
         mut debug: Option<&mut RaycastDebugState>,
-    ) -> Option<RaycastHit<T>>
+    ) -> Result<Option<RaycastHit<T>>, RaycastError>
     where
         F: Fn(&T) -> bool,
     {
         // Validate position is in [0, 1]³
         if !pos.cmpge(Vec3::ZERO).all() || !pos.cmple(Vec3::ONE).all() {
-            return None;
+            // Only return error at top level (when current_depth == _max_depth)
+            // For recursive calls, floating point errors might cause slight out of bounds, which we treat as miss
+            if current_depth == _max_depth {
+                return Err(RaycastError::StartOutOfBounds);
+            }
+            return Ok(None);
         }
 
         // Record entry into this node
@@ -195,16 +157,16 @@ where
                 // Non-empty voxel - return hit
                 if !is_empty(value) {
                     let normal = calculate_entry_normal(pos, dir);
-                    Some(RaycastHit {
+                    Ok(Some(RaycastHit {
                         coord,
                         position: pos,
                         normal,
                         value: value.clone(),
                         debug: debug.map(|d| d.clone()),
-                    })
+                    }))
                 } else {
                     // Empty voxel
-                    None
+                    Ok(None)
                 }
             }
             Cube::Cubes(children) if current_depth > 0 => {
@@ -228,7 +190,7 @@ where
                 let child_octree_pos = (octree_pos << 1) + bit;
 
                 // Recursively raycast into child
-                if let Some(hit) = children[index].raycast_recursive(
+                match children[index].raycast_recursive(
                     child_pos,
                     dir,
                     _max_depth,
@@ -237,7 +199,9 @@ where
                     is_empty,
                     debug.as_deref_mut(),
                 ) {
-                    return Some(hit);
+                    Ok(Some(hit)) => return Ok(Some(hit)),
+                    Ok(None) => {}           // Miss, continue
+                    Err(e) => return Err(e), // Propagate error
                 }
 
                 // Miss in this octant - step to next boundary
@@ -246,13 +210,13 @@ where
                 // Check if next position is still within valid bounds or if we've made no progress
                 // If it's outside [0,1]³ or identical to current position, we've exited/stuck
                 if !next_pos.cmpge(Vec3::ZERO).all() || !next_pos.cmple(Vec3::ONE).all() {
-                    return None;
+                    return Ok(None);
                 }
 
                 // Prevent infinite recursion: if next_pos is same as pos, we haven't moved
                 const EPSILON: f32 = 1e-10;
                 if (next_pos - pos).length() < EPSILON {
-                    return None;
+                    return Ok(None);
                 }
 
                 // Continue raycasting from new position
@@ -268,7 +232,7 @@ where
             }
             _ => {
                 // Max depth or unsupported structure
-                None
+                Ok(None)
             }
         }
     }
@@ -308,7 +272,7 @@ fn calculate_next_position(pos2: Vec3, dir: Vec3, sign: Vec3) -> Vec3 {
 
 /// Calculate surface normal from entry point
 /// The normal points towards the direction the ray came from
-fn calculate_entry_normal(pos: Vec3, _dir: Vec3) -> Vec3 {
+fn calculate_entry_normal(pos: Vec3, _dir: Vec3) -> Axis {
     let dist_to_min = pos;
     let dist_to_max = Vec3::ONE - pos;
 
@@ -318,20 +282,20 @@ fn calculate_entry_normal(pos: Vec3, _dir: Vec3) -> Vec3 {
     if min_dist < max_dist {
         // Entered from min face (0, 0, 0)
         if dist_to_min.x == min_dist {
-            Vec3::new(-1.0, 0.0, 0.0)
+            Axis::NegX
         } else if dist_to_min.y == min_dist {
-            Vec3::new(0.0, -1.0, 0.0)
+            Axis::NegY
         } else {
-            Vec3::new(0.0, 0.0, -1.0)
+            Axis::NegZ
         }
     } else {
         // Entered from max face (1, 1, 1)
         if dist_to_max.x == max_dist {
-            Vec3::new(1.0, 0.0, 0.0)
+            Axis::PosX
         } else if dist_to_max.y == max_dist {
-            Vec3::new(0.0, 1.0, 0.0)
+            Axis::PosY
         } else {
-            Vec3::new(0.0, 0.0, 1.0)
+            Axis::PosZ
         }
     }
 }
@@ -351,6 +315,8 @@ mod tests {
         let dir = Vec3::new(0.0, 0.0, 1.0);
         let hit = cube.raycast(pos, dir, 3, &is_empty);
 
+        assert!(hit.is_ok());
+        let hit = hit.unwrap();
         assert!(hit.is_some());
         let hit = hit.unwrap();
 
@@ -364,7 +330,7 @@ mod tests {
         assert_eq!(hit.position.z, 0.0);
 
         // Check normal (entering from -Z face)
-        assert_eq!(hit.normal, Vec3::new(0.0, 0.0, -1.0));
+        assert_eq!(hit.normal, Axis::NegZ);
     }
 
     #[test]
@@ -379,7 +345,8 @@ mod tests {
             3,
             &is_empty,
         );
-        assert!(hit.is_none());
+        assert!(hit.is_ok());
+        assert!(hit.unwrap().is_none());
     }
 
     #[test]
@@ -405,6 +372,8 @@ mod tests {
         let dir = Vec3::new(0.0, 0.0, 1.0);
         let hit = cube.raycast(pos, dir, 1, &is_empty);
 
+        assert!(hit.is_ok());
+        let hit = hit.unwrap();
         assert!(hit.is_some());
         let hit = hit.unwrap();
 
@@ -419,7 +388,7 @@ mod tests {
         assert_eq!(hit.position.z, 0.0);
 
         // Check normal (entering from -Z face)
-        assert_eq!(hit.normal, Vec3::new(0.0, 0.0, -1.0));
+        assert_eq!(hit.normal, Axis::NegZ);
     }
 
     #[test]
@@ -432,11 +401,13 @@ mod tests {
         let dir = Vec3::new(1.0, 0.0, 0.0);
         let hit = cube.raycast(pos, dir, 3, &is_empty);
 
+        assert!(hit.is_ok());
+        let hit = hit.unwrap();
         assert!(hit.is_some());
         let hit = hit.unwrap();
 
         // Check normal (entering from -X face)
-        assert_eq!(hit.normal, Vec3::new(-1.0, 0.0, 0.0));
+        assert_eq!(hit.normal, Axis::NegX);
         assert_eq!(hit.position.x, 0.0);
         assert_eq!(hit.position.y, 0.5);
         assert_eq!(hit.position.z, 0.5);
@@ -452,11 +423,13 @@ mod tests {
         let dir = Vec3::new(0.0, -1.0, 0.0);
         let hit = cube.raycast(pos, dir, 3, &is_empty);
 
+        assert!(hit.is_ok());
+        let hit = hit.unwrap();
         assert!(hit.is_some());
         let hit = hit.unwrap();
 
         // Check normal (entering from +Y face)
-        assert_eq!(hit.normal, Vec3::new(0.0, 1.0, 0.0));
+        assert_eq!(hit.normal, Axis::PosY);
         assert_eq!(hit.position.x, 0.5);
         assert_eq!(hit.position.y, 1.0);
         assert_eq!(hit.position.z, 0.5);
@@ -472,8 +445,9 @@ mod tests {
         let dir = Vec3::new(1.0, 0.0, 0.0);
         let hit = cube.raycast(pos, dir, 3, &is_empty);
 
-        // Should miss - outside valid [0,1] range
-        assert!(hit.is_none());
+        // Should return StartOutOfBounds error
+        assert!(hit.is_err(), "Ray from outside should return error");
+        assert_eq!(hit.unwrap_err(), RaycastError::StartOutOfBounds);
     }
 
     #[test]
@@ -512,6 +486,8 @@ mod tests {
         let dir = Vec3::new(0.0, 0.0, 1.0);
         let hit = cube.raycast(pos, dir, 2, &is_empty);
 
+        assert!(hit.is_ok());
+        let hit = hit.unwrap();
         assert!(hit.is_some());
         let hit = hit.unwrap();
 
@@ -530,7 +506,7 @@ mod tests {
         assert_eq!(hit.position.z, 0.0);
 
         // Check normal
-        assert_eq!(hit.normal, Vec3::new(0.0, 0.0, -1.0));
+        assert_eq!(hit.normal, Axis::NegZ);
     }
 
     #[test]
@@ -543,6 +519,8 @@ mod tests {
         let dir = Vec3::new(1.0, 1.0, 1.0).normalize();
         let hit = cube.raycast(pos, dir, 3, &is_empty);
 
+        assert!(hit.is_ok());
+        let hit = hit.unwrap();
         assert!(hit.is_some());
         let hit = hit.unwrap();
 
@@ -550,9 +528,8 @@ mod tests {
         assert_eq!(hit.position, Vec3::new(0.0, 0.0, 0.0));
 
         // Normal should be one of the three face normals (depending on implementation)
-        let normal_is_valid = hit.normal == Vec3::new(-1.0, 0.0, 0.0)
-            || hit.normal == Vec3::new(0.0, -1.0, 0.0)
-            || hit.normal == Vec3::new(0.0, 0.0, -1.0);
+        let normal_is_valid =
+            hit.normal == Axis::NegX || hit.normal == Axis::NegY || hit.normal == Axis::NegZ;
         assert!(
             normal_is_valid,
             "Normal should be one of the corner face normals, got {:?}",
@@ -586,9 +563,11 @@ mod tests {
         let dir = Vec3::new(0.0, 0.0, 1.0);
         let hit = cube.raycast(pos, dir, 3, &is_empty);
 
+        assert!(hit.is_ok(), "Raycast should succeed");
+        let hit = hit.unwrap();
         assert!(hit.is_some(), "Ray through center should hit");
         let hit = hit.unwrap();
-        assert_eq!(hit.normal, Vec3::new(0.0, 0.0, -1.0));
+        assert_eq!(hit.normal, Axis::NegZ);
     }
 
     #[test]
@@ -601,7 +580,9 @@ mod tests {
         let dir = Vec3::new(1.0, 0.0, 0.0);
         let hit = cube.raycast(pos, dir, 3, &is_empty);
 
-        assert!(hit.is_none(), "Ray from outside should miss");
+        // Should return StartOutOfBounds error
+        assert!(hit.is_err(), "Ray from outside should return error");
+        assert_eq!(hit.unwrap_err(), RaycastError::StartOutOfBounds);
     }
 
     // ============================================================================
@@ -618,7 +599,8 @@ mod tests {
         let dir = Vec3::new(0.0, 0.0, 1.0);
         let hit = cube.raycast(pos, dir, 1, &is_empty);
 
-        assert!(hit.is_some(), "Should hit octant 0");
+        assert!(hit.is_ok());
+        assert!(hit.unwrap().is_some(), "Should hit octant 0");
     }
 
     #[test]
@@ -631,7 +613,8 @@ mod tests {
         let dir = Vec3::new(0.0, 0.0, 1.0);
         let hit = cube.raycast(pos, dir, 1, &is_empty);
 
-        assert!(hit.is_some(), "Should hit octant 7");
+        assert!(hit.is_ok());
+        assert!(hit.unwrap().is_some(), "Should hit octant 7");
     }
 
     // ============================================================================
@@ -645,9 +628,9 @@ mod tests {
 
         let pos = Vec3::new(0.0, 0.5, 0.5);
         let dir = Vec3::new(1.0, 0.0, 0.0);
-        let hit = cube.raycast(pos, dir, 3, &is_empty).unwrap();
+        let hit = cube.raycast(pos, dir, 3, &is_empty).unwrap().unwrap();
 
-        assert_eq!(hit.normal, Vec3::new(-1.0, 0.0, 0.0), "Normal from -X face");
+        assert_eq!(hit.normal, Axis::NegX, "Normal from -X face");
     }
 
     #[test]
@@ -657,9 +640,9 @@ mod tests {
 
         let pos = Vec3::new(1.0, 0.5, 0.5);
         let dir = Vec3::new(-1.0, 0.0, 0.0);
-        let hit = cube.raycast(pos, dir, 3, &is_empty).unwrap();
+        let hit = cube.raycast(pos, dir, 3, &is_empty).unwrap().unwrap();
 
-        assert_eq!(hit.normal, Vec3::new(1.0, 0.0, 0.0), "Normal from +X face");
+        assert_eq!(hit.normal, Axis::PosX, "Normal from +X face");
     }
 
     #[test]
@@ -669,9 +652,9 @@ mod tests {
 
         let pos = Vec3::new(0.5, 0.0, 0.5);
         let dir = Vec3::new(0.0, 1.0, 0.0);
-        let hit = cube.raycast(pos, dir, 3, &is_empty).unwrap();
+        let hit = cube.raycast(pos, dir, 3, &is_empty).unwrap().unwrap();
 
-        assert_eq!(hit.normal, Vec3::new(0.0, -1.0, 0.0), "Normal from -Y face");
+        assert_eq!(hit.normal, Axis::NegY, "Normal from -Y face");
     }
 
     #[test]
@@ -681,9 +664,9 @@ mod tests {
 
         let pos = Vec3::new(0.5, 1.0, 0.5);
         let dir = Vec3::new(0.0, -1.0, 0.0);
-        let hit = cube.raycast(pos, dir, 3, &is_empty).unwrap();
+        let hit = cube.raycast(pos, dir, 3, &is_empty).unwrap().unwrap();
 
-        assert_eq!(hit.normal, Vec3::new(0.0, 1.0, 0.0), "Normal from +Y face");
+        assert_eq!(hit.normal, Axis::PosY, "Normal from +Y face");
     }
 
     #[test]
@@ -693,9 +676,9 @@ mod tests {
 
         let pos = Vec3::new(0.5, 0.5, 0.0);
         let dir = Vec3::new(0.0, 0.0, 1.0);
-        let hit = cube.raycast(pos, dir, 3, &is_empty).unwrap();
+        let hit = cube.raycast(pos, dir, 3, &is_empty).unwrap().unwrap();
 
-        assert_eq!(hit.normal, Vec3::new(0.0, 0.0, -1.0), "Normal from -Z face");
+        assert_eq!(hit.normal, Axis::NegZ, "Normal from -Z face");
     }
 
     #[test]
@@ -705,9 +688,9 @@ mod tests {
 
         let pos = Vec3::new(0.5, 0.5, 1.0);
         let dir = Vec3::new(0.0, 0.0, -1.0);
-        let hit = cube.raycast(pos, dir, 3, &is_empty).unwrap();
+        let hit = cube.raycast(pos, dir, 3, &is_empty).unwrap().unwrap();
 
-        assert_eq!(hit.normal, Vec3::new(0.0, 0.0, 1.0), "Normal from +Z face");
+        assert_eq!(hit.normal, Axis::PosZ, "Normal from +Z face");
     }
 
     // ============================================================================
@@ -723,8 +706,10 @@ mod tests {
         let dir = Vec3::new(1.0, 0.0, 0.0);
         let hit = cube.raycast(pos, dir, 3, &is_empty);
 
+        assert!(hit.is_ok());
+        let hit = hit.unwrap();
         assert!(hit.is_some(), "Axis-aligned +X ray should hit");
-        assert_eq!(hit.unwrap().normal, Vec3::new(-1.0, 0.0, 0.0));
+        assert_eq!(hit.unwrap().normal, Axis::NegX);
     }
 
     #[test]
@@ -736,8 +721,10 @@ mod tests {
         let dir = Vec3::new(-1.0, 0.0, 0.0);
         let hit = cube.raycast(pos, dir, 3, &is_empty);
 
+        assert!(hit.is_ok());
+        let hit = hit.unwrap();
         assert!(hit.is_some(), "Axis-aligned -X ray should hit");
-        assert_eq!(hit.unwrap().normal, Vec3::new(1.0, 0.0, 0.0));
+        assert_eq!(hit.unwrap().normal, Axis::PosX);
     }
 
     #[test]
@@ -749,8 +736,10 @@ mod tests {
         let dir = Vec3::new(0.0, 1.0, 0.0);
         let hit = cube.raycast(pos, dir, 3, &is_empty);
 
+        assert!(hit.is_ok());
+        let hit = hit.unwrap();
         assert!(hit.is_some(), "Axis-aligned +Y ray should hit");
-        assert_eq!(hit.unwrap().normal, Vec3::new(0.0, -1.0, 0.0));
+        assert_eq!(hit.unwrap().normal, Axis::NegY);
     }
 
     #[test]
@@ -762,8 +751,10 @@ mod tests {
         let dir = Vec3::new(0.0, -1.0, 0.0);
         let hit = cube.raycast(pos, dir, 3, &is_empty);
 
+        assert!(hit.is_ok());
+        let hit = hit.unwrap();
         assert!(hit.is_some(), "Axis-aligned -Y ray should hit");
-        assert_eq!(hit.unwrap().normal, Vec3::new(0.0, 1.0, 0.0));
+        assert_eq!(hit.unwrap().normal, Axis::PosY);
     }
 
     #[test]
@@ -775,8 +766,10 @@ mod tests {
         let dir = Vec3::new(0.0, 0.0, 1.0);
         let hit = cube.raycast(pos, dir, 3, &is_empty);
 
+        assert!(hit.is_ok());
+        let hit = hit.unwrap();
         assert!(hit.is_some(), "Axis-aligned +Z ray should hit");
-        assert_eq!(hit.unwrap().normal, Vec3::new(0.0, 0.0, -1.0));
+        assert_eq!(hit.unwrap().normal, Axis::NegZ);
     }
 
     #[test]
@@ -788,8 +781,10 @@ mod tests {
         let dir = Vec3::new(0.0, 0.0, -1.0);
         let hit = cube.raycast(pos, dir, 3, &is_empty);
 
+        assert!(hit.is_ok());
+        let hit = hit.unwrap();
         assert!(hit.is_some(), "Axis-aligned -Z ray should hit");
-        assert_eq!(hit.unwrap().normal, Vec3::new(0.0, 0.0, 1.0));
+        assert_eq!(hit.unwrap().normal, Axis::PosZ);
     }
 
     // ============================================================================
@@ -805,6 +800,8 @@ mod tests {
         let dir = Vec3::new(0.0, 0.0, 1.0);
         let hit = cube.raycast(pos, dir, 0, &is_empty);
 
+        assert!(hit.is_ok());
+        let hit = hit.unwrap();
         assert!(hit.is_some(), "Depth 0 should still hit solid");
         assert_eq!(hit.unwrap().coord.depth, 0);
     }
@@ -840,8 +837,9 @@ mod tests {
         let pos = Vec3::new(0.1, 0.1, 0.0);
         let dir = Vec3::new(0.0, 0.0, 1.0);
         let hit_with_depth2 = cube.raycast(pos, dir, 2, &is_empty);
+        assert!(hit_with_depth2.is_ok());
         assert!(
-            hit_with_depth2.is_some(),
+            hit_with_depth2.unwrap().is_some(),
             "Should hit with sufficient depth"
         );
 
@@ -850,8 +848,9 @@ mod tests {
         let hit_with_depth1 = cube.raycast(pos, dir, 1, &is_empty);
         // This is expected to miss because we can't traverse deep enough
         // (The _ pattern in match treats non-Solid Cubes at depth 0 as None)
+        assert!(hit_with_depth1.is_ok());
         assert!(
-            hit_with_depth1.is_none(),
+            hit_with_depth1.unwrap().is_none(),
             "Should miss when depth limit prevents reaching solid"
         );
     }
@@ -871,7 +870,8 @@ mod tests {
         let dir = Vec3::new(1.0, 1.0, 1.0).normalize();
         let hit = cube.raycast(pos, dir, 1, &is_empty);
 
-        assert!(hit.is_some(), "Should traverse and hit octant 7");
+        assert!(hit.is_ok());
+        assert!(hit.unwrap().is_some(), "Should traverse and hit octant 7");
     }
 
     #[test]
@@ -909,7 +909,8 @@ mod tests {
         let dir = Vec3::new(0.0, 0.0, 1.0);
         let hit = cube.raycast(pos, dir, 3, &is_empty);
 
-        assert!(hit.is_some(), "Should traverse to depth 3");
+        assert!(hit.is_ok());
+        assert!(hit.unwrap().is_some(), "Should traverse to depth 3");
     }
 
     // ============================================================================
@@ -927,7 +928,8 @@ mod tests {
         let hit = cube.raycast(pos, dir, 3, &is_empty);
 
         // Should still hit (boundary is inside cube)
-        assert!(hit.is_some(), "Ray on boundary should hit");
+        assert!(hit.is_ok());
+        assert!(hit.unwrap().is_some(), "Ray on boundary should hit");
     }
 
     #[test]
@@ -940,7 +942,8 @@ mod tests {
         let dir = Vec3::new(-1.0, -1.0, -1.0).normalize();
         let hit = cube.raycast(pos, dir, 3, &is_empty);
 
-        assert!(hit.is_some(), "Ray at corner should hit");
+        assert!(hit.is_ok());
+        assert!(hit.unwrap().is_some(), "Ray at corner should hit");
     }
 
     // ============================================================================
@@ -1033,6 +1036,8 @@ mod tests {
         let dir = Vec3::new(0.0, 0.0, 1.0);
         let hit = cube.raycast_debug(pos, dir, 3, &is_empty);
 
+        assert!(hit.is_ok());
+        let hit = hit.unwrap();
         assert!(hit.is_some(), "Should hit solid cube");
         let hit = hit.unwrap();
         assert!(hit.debug.is_some(), "Debug state should be populated");
@@ -1113,173 +1118,8 @@ mod tests {
 
         for test_case in test_cases {
             let hit = cube.raycast_debug(test_case.pos, test_case.dir, 3, &is_empty);
-            assert_eq!(
-                hit.is_some(),
-                test_case.should_hit,
-                "Test '{}': hit expectation mismatch",
-                test_case.name
-            );
-
-            if let Some(hit) = hit {
-                if let Some(expected_value) = test_case.expected_value {
-                    assert_eq!(
-                        hit.value, expected_value,
-                        "Test '{}': value mismatch",
-                        test_case.name
-                    );
-                }
-
-                assert!(
-                    hit.debug.is_some(),
-                    "Test '{}': debug state should be populated",
-                    test_case.name
-                );
-                test_case
-                    .expected_debug
-                    .verify(&hit.debug.unwrap(), test_case.name);
-            }
-        }
-    }
-
-    #[test]
-    fn test_debug_state_random_hits() {
-        let cube = Cube::Solid(1i32);
-        let is_empty = |v: &i32| *v == 0;
-
-        // 16 pseudorandom configurations casting towards cube (should hit)
-        let test_cases = vec![
-            RaycastTestCase {
-                name: "diagonal 1",
-                pos: Vec3::new(0.0, 0.0, 0.0),
-                dir: Vec3::new(1.0, 1.0, 1.0).normalize(),
-                should_hit: true,
-                expected_value: Some(1),
-                expected_debug: ExpectedDebugState::exact(1, 3),
-            },
-            RaycastTestCase {
-                name: "diagonal 2",
-                pos: Vec3::new(1.0, 0.0, 0.0),
-                dir: Vec3::new(-1.0, 1.0, 1.0).normalize(),
-                should_hit: true,
-                expected_value: Some(1),
-                expected_debug: ExpectedDebugState::exact(1, 3),
-            },
-            RaycastTestCase {
-                name: "diagonal 3",
-                pos: Vec3::new(0.0, 1.0, 0.0),
-                dir: Vec3::new(1.0, -1.0, 1.0).normalize(),
-                should_hit: true,
-                expected_value: Some(1),
-                expected_debug: ExpectedDebugState::exact(1, 3),
-            },
-            RaycastTestCase {
-                name: "diagonal 4",
-                pos: Vec3::new(0.0, 0.0, 1.0),
-                dir: Vec3::new(1.0, 1.0, -1.0).normalize(),
-                should_hit: true,
-                expected_value: Some(1),
-                expected_debug: ExpectedDebugState::exact(1, 3),
-            },
-            RaycastTestCase {
-                name: "offset 1",
-                pos: Vec3::new(0.3, 0.0, 0.2),
-                dir: Vec3::new(0.0, 1.0, 0.0),
-                should_hit: true,
-                expected_value: Some(1),
-                expected_debug: ExpectedDebugState::exact(1, 3),
-            },
-            RaycastTestCase {
-                name: "offset 2",
-                pos: Vec3::new(0.7, 0.0, 0.8),
-                dir: Vec3::new(0.0, 1.0, 0.0),
-                should_hit: true,
-                expected_value: Some(1),
-                expected_debug: ExpectedDebugState::exact(1, 3),
-            },
-            RaycastTestCase {
-                name: "offset 3",
-                pos: Vec3::new(0.1, 1.0, 0.3),
-                dir: Vec3::new(0.0, -1.0, 0.0),
-                should_hit: true,
-                expected_value: Some(1),
-                expected_debug: ExpectedDebugState::exact(1, 3),
-            },
-            RaycastTestCase {
-                name: "offset 4",
-                pos: Vec3::new(0.9, 1.0, 0.6),
-                dir: Vec3::new(0.0, -1.0, 0.0),
-                should_hit: true,
-                expected_value: Some(1),
-                expected_debug: ExpectedDebugState::exact(1, 3),
-            },
-            RaycastTestCase {
-                name: "angle 1",
-                pos: Vec3::new(0.2, 0.3, 0.0),
-                dir: Vec3::new(0.1, 0.2, 1.0).normalize(),
-                should_hit: true,
-                expected_value: Some(1),
-                expected_debug: ExpectedDebugState::exact(1, 3),
-            },
-            RaycastTestCase {
-                name: "angle 2",
-                pos: Vec3::new(0.8, 0.7, 0.0),
-                dir: Vec3::new(-0.1, -0.3, 1.0).normalize(),
-                should_hit: true,
-                expected_value: Some(1),
-                expected_debug: ExpectedDebugState::exact(1, 3),
-            },
-            RaycastTestCase {
-                name: "angle 3",
-                pos: Vec3::new(0.4, 0.0, 0.5),
-                dir: Vec3::new(0.2, 1.0, 0.1).normalize(),
-                should_hit: true,
-                expected_value: Some(1),
-                expected_debug: ExpectedDebugState::exact(1, 3),
-            },
-            RaycastTestCase {
-                name: "angle 4",
-                pos: Vec3::new(0.6, 1.0, 0.9),
-                dir: Vec3::new(-0.3, -1.0, -0.2).normalize(),
-                should_hit: true,
-                expected_value: Some(1),
-                expected_debug: ExpectedDebugState::exact(1, 3),
-            },
-            RaycastTestCase {
-                name: "corner approach 1",
-                pos: Vec3::new(0.1, 0.1, 0.0),
-                dir: Vec3::new(0.0, 0.0, 1.0),
-                should_hit: true,
-                expected_value: Some(1),
-                expected_debug: ExpectedDebugState::exact(1, 3),
-            },
-            RaycastTestCase {
-                name: "corner approach 2",
-                pos: Vec3::new(0.9, 0.1, 0.0),
-                dir: Vec3::new(0.0, 0.0, 1.0),
-                should_hit: true,
-                expected_value: Some(1),
-                expected_debug: ExpectedDebugState::exact(1, 3),
-            },
-            RaycastTestCase {
-                name: "corner approach 3",
-                pos: Vec3::new(0.1, 0.9, 0.0),
-                dir: Vec3::new(0.0, 0.0, 1.0),
-                should_hit: true,
-                expected_value: Some(1),
-                expected_debug: ExpectedDebugState::exact(1, 3),
-            },
-            RaycastTestCase {
-                name: "corner approach 4",
-                pos: Vec3::new(0.9, 0.9, 0.0),
-                dir: Vec3::new(0.0, 0.0, 1.0),
-                should_hit: true,
-                expected_value: Some(1),
-                expected_debug: ExpectedDebugState::exact(1, 3),
-            },
-        ];
-
-        for test_case in test_cases {
-            let hit = cube.raycast_debug(test_case.pos, test_case.dir, 3, &is_empty);
+            assert!(hit.is_ok());
+            let hit = hit.unwrap();
             assert_eq!(
                 hit.is_some(),
                 test_case.should_hit,
@@ -1367,8 +1207,9 @@ mod tests {
 
         for test_case in test_cases {
             let hit = cube.raycast_debug(test_case.pos, test_case.dir, 3, &is_empty);
+            assert!(hit.is_ok());
             assert_eq!(
-                hit.is_some(),
+                hit.unwrap().is_some(),
                 test_case.should_hit,
                 "Test '{}': hit expectation mismatch",
                 test_case.name
@@ -1387,6 +1228,8 @@ mod tests {
         let dir = Vec3::new(1.0, 1.0, 1.0).normalize();
         let hit = cube.raycast_debug(pos, dir, 1, &is_empty);
 
+        assert!(hit.is_ok());
+        let hit = hit.unwrap();
         assert!(hit.is_some(), "Should traverse and hit octant 7");
         let hit = hit.unwrap();
         assert!(hit.debug.is_some(), "Debug state should be populated");

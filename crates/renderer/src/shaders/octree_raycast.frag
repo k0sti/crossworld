@@ -18,6 +18,7 @@ uniform int u_max_depth;
 // The implementation will use a simple encoding scheme
 uniform sampler3D u_octree_texture;
 uniform int u_octree_size;  // Size of octree at max depth (e.g., 8 for depth 3)
+uniform sampler2D u_material_palette; // Material palette (128 entries)
 
 // Ray structure
 struct Ray {
@@ -85,23 +86,58 @@ HitInfo intersectBox(Ray ray, vec3 boxMin, vec3 boxMax) {
     return hitInfo;
 }
 
-// Material palette (matches MATERIAL_PALETTE in Rust)
-const vec3 MATERIAL_PALETTE[7] = vec3[7](
-    vec3(0.0, 0.0, 0.0), // 0: Empty
-    vec3(1.0, 0.0, 0.0), // 1: Red
-    vec3(0.0, 1.0, 0.0), // 2: Green
-    vec3(0.0, 0.0, 1.0), // 3: Blue
-    vec3(1.0, 1.0, 0.0), // 4: Yellow
-    vec3(1.0, 1.0, 1.0), // 5: White
-    vec3(0.0, 0.0, 0.0)  // 6: Black
-);
+// Decode R2G3B2 color encoding to RGB
+// Encoding: (r << 5) | (g << 2) | b
+// where index = value - 128
+vec3 decodeR2G3B2(int value) {
+    int bits = value - 128;
+    int r_bits = (bits >> 5) & 3;
+    int g_bits = (bits >> 2) & 7;
+    int b_bits = bits & 3;
+
+    // Convert to normalized RGB values
+    // Using same mapping as Rust implementation
+    float r = 0.0;
+    if (r_bits == 1) r = 0.286;
+    else if (r_bits == 2) r = 0.573;
+    else if (r_bits == 3) r = 0.859;
+
+    float g = 0.0;
+    if (g_bits == 1) g = 0.141;
+    else if (g_bits == 2) g = 0.286;
+    else if (g_bits == 3) g = 0.427;
+    else if (g_bits == 4) g = 0.573;
+    else if (g_bits == 5) g = 0.714;
+    else if (g_bits == 6) g = 0.859;
+    else if (g_bits == 7) g = 1.0;
+
+    float b = 0.0;
+    if (b_bits == 1) b = 0.286;
+    else if (b_bits == 2) b = 0.573;
+    else if (b_bits == 3) b = 0.859;
+
+    return vec3(r, g, b);
+}
 
 // Get material color from value
 vec3 getMaterialColor(int value) {
-    if (value < 0 || value >= 7) {
+    if (value < 0) {
         return vec3(0.0);
     }
-    return MATERIAL_PALETTE[value];
+
+    // Values 0-127: Use palette texture
+    if (value < 128) {
+        // Sample center of texel
+        float u = (float(value) + 0.5) / 128.0;
+        return texture(u_material_palette, vec2(u, 0.5)).rgb;
+    }
+
+    // Values 128-255: R2G3B2 encoded colors
+    if (value <= 255) {
+        return decodeR2G3B2(value);
+    }
+
+    return vec3(0.0);
 }
 
 // Calculate surface normal from entry point
