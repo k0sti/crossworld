@@ -70,13 +70,11 @@ impl Tracer for CpuTracer {
         let is_empty = |v: &i32| *v == 0;
         let hit = self
             .cube
-            .raycast_debug(pos, dir, max_depth, &is_empty)
-            .ok()
-            .flatten()?;
+            .raycast_debug(pos, dir, max_depth, &is_empty)?;
 
         Some(RaycastHit {
-            position: hit.position,
-            normal: hit.normal.as_vec3(),
+            position: hit.hit_pos,
+            normal: hit.normal(),
             value: hit.value,
             enter_count: hit.debug.as_ref().map(|d| d.enter_count),
         })
@@ -111,12 +109,11 @@ impl Tracer for GlTracer {
         let hit = self
             .tracer
             .raycast_octree(pos, dir, max_depth)
-            .ok()
-            .flatten()?;
+            .ok()??;
 
         Some(RaycastHit {
-            position: hit.position,
-            normal: hit.normal.as_vec3(),
+            position: hit.hit_pos,
+            normal: hit.normal(),
             value: hit.value,
             enter_count: hit.debug.as_ref().map(|d| d.enter_count),
         })
@@ -155,12 +152,11 @@ impl Tracer for GpuTracer {
         let hit = self
             .tracer
             .raycast_octree(pos, dir, max_depth)
-            .ok()
-            .flatten()?;
+            .ok()??;
 
         Some(RaycastHit {
-            position: hit.position,
-            normal: hit.normal.as_vec3(),
+            position: hit.hit_pos,
+            normal: hit.normal(),
             value: hit.value,
             enter_count: hit.debug.as_ref().map(|d| d.enter_count),
         })
