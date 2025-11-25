@@ -52,7 +52,7 @@ fn test_3d_texture_data_generation() {
 
                 if value != 0 {
                     solid_count += 1;
-                }  else {
+                } else {
                     empty_count += 1;
                 }
             }
@@ -63,7 +63,10 @@ fn test_3d_texture_data_generation() {
     println!("  Solid voxels: {}", solid_count);
     println!("  Empty voxels: {}", empty_count);
     println!("  Total voxels: {}", SIZE * SIZE * SIZE);
-    println!("  Percentage solid: {:.1}%", (solid_count as f32 / (SIZE * SIZE * SIZE) as f32) * 100.0);
+    println!(
+        "  Percentage solid: {:.1}%",
+        (solid_count as f32 / (SIZE * SIZE * SIZE) as f32) * 100.0
+    );
 
     // Print a slice through the middle (z=4)
     println!("\nMiddle slice (z=4, Y goes down, X goes right):");
@@ -107,14 +110,14 @@ fn test_specific_octants() {
 
     // Test all 8 octants (octant indexing: x*4 + y*2 + z)
     let octant_tests = [
-        (0, Vec3::new(0.125, 0.125, 0.125), 1), // Octant 0 (0,0,0): Child 0 -> 1
-        (1, Vec3::new(0.125, 0.125, 0.625), 5), // Octant 1 (0,0,1): Child 1 -> 5
-        (2, Vec3::new(0.125, 0.625, 0.125), 2), // Octant 2 (0,1,0): Child 2 -> 2
-        (3, Vec3::new(0.125, 0.625, 0.625), 0), // Octant 3 (0,1,1): Child 3 -> 0
-        (4, Vec3::new(0.625, 0.125, 0.125), 3), // Octant 4 (1,0,0): Child 4 -> 3
-        (5, Vec3::new(0.625, 0.125, 0.625), 5), // Octant 5 (1,0,1): Child 5 -> 5
-        (6, Vec3::new(0.625, 0.625, 0.125), 4), // Octant 6 (1,1,0): Child 6 -> 4
-        (7, Vec3::new(0.625, 0.625, 0.625), 0), // Octant 7 (1,1,1): Child 7 -> 0
+        (0, Vec3::new(0.125, 0.125, 0.125), 1), // Octant 0: Red
+        (1, Vec3::new(0.125, 0.125, 0.625), 5), // Octant 1: White
+        (2, Vec3::new(0.125, 0.625, 0.125), 2), // Octant 2: Green
+        (3, Vec3::new(0.125, 0.625, 0.625), 0), // Octant 3: Empty
+        (4, Vec3::new(0.625, 0.125, 0.125), 3), // Octant 4: Blue
+        (5, Vec3::new(0.625, 0.125, 0.625), 5), // Octant 5: White
+        (6, Vec3::new(0.625, 0.625, 0.125), 4), // Octant 6: Yellow
+        (7, Vec3::new(0.625, 0.625, 0.625), 0), // Octant 7: Empty
     ];
 
     println!("Testing octant centers:");
