@@ -18,6 +18,8 @@ default:
     @echo "  just gen-cert         - Generate self-signed certificate for development"
     @echo "  just test-client      - Run test client to connect to server"
     @echo "  just raycast-report   - Generate comprehensive raycast test report for all tracers"
+    @echo "  just planet           - Run native voxel editor (Bevy)"
+    @echo "  just planet-release   - Run native voxel editor (optimized build)"
     @echo ""
 
 # Build WASM module in development mode
@@ -125,3 +127,11 @@ raycast-report:
     @echo "Generating raycast test report for all tracers..."
     @echo ""
     cargo test --test raycast_test_report -- --nocapture --test-threads=1
+
+# Run native voxel editor (Bevy) in development mode
+planet:
+    cargo run --bin planet
+
+# Run native voxel editor (Bevy) in release mode
+planet-release:
+    cargo run --release --bin planet
