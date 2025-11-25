@@ -468,7 +468,138 @@ fn create_test_cases() -> Vec<TestCase> {
         number += 1;
     }
 
+    // Load table-driven tests from markdown
+    let table_tests = load_table_driven_tests(number);
+    tests.extend(table_tests);
+
     tests
+}
+
+// ============================================================================
+// Table-Driven Test Loading
+// ============================================================================
+
+/// Convert coordinate from [-1, 1]³ to [0, 1]³
+fn convert_coord_from_table(v: Vec3) -> Vec3 {
+    (v + Vec3::ONE) * 0.5
+}
+
+/// Parse Vec3 from markdown table string
+fn parse_vec3_table(s: &str) -> Option<Vec3> {
+    let s = s.trim();
+    if s == "(0, 0, 0)" && s.len() == 9 {
+        return Some(Vec3::ZERO);
+    }
+
+    let s = s.trim_matches(|c| c == '(' || c == ')' || c == '`');
+    let parts: Vec<&str> = s.split(',').collect();
+
+    if parts.len() != 3 {
+        return None;
+    }
+
+    let x: f32 = parts[0].trim().parse().ok()?;
+    let y: f32 = parts[1].trim().parse().ok()?;
+    let z: f32 = parts[2].trim().parse().ok()?;
+
+    Some(Vec3::new(x, y, z))
+}
+
+/// Parse boolean from markdown table string
+fn parse_bool_table(s: &str) -> Option<bool> {
+    match s.trim().trim_matches('`').to_lowercase().as_str() {
+        "true" | "✅" | "yes" | "1" => Some(true),
+        "false" | "❌" | "no" | "0" => Some(false),
+        _ => None,
+    }
+}
+
+/// Load test cases from markdown table in test_raycast_table.md
+fn load_table_driven_tests(starting_number: usize) -> Vec<TestCase> {
+    // Include the markdown file from cube tests directory
+    let content = include_str!("../../cube/tests/test_raycast_table.md");
+    let mut test_cases = Vec::new();
+    let mut number = starting_number;
+
+    for (line_num, line) in content.lines().enumerate() {
+        let line = line.trim();
+
+        // Skip header, separator, and empty lines
+        if line.is_empty() || line.starts_with("| Ray Origin") || line.starts_with("| :---") {
+            continue;
+        }
+
+        // Parse table row
+        if line.starts_with('|') {
+            let parts: Vec<&str> = line.split('|').collect();
+
+            // Need at least 11 parts
+            if parts.len() < 11 {
+                continue;
+            }
+
+            let origin_str = parts[1].trim();
+            let direction_str = parts[2].trim();
+            let hit_str = parts[3].trim();
+            let voxel_str = parts[6].trim();
+            let visits_str = parts[7].trim();
+            let notes = parts.get(10).unwrap_or(&"").trim();
+
+            // Parse origin and direction
+            let Some(origin) = parse_vec3_table(origin_str) else {
+                continue;
+            };
+            let Some(mut direction) = parse_vec3_table(direction_str) else {
+                continue;
+            };
+            direction = direction.normalize();
+
+            // Parse hit boolean
+            let Some(expect_hit) = parse_bool_table(hit_str) else {
+                continue;
+            };
+
+            // Parse voxel value
+            let expected_voxel: Option<i32> = voxel_str
+                .trim()
+                .trim_matches('`')
+                .parse()
+                .ok()
+                .map(|v: u8| v as i32);
+
+            // Parse visits
+            let expected_visits: i32 = visits_str
+                .trim()
+                .trim_matches('`')
+                .parse()
+                .unwrap_or(1);
+
+            // Convert origin from [-1,1] to [0,1] space
+            let origin_converted = convert_coord_from_table(origin);
+
+            let category = "Table-Driven".to_string();
+            let name = if notes.is_empty() {
+                format!("Table case {}", line_num + 1)
+            } else {
+                notes.to_string()
+            };
+
+            test_cases.push(TestCase {
+                number,
+                name,
+                category,
+                pos: origin_converted,
+                dir: direction,
+                should_hit: expect_hit,
+                expected_value: expected_voxel,
+                expected_enter_count_min: expected_visits.saturating_sub(2).max(0) as u32,
+                expected_enter_count_max: (expected_visits + 2) as u32,
+            });
+            number += 1;
+        }
+    }
+
+    test_cases
 }
 
 // ============================================================================
