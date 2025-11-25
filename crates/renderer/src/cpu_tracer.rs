@@ -9,6 +9,8 @@ pub struct CpuCubeTracer {
     cube: Rc<Cube<i32>>,
     bounds: CubeBounds,
     image_buffer: Option<ImageBuffer<Rgb<u8>, Vec<u8>>>,
+    /// If true, disable lighting and output pure material colors
+    disable_lighting: bool,
 }
 
 impl CpuCubeTracer {
@@ -20,6 +22,7 @@ impl CpuCubeTracer {
             cube,
             bounds: CubeBounds::default(),
             image_buffer: None,
+            disable_lighting: false,
         }
     }
 
@@ -29,6 +32,7 @@ impl CpuCubeTracer {
             cube,
             bounds: CubeBounds::default(),
             image_buffer: None,
+            disable_lighting: false,
         }
     }
 
@@ -39,6 +43,7 @@ impl CpuCubeTracer {
             cube,
             bounds: CubeBounds::default(),
             image_buffer: None,
+            disable_lighting: false,
         }
     }
 
@@ -71,6 +76,19 @@ impl CpuCubeTracer {
             buffer.save(path)?;
         }
         Ok(())
+    }
+
+    /// Set whether to disable lighting (output pure material colors)
+    ///
+    /// When disabled, renders pure material palette colors without any lighting calculations.
+    /// Useful for debugging material system and color verification tests.
+    pub fn set_disable_lighting(&mut self, disable: bool) {
+        self.disable_lighting = disable;
+    }
+
+    /// Get the current lighting disable state
+    pub fn is_lighting_disabled(&self) -> bool {
+        self.disable_lighting
     }
 
     /// Render a single pixel with time-based camera
@@ -181,10 +199,7 @@ impl CpuCubeTracer {
                     println!("\n=== Raycast Debug (first pixel) ===");
                     println!("  Position: {:?}", normalized_pos);
                     println!("  Direction: {:?}", ray.direction.normalize());
-                    println!(
-                        "  Hit: {}",
-                        raycast_result.is_some()
-                    );
+                    println!("  Hit: {}", raycast_result.is_some());
                 }
 
                 // Print final stats at end
@@ -198,8 +213,7 @@ impl CpuCubeTracer {
                 Some(cube_hit) => {
                     // Successful octree raycast - use detailed voxel information
                     // Transform hit position back to world space
-                    let world_hit_point =
-                        cube_hit.hit_pos * (bounds.max - bounds.min) + bounds.min;
+                    let world_hit_point = cube_hit.hit_pos * (bounds.max - bounds.min) + bounds.min;
 
                     // Calculate distance from ray origin
                     let t = (world_hit_point - ray.origin).length();
@@ -215,8 +229,12 @@ impl CpuCubeTracer {
                     // Get material color from voxel value
                     let material_color = cube::material::get_material_color(cube_hit.value);
 
-                    // Apply lighting
-                    color = calculate_lighting(&hit_info, material_color);
+                    // Apply lighting (or output pure color if disabled)
+                    color = if self.disable_lighting {
+                        material_color
+                    } else {
+                        calculate_lighting(&hit_info, material_color)
+                    };
                 }
                 None => {
                     // Miss - do nothing (color remains background)

@@ -11,8 +11,8 @@
 //! - Octant 1, 5: White (255, 255, 255)
 //! - Background: Bluish-gray (102, 128, 153)
 
-use renderer::{CameraConfig, CpuCubeTracer, Renderer};
 use glam::Vec3;
+use renderer::{CameraConfig, CpuCubeTracer, Renderer};
 
 /// Color tolerance for comparisons (±5 RGB units on 0-255 scale)
 const COLOR_TOLERANCE: u8 = 5;
@@ -27,14 +27,24 @@ fn assert_color_near(actual: (u8, u8, u8), expected: (u8, u8, u8), tolerance: u8
         r_diff <= tolerance as i16 && g_diff <= tolerance as i16 && b_diff <= tolerance as i16,
         "{}: expected RGB({}, {}, {}), got RGB({}, {}, {}), diff=({}, {}, {})",
         label,
-        expected.0, expected.1, expected.2,
-        actual.0, actual.1, actual.2,
-        r_diff, g_diff, b_diff
+        expected.0,
+        expected.1,
+        expected.2,
+        actual.0,
+        actual.1,
+        actual.2,
+        r_diff,
+        g_diff,
+        b_diff
     );
 }
 
 /// Helper: Sample pixel from image buffer
-fn sample_pixel(buffer: &image::ImageBuffer<image::Rgb<u8>, Vec<u8>>, x: u32, y: u32) -> (u8, u8, u8) {
+fn sample_pixel(
+    buffer: &image::ImageBuffer<image::Rgb<u8>, Vec<u8>>,
+    x: u32,
+    y: u32,
+) -> (u8, u8, u8) {
     let pixel = buffer.get_pixel(x, y);
     (pixel[0], pixel[1], pixel[2])
 }
@@ -47,9 +57,9 @@ fn test_cpu_tracer_material_colors() {
 
     // Fixed camera looking at the cube center
     let camera = CameraConfig::look_at(
-        Vec3::new(3.0, 2.0, 3.0),  // Position
-        Vec3::ZERO,                 // Target (cube center)
-        Vec3::Y,                    // Up
+        Vec3::new(3.0, 2.0, 3.0), // Position
+        Vec3::ZERO,               // Target (cube center)
+        Vec3::Y,                  // Up
     );
 
     // Render 256x256 image
@@ -64,16 +74,22 @@ fn test_cpu_tracer_material_colors() {
     let center_y = height / 2;
     let center_color = sample_pixel(buffer, center_x, center_y);
 
-    println!("Center pixel RGB: ({}, {}, {})", center_color.0, center_color.1, center_color.2);
+    println!(
+        "Center pixel RGB: ({}, {}, {})",
+        center_color.0, center_color.1, center_color.2
+    );
 
     // The center should NOT be background color (we should hit something)
     let background_rgb = (102, 128, 153); // 0.4, 0.5, 0.6 * 255
-    let is_background =
-        (center_color.0 as i16 - background_rgb.0 as i16).abs() < COLOR_TOLERANCE as i16 &&
-        (center_color.1 as i16 - background_rgb.1 as i16).abs() < COLOR_TOLERANCE as i16 &&
-        (center_color.2 as i16 - background_rgb.2 as i16).abs() < COLOR_TOLERANCE as i16;
+    let is_background = (center_color.0 as i16 - background_rgb.0 as i16).abs()
+        < COLOR_TOLERANCE as i16
+        && (center_color.1 as i16 - background_rgb.1 as i16).abs() < COLOR_TOLERANCE as i16
+        && (center_color.2 as i16 - background_rgb.2 as i16).abs() < COLOR_TOLERANCE as i16;
 
-    assert!(!is_background, "Center pixel should not be background color (should hit a voxel)");
+    assert!(
+        !is_background,
+        "Center pixel should not be background color (should hit a voxel)"
+    );
 
     // Sample multiple regions to verify different colors exist
     let top_left = sample_pixel(buffer, width / 4, height / 4);
@@ -81,10 +97,22 @@ fn test_cpu_tracer_material_colors() {
     let bottom_left = sample_pixel(buffer, width / 4, 3 * height / 4);
     let bottom_right = sample_pixel(buffer, 3 * width / 4, 3 * height / 4);
 
-    println!("Top-left RGB: ({}, {}, {})", top_left.0, top_left.1, top_left.2);
-    println!("Top-right RGB: ({}, {}, {})", top_right.0, top_right.1, top_right.2);
-    println!("Bottom-left RGB: ({}, {}, {})", bottom_left.0, bottom_left.1, bottom_left.2);
-    println!("Bottom-right RGB: ({}, {}, {})", bottom_right.0, bottom_right.1, bottom_right.2);
+    println!(
+        "Top-left RGB: ({}, {}, {})",
+        top_left.0, top_left.1, top_left.2
+    );
+    println!(
+        "Top-right RGB: ({}, {}, {})",
+        top_right.0, top_right.1, top_right.2
+    );
+    println!(
+        "Bottom-left RGB: ({}, {}, {})",
+        bottom_left.0, bottom_left.1, bottom_left.2
+    );
+    println!(
+        "Bottom-right RGB: ({}, {}, {})",
+        bottom_right.0, bottom_right.1, bottom_right.2
+    );
 
     // Check for distinct colors (accounting for lighting which dims RGB values)
     // 1: set_empty (Black)
@@ -96,11 +124,19 @@ fn test_cpu_tracer_material_colors() {
     let samples = [center_color, top_left, top_right, bottom_left, bottom_right];
 
     // Adjusted thresholds for lit colors
-    let has_white = samples.iter().any(|&(r, g, b)| r > 150 && g > 150 && b > 150);
-    let has_green = samples.iter().any(|&(r, g, b)| r < 100 && g > 100 && b < 100);
-    let has_blue = samples.iter().any(|&(r, g, b)| r < 100 && g < 150 && b > 150);
+    let has_white = samples
+        .iter()
+        .any(|&(r, g, b)| r > 150 && g > 150 && b > 150);
+    let has_green = samples
+        .iter()
+        .any(|&(r, g, b)| r < 100 && g > 100 && b < 100);
+    let has_blue = samples
+        .iter()
+        .any(|&(r, g, b)| r < 100 && g < 150 && b > 150);
     // Light blue (ice) is high G and B
-    let has_light_blue = samples.iter().any(|&(r, g, b)| r > 100 && g > 150 && b > 150);
+    let has_light_blue = samples
+        .iter()
+        .any(|&(r, g, b)| r > 100 && g > 150 && b > 150);
 
     println!("Has white: {}", has_white);
     println!("Has green: {}", has_green);
@@ -108,8 +144,10 @@ fn test_cpu_tracer_material_colors() {
     println!("Has light blue: {}", has_light_blue);
 
     // At least one distinct color should be visible
-    assert!(has_white || has_green || has_blue || has_light_blue,
-        "At least one sampled region should show a distinct color");
+    assert!(
+        has_white || has_green || has_blue || has_light_blue,
+        "At least one sampled region should show a distinct color"
+    );
 
     println!("✓ CPU tracer renders distinct colors");
 }
@@ -136,7 +174,10 @@ fn test_cpu_tracer_background_color() {
     // Sample center (should be background)
     let center = sample_pixel(buffer, width / 2, height / 2);
 
-    println!("Background pixel RGB: ({}, {}, {})", center.0, center.1, center.2);
+    println!(
+        "Background pixel RGB: ({}, {}, {})",
+        center.0, center.1, center.2
+    );
 
     // Background should be bluish-gray: RGB(102, 128, 153) ± 5
     // But with gamma correction: 0.4^(1/2.2) ≈ 0.665, 0.5^(1/2.2) ≈ 0.730, 0.6^(1/2.2) ≈ 0.787
@@ -202,27 +243,125 @@ fn test_material_palette_accessibility() {
 
 #[test]
 fn test_lighting_constants() {
-    use renderer::{LIGHT_DIR, AMBIENT, DIFFUSE_STRENGTH, BACKGROUND_COLOR};
+    use renderer::{AMBIENT, BACKGROUND_COLOR, DIFFUSE_STRENGTH, LIGHT_DIR};
 
     println!("\n=== Testing Lighting Constants ===");
 
     // Light direction should be normalized
-    let light_len = (LIGHT_DIR.x * LIGHT_DIR.x + LIGHT_DIR.y * LIGHT_DIR.y + LIGHT_DIR.z * LIGHT_DIR.z).sqrt();
-    assert!((light_len - 1.0).abs() < 0.001, "Light direction should be normalized");
+    let light_len =
+        (LIGHT_DIR.x * LIGHT_DIR.x + LIGHT_DIR.y * LIGHT_DIR.y + LIGHT_DIR.z * LIGHT_DIR.z).sqrt();
+    assert!(
+        (light_len - 1.0).abs() < 0.001,
+        "Light direction should be normalized"
+    );
 
     // Constants should be in valid ranges
-    assert!(AMBIENT >= 0.0 && AMBIENT <= 1.0, "Ambient should be in [0, 1]");
-    assert!(DIFFUSE_STRENGTH >= 0.0, "Diffuse strength should be non-negative");
+    assert!(
+        AMBIENT >= 0.0 && AMBIENT <= 1.0,
+        "Ambient should be in [0, 1]"
+    );
+    assert!(
+        DIFFUSE_STRENGTH >= 0.0,
+        "Diffuse strength should be non-negative"
+    );
 
     // Background color components should be in [0, 1]
     assert!(BACKGROUND_COLOR.x >= 0.0 && BACKGROUND_COLOR.x <= 1.0);
     assert!(BACKGROUND_COLOR.y >= 0.0 && BACKGROUND_COLOR.y <= 1.0);
     assert!(BACKGROUND_COLOR.z >= 0.0 && BACKGROUND_COLOR.z <= 1.0);
 
-    println!("  Light direction: {:?} (length: {:.3})", LIGHT_DIR, light_len);
+    println!(
+        "  Light direction: {:?} (length: {:.3})",
+        LIGHT_DIR, light_len
+    );
     println!("  Ambient: {}", AMBIENT);
     println!("  Diffuse strength: {}", DIFFUSE_STRENGTH);
     println!("  Background: {:?}", BACKGROUND_COLOR);
 
     println!("✓ All lighting constants are valid");
+}
+
+#[test]
+fn test_lighting_toggle() {
+    println!("\n=== Testing Lighting Toggle ===");
+
+    let mut tracer = CpuCubeTracer::new();
+
+    // Fixed camera looking at the cube center
+    let camera = CameraConfig::look_at(
+        Vec3::new(3.0, 2.0, 3.0), // Position
+        Vec3::ZERO,               // Target (cube center)
+        Vec3::Y,                  // Up
+    );
+
+    let width = 256;
+    let height = 256;
+
+    // Render with lighting enabled (default)
+    tracer.set_disable_lighting(false);
+    tracer.render_with_camera(width, height, &camera);
+    let lit_buffer = tracer
+        .image_buffer()
+        .expect("Image buffer should exist")
+        .clone();
+
+    // Render with lighting disabled
+    tracer.set_disable_lighting(true);
+    tracer.render_with_camera(width, height, &camera);
+    let unlit_buffer = tracer.image_buffer().expect("Image buffer should exist");
+
+    // Sample center pixels from both renders
+    let center_x = width / 2;
+    let center_y = height / 2;
+
+    let lit_color = sample_pixel(&lit_buffer, center_x, center_y);
+    let unlit_color = sample_pixel(unlit_buffer, center_x, center_y);
+
+    println!(
+        "Lit color RGB: ({}, {}, {})",
+        lit_color.0, lit_color.1, lit_color.2
+    );
+    println!(
+        "Unlit color RGB: ({}, {}, {})",
+        unlit_color.0, unlit_color.1, unlit_color.2
+    );
+
+    // With lighting disabled, colors should be brighter (closer to pure material colors)
+    // The unlit version should have RGB values >= lit version for most pixels
+    // (since lighting typically darkens colors via ambient + diffuse < 1.0)
+    //
+    // However, due to gamma correction, the relationship might not be strictly greater.
+    // Instead, verify that the colors are significantly different.
+    let r_diff = (lit_color.0 as i16 - unlit_color.0 as i16).abs();
+    let g_diff = (lit_color.1 as i16 - unlit_color.1 as i16).abs();
+    let b_diff = (lit_color.2 as i16 - unlit_color.2 as i16).abs();
+
+    let total_diff = r_diff + g_diff + b_diff;
+
+    println!(
+        "Color difference: R={}, G={}, B={}, Total={}",
+        r_diff, g_diff, b_diff, total_diff
+    );
+
+    // Expect at least 30 total RGB units difference (10 per channel average)
+    assert!(
+        total_diff > 30,
+        "Lit and unlit renders should produce significantly different colors. \
+        Lit: RGB({}, {}, {}), Unlit: RGB({}, {}, {}), Diff: {}",
+        lit_color.0,
+        lit_color.1,
+        lit_color.2,
+        unlit_color.0,
+        unlit_color.1,
+        unlit_color.2,
+        total_diff
+    );
+
+    // Verify flag state
+    tracer.set_disable_lighting(false);
+    assert!(!tracer.is_lighting_disabled(), "Lighting should be enabled");
+    tracer.set_disable_lighting(true);
+    assert!(tracer.is_lighting_disabled(), "Lighting should be disabled");
+
+    println!("✓ Lighting toggle produces distinct visual output");
 }
