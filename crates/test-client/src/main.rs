@@ -91,7 +91,11 @@ async fn main() -> Result<()> {
     let velocity = Vec3::new(0.1, 0.0, 0.05);
     let mut seq = 0u32;
 
-    tracing::info!("Sending {} position updates at {}ms intervals", args.updates, args.rate_ms);
+    tracing::info!(
+        "Sending {} position updates at {}ms intervals",
+        args.updates,
+        args.rate_ms
+    );
 
     for i in 0..args.updates {
         // Update position (simple movement)
@@ -175,44 +179,45 @@ async fn receive_positions(connection: wtransport::Connection) -> Result<()> {
 
     loop {
         match connection.receive_datagram().await {
-            Ok(data) => {
-                match bincode::deserialize::<UnreliableMessage>(&data) {
-                    Ok(UnreliableMessage::Batch { positions, timestamp: _ }) => {
-                        received_count += 1;
-                        if received_count % 10 == 0 {
-                            tracing::info!(
-                                "Received position batch with {} players (total batches: {})",
-                                positions.len(),
-                                received_count
-                            );
-                        }
+            Ok(data) => match bincode::deserialize::<UnreliableMessage>(&data) {
+                Ok(UnreliableMessage::Batch {
+                    positions,
+                    timestamp: _,
+                }) => {
+                    received_count += 1;
+                    if received_count % 10 == 0 {
+                        tracing::info!(
+                            "Received position batch with {} players (total batches: {})",
+                            positions.len(),
+                            received_count
+                        );
+                    }
 
-                        for pos in &positions {
-                            tracing::debug!(
-                                "  Player {}: pos=[{:.1}, {:.1}, {:.1}]",
-                                &pos.id[..8],
-                                pos.pos[0],
-                                pos.pos[1],
-                                pos.pos[2]
-                            );
-                        }
-                    }
-                    Ok(UnreliableMessage::Pong { timestamp }) => {
-                        let now = SystemTime::now()
-                            .duration_since(UNIX_EPOCH)
-                            .unwrap()
-                            .as_millis() as u64;
-                        let latency = now.saturating_sub(timestamp);
-                        tracing::debug!("Received Pong, latency: {}ms", latency);
-                    }
-                    Ok(_) => {
-                        tracing::debug!("Received other unreliable message");
-                    }
-                    Err(e) => {
-                        tracing::warn!("Failed to deserialize datagram: {}", e);
+                    for pos in &positions {
+                        tracing::debug!(
+                            "  Player {}: pos=[{:.1}, {:.1}, {:.1}]",
+                            &pos.id[..8],
+                            pos.pos[0],
+                            pos.pos[1],
+                            pos.pos[2]
+                        );
                     }
                 }
-            }
+                Ok(UnreliableMessage::Pong { timestamp }) => {
+                    let now = SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap()
+                        .as_millis() as u64;
+                    let latency = now.saturating_sub(timestamp);
+                    tracing::debug!("Received Pong, latency: {}ms", latency);
+                }
+                Ok(_) => {
+                    tracing::debug!("Received other unreliable message");
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to deserialize datagram: {}", e);
+                }
+            },
             Err(e) => {
                 tracing::warn!("Datagram receive error: {}", e);
                 break;

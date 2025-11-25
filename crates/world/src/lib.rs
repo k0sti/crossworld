@@ -104,7 +104,6 @@ impl WorldCube {
             Err(e) => Err(JsValue::from_str(&format!("Parse error: {}", e))),
         }
     }
-
 }
 
 impl Default for WorldCube {

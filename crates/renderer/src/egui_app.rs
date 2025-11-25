@@ -1,10 +1,8 @@
 //! Egui application for comparing three raytracer implementations side-by-side
 
-use renderer::{
-    create_octa_cube, CameraConfig, CpuCubeTracer, GlCubeTracer, GpuTracer, Renderer,
-};
 use egui::{ColorImage, TextureHandle, TextureOptions};
 use glow::*;
+use renderer::{CameraConfig, CpuCubeTracer, GlCubeTracer, GpuTracer, Renderer, create_octa_cube};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
@@ -71,7 +69,7 @@ pub struct DualRendererApp {
 
     // Settings
     render_size: (u32, u32),
-    sync_mode: bool,  // If true, wait for CPU renderer to complete each frame
+    sync_mode: bool, // If true, wait for CPU renderer to complete each frame
 
     // Camera control
     camera: CameraConfig,
@@ -575,9 +573,10 @@ impl DualRendererApp {
             }
 
             // Calculate diff
-            if let (Some(left_img), Some(right_img)) =
-                (self.get_frame(self.diff_left), self.get_frame(self.diff_right))
-            {
+            if let (Some(left_img), Some(right_img)) = (
+                self.get_frame(self.diff_left),
+                self.get_frame(self.diff_right),
+            ) {
                 let diff_image = self.compute_difference_image(left_img, right_img);
                 self.diff_texture =
                     Some(ctx.load_texture("diff_render", diff_image, TextureOptions::LINEAR));
@@ -696,9 +695,21 @@ impl DualRendererApp {
                 egui::ComboBox::from_label("Left")
                     .selected_text(self.diff_left.name())
                     .show_ui(ui, |ui| {
-                        ui.selectable_value(&mut self.diff_left, DiffSource::Cpu, DiffSource::Cpu.name());
-                        ui.selectable_value(&mut self.diff_left, DiffSource::Gl, DiffSource::Gl.name());
-                        ui.selectable_value(&mut self.diff_left, DiffSource::Gpu, DiffSource::Gpu.name());
+                        ui.selectable_value(
+                            &mut self.diff_left,
+                            DiffSource::Cpu,
+                            DiffSource::Cpu.name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.diff_left,
+                            DiffSource::Gl,
+                            DiffSource::Gl.name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.diff_left,
+                            DiffSource::Gpu,
+                            DiffSource::Gpu.name(),
+                        );
                     });
 
                 ui.label("vs");
@@ -706,9 +717,21 @@ impl DualRendererApp {
                 egui::ComboBox::from_label("Right")
                     .selected_text(self.diff_right.name())
                     .show_ui(ui, |ui| {
-                        ui.selectable_value(&mut self.diff_right, DiffSource::Cpu, DiffSource::Cpu.name());
-                        ui.selectable_value(&mut self.diff_right, DiffSource::Gl, DiffSource::Gl.name());
-                        ui.selectable_value(&mut self.diff_right, DiffSource::Gpu, DiffSource::Gpu.name());
+                        ui.selectable_value(
+                            &mut self.diff_right,
+                            DiffSource::Cpu,
+                            DiffSource::Cpu.name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.diff_right,
+                            DiffSource::Gl,
+                            DiffSource::Gl.name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.diff_right,
+                            DiffSource::Gpu,
+                            DiffSource::Gpu.name(),
+                        );
                     });
             });
 

@@ -11,9 +11,7 @@ pub enum ReliableMessage {
         position: [f32; 3],
     },
     /// Player leaving the server
-    Leave {
-        npub: String,
-    },
+    Leave { npub: String },
     /// Chat message
     ChatMessage {
         from: String,
@@ -21,19 +19,11 @@ pub enum ReliableMessage {
         timestamp: u64,
     },
     /// Game event (voxel edit, etc.)
-    GameEvent {
-        event_type: String,
-        data: Vec<u8>,
-    },
+    GameEvent { event_type: String, data: Vec<u8> },
     /// Server command
-    ServerCommand {
-        command: String,
-        args: Vec<String>,
-    },
+    ServerCommand { command: String, args: Vec<String> },
     /// Kick notification
-    Kick {
-        reason: String,
-    },
+    Kick { reason: String },
 }
 
 /// Messages sent over unreliable datagrams (UDP-like)
@@ -44,11 +34,11 @@ pub enum UnreliableMessage {
         x: f32,
         y: f32,
         z: f32,
-        rx: f32,  // Quaternion rotation
+        rx: f32, // Quaternion rotation
         ry: f32,
         rz: f32,
         rw: f32,
-        seq: u32,  // Sequence number for ordering
+        seq: u32, // Sequence number for ordering
     },
     /// Batch position updates
     Batch {

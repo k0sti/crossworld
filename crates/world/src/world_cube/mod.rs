@@ -1,9 +1,7 @@
 mod builder;
 
 use crate::GeometryData;
-use cube::{
-    ColorMapper, Cube, CubeCoord, DefaultMeshBuilder, Octree, glam::IVec3, serialize_csm,
-};
+use cube::{ColorMapper, Cube, CubeCoord, DefaultMeshBuilder, Octree, glam::IVec3, serialize_csm};
 use noise::{Fbm, Perlin};
 
 pub struct WorldCube {
@@ -149,7 +147,6 @@ impl WorldCube {
     pub fn get_root(&self) -> &Cube<i32> {
         &self.octree.root
     }
-
 
     pub fn generate_mesh(&self) -> GeometryData {
         // Generate mesh from octree using appropriate mesh builder

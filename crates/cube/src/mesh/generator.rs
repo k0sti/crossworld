@@ -218,7 +218,10 @@ mod tests {
         // With empty borders, faces are generated at the boundary between solid and empty
         // A single solid cube bordered by empty space has 6 faces (one per side)
         // Each face has 6 indices (2 triangles), so at least some indices
-        assert!(builder.indices.len() > 0, "Should generate faces at solid-empty boundary");
+        assert!(
+            builder.indices.len() > 0,
+            "Should generate faces at solid-empty boundary"
+        );
     }
 
     #[test]

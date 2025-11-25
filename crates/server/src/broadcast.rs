@@ -18,7 +18,8 @@ impl GameServer {
         loop {
             interval.tick().await;
 
-            if let Err(e) = Self::broadcast_positions_once(server.clone(), connections.clone()).await
+            if let Err(e) =
+                Self::broadcast_positions_once(server.clone(), connections.clone()).await
             {
                 tracing::error!("Error broadcasting positions: {}", e);
             }

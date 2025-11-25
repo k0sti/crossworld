@@ -76,26 +76,18 @@ impl DiscoveryService {
         })
         .to_string();
 
-        let event = EventBuilder::new(
-            Kind::LiveEvent,
-            content,
-        )
-        .tags([
-            Tag::identifier(&self.server_id),
-            Tag::custom(
-                TagKind::custom("g"),
-                vec!["crossworld"],
-            ),
-            Tag::custom(
-                TagKind::custom("status"),
-                vec!["live"],
-            ),
-            Tag::custom(
-                TagKind::custom("participants"),
-                vec![player_count.to_string()],
-            ),
-        ])
-        .sign(&self.client.signer().await?).await?;
+        let event = EventBuilder::new(Kind::LiveEvent, content)
+            .tags([
+                Tag::identifier(&self.server_id),
+                Tag::custom(TagKind::custom("g"), vec!["crossworld"]),
+                Tag::custom(TagKind::custom("status"), vec!["live"]),
+                Tag::custom(
+                    TagKind::custom("participants"),
+                    vec![player_count.to_string()],
+                ),
+            ])
+            .sign(&self.client.signer().await?)
+            .await?;
 
         self.client.send_event(event).await?;
 

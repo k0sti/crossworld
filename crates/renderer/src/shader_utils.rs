@@ -6,7 +6,11 @@ use glow::*;
 ///
 /// # Safety
 /// Requires an active OpenGL context
-pub unsafe fn compile_shader(gl: &Context, shader_type: u32, source: &str) -> Result<Shader, String> {
+pub unsafe fn compile_shader(
+    gl: &Context,
+    shader_type: u32,
+    source: &str,
+) -> Result<Shader, String> {
     unsafe {
         let shader = gl.create_shader(shader_type).map_err(|e| e.to_string())?;
 
@@ -60,10 +64,7 @@ pub unsafe fn create_program(
 /// # Safety
 /// Requires an active OpenGL context with compute shader support (GL 4.3+)
 #[allow(dead_code)]
-pub unsafe fn create_compute_program(
-    gl: &Context,
-    compute_src: &str,
-) -> Result<Program, String> {
+pub unsafe fn create_compute_program(gl: &Context, compute_src: &str) -> Result<Program, String> {
     unsafe {
         let program = gl.create_program().map_err(|e| e.to_string())?;
 
