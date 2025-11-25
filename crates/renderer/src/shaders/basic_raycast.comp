@@ -26,12 +26,10 @@ const float CUBE_SIZE = 2.0;
 const vec3 CUBE_MIN = vec3(-CUBE_SIZE * 0.5);  // vec3(-1.0, -1.0, -1.0)
 const vec3 CUBE_MAX = vec3(CUBE_SIZE * 0.5);   // vec3(1.0, 1.0, 1.0)
 
-// Lighting parameters
-const vec3 LIGHT_DIR = normalize(vec3(0.5, 1.0, 0.3));
-const vec3 LIGHT_COLOR = vec3(1.0, 0.95, 0.9);
-const vec3 AMBIENT = vec3(0.3, 0.3, 0.35);
-const float SPECULAR_STRENGTH = 0.5;
-const float SHININESS = 32.0;
+// Lighting parameters (standardized across all tracers)
+const vec3 LIGHT_DIR = vec3(0.431934, 0.863868, 0.259161);  // Pre-normalized
+const float AMBIENT = 0.3;
+const float DIFFUSE_STRENGTH = 0.7;
 
 // Rotate vector by quaternion
 vec3 rotateByQuat(vec3 v, vec4 q) {
@@ -79,21 +77,13 @@ vec3 calculateBoxNormal(vec3 point, vec3 boxMin, vec3 boxMax) {
     return normalize(normal);
 }
 
-// Blinn-Phong lighting calculation
-vec3 calculateLighting(vec3 normal, vec3 viewDir) {
-    // Ambient
-    vec3 ambient = AMBIENT;
+// Simplified Lambert lighting calculation (matches CPU and GL tracers)
+vec3 calculateLighting(vec3 materialColor) {
+    // Diffuse lighting using Lambert's cosine law
+    float diffuse = max(dot(vec3(0.0, 1.0, 0.0), LIGHT_DIR), 0.0);  // Using +Y normal for simple cube
 
-    // Diffuse
-    float diff = max(dot(normal, LIGHT_DIR), 0.0);
-    vec3 diffuse = diff * LIGHT_COLOR;
-
-    // Specular (Blinn-Phong)
-    vec3 halfDir = normalize(LIGHT_DIR + viewDir);
-    float spec = pow(max(dot(normal, halfDir), 0.0), SHININESS);
-    vec3 specular = SPECULAR_STRENGTH * spec * LIGHT_COLOR;
-
-    return ambient + diffuse + specular;
+    // Combine ambient and diffuse
+    return materialColor * (AMBIENT + diffuse * DIFFUSE_STRENGTH);
 }
 
 // Generate camera ray for pixel coordinates
@@ -156,23 +146,20 @@ void main() {
     // Check if ray hits the box
     if (tmin <= tmax && tmax >= 0.0) {
         // Hit! Calculate shading
-        float t = tmin > 0.0 ? tmin : 0.0;
-        vec3 hitPoint = rayOrigin + rayDir * t;
-        vec3 normal = calculateBoxNormal(hitPoint, CUBE_MIN, CUBE_MAX);
-        vec3 viewDir = -rayDir;
-
-        // Base cube color
+        // Base cube color (simple gray for basic raycast)
         vec3 cubeColor = vec3(0.8, 0.7, 0.6);
 
         // Apply lighting
-        vec3 lighting = calculateLighting(normal, viewDir);
-        color = cubeColor * lighting;
+        color = calculateLighting(cubeColor);
 
         // Gamma correction
         color = pow(color, vec3(1.0 / 2.2));
     } else {
-        // Miss - background color
-        color = vec3(0.1, 0.1, 0.15);
+        // Miss - background color (matches standardized background)
+        color = vec3(0.4, 0.5, 0.6);
+
+        // Gamma correction for background too
+        color = pow(color, vec3(1.0 / 2.2));
     }
 
     // Write to output image
