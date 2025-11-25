@@ -15,6 +15,7 @@ import { Relay } from 'applesauce-relay'
 import { getEnabledProfileRelays } from '../services/relay-settings'
 import { NostrSigninScreen } from './NostrSigninScreen'
 import { LoginSettingsService } from '../services/login-settings'
+import { DEFAULT_RELAYS } from '../config'
 
 // Check if we're on Android
 const IS_WEB_ANDROID = /android/i.test(navigator.userAgent)

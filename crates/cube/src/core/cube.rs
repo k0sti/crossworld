@@ -4,28 +4,31 @@ use glam::IVec3;
 use std::rc::Rc;
 
 /// Pre-computed octant positions for fast lookup
+/// Uses center-based coordinates: -1 or +1 for each axis
+/// This matches the [-1,1]³ raycast coordinate system
 pub const OCTANT_POSITIONS: [IVec3; 8] = [
-    IVec3::new(0, 0, 0), // 0: a
-    IVec3::new(0, 0, 1), // 1: b
-    IVec3::new(0, 1, 0), // 2: c
-    IVec3::new(0, 1, 1), // 3: d
-    IVec3::new(1, 0, 0), // 4: e
-    IVec3::new(1, 0, 1), // 5: f
-    IVec3::new(1, 1, 0), // 6: g
-    IVec3::new(1, 1, 1), // 7: h
+    IVec3::new(-1, -1, -1), // 0: x=0,y=0,z=0 (---)
+    IVec3::new(-1, -1, 1),  // 1: x=0,y=0,z=1 (--+)
+    IVec3::new(-1, 1, -1),  // 2: x=0,y=1,z=0 (-+-)
+    IVec3::new(-1, 1, 1),   // 3: x=0,y=1,z=1 (-++)
+    IVec3::new(1, -1, -1),  // 4: x=1,y=0,z=0 (+--)
+    IVec3::new(1, -1, 1),   // 5: x=1,y=0,z=1 (+-+)
+    IVec3::new(1, 1, -1),   // 6: x=1,y=1,z=0 (++-)
+    IVec3::new(1, 1, 1),    // 7: x=1,y=1,z=1 (+++)
 ];
 
 /// Extension trait for IVec3 to add octree-specific functionality
 pub trait IVec3Ext {
-    /// Convert octant index (0-7) to 3D position (each component 0 or 1)
+    /// Convert octant index (0-7) to 3D position (each component -1 or +1)
     /// Layout: index = x*4 + y*2 + z
     fn from_octant_index(index: usize) -> Self;
 
     /// Convert 3D position to octant index (x*4 + y*2 + z)
-    /// Each component should be 0 or 1
+    /// Each component should be -1 or +1 (center-based)
+    /// Converts -1 to 0 and +1 to 1 for indexing
     fn to_octant_index(self) -> usize;
 
-    /// Step function: returns 0 if component is 0, else 1
+    /// Step function: returns 0 if component < 0, else 1
     fn step0(self) -> Self;
 }
 
@@ -38,15 +41,19 @@ impl IVec3Ext for IVec3 {
 
     #[inline]
     fn to_octant_index(self) -> usize {
-        ((self.x << 2) | (self.y << 1) | self.z) as usize
+        // Convert -1/+1 to 0/1 for indexing
+        let x = (self.x > 0) as usize;
+        let y = (self.y > 0) as usize;
+        let z = (self.z > 0) as usize;
+        (x << 2) | (y << 1) | z
     }
 
     #[inline]
     fn step0(self) -> Self {
         IVec3::new(
-            if self.x == 0 { 0 } else { 1 },
-            if self.y == 0 { 0 } else { 1 },
-            if self.z == 0 { 0 } else { 1 },
+            if self.x < 0 { -1 } else { 1 },
+            if self.y < 0 { -1 } else { 1 },
+            if self.z < 0 { -1 } else { 1 },
         )
     }
 }
@@ -121,9 +128,10 @@ impl<T> Cube<T> {
 
     /// Calculate octant index at given depth for position
     /// Returns which octant (0-7) the position falls into at this depth level
+    /// For center-based coordinates: extracts sign at depth level and converts to octant
     #[inline]
     pub fn index(depth: u32, pos: IVec3) -> usize {
-        let p = (pos >> depth) & 1; // Get LSB at this depth level
+        let p = (pos >> depth).step0(); // Get -1 or +1 at this depth level
         p.to_octant_index()
     }
 
@@ -184,7 +192,7 @@ impl<T> Cube<T> {
                 if depth > 0 {
                     for i in 0..8 {
                         let d = depth - 1;
-                        let p = (pos << 1) + IVec3::from_octant_index(i);
+                        let p = pos * 2 + IVec3::from_octant_index(i);
                         children[i].visit_leaves(d, p, callback);
                     }
                 } else {
@@ -209,7 +217,7 @@ impl<T> Cube<T> {
                 Cube::Cubes(children) => {
                     for i in 0..8 {
                         let d = depth - 1;
-                        let p = (pos << 1) + IVec3::from_octant_index(i);
+                        let p = pos * 2 + IVec3::from_octant_index(i);
                         children[i].visit_deep(d, p, callback);
                     }
                 }
@@ -217,7 +225,7 @@ impl<T> Cube<T> {
                     // For non-branching nodes, treat as uniform and recurse
                     for i in 0..8 {
                         let d = depth - 1;
-                        let p = (pos << 1) + IVec3::from_octant_index(i);
+                        let p = pos * 2 + IVec3::from_octant_index(i);
                         self.visit_deep(d, p, callback);
                     }
                 }
@@ -767,19 +775,19 @@ mod tests {
 
     #[test]
     fn test_ivec3_ext() {
-        // Test octant index conversions
-        assert_eq!(IVec3::from_octant_index(0), IVec3::new(0, 0, 0));
+        // Test octant index conversions (center-based: -1 or +1)
+        assert_eq!(IVec3::from_octant_index(0), IVec3::new(-1, -1, -1));
         assert_eq!(IVec3::from_octant_index(7), IVec3::new(1, 1, 1));
-        assert_eq!(IVec3::from_octant_index(4), IVec3::new(1, 0, 0));
+        assert_eq!(IVec3::from_octant_index(4), IVec3::new(1, -1, -1));
 
-        assert_eq!(IVec3::new(0, 0, 0).to_octant_index(), 0);
+        assert_eq!(IVec3::new(-1, -1, -1).to_octant_index(), 0);
         assert_eq!(IVec3::new(1, 1, 1).to_octant_index(), 7);
-        assert_eq!(IVec3::new(1, 0, 0).to_octant_index(), 4);
+        assert_eq!(IVec3::new(1, -1, -1).to_octant_index(), 4);
 
-        // Test step0
-        assert_eq!(IVec3::new(0, 0, 0).step0(), IVec3::new(0, 0, 0));
-        assert_eq!(IVec3::new(5, -3, 2).step0(), IVec3::new(1, 1, 1));
-        assert_eq!(IVec3::new(0, 1, 0).step0(), IVec3::new(0, 1, 0));
+        // Test step0 (center-based: return -1 or +1)
+        assert_eq!(IVec3::new(0, 0, 0).step0(), IVec3::new(1, 1, 1)); // Zero maps to positive
+        assert_eq!(IVec3::new(5, -3, 2).step0(), IVec3::new(1, -1, 1));
+        assert_eq!(IVec3::new(-1, 1, -1).step0(), IVec3::new(-1, 1, -1));
     }
 
     #[test]
@@ -796,22 +804,23 @@ mod tests {
             Rc::new(Cube::Solid(8)),
         ]);
 
-        // Test get at depth 1
-        assert_eq!(cube.get(CubeCoord::new(IVec3::new(0, 0, 0), 1)).id(), 1);
-        assert_eq!(cube.get(CubeCoord::new(IVec3::new(1, 0, 0), 1)).id(), 5);
-        assert_eq!(cube.get(CubeCoord::new(IVec3::new(1, 1, 1), 1)).id(), 8);
+        // Test get at depth 1 (center-based: positions are -1 or +1)
+        assert_eq!(cube.get(CubeCoord::new(IVec3::new(-1, -1, -1), 1)).id(), 1); // Octant 0
+        assert_eq!(cube.get(CubeCoord::new(IVec3::new(1, -1, -1), 1)).id(), 5);  // Octant 4
+        assert_eq!(cube.get(CubeCoord::new(IVec3::new(1, 1, 1), 1)).id(), 8);    // Octant 7
     }
 
     #[test]
     fn test_cube_update() {
         let cube = Cube::Solid(0);
 
-        // Update at depth 2, position (2, 0, 0)
-        let updated = cube.update(CubeCoord::new(IVec3::new(2, 0, 0), 2), Cube::Solid(42));
+        // Update at depth 2, position (3, -1, -1) - center-based
+        // At depth 2, valid positions are {-3, -1, +1, +3} for each axis
+        let updated = cube.update(CubeCoord::new(IVec3::new(3, -1, -1), 2), Cube::Solid(42));
 
         // Verify the update
-        assert_eq!(updated.get(CubeCoord::new(IVec3::new(2, 0, 0), 2)).id(), 42);
-        assert_eq!(updated.get(CubeCoord::new(IVec3::new(0, 0, 0), 2)).id(), 0);
+        assert_eq!(updated.get(CubeCoord::new(IVec3::new(3, -1, -1), 2)).id(), 42);
+        assert_eq!(updated.get(CubeCoord::new(IVec3::new(-3, -3, -3), 2)).id(), 0);
     }
 
     #[test]
@@ -907,10 +916,13 @@ mod tests {
     fn test_cube_tabulate_vector() {
         let cube = Cube::tabulate_vector(|v| Cube::Solid(v.x + v.y * 2 + v.z * 4));
 
-        // Test a few positions
-        assert_eq!(cube.get_child(0).unwrap().id(), 0); // (0,0,0)
-        assert_eq!(cube.get_child(7).unwrap().id(), 7); // (1,1,1)
-        assert_eq!(cube.get_child(4).unwrap().id(), 1); // (1,0,0)
+        // Test a few positions (center-based: -1 or +1)
+        // Octant 0: (-1,-1,-1) => -1 + -2 + -4 = -7
+        assert_eq!(cube.get_child(0).unwrap().id(), -7);
+        // Octant 7: (1,1,1) => 1 + 2 + 4 = 7
+        assert_eq!(cube.get_child(7).unwrap().id(), 7);
+        // Octant 4: (1,-1,-1) => 1 + -2 + -4 = -5
+        assert_eq!(cube.get_child(4).unwrap().id(), -5);
     }
 
     #[test]

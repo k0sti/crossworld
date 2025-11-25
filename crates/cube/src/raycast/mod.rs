@@ -179,27 +179,11 @@ where
                 // We loop until the ray exits this parent Node.
                 loop {
                     // Construct the CubeCoord for the specific child we are looking at
+                    // Uses center-based coordinates: child_pos = parent_pos * 2 + offset
+                    // where offset ∈ {-1,+1}³
                     let child_offset = get_octant_offset_ivec(octant_idx);
-
-                    // Note: User's code used `current_coord.coord * 2 + child_offset`.
-                    // Our `CubeCoord` uses `pos`.
-                    // Also, our `CubeCoord` logic in `neighbor_grid.rs` uses `(pos << 1) + offset` where offset is 0 or 1.
-                    // The user's logic seems to use a centered coordinate system for indices too?
-                    // "Coordinate in depth scale, centered at origin"
-                    // Let's stick to our existing `CubeCoord` convention which is 0..2^depth.
-                    // But wait, the user's code explicitly defines `CubeCoord` as "centered at origin".
-                    // If I use existing `CubeCoord`, it expects 0..N.
-                    // The user's `recursive_raycast` passes `next_coord`.
-                    // If I want to maintain compatibility with existing `CubeCoord` (which is used elsewhere),
-                    // I should probably map the traversal to the existing coordinate system or adapt `CubeCoord`.
-                    // Existing `CubeCoord` is `pos: IVec3` (0 to 2^depth-1).
-                    // User's `get_octant_offset_ivec` returns -1 or 1.
-                    // Existing `CubeCoord::child` uses `(pos << 1) + offset` where offset is 0 or 1.
-
-                    // Let's map octant index to 0..1 offset for `CubeCoord`
-                    let child_coord_offset = IVec3::from_octant_index(octant_idx);
                     let next_coord = CubeCoord::new(
-                        (current_coord.pos << 1) + child_coord_offset,
+                        current_coord.pos * 2 + child_offset,
                         current_coord.depth + 1,
                     );
 
