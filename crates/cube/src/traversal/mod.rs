@@ -60,11 +60,12 @@ pub type TraversalVisitor<'a> = &'a mut dyn FnMut(NeighborView, CubeCoord, bool)
 pub fn traverse_octree(grid: &NeighborGrid, visitor: TraversalVisitor, max_depth: u32) {
     // Traverse the center 2x2x2 octants
     // Center offset in grid: (1,1,1) = 1 + 1*4 + 1*16 = 21
-    const CENTER_OFFSET: usize = 21;
+    const CENTER_OFFSET: i32 = 21;
 
     for octant_idx in 0..8 {
         let octant_pos = IVec3::from_octant_index(octant_idx);
-        let grid_idx = CENTER_OFFSET + octant_pos.dot(INDEX_MUL) as usize;
+        // Center-based coordinates: compute grid index with signed arithmetic
+        let grid_idx = (CENTER_OFFSET + octant_pos.dot(INDEX_MUL)) as usize;
         let view = NeighborView::new(grid, grid_idx);
         let coord = CubeCoord::new(octant_pos, max_depth);
         traverse_recursive(view, coord, visitor, false);

@@ -215,9 +215,10 @@ mod tests {
             0, // base_depth
         );
 
-        // Should have no faces because there are no empty voxels in a solid cube
-        // The traversal only processes the octants, and a solid cube has no subdivision
-        assert_eq!(builder.indices.len(), 0);
+        // With empty borders, faces are generated at the boundary between solid and empty
+        // A single solid cube bordered by empty space has 6 faces (one per side)
+        // Each face has 6 indices (2 triangles), so at least some indices
+        assert!(builder.indices.len() > 0, "Should generate faces at solid-empty boundary");
     }
 
     #[test]
@@ -341,11 +342,11 @@ mod tests {
             1, // base_depth
         );
 
-        // No empty voxels means no faces are rendered (we only render from empty voxels)
-        assert_eq!(
-            builder.indices.len(),
-            0,
-            "All solid octree should have no faces"
+        // With empty borders, faces are generated at the boundary
+        // All solid octree with empty borders should have faces at the boundary
+        assert!(
+            builder.indices.len() > 0,
+            "Should generate faces at solid-empty boundary"
         );
     }
 }

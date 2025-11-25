@@ -182,8 +182,8 @@ impl CpuCubeTracer {
                     println!("  Position: {:?}", normalized_pos);
                     println!("  Direction: {:?}", ray.direction.normalize());
                     println!(
-                        "  Result: {:?}",
-                        raycast_result.as_ref().map(|o| o.is_some())
+                        "  Hit: {}",
+                        raycast_result.is_some()
                     );
                 }
 

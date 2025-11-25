@@ -186,25 +186,27 @@ impl WasmCube {
                 hit.coord
             } else {
                 // Return the cube coordinate on the near side (neighbor in opposite direction of normal)
+                let normal = hit.normal();
                 let offset = IVec3::new(
-                    -hit.normal.x.signum() as i32,
-                    -hit.normal.y.signum() as i32,
-                    -hit.normal.z.signum() as i32,
+                    -normal.x.signum() as i32,
+                    -normal.y.signum() as i32,
+                    -normal.z.signum() as i32,
                 );
                 CubeCoord::new(hit.coord.pos + offset, hit.coord.depth)
             };
 
+            let normal = hit.normal();
             let result = RaycastResult {
                 x: coord.pos.x,
                 y: coord.pos.y,
                 z: coord.pos.z,
                 depth: coord.depth,
-                world_x: hit.position.x,
-                world_y: hit.position.y,
-                world_z: hit.position.z,
-                normal_x: hit.normal.x,
-                normal_y: hit.normal.y,
-                normal_z: hit.normal.z,
+                world_x: hit.hit_pos.x,
+                world_y: hit.hit_pos.y,
+                world_z: hit.hit_pos.z,
+                normal_x: normal.x,
+                normal_y: normal.y,
+                normal_z: normal.z,
             };
             serde_wasm_bindgen::to_value(&result).unwrap()
         } else {
