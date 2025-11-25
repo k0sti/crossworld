@@ -19,6 +19,7 @@ uniform int u_max_depth;
 uniform sampler3D u_octree_texture;
 uniform int u_octree_size;  // Size of octree at max depth (e.g., 8 for depth 3)
 uniform sampler2D u_material_palette; // Material palette (128 entries)
+uniform bool u_disable_lighting; // If true, output pure material colors without lighting
 
 // Ray structure
 struct Ray {
@@ -360,16 +361,21 @@ void main() {
             // Get material color from voxel value
             vec3 materialColor = getMaterialColor(octreeHit.value);
 
-            // Lighting constants (match Rust constants)
-            vec3 lightDir = normalize(vec3(0.431934, 0.863868, 0.259161));
-            float ambient = 0.3;
-            float diffuseStrength = 0.7;
+            // Apply lighting (or output pure color if disabled)
+            if (u_disable_lighting) {
+                color = materialColor;
+            } else {
+                // Lighting constants (match Rust constants)
+                vec3 lightDir = normalize(vec3(0.431934, 0.863868, 0.259161));
+                float ambient = 0.3;
+                float diffuseStrength = 0.7;
 
-            // Diffuse lighting
-            float diffuse = max(dot(octreeHit.normal, lightDir), 0.0);
+                // Diffuse lighting
+                float diffuse = max(dot(octreeHit.normal, lightDir), 0.0);
 
-            // Combine lighting (simplified Lambert model)
-            color = materialColor * (ambient + diffuse * diffuseStrength);
+                // Combine lighting (simplified Lambert model)
+                color = materialColor * (ambient + diffuse * diffuseStrength);
+            }
         }
     }
 

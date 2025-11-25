@@ -63,25 +63,21 @@ fn test_raycast_at_various_positions() {
             let should_hit = ![3, 7].contains(expected_octant);
 
             match (&result, should_hit) {
-                (Ok(Some(_)), true) => {
+                (Some(_), true) => {
                     passed_tests += 1;
                 }
-                (Ok(None), false) => {
+                (None, false) => {
                     passed_tests += 1; // Correctly missed empty octant
                 }
-                (Ok(Some(_)), false) => {
+                (Some(_), false) => {
                     println!("  UNEXPECTED HIT at {} ({}), dir {}", pos, desc, dir_name);
                     passed_tests += 1; // Still a hit, just unexpected
                 }
-                (Ok(None), true) => {
+                (None, true) => {
                     println!(
                         "  ✗ MISS at {} ({}), dir {} - EXPECTED HIT",
                         pos, desc, dir_name
                     );
-                    failed_tests += 1;
-                }
-                (Err(e), _) => {
-                    println!("  ⚠ ERROR at {} ({}), dir {}: {:?}", pos, desc, dir_name, e);
                     failed_tests += 1;
                 }
             }

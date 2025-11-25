@@ -20,6 +20,8 @@ pub struct GlCubeTracer {
     bounds: CubeBounds,
     // GL resources (Option for cases where GL context isn't available)
     gl_program: Option<GlTracerGl>,
+    /// If true, disable lighting and output pure material colors
+    disable_lighting: bool,
 }
 
 /// GPU-specific OpenGL resources
@@ -38,6 +40,7 @@ pub struct GlTracerGl {
     octree_size_location: Option<UniformLocation>,
     material_palette_location: Option<UniformLocation>,
     material_palette_texture: Option<Texture>,
+    disable_lighting_location: Option<UniformLocation>,
 }
 
 /// Raycast hit result for cube intersection
@@ -93,6 +96,7 @@ impl GlCubeTracer {
             cube,
             bounds: CubeBounds::default(),
             gl_program: None,
+            disable_lighting: false,
         }
     }
 
@@ -109,6 +113,19 @@ impl GlCubeTracer {
     /// Get reference to the cube
     pub fn cube(&self) -> &Rc<Cube<i32>> {
         &self.cube
+    }
+
+    /// Set whether to disable lighting (output pure material colors)
+    ///
+    /// When disabled, renders pure material palette colors without any lighting calculations.
+    /// Useful for debugging material system and color verification tests.
+    pub fn set_disable_lighting(&mut self, disable: bool) {
+        self.disable_lighting = disable;
+    }
+
+    /// Get the current lighting disable state
+    pub fn is_lighting_disabled(&self) -> bool {
+        self.disable_lighting
     }
 
     /// Raycast against the cube's bounding box (simple box intersection)
@@ -141,7 +158,7 @@ impl GlCubeTracer {
     pub unsafe fn render_to_gl(&self, gl: &Context, width: i32, height: i32, time: f32) {
         unsafe {
             if let Some(gl_program) = &self.gl_program {
-                gl_program.render_to_gl(gl, width, height, time);
+                gl_program.render_to_gl(gl, width, height, time, self.disable_lighting);
             }
         }
     }
@@ -156,7 +173,13 @@ impl GlCubeTracer {
     ) {
         unsafe {
             if let Some(gl_program) = &self.gl_program {
-                gl_program.render_to_gl_with_camera(gl, width, height, camera);
+                gl_program.render_to_gl_with_camera(
+                    gl,
+                    width,
+                    height,
+                    camera,
+                    self.disable_lighting,
+                );
             }
         }
     }
@@ -206,6 +229,7 @@ impl GlTracerGl {
             let octree_texture = Some(Self::create_octree_texture(gl, cube)?);
             println!("[GL Tracer] Octree texture created successfully!");
             let material_palette_location = gl.get_uniform_location(program, "u_material_palette");
+            let disable_lighting_location = gl.get_uniform_location(program, "u_disable_lighting");
 
             // Create and upload material palette texture
             println!("[GL Tracer] Creating material palette texture...");
@@ -226,6 +250,7 @@ impl GlTracerGl {
                 octree_size_location,
                 material_palette_location,
                 material_palette_texture,
+                disable_lighting_location,
             })
         }
     }
@@ -357,7 +382,14 @@ impl GlTracerGl {
         }
     }
 
-    pub unsafe fn render_to_gl(&self, gl: &Context, width: i32, height: i32, time: f32) {
+    pub unsafe fn render_to_gl(
+        &self,
+        gl: &Context,
+        width: i32,
+        height: i32,
+        time: f32,
+        disable_lighting: bool,
+    ) {
         unsafe {
             // Set viewport
             gl.viewport(0, 0, width, height);
@@ -398,6 +430,9 @@ impl GlTracerGl {
             if let Some(loc) = &self.octree_size_location {
                 gl.uniform_1_i32(Some(loc), 8); // 8x8x8 grid
             }
+            if let Some(loc) = &self.disable_lighting_location {
+                gl.uniform_1_i32(Some(loc), if disable_lighting { 1 } else { 0 });
+            }
 
             // Bind material palette texture to unit 1
             if let Some(texture) = self.material_palette_texture {
@@ -422,6 +457,7 @@ impl GlTracerGl {
         width: i32,
         height: i32,
         camera: &CameraConfig,
+        disable_lighting: bool,
     ) {
         unsafe {
             // Set viewport
@@ -476,6 +512,9 @@ impl GlTracerGl {
             }
             if let Some(loc) = &self.octree_size_location {
                 gl.uniform_1_i32(Some(loc), 8);
+            }
+            if let Some(loc) = &self.disable_lighting_location {
+                gl.uniform_1_i32(Some(loc), if disable_lighting { 1 } else { 0 });
             }
 
             // Bind material palette texture to unit 1
@@ -558,9 +597,23 @@ fn sample_cube_at_position(cube: &Cube<i32>, pos: glam::Vec3, max_depth: u32) ->
             // Clamp to valid range [0, grid_size)
             let octree_pos = octree_pos.clamp(IVec3::ZERO, IVec3::splat(grid_size - 1));
 
+            #[cfg(test)]
+            println!(
+                "    Sampling at normalized pos {:?} -> grid pos {:?} (grid_size: {})",
+                pos, octree_pos, grid_size
+            );
+
             // Sample the cube at this position at the given depth
             // depth determines resolution: depth=3 means 8x8x8 grid (2^3)
-            cube.get_id(max_depth, octree_pos)
+            let value = cube.get_id(max_depth, octree_pos);
+
+            #[cfg(test)]
+            println!(
+                "    get_id({}, {:?}) returned {}",
+                max_depth, octree_pos, value
+            );
+
+            value
         }
     }
 }
@@ -588,7 +641,13 @@ mod tests {
         // Test sampling solid voxels
         // Octant 0 (0,0,0) -> grid positions (x: 0-3, y: 0-3, z: 0-3)
         let pos_octant_0 = glam::Vec3::new(0.125, 0.125, 0.125);
-        assert_eq!(sample_cube_at_position(&cube, pos_octant_0, 3), 1);
+        let result = sample_cube_at_position(&cube, pos_octant_0, 3);
+        println!(
+            "Testing position {:?} (octant 0, should be solid)",
+            pos_octant_0
+        );
+        println!("  Result: {} (expected: 1)", result);
+        assert_eq!(result, 1);
 
         // Test sampling empty voxels
         // Octant 3 (0,1,1) -> grid positions (x: 0-3, y: 4-7, z: 4-7)
