@@ -28,7 +28,7 @@ fn test_cpu_renderer_produces_visible_output() {
         .expect("Should have image buffer after rendering");
 
     // Count non-background pixels
-    let background_color = [51, 76, 102]; // RGB(0.2, 0.3, 0.4) * 255
+    let background_color = [170, 186, 201]; // RGB(0.4, 0.5, 0.6) * 255 with gamma correction
     let mut non_background_count = 0;
     let mut sample_pixels = Vec::new();
 
@@ -115,7 +115,7 @@ fn test_default_cpu_renderer_produces_output() {
     let buffer = tracer.image_buffer().expect("Should have image buffer");
 
     // Count non-background pixels
-    let background_color = [51, 76, 102];
+    let background_color = [170, 186, 201]; // RGB(0.4, 0.5, 0.6) * 255 with gamma correction
     let non_background = buffer
         .pixels()
         .filter(|p| {

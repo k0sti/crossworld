@@ -85,18 +85,20 @@
 - [ ] 10.5 Document lighting toggle feature in struct docs
 
 ## 11. Update Existing Tests
-- [ ] 11.1 Review all tests in `tests/` for hardcoded color expectations
-- [ ] 11.2 Update `test_render_and_save_debug_image()` if it checks colors
-- [ ] 11.3 Update `test_render_multiple_angles()` if it checks colors
-- [ ] 11.4 Verify all existing tests still pass with new color output
-- [ ] 11.5 Update test documentation to reference new material system
+- [x] 11.1 Review all tests in `tests/` for hardcoded color expectations
+- [x] 11.2 Update background color in `octa_cube_rendering.rs` from RGB(51,76,102) to RGB(170,186,201)
+- [x] 11.3 Update background color in `render_validation.rs` (2 locations)
+- [x] 11.4 Verify all existing tests still pass with new color output (octa_cube_rendering: 2/2, render_validation: 2/2)
+- [x] 11.5 Update test documentation comments to reference gamma-corrected background
 
 ## 12. Documentation
-- [ ] 12.1 Add R2G3B2 palette explanation to `crates/renderer/README.md` (or create if missing)
-- [ ] 12.2 Document lighting model formula and constants
-- [ ] 12.3 Add examples of using material colors in code
-- [ ] 12.4 Document lighting toggle flag usage
-- [ ] 12.5 Add visual comparison screenshots (old vs new) if helpful
+- [x] 12.1 Add material palette explanation to `crates/renderer/README.md` (7-color test palette table)
+- [x] 12.2 Document lighting model formula and constants (LIGHT_DIR, AMBIENT, DIFFUSE_STRENGTH)
+- [x] 12.3 Add examples of using material colors in code (`get_material_color()` usage)
+- [x] 12.4 Document lighting toggle flag usage (`set_disable_lighting()` examples)
+- [x] 12.5 Add testing section documenting color verification tests
+- [x] 12.6 Update shader documentation to reflect octree traversal and material system
+- [x] 12.7 Document gamma correction and background color
 
 ## 13. Code Quality
 - [x] 13.1 Run `cargo fmt` on all modified Rust files

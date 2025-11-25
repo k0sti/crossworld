@@ -52,7 +52,7 @@ fn test_octa_cube_cpu_rendering() {
     // Basic validation: check that not all pixels are the background color
     // (This ensures the octree was actually rendered)
     let mut non_background_pixels = 0;
-    let background_color = [51, 76, 102]; // RGB(0.2, 0.3, 0.4) * 255
+    let background_color = [170, 186, 201]; // RGB(0.4, 0.5, 0.6) * 255 with gamma correction
 
     for pixel in buffer.pixels() {
         let [r, g, b] = pixel.0;
