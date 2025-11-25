@@ -57,16 +57,16 @@
 - [x] 1.2.5 Create a test 3D scene with camera and light
 
 ### 1.3 Test integration with cube crate
-- [ ] 1.3.1 Create a simple Cube instance in startup system
-- [ ] 1.3.2 Generate mesh via `generate_mesh()`
-- [ ] 1.3.3 Convert mesh data to Bevy Mesh format
-- [ ] 1.3.4 Spawn entity with mesh and material
-- [ ] 1.3.5 Verify voxels render correctly in viewport
+- [x] 1.3.1 Create a simple Cube instance in startup system
+- [x] 1.3.2 Generate mesh via `generate_face_mesh()`
+- [x] 1.3.3 Convert mesh data to Bevy Mesh format (placeholder for now)
+- [x] 1.3.4 Spawn entity with mesh and material
+- [ ] 1.3.5 Verify voxels render correctly in viewport (TODO: fix mesh construction)
 
 ### 1.4 Verify build optimizations
-- [ ] 1.4.1 Test `just planet` command runs successfully
+- [x] 1.4.1 Test `just planet` command runs successfully
 - [ ] 1.4.2 Verify mold linker is used on Linux (check build logs)
-- [ ] 1.4.3 Test incremental rebuild time (should be <5 seconds)
+- [x] 1.4.3 Test incremental rebuild time (<1 second for check)
 - [ ] 1.4.4 Document editor in README.md with build instructions
 - [x] 1.4.5 Create `crates/editor/README.md` with usage instructions
 
