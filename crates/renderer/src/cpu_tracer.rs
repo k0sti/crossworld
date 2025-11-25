@@ -162,26 +162,20 @@ impl CpuCubeTracer {
                     std::sync::atomic::AtomicUsize::new(0);
                 static MISS_COUNT: std::sync::atomic::AtomicUsize =
                     std::sync::atomic::AtomicUsize::new(0);
-                static ERROR_COUNT: std::sync::atomic::AtomicUsize =
-                    std::sync::atomic::AtomicUsize::new(0);
                 static ONCE: std::sync::Once = std::sync::Once::new();
 
                 match &raycast_result {
-                    Ok(Some(_)) => {
+                    Some(_) => {
                         HIT_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     }
-                    Ok(None) => {
+                    None => {
                         MISS_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                    }
-                    Err(_) => {
-                        ERROR_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     }
                 }
 
                 // Print stats after first pixel is rendered
                 if HIT_COUNT.load(std::sync::atomic::Ordering::Relaxed)
                     + MISS_COUNT.load(std::sync::atomic::Ordering::Relaxed)
-                    + ERROR_COUNT.load(std::sync::atomic::Ordering::Relaxed)
                     == 1
                 {
                     println!("\n=== Raycast Debug (first pixel) ===");
@@ -201,11 +195,11 @@ impl CpuCubeTracer {
             }
 
             match raycast_result {
-                Ok(Some(cube_hit)) => {
+                Some(cube_hit) => {
                     // Successful octree raycast - use detailed voxel information
                     // Transform hit position back to world space
                     let world_hit_point =
-                        cube_hit.position * (bounds.max - bounds.min) + bounds.min;
+                        cube_hit.hit_pos * (bounds.max - bounds.min) + bounds.min;
 
                     // Calculate distance from ray origin
                     let t = (world_hit_point - ray.origin).length();
@@ -215,7 +209,7 @@ impl CpuCubeTracer {
                         hit: true,
                         t,
                         point: world_hit_point,
-                        normal: cube_hit.normal.as_vec3(),
+                        normal: cube_hit.normal(),
                     };
 
                     // Get material color from voxel value
@@ -224,12 +218,8 @@ impl CpuCubeTracer {
                     // Apply lighting
                     color = calculate_lighting(&hit_info, material_color);
                 }
-                Ok(None) => {
+                None => {
                     // Miss - do nothing (color remains background)
-                }
-                Err(_) => {
-                    // Error - render debug purple
-                    color = glam::Vec3::new(1.0, 0.0, 1.0);
                 }
             }
         }

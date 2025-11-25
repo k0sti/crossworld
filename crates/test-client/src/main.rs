@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use clap::Parser;
-use crossworld_server::messages::{PlayerIdentity, ReliableMessage, UnreliableMessage};
+use crossworld_server::messages::{ReliableMessage, UnreliableMessage};
 use glam::Vec3;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -177,7 +177,7 @@ async fn receive_positions(connection: wtransport::Connection) -> Result<()> {
         match connection.receive_datagram().await {
             Ok(data) => {
                 match bincode::deserialize::<UnreliableMessage>(&data) {
-                    Ok(UnreliableMessage::Batch { positions, timestamp }) => {
+                    Ok(UnreliableMessage::Batch { positions, timestamp: _ }) => {
                         received_count += 1;
                         if received_count % 10 == 0 {
                             tracing::info!(

@@ -205,7 +205,7 @@ async fn main() -> Result<()> {
         let session = endpoint.accept().await;
 
         let server = server.clone();
-        let connections = connections.clone();
+        let _connections = connections.clone();
 
         tokio::spawn(async move {
             if let Err(e) = GameServer::handle_connection(server, session).await {

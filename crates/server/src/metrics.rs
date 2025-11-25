@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 impl ServerMetrics {
     /// Get Prometheus-compatible metrics as a string
+    #[allow(dead_code)]
     pub fn to_prometheus(&self) -> String {
         format!(
             "# HELP connected_players Number of connected players\n\

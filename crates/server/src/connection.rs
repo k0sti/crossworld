@@ -3,7 +3,7 @@ use crate::server::GameServer;
 use anyhow::{Context, Result};
 use glam::Vec3;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use wtransport::endpoint::IncomingSession;
 use wtransport::{Connection, RecvStream, SendStream};
 
@@ -215,10 +215,10 @@ impl GameServer {
                     x,
                     y,
                     z,
-                    rx,
-                    ry,
-                    rz,
-                    rw,
+                    rx: _,
+                    ry: _,
+                    rz: _,
+                    rw: _,
                     seq,
                 } => {
                     // For now, we need to know which player this is from

@@ -134,7 +134,7 @@ impl GlCubeTracer {
         max_depth: u32,
     ) -> Result<Option<cube::RaycastHit<i32>>, cube::RaycastError> {
         let is_empty = |v: &i32| *v == 0;
-        self.cube.raycast_debug(pos, dir, max_depth, &is_empty)
+        Ok(self.cube.raycast_debug(pos, dir, max_depth, &is_empty))
     }
 
     /// Render to OpenGL context
