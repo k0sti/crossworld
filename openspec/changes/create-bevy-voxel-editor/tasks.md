@@ -59,9 +59,9 @@
 ### 1.3 Test integration with cube crate
 - [x] 1.3.1 Create a simple Cube instance in startup system
 - [x] 1.3.2 Generate mesh via `generate_face_mesh()`
-- [x] 1.3.3 Convert mesh data to Bevy Mesh format (placeholder for now)
+- [x] 1.3.3 Convert mesh data to Bevy Mesh format
 - [x] 1.3.4 Spawn entity with mesh and material
-- [ ] 1.3.5 Verify voxels render correctly in viewport (TODO: fix mesh construction)
+- [x] 1.3.5 Verify voxels render correctly in viewport
 
 ### 1.4 Verify build optimizations
 - [x] 1.4.1 Test `just planet` command runs successfully
