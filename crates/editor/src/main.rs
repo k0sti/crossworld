@@ -1,5 +1,7 @@
 use bevy::prelude::*;
+use bevy::asset::RenderAssetUsages;
 use bevy_egui::EguiPlugin;
+use bevy_mesh::{Indices, PrimitiveTopology};
 use cube::{Cube, DefaultMeshBuilder, generate_face_mesh};
 
 fn main() {
@@ -135,15 +137,33 @@ fn spawn_test_voxel_cube(
 
 /// Convert DefaultMeshBuilder to Bevy Mesh
 fn convert_to_bevy_mesh(builder: &DefaultMeshBuilder) -> Mesh {
-    // For now, just return a simple cuboid to verify the integration works
-    // The cube crate generates the mesh data correctly (we can see it in the logs)
-    // TODO: Properly construct mesh from builder.vertices/indices/normals/colors
-    // once we figure out the correct Bevy 0.17 API for custom mesh construction
+    // Create positions, normals, and colors from builder data
+    let positions: Vec<[f32; 3]> = builder.vertices
+        .chunks(3)
+        .map(|v| [v[0], v[1], v[2]])
+        .collect();
 
-    info!("Generated voxel mesh: {} vertices, {} triangles",
-          builder.vertices.len() / 3,
+    let normals: Vec<[f32; 3]> = builder.normals
+        .chunks(3)
+        .map(|n| [n[0], n[1], n[2]])
+        .collect();
+
+    let colors: Vec<[f32; 4]> = builder.colors
+        .chunks(3)
+        .map(|c| [c[0], c[1], c[2], 1.0])
+        .collect();
+
+    info!("Converting voxel mesh: {} vertices, {} triangles",
+          positions.len(),
           builder.indices.len() / 3);
 
-    // Return a placeholder cuboid for now
-    Cuboid::new(2.0, 2.0, 2.0).mesh().build()
+    // Create mesh using Bevy's API
+    Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::default(),
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, colors)
+    .with_inserted_indices(Indices::U32(builder.indices.clone()))
 }
