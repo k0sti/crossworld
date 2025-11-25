@@ -18,5 +18,7 @@ pub use cpu_tracer::CpuCubeTracer;
 pub use gl_tracer::GlCubeTracer;
 pub use gpu_tracer::GpuTracer;
 
-pub use renderer::{CameraConfig, Renderer, AMBIENT, BACKGROUND_COLOR, DIFFUSE_STRENGTH, LIGHT_DIR};
+pub use renderer::{
+    AMBIENT, BACKGROUND_COLOR, CameraConfig, DIFFUSE_STRENGTH, LIGHT_DIR, Renderer,
+};
 pub use scenes::create_octa_cube;

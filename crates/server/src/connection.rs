@@ -9,7 +9,10 @@ use wtransport::{Connection, RecvStream, SendStream};
 
 impl GameServer {
     /// Handle a new WebTransport connection
-    pub async fn handle_connection(server: Arc<GameServer>, session: IncomingSession) -> Result<()> {
+    pub async fn handle_connection(
+        server: Arc<GameServer>,
+        session: IncomingSession,
+    ) -> Result<()> {
         // Accept the session request
         let session_request = session.await?;
         tracing::info!("Accepting new connection request");
@@ -99,8 +102,8 @@ impl GameServer {
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
         // Deserialize message
-        let msg: ReliableMessage = bincode::deserialize(&data)
-            .context("Failed to deserialize reliable message")?;
+        let msg: ReliableMessage =
+            bincode::deserialize(&data).context("Failed to deserialize reliable message")?;
 
         tracing::debug!("Received reliable message: {:?}", msg);
 
@@ -237,7 +240,9 @@ impl GameServer {
 
                 UnreliableMessage::Pong { timestamp } => {
                     let latency = Instant::now()
-                        .duration_since(Instant::now() - std::time::Duration::from_millis(timestamp))
+                        .duration_since(
+                            Instant::now() - std::time::Duration::from_millis(timestamp),
+                        )
                         .as_millis();
                     tracing::trace!("Pong received, latency: {}ms", latency);
                 }
@@ -277,6 +282,9 @@ impl GameServer {
     fn npub_to_hex(npub: &str) -> Result<String> {
         // TODO: Proper npub decoding using nostr-sdk
         // For now, just use a simple hash
-        Ok(format!("{:x}", npub.bytes().fold(0u64, |acc, b| acc.wrapping_add(b as u64))))
+        Ok(format!(
+            "{:x}",
+            npub.bytes().fold(0u64, |acc, b| acc.wrapping_add(b as u64))
+        ))
     }
 }

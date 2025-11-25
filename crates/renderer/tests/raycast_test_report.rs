@@ -69,9 +69,7 @@ impl Tracer for CpuTracer {
 
     fn raycast(&self, pos: Vec3, dir: Vec3, max_depth: u32) -> Option<RaycastHit> {
         let is_empty = |v: &i32| *v == 0;
-        let hit = self
-            .cube
-            .raycast_debug(pos, dir, max_depth, &is_empty)?;
+        let hit = self.cube.raycast_debug(pos, dir, max_depth, &is_empty)?;
 
         Some(RaycastHit {
             position: hit.hit_pos,
@@ -107,10 +105,7 @@ impl Tracer for GlTracer {
     }
 
     fn raycast(&self, pos: Vec3, dir: Vec3, max_depth: u32) -> Option<RaycastHit> {
-        let hit = self
-            .tracer
-            .raycast_octree(pos, dir, max_depth)
-            .ok()??;
+        let hit = self.tracer.raycast_octree(pos, dir, max_depth).ok()??;
 
         Some(RaycastHit {
             position: hit.hit_pos,
@@ -150,10 +145,7 @@ impl Tracer for GpuTracer {
     }
 
     fn raycast(&self, pos: Vec3, dir: Vec3, max_depth: u32) -> Option<RaycastHit> {
-        let hit = self
-            .tracer
-            .raycast_octree(pos, dir, max_depth)
-            .ok()??;
+        let hit = self.tracer.raycast_octree(pos, dir, max_depth).ok()??;
 
         Some(RaycastHit {
             position: hit.hit_pos,
@@ -407,17 +399,17 @@ fn load_table_driven_tests(starting_number: usize) -> Vec<TestCase> {
                 .map(|v: u8| v as i32);
 
             // Parse visits
-            let expected_visits: i32 = visits_str
-                .trim()
-                .trim_matches('`')
-                .parse()
-                .unwrap_or(1);
+            let expected_visits: i32 = visits_str.trim().trim_matches('`').parse().unwrap_or(1);
 
             // Detect coordinate system and convert if needed
             // If any coordinate is negative or > 1, it's in [-1,1]³ space (octa-cube tests)
             // Otherwise it's already in [0,1]³ space (solid cube tests)
-            let origin_converted = if origin.x < 0.0 || origin.y < 0.0 || origin.z < 0.0
-                || origin.x > 1.0 || origin.y > 1.0 || origin.z > 1.0
+            let origin_converted = if origin.x < 0.0
+                || origin.y < 0.0
+                || origin.z < 0.0
+                || origin.x > 1.0
+                || origin.y > 1.0
+                || origin.z > 1.0
             {
                 // Octa-cube test in [-1,1]³ space - convert to [0,1]³
                 convert_coord_from_table(origin)
@@ -727,9 +719,12 @@ fn test_raycast_report() {
             // Choose tracer based on coordinate system
             // Solid cube tests: coordinates in [0,1]³ and expect value 1 or 0 (miss)
             // Octa-cube tests: other values (2,3,4,5) or coordinates needed conversion
-            let use_solid = test.pos.x >= 0.0 && test.pos.x <= 1.0
-                && test.pos.y >= 0.0 && test.pos.y <= 1.0
-                && test.pos.z >= 0.0 && test.pos.z <= 1.0
+            let use_solid = test.pos.x >= 0.0
+                && test.pos.x <= 1.0
+                && test.pos.y >= 0.0
+                && test.pos.y <= 1.0
+                && test.pos.z >= 0.0
+                && test.pos.z <= 1.0
                 && (test.expected_value == Some(1)
                     || test.expected_value == Some(0)
                     || test.expected_value.is_none());

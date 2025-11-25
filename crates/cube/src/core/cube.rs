@@ -58,7 +58,6 @@ impl IVec3Ext for IVec3 {
     }
 }
 
-
 /// 2D quadtree for plane subdivision
 #[derive(Debug, Clone, PartialEq)]
 pub enum Quad<T> {
@@ -806,8 +805,8 @@ mod tests {
 
         // Test get at depth 1 (center-based: positions are -1 or +1)
         assert_eq!(cube.get(CubeCoord::new(IVec3::new(-1, -1, -1), 1)).id(), 1); // Octant 0
-        assert_eq!(cube.get(CubeCoord::new(IVec3::new(1, -1, -1), 1)).id(), 5);  // Octant 4
-        assert_eq!(cube.get(CubeCoord::new(IVec3::new(1, 1, 1), 1)).id(), 8);    // Octant 7
+        assert_eq!(cube.get(CubeCoord::new(IVec3::new(1, -1, -1), 1)).id(), 5); // Octant 4
+        assert_eq!(cube.get(CubeCoord::new(IVec3::new(1, 1, 1), 1)).id(), 8); // Octant 7
     }
 
     #[test]
@@ -819,8 +818,14 @@ mod tests {
         let updated = cube.update(CubeCoord::new(IVec3::new(3, -1, -1), 2), Cube::Solid(42));
 
         // Verify the update
-        assert_eq!(updated.get(CubeCoord::new(IVec3::new(3, -1, -1), 2)).id(), 42);
-        assert_eq!(updated.get(CubeCoord::new(IVec3::new(-3, -3, -3), 2)).id(), 0);
+        assert_eq!(
+            updated.get(CubeCoord::new(IVec3::new(3, -1, -1), 2)).id(),
+            42
+        );
+        assert_eq!(
+            updated.get(CubeCoord::new(IVec3::new(-3, -3, -3), 2)).id(),
+            0
+        );
     }
 
     #[test]

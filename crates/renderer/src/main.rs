@@ -1,5 +1,5 @@
 // Import from the renderer library crate
-use renderer::{create_octa_cube, CpuCubeTracer, GlCubeTracer, GpuTracer, Renderer};
+use renderer::{CpuCubeTracer, GlCubeTracer, GpuTracer, Renderer, create_octa_cube};
 
 // Bin-specific modules
 mod egui_app;
@@ -304,15 +304,23 @@ fn main() -> Result<(), Box<dyn Error>> {
                 eprintln!("Options:");
                 eprintln!("  --console      Run in console mode (no GUI, batch CPU rendering)");
                 eprintln!("  --single-frame Render one frame in GUI and exit (for debugging)");
-                eprintln!("  --sync         GUI with synchronized rendering (all tracers use same time/camera)");
-                eprintln!("  --single       Render once and exit. Uses GUI if available, headless if not.");
-                eprintln!("  --headless     Force headless mode (combine with --single for batch processing)");
+                eprintln!(
+                    "  --sync         GUI with synchronized rendering (all tracers use same time/camera)"
+                );
+                eprintln!(
+                    "  --single       Render once and exit. Uses GUI if available, headless if not."
+                );
+                eprintln!(
+                    "  --headless     Force headless mode (combine with --single for batch processing)"
+                );
                 eprintln!();
                 eprintln!("Default: Opens GUI with triple renderer (CPU + GL + GPU side-by-side)");
                 eprintln!();
                 eprintln!("Examples:");
                 eprintln!("  renderer --single           # GUI: render one frame, save, exit");
-                eprintln!("  renderer --single --headless # Headless: render, save diffs, stats, exit");
+                eprintln!(
+                    "  renderer --single --headless # Headless: render, save diffs, stats, exit"
+                );
                 eprintln!("  renderer --sync             # GUI: synchronized continuous rendering");
                 return Ok(());
             }
@@ -364,15 +372,18 @@ fn run_console_renderer() -> Result<(), Box<dyn Error>> {
         println!("  Saved {}", filename);
     }
 
-    println!("\nConsole rendering complete! Generated {} frames", num_frames);
+    println!(
+        "\nConsole rendering complete! Generated {} frames",
+        num_frames
+    );
     println!("Output: output/console_frame_*.png");
     Ok(())
 }
 
 fn run_sync_renderer_headless() -> Result<(), Box<dyn Error>> {
-    use renderer::CameraConfig;
     use GlCubeTracer;
     use GpuTracer;
+    use renderer::CameraConfig;
 
     println!("Running synchronized single-shot renderer...");
     println!("All tracers use same timestamp and camera configuration");
@@ -387,7 +398,11 @@ fn run_sync_renderer_headless() -> Result<(), Box<dyn Error>> {
     let width = 800u32;
     let height = 600u32;
 
-    println!("Camera: pos={:?}, target={:?}", camera.position, camera.target());
+    println!(
+        "Camera: pos={:?}, target={:?}",
+        camera.position,
+        camera.target()
+    );
     println!("Resolution: {}x{}", width, height);
     println!("Time: {:.2}s", time);
     println!();
@@ -431,27 +446,26 @@ fn run_sync_renderer_headless() -> Result<(), Box<dyn Error>> {
         let window_attributes = Window::default_attributes()
             .with_title("Sync Renderer (Hidden)")
             .with_inner_size(winit::dpi::LogicalSize::new(width, height))
-            .with_visible(false);  // Hide the window
+            .with_visible(false); // Hide the window
 
         let template = ConfigTemplateBuilder::new()
             .with_alpha_size(8)
             .with_transparency(false);
 
-        let display_builder = glutin_winit::DisplayBuilder::new()
-            .with_window_attributes(Some(window_attributes));
+        let display_builder =
+            glutin_winit::DisplayBuilder::new().with_window_attributes(Some(window_attributes));
 
-        let (window, gl_config) = display_builder
-            .build(&event_loop, template, |configs| {
-                configs
-                    .reduce(|accum, config| {
-                        if config.num_samples() > accum.num_samples() {
-                            config
-                        } else {
-                            accum
-                        }
-                    })
-                    .unwrap()
-            })?;
+        let (window, gl_config) = display_builder.build(&event_loop, template, |configs| {
+            configs
+                .reduce(|accum, config| {
+                    if config.num_samples() > accum.num_samples() {
+                        config
+                    } else {
+                        accum
+                    }
+                })
+                .unwrap()
+        })?;
 
         let window = window.ok_or("Failed to create window")?;
         let window_handle = window.window_handle().ok().map(|h| h.as_raw());
@@ -461,10 +475,7 @@ fn run_sync_renderer_headless() -> Result<(), Box<dyn Error>> {
             .with_context_api(ContextApi::Gles(Some(Version::new(3, 0))))
             .build(window_handle);
 
-        let gl_context = unsafe {
-            gl_display
-                .create_context(&gl_config, &context_attributes)?
-        };
+        let gl_context = unsafe { gl_display.create_context(&gl_config, &context_attributes)? };
 
         let size = window.inner_size();
         let attrs = SurfaceAttributesBuilder::<WindowSurface>::new().build(
@@ -473,10 +484,7 @@ fn run_sync_renderer_headless() -> Result<(), Box<dyn Error>> {
             NonZeroU32::new(size.height).unwrap(),
         );
 
-        let gl_surface = unsafe {
-            gl_display
-                .create_window_surface(&gl_config, &attrs)?
-        };
+        let gl_surface = unsafe { gl_display.create_window_surface(&gl_config, &attrs)? };
 
         let _gl_context = gl_context.make_current(&gl_surface)?;
 
@@ -506,8 +514,16 @@ fn run_sync_renderer_headless() -> Result<(), Box<dyn Error>> {
                 glow::UNSIGNED_BYTE,
                 None,
             );
-            gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MIN_FILTER, glow::LINEAR as i32);
-            gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MAG_FILTER, glow::LINEAR as i32);
+            gl.tex_parameter_i32(
+                glow::TEXTURE_2D,
+                glow::TEXTURE_MIN_FILTER,
+                glow::LINEAR as i32,
+            );
+            gl.tex_parameter_i32(
+                glow::TEXTURE_2D,
+                glow::TEXTURE_MAG_FILTER,
+                glow::LINEAR as i32,
+            );
 
             let framebuffer = gl.create_framebuffer()?;
             gl.bind_framebuffer(glow::FRAMEBUFFER, Some(framebuffer));
@@ -588,8 +604,16 @@ fn run_sync_renderer_headless() -> Result<(), Box<dyn Error>> {
                     glow::UNSIGNED_BYTE,
                     None,
                 );
-                gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MIN_FILTER, glow::LINEAR as i32);
-                gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MAG_FILTER, glow::LINEAR as i32);
+                gl.tex_parameter_i32(
+                    glow::TEXTURE_2D,
+                    glow::TEXTURE_MIN_FILTER,
+                    glow::LINEAR as i32,
+                );
+                gl.tex_parameter_i32(
+                    glow::TEXTURE_2D,
+                    glow::TEXTURE_MAG_FILTER,
+                    glow::LINEAR as i32,
+                );
 
                 let framebuffer = gl.create_framebuffer()?;
                 gl.bind_framebuffer(glow::FRAMEBUFFER, Some(framebuffer));
@@ -650,9 +674,11 @@ fn run_sync_renderer_headless() -> Result<(), Box<dyn Error>> {
                 println!("  CPU vs GL:");
                 println!("    Max difference: {} (out of 255)", max_diff);
                 println!("    Avg difference: {:.2}", avg_diff);
-                println!("    Differing pixels: {} ({:.2}%)",
+                println!(
+                    "    Differing pixels: {} ({:.2}%)",
                     pixel_diff_count,
-                    (pixel_diff_count as f32 / (width * height) as f32) * 100.0);
+                    (pixel_diff_count as f32 / (width * height) as f32) * 100.0
+                );
                 println!("    Saved: output/diff_cpu_gl.png");
 
                 // CPU vs GPU
@@ -662,9 +688,11 @@ fn run_sync_renderer_headless() -> Result<(), Box<dyn Error>> {
                 println!("  CPU vs GPU:");
                 println!("    Max difference: {} (out of 255)", max_diff);
                 println!("    Avg difference: {:.2}", avg_diff);
-                println!("    Differing pixels: {} ({:.2}%)",
+                println!(
+                    "    Differing pixels: {} ({:.2}%)",
                     pixel_diff_count,
-                    (pixel_diff_count as f32 / (width * height) as f32) * 100.0);
+                    (pixel_diff_count as f32 / (width * height) as f32) * 100.0
+                );
                 println!("    Saved: output/diff_cpu_gpu.png");
 
                 // GL vs GPU
@@ -674,9 +702,11 @@ fn run_sync_renderer_headless() -> Result<(), Box<dyn Error>> {
                 println!("  GL vs GPU:");
                 println!("    Max difference: {} (out of 255)", max_diff);
                 println!("    Avg difference: {:.2}", avg_diff);
-                println!("    Differing pixels: {} ({:.2}%)",
+                println!(
+                    "    Differing pixels: {} ({:.2}%)",
                     pixel_diff_count,
-                    (pixel_diff_count as f32 / (width * height) as f32) * 100.0);
+                    (pixel_diff_count as f32 / (width * height) as f32) * 100.0
+                );
                 println!("    Saved: output/diff_gl_gpu.png");
             }
             println!();
@@ -800,7 +830,9 @@ fn run_dual_renderer_with_mode(single_frame: bool, sync_mode: bool) -> Result<()
 
     event_loop.set_control_flow(ControlFlow::Poll);
 
-    let mut app = App::default().with_single_frame(single_frame).with_sync_mode(sync_mode);
+    let mut app = App::default()
+        .with_single_frame(single_frame)
+        .with_sync_mode(sync_mode);
     event_loop.run_app(&mut app)?;
 
     Ok(())

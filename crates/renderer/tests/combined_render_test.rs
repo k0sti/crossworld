@@ -102,9 +102,8 @@ fn create_test_context() -> (
 
     let gl_context = gl_context.make_current(&gl_surface).unwrap();
 
-    let gl = unsafe {
-        glow::Context::from_loader_function_cstr(|s| gl_display.get_proc_address(s))
-    };
+    let gl =
+        unsafe { glow::Context::from_loader_function_cstr(|s| gl_display.get_proc_address(s)) };
 
     (event_loop, window, gl_context, gl_surface, gl)
 }
@@ -203,7 +202,9 @@ fn test_both_tracers() {
     let mut gl_tracer = GlCubeTracer::new(cube.clone());
 
     unsafe {
-        gl_tracer.init_gl(&gl).expect("Failed to initialize GL tracer");
+        gl_tracer
+            .init_gl(&gl)
+            .expect("Failed to initialize GL tracer");
         println!("✓ GL tracer initialized");
 
         gl_tracer.render_to_gl_with_camera(&gl, width, height, &camera);
@@ -228,10 +229,16 @@ fn test_both_tracers() {
 
     println!("\nPixel Analysis:");
     println!("  Total pixels: {}", analysis.total_pixels);
-    println!("  Background: {} ({:.1}%)", analysis.background_count,
-        (analysis.background_count as f32 / analysis.total_pixels as f32) * 100.0);
-    println!("  Content: {} ({:.1}%)", analysis.non_background_count,
-        (analysis.non_background_count as f32 / analysis.total_pixels as f32) * 100.0);
+    println!(
+        "  Background: {} ({:.1}%)",
+        analysis.background_count,
+        (analysis.background_count as f32 / analysis.total_pixels as f32) * 100.0
+    );
+    println!(
+        "  Content: {} ({:.1}%)",
+        analysis.non_background_count,
+        (analysis.non_background_count as f32 / analysis.total_pixels as f32) * 100.0
+    );
     println!("  Unique colors: {}", analysis.unique_colors);
 
     save_debug_png(&pixels, width, height, "gl_tracer_output.png");
@@ -243,10 +250,16 @@ fn test_both_tracers() {
 
     if analysis.all_same_color {
         let first = (pixels[0], pixels[1], pixels[2]);
-        println!("\n❌ GL TRACER FAILED: All pixels are RGB({}, {}, {})", first.0, first.1, first.2);
+        println!(
+            "\n❌ GL TRACER FAILED: All pixels are RGB({}, {}, {})",
+            first.0, first.1, first.2
+        );
         println!("   Shader runs but raytracing logic is broken\n");
     } else if analysis.has_content {
-        println!("\n✅ GL TRACER PASSED: {} unique colors rendered\n", analysis.unique_colors);
+        println!(
+            "\n✅ GL TRACER PASSED: {} unique colors rendered\n",
+            analysis.unique_colors
+        );
     } else {
         println!("\n❌ GL TRACER FAILED: Only background rendered\n");
     }
@@ -290,18 +303,36 @@ fn test_both_tracers() {
 
             println!("\nPixel Analysis:");
             println!("  Total pixels: {}", analysis.total_pixels);
-            println!("  Background: {} ({:.1}%)", analysis.background_count,
-                (analysis.background_count as f32 / analysis.total_pixels as f32) * 100.0);
-            println!("  Content: {} ({:.1}%)", analysis.non_background_count,
-                (analysis.non_background_count as f32 / analysis.total_pixels as f32) * 100.0);
+            println!(
+                "  Background: {} ({:.1}%)",
+                analysis.background_count,
+                (analysis.background_count as f32 / analysis.total_pixels as f32) * 100.0
+            );
+            println!(
+                "  Content: {} ({:.1}%)",
+                analysis.non_background_count,
+                (analysis.non_background_count as f32 / analysis.total_pixels as f32) * 100.0
+            );
             println!("  Unique colors: {}", analysis.unique_colors);
 
             // Sample some pixel values
             println!("\nSample pixels:");
-            for i in [0, width/2, width-1, (height/2)*width, ((height-1)*width)] {
+            for i in [
+                0,
+                width / 2,
+                width - 1,
+                (height / 2) * width,
+                ((height - 1) * width),
+            ] {
                 let idx = (i * 4) as usize;
                 if idx + 2 < pixels.len() {
-                    println!("  Pixel {}: RGB({}, {}, {})", i, pixels[idx], pixels[idx+1], pixels[idx+2]);
+                    println!(
+                        "  Pixel {}: RGB({}, {}, {})",
+                        i,
+                        pixels[idx],
+                        pixels[idx + 1],
+                        pixels[idx + 2]
+                    );
                 }
             }
 
@@ -314,12 +345,17 @@ fn test_both_tracers() {
 
             if analysis.all_same_color {
                 let first = (pixels[0], pixels[1], pixels[2]);
-                println!("\n❌ GPU TRACER FAILED: All pixels are RGB({}, {}, {})", first.0, first.1, first.2);
+                println!(
+                    "\n❌ GPU TRACER FAILED: All pixels are RGB({}, {}, {})",
+                    first.0, first.1, first.2
+                );
                 println!("   Shader runs but produces uniform output");
 
                 // Check if it's magenta (clearcolor) - means nothing was rendered
                 if first.0 == 255 && first.1 == 0 && first.2 == 255 {
-                    println!("   ⚠️  All pixels are MAGENTA (clear color) - compute/blit shader not executing!\n");
+                    println!(
+                        "   ⚠️  All pixels are MAGENTA (clear color) - compute/blit shader not executing!\n"
+                    );
                 } else {
                     println!("   Compute shader executes but raytracing logic is broken\n");
                 }
@@ -329,9 +365,15 @@ fn test_both_tracers() {
                 println!("\n❌ GPU TRACER FAILED: Only background rendered\n");
                 panic!("GPU tracer produces only background");
             } else if analysis.unique_colors < 5 {
-                println!("\n⚠️  GPU TRACER WARNING: Only {} unique colors (expected more)\n", analysis.unique_colors);
+                println!(
+                    "\n⚠️  GPU TRACER WARNING: Only {} unique colors (expected more)\n",
+                    analysis.unique_colors
+                );
             } else {
-                println!("\n✅ GPU TRACER PASSED: {} unique colors rendered\n", analysis.unique_colors);
+                println!(
+                    "\n✅ GPU TRACER PASSED: {} unique colors rendered\n",
+                    analysis.unique_colors
+                );
             }
         }
         Err(e) => {
@@ -343,5 +385,8 @@ fn test_both_tracers() {
     println!("========================================\n");
 
     // Fail the test if GL tracer has issues
-    assert!(!analysis.all_same_color, "GL tracer produces uniform color - raytracing broken");
+    assert!(
+        !analysis.all_same_color,
+        "GL tracer produces uniform color - raytracing broken"
+    );
 }

@@ -75,12 +75,20 @@ fn test_shader_files_exist() {
     println!("  Fragment shader length: {} bytes", fragment_shader.len());
 
     assert!(!vertex_shader.is_empty(), "Vertex shader source is empty!");
-    assert!(!fragment_shader.is_empty(), "Fragment shader source is empty!");
+    assert!(
+        !fragment_shader.is_empty(),
+        "Fragment shader source is empty!"
+    );
 
     // Check for key shader components
-    assert!(vertex_shader.contains("gl_Position"), "Vertex shader missing gl_Position");
-    assert!(fragment_shader.contains("FragColor") || fragment_shader.contains("gl_FragColor"),
-            "Fragment shader missing output");
+    assert!(
+        vertex_shader.contains("gl_Position"),
+        "Vertex shader missing gl_Position"
+    );
+    assert!(
+        fragment_shader.contains("FragColor") || fragment_shader.contains("gl_FragColor"),
+        "Fragment shader missing output"
+    );
 
     println!("✓ Shader files verified");
 }
@@ -95,9 +103,18 @@ fn test_compute_shader_source_exists() {
 
     println!("  Compute shader length: {} bytes", compute_source.len());
 
-    assert!(!compute_source.is_empty(), "Compute shader source is empty!");
-    assert!(compute_source.contains("imageStore"), "Compute shader missing imageStore");
-    assert!(compute_source.contains("layout(local_size_x"), "Compute shader missing work group size");
+    assert!(
+        !compute_source.is_empty(),
+        "Compute shader source is empty!"
+    );
+    assert!(
+        compute_source.contains("imageStore"),
+        "Compute shader missing imageStore"
+    );
+    assert!(
+        compute_source.contains("layout(local_size_x"),
+        "Compute shader missing work group size"
+    );
 
     println!("✓ Compute shader source verified");
 }

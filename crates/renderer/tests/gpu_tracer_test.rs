@@ -105,9 +105,8 @@ fn create_test_context() -> (
 
     let gl_context = gl_context.make_current(&gl_surface).unwrap();
 
-    let gl = unsafe {
-        glow::Context::from_loader_function_cstr(|s| gl_display.get_proc_address(s))
-    };
+    let gl =
+        unsafe { glow::Context::from_loader_function_cstr(|s| gl_display.get_proc_address(s)) };
 
     (event_loop, window, gl_context, gl_surface, gl)
 }
@@ -119,8 +118,8 @@ fn analyze_pixels(pixels: &[u8], width: i32, height: i32) -> RenderAnalysis {
     let mut unique_colors = std::collections::HashSet::new();
     let mut sample_colors = Vec::new();
 
-    let bg_r = 51u8;  // 0.2 * 255
-    let bg_g = 76u8;  // 0.3 * 255
+    let bg_r = 51u8; // 0.2 * 255
+    let bg_g = 76u8; // 0.3 * 255
     let bg_b = 102u8; // 0.4 * 255
 
     // Sample 9 locations across the image

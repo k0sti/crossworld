@@ -1,6 +1,6 @@
 //! Octa cube rendering test - validates CPU raytracer with sparse octrees
 
-use renderer::{create_octa_cube, CameraConfig, CpuCubeTracer, Renderer};
+use renderer::{CameraConfig, CpuCubeTracer, Renderer, create_octa_cube};
 use std::path::PathBuf;
 
 /// Test output directory

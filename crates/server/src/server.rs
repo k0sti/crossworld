@@ -107,11 +107,7 @@ impl GameServer {
         // Check for teleportation
         let distance = (new_pos - old_pos).length();
         if distance > self.config.teleport_threshold {
-            tracing::warn!(
-                "Player {} teleported {} units",
-                hex_id,
-                distance
-            );
+            tracing::warn!("Player {} teleported {} units", hex_id, distance);
             return false;
         }
 
@@ -133,11 +129,7 @@ impl GameServer {
             || new_pos.y > 1000.0
             || new_pos.z.abs() > self.config.world_size
         {
-            tracing::warn!(
-                "Player {} out of bounds: {:?}",
-                hex_id,
-                new_pos
-            );
+            tracing::warn!("Player {} out of bounds: {:?}", hex_id, new_pos);
             return false;
         }
 
