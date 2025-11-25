@@ -8,6 +8,7 @@
 use cube::Cube;
 use glam::Vec3;
 use std::fmt;
+use std::rc::Rc;
 
 // ANSI color codes
 const RESET: &str = "\x1b[0m";
@@ -309,170 +310,8 @@ fn test_tracer(tracer: &dyn Tracer, test: &TestCase) -> TestCaseResult {
 // ============================================================================
 
 fn create_test_cases() -> Vec<TestCase> {
-    let mut tests = Vec::new();
-    let mut number = 1;
-
-    // Axis-aligned rays
-    let axis_tests = vec![
-        (
-            "Axis +X",
-            Vec3::new(0.0, 0.5, 0.5),
-            Vec3::new(1.0, 0.0, 0.0),
-        ),
-        (
-            "Axis -X",
-            Vec3::new(1.0, 0.5, 0.5),
-            Vec3::new(-1.0, 0.0, 0.0),
-        ),
-        (
-            "Axis +Y",
-            Vec3::new(0.5, 0.0, 0.5),
-            Vec3::new(0.0, 1.0, 0.0),
-        ),
-        (
-            "Axis -Y",
-            Vec3::new(0.5, 1.0, 0.5),
-            Vec3::new(0.0, -1.0, 0.0),
-        ),
-        (
-            "Axis +Z",
-            Vec3::new(0.5, 0.5, 0.0),
-            Vec3::new(0.0, 0.0, 1.0),
-        ),
-        (
-            "Axis -Z",
-            Vec3::new(0.5, 0.5, 1.0),
-            Vec3::new(0.0, 0.0, -1.0),
-        ),
-    ];
-
-    for (name, pos, dir) in axis_tests {
-        tests.push(TestCase {
-            number,
-            name: name.to_string(),
-            category: "Axis-Aligned".to_string(),
-            pos,
-            dir,
-            should_hit: true,
-            expected_value: Some(1),
-            expected_enter_count_min: 1,
-            expected_enter_count_max: 1,
-        });
-        number += 1;
-    }
-
-    // Diagonal rays
-    let diagonal_tests = vec![
-        (
-            "Diagonal (+++)",
-            Vec3::new(0.0, 0.0, 0.0),
-            Vec3::new(1.0, 1.0, 1.0).normalize(),
-        ),
-        (
-            "Diagonal (-++)",
-            Vec3::new(1.0, 0.0, 0.0),
-            Vec3::new(-1.0, 1.0, 1.0).normalize(),
-        ),
-        (
-            "Diagonal (+-+)",
-            Vec3::new(0.0, 1.0, 0.0),
-            Vec3::new(1.0, -1.0, 1.0).normalize(),
-        ),
-        (
-            "Diagonal (++-)",
-            Vec3::new(0.0, 0.0, 1.0),
-            Vec3::new(1.0, 1.0, -1.0).normalize(),
-        ),
-    ];
-
-    for (name, pos, dir) in diagonal_tests {
-        tests.push(TestCase {
-            number,
-            name: name.to_string(),
-            category: "Diagonal".to_string(),
-            pos,
-            dir,
-            should_hit: true,
-            expected_value: Some(1),
-            expected_enter_count_min: 1,
-            expected_enter_count_max: 1,
-        });
-        number += 1;
-    }
-
-    // Miss cases
-    let miss_tests = vec![
-        (
-            "Miss +X outside",
-            Vec3::new(2.0, 0.5, 0.5),
-            Vec3::new(1.0, 0.0, 0.0),
-        ),
-        (
-            "Miss -Y outside",
-            Vec3::new(0.5, -1.0, 0.5),
-            Vec3::new(0.0, -1.0, 0.0),
-        ),
-        (
-            "Miss +Z outside",
-            Vec3::new(0.5, 0.5, 2.0),
-            Vec3::new(0.0, 0.0, 1.0),
-        ),
-    ];
-
-    for (name, pos, dir) in miss_tests {
-        tests.push(TestCase {
-            number,
-            name: name.to_string(),
-            category: "Boundary Miss".to_string(),
-            pos,
-            dir,
-            should_hit: false,
-            expected_value: None,
-            expected_enter_count_min: 0,
-            expected_enter_count_max: 0,
-        });
-        number += 1;
-    }
-
-    // Edge cases
-    let edge_tests = vec![
-        (
-            "Center hit",
-            Vec3::new(0.5, 0.5, 0.0),
-            Vec3::new(0.0, 0.0, 1.0),
-        ),
-        (
-            "Corner entry",
-            Vec3::new(0.0, 0.0, 0.0),
-            Vec3::new(1.0, 1.0, 1.0).normalize(),
-        ),
-        (
-            "Boundary entry",
-            Vec3::new(0.5, 0.5, 0.5),
-            Vec3::new(0.0, 0.0, 1.0),
-        ),
-    ];
-
-    for (name, pos, dir) in edge_tests {
-        tests.push(TestCase {
-            number,
-            name: name.to_string(),
-            category: "Edge Cases".to_string(),
-            pos,
-            dir,
-            should_hit: true,
-            expected_value: Some(1),
-            expected_enter_count_min: 1,
-            expected_enter_count_max: 1,
-        });
-        number += 1;
-    }
-
-    // Load table-driven tests from markdown
-    let table_tests = load_table_driven_tests(number);
-    tests.extend(table_tests);
-
-    tests
+    // All tests now loaded from markdown table
+    load_table_driven_tests(1)
 }
 
 // ============================================================================
@@ -574,8 +413,18 @@ fn load_table_driven_tests(starting_number: usize) -> Vec<TestCase> {
                 .parse()
                 .unwrap_or(1);
 
-            // Convert origin from [-1,1] to [0,1] space
-            let origin_converted = convert_coord_from_table(origin);
+            // Detect coordinate system and convert if needed
+            // If any coordinate is negative or > 1, it's in [-1,1]³ space (octa-cube tests)
+            // Otherwise it's already in [0,1]³ space (solid cube tests)
+            let origin_converted = if origin.x < 0.0 || origin.y < 0.0 || origin.z < 0.0
+                || origin.x > 1.0 || origin.y > 1.0 || origin.z > 1.0
+            {
+                // Octa-cube test in [-1,1]³ space - convert to [0,1]³
+                convert_coord_from_table(origin)
+            } else {
+                // Solid cube test already in [0,1]³ space - use as-is
+                origin
+            };
 
             let category = "Table-Driven".to_string();
             let name = if notes.is_empty() {
@@ -812,30 +661,98 @@ fn print_summary(all_results: &[TracerResults], total_tests: usize) {
 }
 
 // ============================================================================
+// Helper Functions
+// ============================================================================
+
+/// Create the octa-cube for table-driven tests
+/// Bounds: [0, 0, 0] to [1, 1, 1] (after conversion from [-1,-1,-1] to [1,1,1])
+/// Depth: 1 (2×2×2 grid)
+fn create_octa_cube() -> Cube<i32> {
+    // Children array in cube crate order (x*4 + y*2 + z):
+    // Node 0: (0,0,0) = value 1
+    // Node 1: (0,0,1) = value 3
+    // Node 2: (0,1,0) = value 0 (empty)
+    // Node 3: (0,1,1) = value 5
+    // Node 4: (1,0,0) = value 2
+    // Node 5: (1,0,1) = value 4
+    // Node 6: (1,1,0) = value 0 (empty)
+    // Node 7: (1,1,1) = value 0 (empty)
+    let children: [Rc<Cube<i32>>; 8] = [
+        Rc::new(Cube::Solid(1)), // Node 0
+        Rc::new(Cube::Solid(3)), // Node 1
+        Rc::new(Cube::Solid(0)), // Node 2 - empty
+        Rc::new(Cube::Solid(5)), // Node 3
+        Rc::new(Cube::Solid(2)), // Node 4
+        Rc::new(Cube::Solid(4)), // Node 5
+        Rc::new(Cube::Solid(0)), // Node 6 - empty
+        Rc::new(Cube::Solid(0)), // Node 7 - empty
+    ];
+
+    Cube::Cubes(Box::new(children))
+}
+
+// ============================================================================
 // Main Test
 // ============================================================================
 
 #[test]
 fn test_raycast_report() {
-    let cube = Cube::Solid(1i32);
+    // Create both cubes for different test types
+    let solid_cube = Cube::Solid(1i32);
+    let octa_cube = create_octa_cube();
+
     let test_cases = create_test_cases();
 
-    // Create tracers
-    let tracers: Vec<Box<dyn Tracer>> = vec![
-        Box::new(CpuTracer::new(cube.clone())),
-        Box::new(GlTracer::new(cube.clone())),
-        Box::new(GpuTracer::new(cube)),
+    // Create tracers for both cubes
+    let solid_tracers: Vec<Box<dyn Tracer>> = vec![
+        Box::new(CpuTracer::new(solid_cube.clone())),
+        Box::new(GlTracer::new(solid_cube.clone())),
+        Box::new(GpuTracer::new(solid_cube)),
+    ];
+
+    let octa_tracers: Vec<Box<dyn Tracer>> = vec![
+        Box::new(CpuTracer::new(octa_cube.clone())),
+        Box::new(GlTracer::new(octa_cube.clone())),
+        Box::new(GpuTracer::new(octa_cube)),
     ];
 
     // Run all tests for all tracers
+    // Use the appropriate cube based on expected voxel value
+    // (simple solid cube tests expect value 1, octa-cube tests expect values 0-5)
     let mut all_results = Vec::new();
-    for tracer in &tracers {
+
+    for tracer_idx in 0..3 {
         let mut results = Vec::new();
         for test in &test_cases {
-            results.push(test_tracer(tracer.as_ref(), test));
+            // Choose tracer based on coordinate system
+            // Solid cube tests: coordinates in [0,1]³ and expect value 1 or 0 (miss)
+            // Octa-cube tests: other values (2,3,4,5) or coordinates needed conversion
+            let use_solid = test.pos.x >= 0.0 && test.pos.x <= 1.0
+                && test.pos.y >= 0.0 && test.pos.y <= 1.0
+                && test.pos.z >= 0.0 && test.pos.z <= 1.0
+                && (test.expected_value == Some(1)
+                    || test.expected_value == Some(0)
+                    || test.expected_value.is_none());
+
+            let tracer: &dyn Tracer = if use_solid {
+                solid_tracers[tracer_idx].as_ref()
+            } else {
+                octa_tracers[tracer_idx].as_ref()
+            };
+
+            results.push(test_tracer(tracer, test));
         }
+
+        let tracer_name = if tracer_idx == 0 {
+            "CPU"
+        } else if tracer_idx == 1 {
+            "GL"
+        } else {
+            "GPU"
+        };
+
         all_results.push(TracerResults {
-            tracer_name: tracer.name().to_string(),
+            tracer_name: tracer_name.to_string(),
             results,
         });
     }
