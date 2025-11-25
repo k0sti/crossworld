@@ -3,3 +3,43 @@ rustflags = ["--cfg=web_sys_unstable_apis"]
 
 [target.wasm32-unknown-unknown]
 rustflags = ["--cfg=web_sys_unstable_apis", "--cfg=getrandom_backend=\"wasm_js\""]
+
+# Linux-specific optimizations using mold linker
+[target.x86_64-unknown-linux-gnu]
+linker = "clang"
+rustflags = ["-C", "link-arg=-fuse-ld=mold"]
+
+# Enable unstable features (requires nightly for cranelift)
+[unstable]
+codegen-backend = true
+
+# Fast debug builds profile
+# Usage: cargo build --profile fast-dev
+[profile.fast-dev]
+inherits = "dev"
+opt-level = 1              # Minimal optimizations for speed
+debug = true               # Keep debug info
+incremental = true         # Enable incremental compilation
+
+# Development profile tweaks
+[profile.dev]
+opt-level = 0              # No optimizations
+debug = true               # Full debug info
+incremental = true         # Incremental compilation
+codegen-units = 256        # Maximize parallel codegen
+
+# Release profile optimizations
+[profile.release]
+opt-level = 3              # Full optimizations
+lto = "thin"               # Thin LTO for faster builds than "fat"
+codegen-units = 1          # Single codegen unit for better optimization
+debug = false              # No debug info in release
+strip = true               # Strip symbols to reduce binary size
+panic = "abort"            # Abort on panic (smaller binary)
+
+# Profile for distribution builds
+[profile.dist]
+inherits = "release"
+lto = "fat"                # Full LTO for maximum optimization
+codegen-units = 1
+strip = true

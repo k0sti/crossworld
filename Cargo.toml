@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/world", "crates/worldtool", "crates/cube", "crates/assets", "crates/physics", "crates/renderer", "crates/server", "crates/test-client"]
+members = ["crates/world", "crates/worldtool", "crates/cube", "crates/assets", "crates/physics", "crates/renderer", "crates/server", "crates/test-client", "crates/editor"]
 resolver = "2"
 
 [profile.release]
