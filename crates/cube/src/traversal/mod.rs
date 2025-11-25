@@ -65,8 +65,9 @@ pub fn traverse_octree(grid: &NeighborGrid, visitor: TraversalVisitor, max_depth
     for octant_idx in 0..8 {
         let octant_pos = IVec3::from_octant_index(octant_idx);
         // Center-based coordinates: compute grid index with signed arithmetic
-        let grid_idx = (CENTER_OFFSET + octant_pos.dot(INDEX_MUL)) as usize;
-        let view = NeighborView::new(grid, grid_idx);
+        // octant_pos has values -1 or +1, so the dot product can be negative
+        let grid_idx = CENTER_OFFSET + octant_pos.dot(INDEX_MUL);
+        let view = NeighborView::new(grid, grid_idx as usize);
         let coord = CubeCoord::new(octant_pos, max_depth);
         traverse_recursive(view, coord, visitor, false);
     }
@@ -98,11 +99,11 @@ fn traverse_recursive(
                 // Subdivide leaf and traverse children
                 // create_child_grid will replicate the solid value into 8 children
                 let child_grid = view.create_child_grid();
-                const CENTER_OFFSET: usize = 21;
+                const CENTER_OFFSET: i32 = 21;
                 for octant_idx in 0..8 {
                     let octant_pos = IVec3::from_octant_index(octant_idx);
-                    let child_grid_idx = CENTER_OFFSET + octant_pos.dot(INDEX_MUL) as usize;
-                    let child_view = NeighborView::new(&child_grid, child_grid_idx);
+                    let child_grid_idx = CENTER_OFFSET + octant_pos.dot(INDEX_MUL);
+                    let child_view = NeighborView::new(&child_grid, child_grid_idx as usize);
                     let child_coord = coord.child(octant_idx);
                     traverse_recursive(child_view, child_coord, visitor, true);
                 }
@@ -111,11 +112,11 @@ fn traverse_recursive(
         Cube::Cubes(_children) => {
             // Branch node - traverse children without calling visitor
             let child_grid = view.create_child_grid();
-            const CENTER_OFFSET: usize = 21;
+            const CENTER_OFFSET: i32 = 21;
             for octant_idx in 0..8 {
                 let octant_pos = IVec3::from_octant_index(octant_idx);
-                let child_grid_idx = CENTER_OFFSET + octant_pos.dot(INDEX_MUL) as usize;
-                let child_view = NeighborView::new(&child_grid, child_grid_idx);
+                let child_grid_idx = CENTER_OFFSET + octant_pos.dot(INDEX_MUL);
+                let child_view = NeighborView::new(&child_grid, child_grid_idx as usize);
                 let child_coord = coord.child(octant_idx);
                 traverse_recursive(child_view, child_coord, visitor, false);
             }
