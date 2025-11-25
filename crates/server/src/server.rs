@@ -70,6 +70,7 @@ impl GameServer {
     }
 
     /// Update player position
+    #[allow(dead_code)]
     pub fn update_player_position(
         &self,
         hex_id: &str,
@@ -177,6 +178,7 @@ impl GameServer {
 }
 
 /// Player data
+#[allow(dead_code)]
 pub struct Player {
     pub identity: PlayerIdentity,
     pub state: PlayerState,
@@ -256,12 +258,14 @@ pub struct ServerMetrics {
 }
 
 /// Simple circular buffer
+#[allow(dead_code)]
 pub struct CircularBuffer<T> {
     buffer: Vec<T>,
     capacity: usize,
     index: usize,
 }
 
+#[allow(dead_code)]
 impl<T> CircularBuffer<T> {
     pub fn new(capacity: usize) -> Self {
         Self {

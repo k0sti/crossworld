@@ -91,6 +91,7 @@ pub struct DualRendererApp {
 }
 
 impl DualRendererApp {
+    #[allow(dead_code)]
     pub unsafe fn new(gl: &Arc<Context>) -> Result<Self, String> {
         unsafe { Self::new_with_sync(gl, false) }
     }

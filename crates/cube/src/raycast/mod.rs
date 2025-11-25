@@ -18,13 +18,6 @@
 use crate::{Axis, Cube, CubeCoord, IVec3Ext};
 use glam::{ivec3, vec3, IVec3, Vec3};
 
-/// Sign of a normal vector component
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Sign {
-    Positive,
-    Negative,
-}
-
 /// Result of a raycast hit
 #[derive(Debug, Clone)]
 pub struct RaycastHit<T> {
@@ -32,10 +25,8 @@ pub struct RaycastHit<T> {
     pub coord: CubeCoord,
     /// Voxel value at the hit position
     pub value: T,
-    /// Axis of the surface normal at hit point
+    /// Axis of the surface normal at hit point (includes sign: PosX/NegX, etc)
     pub normal_axis: Axis,
-    /// Sign of the surface normal at hit point
-    pub normal_sign: Sign,
     /// Exact hit position in local node space [-1, 1]
     pub hit_pos: Vec3,
     /// Debug information (optional)
@@ -43,19 +34,15 @@ pub struct RaycastHit<T> {
 }
 
 impl<T> RaycastHit<T> {
-    /// Get the normal vector from axis and sign
+    /// Get the normal vector from axis (including sign)
     pub fn normal(&self) -> Vec3 {
-        let val = match self.normal_sign {
-            Sign::Positive => 1.0,
-            Sign::Negative => -1.0,
-        };
-        match self.normal_axis {
-            Axis::X => vec3(val, 0.0, 0.0),
-            Axis::Y => vec3(0.0, val, 0.0),
-            Axis::Z => vec3(0.0, 0.0, val),
-        }
+        // Use the Axis enum's built-in conversion
+        self.normal_axis.as_vec3()
     }
 }
+
+pub mod error;
+pub use error::RaycastError;
 
 /// Debug state for raycast traversal
 #[derive(Debug, Clone, Default)]
@@ -169,12 +156,11 @@ where
             Cube::Solid(value) => {
                 // Leaf reached
                 if !is_empty(value) {
-                    let (axis, sign) = get_entry_normal(local_pos, ray_dir);
+                    let axis = get_entry_normal(local_pos, ray_dir);
                     Some(RaycastHit {
                         coord: current_coord,
                         value: value.clone(),
                         normal_axis: axis,
-                        normal_sign: sign,
                         hit_pos: local_pos,
                         debug: debug.cloned(),
                     })
@@ -348,6 +334,8 @@ where
                         debug,
                     );
                 }
+                // If loop breaks without returning, no hit was found
+                None
             }
             _ => None, // Other types not supported yet
         }
@@ -496,37 +484,28 @@ fn intersect_aabb_entry(origin: Vec3, dir: Vec3, box_min: Vec3, box_max: Vec3) -
     }
 }
 
-fn get_entry_normal(pos: Vec3, dir: Vec3) -> (Axis, Sign) {
+fn get_entry_normal(pos: Vec3, dir: Vec3) -> Axis {
     let x_dist = 1.0 - pos.x.abs();
     let y_dist = 1.0 - pos.y.abs();
     let z_dist = 1.0 - pos.z.abs();
 
     if x_dist < y_dist && x_dist < z_dist {
-        (
-            Axis::X,
-            if dir.x < 0.0 {
-                Sign::Positive
-            } else {
-                Sign::Negative
-            },
-        )
+        if dir.x < 0.0 {
+            Axis::PosX
+        } else {
+            Axis::NegX
+        }
     } else if y_dist < z_dist {
-        (
-            Axis::Y,
-            if dir.y < 0.0 {
-                Sign::Positive
-            } else {
-                Sign::Negative
-            },
-        )
+        if dir.y < 0.0 {
+            Axis::PosY
+        } else {
+            Axis::NegY
+        }
     } else {
-        (
-            Axis::Z,
-            if dir.z < 0.0 {
-                Sign::Positive
-            } else {
-                Sign::Negative
-            },
-        )
+        if dir.z < 0.0 {
+            Axis::PosZ
+        } else {
+            Axis::NegZ
+        }
     }
 }

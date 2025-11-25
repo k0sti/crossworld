@@ -23,6 +23,7 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::window::{Window, WindowId};
 
 #[cfg(target_os = "linux")]
+#[allow(unused_imports)]
 use winit::platform::x11::EventLoopBuilderExtX11;
 
 #[derive(Default)]
