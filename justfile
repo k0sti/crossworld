@@ -17,7 +17,9 @@ default:
     @echo "  just server-prod      - Run game server (production mode)"
     @echo "  just gen-cert         - Generate self-signed certificate for development"
     @echo "  just test-client      - Run test client to connect to server"
-    @echo "  just raycast-report   - Generate comprehensive raycast test report for all tracers"
+    @echo "  just raycast-report   - Test raycast algorithm (octree traversal logic)"
+    @echo "  just raytrace-report  - Test rendering output (color accuracy, tracer consistency)"
+    @echo "  just test-raytracing  - Run complete raytracing test suite (raycast + raytrace)"
     @echo ""
 
 # Build WASM module in development mode
@@ -120,8 +122,37 @@ server-prod:
 test-client:
     cargo run --bin test-client
 
-# Generate comprehensive raycast test report for all tracers
+# Test core raycast algorithm (octree traversal logic)
 raycast-report:
-    @echo "Generating raycast test report for all tracers..."
+    @echo "╔══════════════════════════════════════════════════════════════════════════════╗"
+    @echo "║                    RAYCAST ALGORITHM TESTS (cube package)                    ║"
+    @echo "║  Tests: Octree traversal, hit detection, normals, positions, edge cases     ║"
+    @echo "╚══════════════════════════════════════════════════════════════════════════════╝"
     @echo ""
-    cargo test --test raycast_test_report -- --nocapture --test-threads=1
+    cargo test --package cube --test raycast_table_tests -- --nocapture --test-threads=1
+
+# Test rendering output across all tracers (visual correctness)
+raytrace-report:
+    @echo "╔══════════════════════════════════════════════════════════════════════════════╗"
+    @echo "║                 RAYTRACE RENDERING TESTS (renderer package)                  ║"
+    @echo "║  Tests: Color accuracy, tracer consistency, visual output validation         ║"
+    @echo "╚══════════════════════════════════════════════════════════════════════════════╝"
+    @echo ""
+    @echo "Running color accuracy tests..."
+    cargo test --package renderer --test color_accuracy_tests -- --nocapture
+    @echo ""
+    @echo "Running tracer consistency tests..."
+    cargo test --package renderer --test tracer_consistency_tests -- --nocapture
+    @echo ""
+    @echo "Running combined render tests..."
+    cargo test --package renderer --test combined_render_test -- --nocapture
+    @echo ""
+    @echo "✓ All raytrace rendering tests completed"
+
+# Run all raycast and raytrace tests
+test-raytracing:
+    @echo "Running complete raytracing test suite..."
+    @echo ""
+    just raycast-report
+    @echo ""
+    just raytrace-report
