@@ -11,15 +11,77 @@
 //! - **Octa-with-leaves**: 8 leaf values packed together (9 bytes)
 //! - **Octa-with-pointers**: Variable-size pointers (1/2/4/8 bytes each)
 //!
-//! # Example
+//! # Guarantees
+//!
+//! ## Round-Trip Preservation
+//! BCF guarantees that serialization and deserialization preserve octree structure:
 //!
 //! ```
-//! use cube::{Cube, io::bcf::{serialize_bcf, parse_bcf}};
+//! # use cube::{Cube, io::bcf::{serialize_bcf, parse_bcf}};
+//! let original = Cube::Solid(42u8);
+//! let bytes = serialize_bcf(&original);
+//! let restored = parse_bcf(&bytes).unwrap();
+//! assert_eq!(original, restored);
+//! ```
 //!
-//! let cube = Cube::Solid(42u8);
-//! let binary_data = serialize_bcf(&cube);
-//! let parsed_cube = parse_bcf(&binary_data).unwrap();
-//! assert_eq!(cube, parsed_cube);
+//! Furthermore, **binary round-trips are identical**:
+//! ```
+//! # use cube::{Cube, io::bcf::{serialize_bcf, parse_bcf}};
+//! # let original = Cube::Solid(42u8);
+//! let bytes1 = serialize_bcf(&original);
+//! let restored = parse_bcf(&bytes1).unwrap();
+//! let bytes2 = serialize_bcf(&restored);
+//! assert_eq!(bytes1, bytes2); // Identical binary representation
+//! ```
+//!
+//! ## Determinism
+//! Serialization is deterministic: the same input cube always produces
+//! the same binary output. This enables:
+//! - Content-addressable storage (use BCF binary as hash key)
+//! - Reproducible builds (no non-deterministic encoding choices)
+//! - Reliable diff comparison (binary equality implies structural equality)
+//!
+//! ```
+//! # use cube::{Cube, io::bcf::serialize_bcf};
+//! let cube = Cube::Solid(100u8);
+//! let bytes1 = serialize_bcf(&cube);
+//! let bytes2 = serialize_bcf(&cube);
+//! assert_eq!(bytes1, bytes2); // Deterministic encoding
+//! ```
+//!
+//! ## Performance
+//! - **Serialization**: O(n) where n = node count in octree
+//! - **Deserialization**: O(n) with lazy pointer resolution
+//! - **Memory**: Zero-copy parsing via `BcfReader` (borrows input buffer)
+//! - **Size**: Optimized encoding (octa-leaves for dense regions, pointers for sparse)
+//!
+//! # Limitations
+//!
+//! ## Unsupported Cube Variants
+//! - **`Cube::Planes`**: Serializes as `Solid(0)` (empty cube)
+//! - **`Cube::Slices`**: Serializes as `Solid(0)` (empty cube)
+//!
+//! These variants are experimental and not yet stabilized. A warning is logged
+//! when serializing these types. Use `Cube::Cubes` (octree) for full support.
+//!
+//! ## Recursion Limits
+//! Parsing enforces a maximum recursion depth (64 levels) to prevent stack
+//! overflow from malicious or corrupt data. Octrees deeper than 64 levels
+//! will fail to parse with `BcfError::RecursionLimit`.
+//!
+//! # Example: Error Handling
+//!
+//! ```
+//! use cube::io::bcf::{parse_bcf, BcfError};
+//!
+//! let corrupt_data = vec![0xFF; 100]; // Invalid magic number
+//! match parse_bcf(&corrupt_data) {
+//!     Ok(cube) => println!("Parsed: {:?}", cube),
+//!     Err(BcfError::InvalidMagic { expected, found }) => {
+//!         eprintln!("Bad magic: expected 0x{:08X}, found 0x{:08X}", expected, found);
+//!     }
+//!     Err(e) => eprintln!("Parse error: {}", e),
+//! }
 //! ```
 //!
 //! # File Format
@@ -38,6 +100,7 @@
 //! See `docs/bcf-format.md` for complete specification.
 
 pub mod parser;
+pub mod reader;
 pub mod serializer;
 
 use std::fmt;
@@ -152,4 +215,5 @@ pub mod constants {
 
 // Re-export public API
 pub use parser::parse_bcf;
+pub use reader::{BcfHeader, BcfNodeType, BcfReader};
 pub use serializer::serialize_bcf;
