@@ -60,4 +60,4 @@
 - [x] 6.4 Verify all new tests pass (at least 20+ new tests) - 49 tests passing
 - [x] 6.5 Check test coverage: all BCF code paths exercised
 - [x] 6.6 Review documentation: clear, accurate, with examples
-- [ ] 6.7 Commit changes with message: "test: Add comprehensive BCF round-trip and validation tests"
+- [x] 6.7 Commit changes with message: "test: Add comprehensive BCF round-trip and validation tests" (commit 0570ae8)
