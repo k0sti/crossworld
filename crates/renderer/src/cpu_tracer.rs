@@ -159,18 +159,13 @@ impl CpuCubeTracer {
             normalized_pos =
                 normalized_pos.clamp(glam::Vec3::splat(EPSILON), glam::Vec3::splat(1.0 - EPSILON));
 
-            // Define empty voxel predicate (value == 0)
-            let is_empty = |v: &i32| *v == 0;
-
-            // Set maximum raycast depth (octa cube is depth 1, not 8!)
-            let max_depth = 1;
-
-            // Call cube raycast directly
-            let raycast_result = self.cube.raycast(
+            // Call cube raycast directly (new API)
+            // The new raycast treats T::default() (0 for i32) as empty
+            let raycast_result = cube::raycast(
+                &self.cube,
                 normalized_pos,
                 ray.direction.normalize(),
-                max_depth,
-                &is_empty,
+                None, // No debug state
             );
 
             // DEBUG: Track raycast success rate
@@ -213,7 +208,7 @@ impl CpuCubeTracer {
                 Some(cube_hit) => {
                     // Successful octree raycast - use detailed voxel information
                     // Transform hit position back to world space
-                    let world_hit_point = cube_hit.hit_pos * (bounds.max - bounds.min) + bounds.min;
+                    let world_hit_point = cube_hit.pos * (bounds.max - bounds.min) + bounds.min;
 
                     // Calculate distance from ray origin
                     let t = (world_hit_point - ray.origin).length();
@@ -223,7 +218,7 @@ impl CpuCubeTracer {
                         hit: true,
                         t,
                         point: world_hit_point,
-                        normal: cube_hit.normal(),
+                        normal: cube_hit.normal.as_vec3(),
                     };
 
                     // Get material color from voxel value
