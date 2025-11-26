@@ -6,7 +6,7 @@ use std::rc::Rc;
 
 /// Pure Rust CPU raytracer that renders to an image buffer
 pub struct CpuCubeTracer {
-    cube: Rc<Cube<i32>>,
+    cube: Rc<Cube<u8>>,
     bounds: CubeBounds,
     image_buffer: Option<ImageBuffer<Rgb<u8>, Vec<u8>>>,
     /// If true, disable lighting and output pure material colors
@@ -27,7 +27,7 @@ impl CpuCubeTracer {
     }
 
     #[allow(dead_code)]
-    pub fn new_with_cube(cube: Rc<Cube<i32>>) -> Self {
+    pub fn new_with_cube(cube: Rc<Cube<u8>>) -> Self {
         Self {
             cube,
             bounds: CubeBounds::default(),
@@ -48,9 +48,15 @@ impl CpuCubeTracer {
     }
 
     /// Parse cubscript code and return a Cube instance
-    fn parse_cube(cubscript: &str) -> Rc<Cube<i32>> {
+    /// Note: parse_csm returns Cube<i32>, but we need Cube<u8>, so this is a placeholder
+    fn parse_cube(cubscript: &str) -> Rc<Cube<u8>> {
         match parse_csm(cubscript) {
-            Ok(octree) => Rc::new(octree.root),
+            Ok(_octree) => {
+                // TODO: Implement Cube<i32> to Cube<u8> conversion
+                eprintln!("Warning: CSM parsing returns Cube<i32>, but renderer needs Cube<u8>");
+                eprintln!("Using default solid cube instead");
+                Rc::new(Cube::Solid(1))
+            }
             Err(e) => {
                 eprintln!("Failed to parse cubscript: {}", e);
                 eprintln!("Using default solid cube");
@@ -201,7 +207,7 @@ impl CpuCubeTracer {
                 };
 
                 // Get material color from voxel value
-                let material_color = cube::material::get_material_color(cube_hit.value);
+                let material_color = cube::material::get_material_color(cube_hit.value as i32);
 
                 // Apply lighting (or output pure color if disabled)
                 color = if self.disable_lighting {

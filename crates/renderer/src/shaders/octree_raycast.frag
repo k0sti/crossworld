@@ -2,7 +2,7 @@
 precision highp float;
 precision highp int;
 precision highp sampler2D;
-precision highp sampler3D;
+precision highp usampler2D;
 
 out vec4 FragColor;
 
@@ -13,11 +13,10 @@ uniform vec4 u_camera_rot;  // quaternion (x, y, z, w)
 uniform bool u_use_camera;
 uniform int u_max_depth;
 
-// Octree data texture
-// For now, we'll pass octree data as a 3D texture or buffer
-// The implementation will use a simple encoding scheme
-uniform sampler3D u_octree_texture;
-uniform int u_octree_size;  // Size of octree at max depth (e.g., 8 for depth 3)
+// BCF octree data (stored as 1D-like 2D texture)
+uniform usampler2D u_octree_data;
+uniform uint u_octree_data_size;  // Size of BCF data in bytes
+
 uniform sampler2D u_material_palette; // Material palette (128 entries)
 uniform bool u_disable_lighting; // If true, output pure material colors without lighting
 
@@ -141,6 +140,97 @@ vec3 getMaterialColor(int value) {
     return vec3(0.0);
 }
 
+// ============================================================================
+// BCF (Binary Cube Format) Reading Functions
+// ============================================================================
+
+// Read a single byte from BCF data at given offset (bounds checked)
+uint readU8(uint offset) {
+    if (offset >= u_octree_data_size) {
+        return 0u;
+    }
+    // 1D-like 2D texture: width = data_size, height = 1
+    // Use texelFetch for direct integer access
+    return texelFetch(u_octree_data, ivec2(int(offset), 0), 0).r;
+}
+
+// Read multi-byte pointer (little-endian)
+// ssss: size exponent (0=1 byte, 1=2 bytes, 2=4 bytes, 3=8 bytes)
+uint readPointer(uint offset, uint ssss) {
+    if (ssss == 0u) {
+        return readU8(offset);
+    } else if (ssss == 1u) {
+        return readU8(offset) | (readU8(offset + 1u) << 8);
+    } else if (ssss == 2u) {
+        return readU8(offset)
+             | (readU8(offset + 1u) << 8)
+             | (readU8(offset + 2u) << 16)
+             | (readU8(offset + 3u) << 24);
+    }
+    // 8-byte pointers not supported in WebGL
+    return 0u;
+}
+
+// Decode BCF type byte into its components
+// Type byte format: [MSB][Type ID (3 bits)][Size/Value (4 bits)]
+void decodeTypeByte(uint type_byte, out uint msb, out uint type_id, out uint size_val) {
+    msb = (type_byte >> 7) & 1u;
+    type_id = (type_byte >> 4) & 7u;
+    size_val = type_byte & 15u;
+}
+
+// Calculate octant index from position relative to center
+// Octant bits: bit 0 = x >= center.x, bit 1 = y >= center.y, bit 2 = z >= center.z
+uint getOctant(vec3 pos, vec3 center) {
+    uint octant = 0u;
+    if (pos.x >= center.x) octant |= 1u;
+    if (pos.y >= center.y) octant |= 2u;
+    if (pos.z >= center.z) octant |= 4u;
+    return octant;
+}
+
+// Parse BCF node at offset and return material value or child pointer
+// If returns non-zero value and child_offset == 0: leaf node with material value
+// If returns 0 and child_offset != 0: branch node, follow pointer
+// If both return 0: error or empty node
+uint parseBcfNode(uint offset, uint octant, out uint child_offset) {
+    child_offset = 0u;
+
+    if (offset >= u_octree_data_size) {
+        return 0u;
+    }
+
+    uint type_byte = readU8(offset);
+    uint msb, type_id, size_val;
+    decodeTypeByte(type_byte, msb, type_id, size_val);
+
+    // Inline leaf (0x00-0x7F): MSB = 0
+    if (msb == 0u) {
+        return type_byte & 0x7Fu;
+    }
+
+    // Extended leaf (0x80-0x8F): type_id = 0
+    if (type_id == 0u) {
+        return readU8(offset + 1u);
+    }
+
+    // Octa-with-leaves (0x90-0x9F): type_id = 1
+    if (type_id == 1u) {
+        return readU8(offset + 1u + octant);
+    }
+
+    // Octa-with-pointers (0xA0-0xAF): type_id = 2
+    if (type_id == 2u) {
+        uint ssss = size_val;
+        uint ptr_offset = offset + 1u + (octant * (1u << ssss));
+        child_offset = readPointer(ptr_offset, ssss);
+        return 0u; // Not a leaf, follow pointer
+    }
+
+    // Unknown type or error
+    return 0u;
+}
+
 // Calculate surface normal from entry point
 // The normal points towards the direction the ray came from
 vec3 calculateEntryNormal(vec3 pos, vec3 dir) {
@@ -173,128 +263,101 @@ vec3 calculateEntryNormal(vec3 pos, vec3 dir) {
     }
 }
 
-// Get voxel value from octree texture
-// For simplicity, use 3D texture lookup
-int getVoxelValue(vec3 pos) {
-    // Sample the 3D texture at the given position
-    vec4 texel = texture(u_octree_texture, pos);
-    // Assume value is encoded in red channel as normalized float
-    return int(texel.r * 255.0);
-}
+// ============================================================================
+// BCF Octree Traversal
+// ============================================================================
 
-// Calculate next integer boundary in direction of sign
-vec3 nextIntegerBoundary(vec3 v, vec3 sign) {
-    vec3 scaled = v * sign + vec3(1.0);
-    return floor(scaled) * sign;
-}
-
-// Calculate the next position after stepping to next octant boundary
-vec3 calculateNextPosition(vec3 pos2, vec3 dir, vec3 sign) {
-    const float EPSILON = 1e-8;
-
-    vec3 nextInteger = nextIntegerBoundary(pos2, sign);
-    vec3 diff = nextInteger - pos2;
-
-    // Avoid division by zero
-    if (abs(diff.x) < EPSILON && abs(diff.y) < EPSILON && abs(diff.z) < EPSILON) {
-        return pos2 / 2.0;
-    }
-
-    vec3 invTime = dir / diff;
-    float maxInv = max(max(invTime.x, invTime.y), invTime.z);
-
-    if (abs(maxInv) < EPSILON) {
-        return pos2 / 2.0;
-    }
-
-    vec3 step = diff * (invTime / maxInv);
-    vec3 nextPos = (pos2 + step) / 2.0;
-
-    // Clamp to valid range
-    return clamp(nextPos, vec3(0.0), vec3(1.0));
-}
-
-// Recursive octree raycast
-// Returns HitInfo with voxel intersection
-HitInfo raycastOctree(vec3 pos, vec3 dir, int currentDepth) {
+// Raycast through BCF-encoded octree
+// pos: ray position in cube-local space [-1, 1]³
+// dir: normalized ray direction
+HitInfo raycastBcfOctree(vec3 pos, vec3 dir) {
     HitInfo result;
     result.hit = false;
     result.t = 1e10;
     result.value = 0;
 
+    // BCF header: magic (4 bytes) + version (4 bytes) + ssss (4 bytes)
+    // Root node starts at offset 12
+    const uint BCF_HEADER_SIZE = 12u;
+
+    // Stack for traversal (depth, offset, bounds)
+    // Max depth 8 for typical octrees
+    const int MAX_DEPTH = 8;
+    uint stack_offset[MAX_DEPTH];
+    vec3 stack_min[MAX_DEPTH];
+    vec3 stack_max[MAX_DEPTH];
+    int stack_ptr = 0;
+
+    // Initialize with root node
+    stack_offset[0] = BCF_HEADER_SIZE;
+    stack_min[0] = vec3(-1.0);
+    stack_max[0] = vec3(1.0);
+
     // Max iterations to prevent infinite loops
     const int MAX_ITERATIONS = 256;
+    int iter = 0;
 
-    for (int iter = 0; iter < MAX_ITERATIONS; iter++) {
-        // Validate position is in [0, 1]³
-        if (any(lessThan(pos, vec3(0.0))) || any(greaterThan(pos, vec3(1.0)))) {
-            break;
+    while (stack_ptr >= 0 && iter < MAX_ITERATIONS) {
+        iter++;
+
+        // Pop from stack
+        uint node_offset = stack_offset[stack_ptr];
+        vec3 box_min = stack_min[stack_ptr];
+        vec3 box_max = stack_max[stack_ptr];
+        stack_ptr--;
+
+        // Check if ray intersects this box
+        vec3 box_center = (box_min + box_max) * 0.5;
+        vec3 box_size = (box_max - box_min) * 0.5;
+
+        // Simple box intersection test
+        vec3 inv_dir = 1.0 / dir;
+        vec3 t_min = (box_min - pos) * inv_dir;
+        vec3 t_max = (box_max - pos) * inv_dir;
+        vec3 t1 = min(t_min, t_max);
+        vec3 t2 = max(t_min, t_max);
+        float t_near = max(max(t1.x, t1.y), t1.z);
+        float t_far = min(min(t2.x, t2.y), t2.z);
+
+        if (t_near > t_far || t_far < 0.0) {
+            continue; // No intersection
         }
 
-        // At max depth, check voxel value
-        if (currentDepth == 0) {
-            int value = getVoxelValue(pos);
-            if (value != 0) {
-                // Hit non-empty voxel
-                vec3 normal = calculateEntryNormal(pos, dir);
-                result.hit = true;
-                result.point = pos;
-                result.normal = normal;
-                result.value = value;
-                return result;
-            }
-            // Empty voxel, step forward
-            // For depth 0, we're at leaf level, so step to next boundary
-            vec3 sign = sign(dir);
-            vec3 pos2 = pos * 2.0;
-            pos = calculateNextPosition(pos2, dir, sign);
-            continue;
-        }
+        // Calculate entry point and octant
+        vec3 entry = pos + dir * max(t_near, 0.0);
+        uint octant = getOctant(entry, box_center);
 
-        // Calculate which octant we're in
-        vec3 pos2 = pos * 2.0;
-        vec3 sign = sign(dir);
+        // Parse BCF node
+        uint child_offset;
+        uint value = parseBcfNode(node_offset, octant, child_offset);
 
-        // Calculate octant bit using floor and sign adjustment
-        ivec3 signInt = ivec3(
-            dir.x >= 0.0 ? 1 : -1,
-            dir.y >= 0.0 ? 1 : -1,
-            dir.z >= 0.0 ? 1 : -1
-        );
-        ivec3 sign10 = ivec3(
-            dir.x >= 0.0 ? 0 : 1,
-            dir.y >= 0.0 ? 0 : 1,
-            dir.z >= 0.0 ? 0 : 1
-        );
-
-        ivec3 bit = ivec3(floor(pos2 * vec3(sign)));
-        bit = bit * signInt + sign10;
-
-        // Check octant validity
-        if (any(lessThan(bit, ivec3(0))) || any(greaterThan(bit, ivec3(1)))) {
-            break;
-        }
-
-        // Transform to child coordinate space
-        vec3 childPos = (pos2 - vec3(bit)) / 2.0;
-
-        // Sample octree at child level
-        // This is a simplified version - actual implementation would need
-        // hierarchical octree structure
-        int value = getVoxelValue(childPos);
-
-        if (value != 0) {
-            // Hit solid voxel
-            vec3 normal = calculateEntryNormal(childPos, dir);
+        if (value != 0u && child_offset == 0u) {
+            // Hit a leaf with material value
+            vec3 normal = calculateEntryNormal((entry - box_min) / (box_max - box_min), dir);
             result.hit = true;
-            result.point = pos;
+            result.t = max(t_near, 0.0);
+            result.point = entry;
             result.normal = normal;
-            result.value = value;
+            result.value = int(value);
             return result;
-        }
+        } else if (child_offset != 0u) {
+            // Branch node - push child octant bounds onto stack
+            vec3 octant_min = box_min;
+            vec3 octant_max = box_center;
 
-        // Miss in this octant - step to next boundary
-        pos = calculateNextPosition(pos2, dir, sign);
+            if ((octant & 1u) != 0u) { octant_min.x = box_center.x; octant_max.x = box_max.x; }
+            if ((octant & 2u) != 0u) { octant_min.y = box_center.y; octant_max.y = box_max.y; }
+            if ((octant & 4u) != 0u) { octant_min.z = box_center.z; octant_max.z = box_max.z; }
+
+            // Push child onto stack
+            if (stack_ptr + 1 < MAX_DEPTH) {
+                stack_ptr++;
+                stack_offset[stack_ptr] = child_offset;
+                stack_min[stack_ptr] = octant_min;
+                stack_max[stack_ptr] = octant_max;
+            }
+        }
+        // If value == 0 and child_offset == 0, it's empty - continue to next stack item
     }
 
     return result;
@@ -332,50 +395,31 @@ void main() {
     ray.origin = cameraPos;
     ray.direction = normalize(forward + uv.x * right + uv.y * camUp);
 
-    // Cube bounds (world space)
-    vec3 boxMin = vec3(-1.0, -1.0, -1.0);
-    vec3 boxMax = vec3(1.0, 1.0, 1.0);
-
-    // Intersect with bounding box first
-    HitInfo boxHit = intersectBox(ray, boxMin, boxMax);
-
     // Background color (matches BACKGROUND_COLOR in Rust)
     vec3 color = vec3(0.4, 0.5, 0.6);
 
-    if (boxHit.hit) {
-        // Transform hit point to normalized [0,1]³ cube space
-        vec3 normalizedPos = (boxHit.point - boxMin) / (boxMax - boxMin);
+    // Raycast through BCF-encoded octree
+    // The octree is in world space [-1, 1]³
+    HitInfo octreeHit = raycastBcfOctree(ray.origin, ray.direction);
 
-        // Move slightly inside the cube to avoid boundary issues
-        const float EPSILON = 1e-6;
-        normalizedPos = normalizedPos + ray.direction * EPSILON;
-        normalizedPos = clamp(normalizedPos, vec3(0.0), vec3(1.0));
+    if (octreeHit.hit) {
+        // Get material color from voxel value
+        vec3 materialColor = getMaterialColor(octreeHit.value);
 
-        // Raycast through octree
-        HitInfo octreeHit = raycastOctree(normalizedPos, ray.direction, u_max_depth);
+        // Apply lighting (or output pure color if disabled)
+        if (u_disable_lighting) {
+            color = materialColor;
+        } else {
+            // Lighting constants (match Rust constants)
+            vec3 lightDir = normalize(vec3(0.431934, 0.863868, 0.259161));
+            float ambient = 0.3;
+            float diffuseStrength = 0.7;
 
-        if (octreeHit.hit) {
-            // Transform hit position back to world space
-            vec3 worldHitPoint = octreeHit.point * (boxMax - boxMin) + boxMin;
+            // Diffuse lighting
+            float diffuse = max(dot(octreeHit.normal, lightDir), 0.0);
 
-            // Get material color from voxel value
-            vec3 materialColor = getMaterialColor(octreeHit.value);
-
-            // Apply lighting (or output pure color if disabled)
-            if (u_disable_lighting) {
-                color = materialColor;
-            } else {
-                // Lighting constants (match Rust constants)
-                vec3 lightDir = normalize(vec3(0.431934, 0.863868, 0.259161));
-                float ambient = 0.3;
-                float diffuseStrength = 0.7;
-
-                // Diffuse lighting
-                float diffuse = max(dot(octreeHit.normal, lightDir), 0.0);
-
-                // Combine lighting (simplified Lambert model)
-                color = materialColor * (ambient + diffuse * diffuseStrength);
-            }
+            // Combine lighting (simplified Lambert model)
+            color = materialColor * (ambient + diffuse * diffuseStrength);
         }
     }
 
