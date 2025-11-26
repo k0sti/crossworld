@@ -277,9 +277,7 @@ fn test_raycast_table() {
             // Check hit expectation
             if !test.should_hit {
                 test_passed = false;
-                errors.push(format!(
-                    "Hit mismatch: expected no hit, but got a hit"
-                ));
+                errors.push(format!("Hit mismatch: expected no hit, but got a hit"));
             } else {
                 // Check all fields
                 if hit_data.value != test.expected_voxel {
@@ -319,10 +317,7 @@ fn test_raycast_table() {
         let expected_str = if test.should_hit {
             format!(
                 "Hit(pos={:?}, d={}, v={}, n={:?})",
-                test.expected_pos,
-                test.expected_depth,
-                test.expected_voxel,
-                test.expected_normal
+                test.expected_pos, test.expected_depth, test.expected_voxel, test.expected_normal
             )
         } else {
             "Miss".to_string()
