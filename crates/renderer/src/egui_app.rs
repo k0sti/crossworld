@@ -578,7 +578,9 @@ impl DualRendererApp {
                     "Resolution: {}x{}",
                     self.render_size.0, self.render_size.1
                 ));
-                ui.separator();
+            });
+
+            ui.horizontal(|ui| {
                 ui.checkbox(&mut self.use_manual_camera, "Manual Camera");
                 if self.use_manual_camera {
                     ui.label("(Drag: orbit, Scroll: zoom)");
