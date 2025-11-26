@@ -6,7 +6,6 @@ use renderer::scenes::create_octa_cube;
 fn test_raycast_at_max_boundary_negative_dir() {
     // Test to isolate the bug with rays at max boundary going inward
     let cube = create_octa_cube();
-    let is_empty = |v: &i32| *v == 0;
 
     // Ray at Y=0.999 (near max boundary) going down (negative Y)
     println!("\n=== Test: Ray at max Y boundary with negative direction ===");
@@ -16,11 +15,11 @@ fn test_raycast_at_max_boundary_negative_dir() {
     println!("Position: {:?} (octant 2, which is solid)", pos);
     println!("Direction: {:?} (negative Y)", dir);
 
-    let hit = cube.raycast(pos, dir, 1, &is_empty);
+    let hit = cube::raycast(&cube, pos, dir, None);
 
     match &hit {
         Some(hit) => {
-            println!("✓ HIT at {:?} with value {}", hit.hit_pos, hit.value);
+            println!("✓ HIT at {:?} with value {}", hit.pos, hit.value);
         }
         None => {
             println!("✗ MISS - This reveals the bug!");
@@ -38,9 +37,6 @@ fn test_raycast_octa_cube_from_boundary() {
     println!("=== Testing Raycast on Octa Cube ===");
     println!("Octa cube structure: 2x2x2 with solid octants at 0,1,2,4,5,6 and empty at 3,7");
 
-    let is_empty = |v: &i32| *v == 0;
-    let max_depth = 1; // Octa cube is depth 1
-
     // Test 1: Ray from boundary (Z=0) going up through solid octants
     println!("\n--- Test 1: From boundary into solid octants ---");
     let ray_origin = glam::Vec3::new(0.25, 0.25, 0.0); // Lower left quadrant, at boundary
@@ -52,13 +48,13 @@ fn test_raycast_octa_cube_from_boundary() {
     );
     println!("Direction: {:?}", ray_dir);
 
-    let hit = cube.raycast(ray_origin, ray_dir, max_depth, &is_empty);
+    let hit = cube::raycast(&cube, ray_origin, ray_dir, None);
 
     match &hit {
         Some(hit) => {
             println!("✓ HIT!");
-            println!("  Position: {:?}", hit.hit_pos);
-            println!("  Normal: {:?}", hit.normal());
+            println!("  Position: {:?}", hit.pos);
+            println!("  Normal: {:?}", hit.normal.as_vec3());
             println!("  Value: {}", hit.value);
         }
         None => {
@@ -76,13 +72,13 @@ fn test_raycast_octa_cube_from_boundary() {
     println!("Origin: {:?} (inside solid octant 0)", ray_origin2);
     println!("Direction: {:?}", ray_dir2);
 
-    let hit2 = cube.raycast(ray_origin2, ray_dir2, max_depth, &is_empty);
+    let hit2 = cube::raycast(&cube, ray_origin2, ray_dir2, None);
 
     match &hit2 {
         Some(hit) => {
             println!("✓ HIT!");
-            println!("  Position: {:?}", hit.hit_pos);
-            println!("  Normal: {:?}", hit.normal());
+            println!("  Position: {:?}", hit.pos);
+            println!("  Normal: {:?}", hit.normal.as_vec3());
             println!("  Value: {}", hit.value);
         }
         None => {
@@ -104,11 +100,11 @@ fn test_raycast_octa_cube_from_boundary() {
     );
     println!("Direction: {:?}", ray_dir3);
 
-    let hit3 = cube.raycast(ray_origin3, ray_dir3, max_depth, &is_empty);
+    let hit3 = cube::raycast(&cube, ray_origin3, ray_dir3, None);
 
     match &hit3 {
         Some(hit) => {
-            println!("  Hit at {:?} with value {}", hit.hit_pos, hit.value);
+            println!("  Hit at {:?} with value {}", hit.pos, hit.value);
         }
         None => {
             println!("✓ MISS - Correctly missed empty octant 3");
@@ -126,12 +122,12 @@ fn test_raycast_octa_cube_from_boundary() {
     println!("Origin: {:?} (inside solid octant 0, z < 0.5)", ray_origin4);
     println!("Direction: {:?} (toward octant 1, also solid)", ray_dir4);
 
-    let hit4 = cube.raycast(ray_origin4, ray_dir4, max_depth, &is_empty);
+    let hit4 = cube::raycast(&cube, ray_origin4, ray_dir4, None);
 
     match &hit4 {
         Some(hit) => {
             println!("✓ HIT!");
-            println!("  Position: {:?}", hit.hit_pos);
+            println!("  Position: {:?}", hit.pos);
             println!("  Value: {}", hit.value);
         }
         None => {
