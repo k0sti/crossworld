@@ -375,6 +375,8 @@ HitInfo raycastBcfOctreeAxisAligned(vec3 pos, vec3 dir) {
             if (value != 0u && child_offset == 0u) {
                 result.hit = true;
                 result.point = ray_pos;
+                // For axis-aligned rays, normal is always opposite to ray direction
+                // This matches CPU raycast_axis: normal = ray_axis.flip()
                 result.normal = entry_normal;
                 result.value = int(value);
                 return result;
@@ -630,15 +632,18 @@ void main() {
         if (u_disable_lighting) {
             color = materialColor;
         } else {
-            // Lighting constants (match Rust constants)
-            vec3 lightDir = normalize(vec3(0.431934, 0.863868, 0.259161));
+            // Lighting constants (match Rust constants exactly)
+            // LIGHT_DIR is already normalized in CPU version
+            vec3 lightDir = vec3(0.431934, 0.863868, 0.259161);
             float ambient = 0.3;
             float diffuseStrength = 0.7;
 
-            // Diffuse lighting
+            // Diffuse lighting using Lambert's cosine law
+            // Matches CPU: hit.normal.dot(LIGHT_DIR).max(0.0)
             float diffuse = max(dot(octreeHit.normal, lightDir), 0.0);
 
-            // Combine lighting (simplified Lambert model)
+            // Combine lighting (matches CPU formula)
+            // CPU: material_color * (AMBIENT + diffuse * DIFFUSE_STRENGTH)
             color = materialColor * (ambient + diffuse * diffuseStrength);
         }
     }
