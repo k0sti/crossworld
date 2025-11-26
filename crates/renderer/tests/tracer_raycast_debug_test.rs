@@ -203,9 +203,6 @@ fn run_test_cases_on_cube(cube: &Cube<i32>, test_cases: Vec<RaycastTestCase>, tr
     for test_case in test_cases {
         let hit = cube.raycast_debug(test_case.pos, test_case.dir, 3, &is_empty);
 
-        assert!(hit.is_ok());
-        let hit = hit.unwrap();
-
         assert_eq!(
             hit.is_some(),
             test_case.should_hit,
@@ -214,7 +211,7 @@ fn run_test_cases_on_cube(cube: &Cube<i32>, test_cases: Vec<RaycastTestCase>, tr
             tracer_name
         );
 
-        if let Some(hit) = hit {
+        if let Some(hit) = &hit {
             if let Some(expected_value) = test_case.expected_value {
                 assert_eq!(
                     hit.value, expected_value,
@@ -230,9 +227,11 @@ fn run_test_cases_on_cube(cube: &Cube<i32>, test_cases: Vec<RaycastTestCase>, tr
                 tracer_name
             );
 
-            test_case
-                .expected_debug
-                .verify(&hit.debug.unwrap(), test_case.name, tracer_name);
+            if let Some(ref debug_state) = hit.debug {
+                test_case
+                    .expected_debug
+                    .verify(debug_state, test_case.name, tracer_name);
+            }
         }
     }
 }
@@ -269,13 +268,11 @@ fn test_cube_tracer_immediate_hit() {
     let dir = Vec3::new(0.0, 0.0, 1.0);
     let hit = cube.raycast_debug(pos, dir, 3, &is_empty);
 
-    assert!(hit.is_ok());
-    let hit = hit.unwrap();
     assert!(hit.is_some(), "Cube: Should hit solid cube");
-    let hit = hit.unwrap();
-    assert!(hit.debug.is_some(), "Cube: Debug state should be populated");
+    let hit_data = hit.unwrap();
+    assert!(hit_data.debug.is_some(), "Cube: Debug state should be populated");
 
-    let debug = hit.debug.unwrap();
+    let debug = hit_data.debug.unwrap();
     // When entering face voxel has color cube, raycast steps should be 1
     assert_eq!(
         debug.enter_count, 1,

@@ -207,8 +207,6 @@ fn test_raycast_depth1_octree() {
 
     for (i, (origin, direction, should_hit)) in test_cases.iter().enumerate() {
         let hit = cube.raycast_debug(*origin, *direction, 1, &is_empty);
-        assert!(hit.is_ok(), "Test case {}: Raycast should succeed", i);
-        let hit = hit.unwrap();
         assert_eq!(
             hit.is_some(),
             *should_hit,
@@ -238,7 +236,7 @@ fn format_hit_info(hit: &Option<RaycastHit<u8>>) -> String {
     match hit {
         Some(h) => format!(
             "Hit(pos={:?}, d={}, v={}, n={:?})",
-            h.coord.pos, h.coord.depth, h.value, h.normal
+            h.coord.pos, h.coord.depth, h.value, h.normal_axis
         ),
         None => "Miss".to_string(),
     }
@@ -270,23 +268,19 @@ fn test_raycast_table() {
         let mut test_passed = true;
         let mut errors = Vec::new();
 
-        if hit.is_err() {
-            test_passed = false;
-            errors.push(format!("Raycast failed: {:?}", hit.err()));
-        } else {
-            let hit = hit.unwrap();
-
+        if hit.is_none() {
+            if test.should_hit {
+                test_passed = false;
+                errors.push(format!("Expected hit but got None"));
+            }
+        } else if let Some(hit_data) = &hit {
             // Check hit expectation
-            if hit.is_some() != test.should_hit {
+            if !test.should_hit {
                 test_passed = false;
                 errors.push(format!(
-                    "Hit mismatch: expected {}, got {}",
-                    test.should_hit,
-                    hit.is_some()
+                    "Hit mismatch: expected no hit, but got a hit"
                 ));
-            }
-
-            if let Some(hit_data) = &hit {
+            } else {
                 // Check all fields
                 if hit_data.value != test.expected_voxel {
                     test_passed = false;
@@ -312,41 +306,41 @@ fn test_raycast_table() {
                     ));
                 }
 
-                if hit_data.normal != test.expected_normal {
+                if hit_data.normal_axis != test.expected_normal {
                     test_passed = false;
                     errors.push(format!(
                         "Normal: expected {:?}, got {:?}",
-                        test.expected_normal, hit_data.normal
+                        test.expected_normal, hit_data.normal_axis
                     ));
                 }
             }
-
-            let expected_str = if test.should_hit {
-                format!(
-                    "Hit(pos={:?}, d={}, v={}, n={:?})",
-                    test.expected_pos,
-                    test.expected_depth,
-                    test.expected_voxel,
-                    test.expected_normal
-                )
-            } else {
-                "Miss".to_string()
-            };
-
-            let actual_str = format_hit_info(&hit);
-
-            results.push(TestResult {
-                name: test.name.clone(),
-                passed: test_passed,
-                expected: expected_str,
-                actual: actual_str,
-                error: if errors.is_empty() {
-                    None
-                } else {
-                    Some(errors.join("; "))
-                },
-            });
         }
+
+        let expected_str = if test.should_hit {
+            format!(
+                "Hit(pos={:?}, d={}, v={}, n={:?})",
+                test.expected_pos,
+                test.expected_depth,
+                test.expected_voxel,
+                test.expected_normal
+            )
+        } else {
+            "Miss".to_string()
+        };
+
+        let actual_str = format_hit_info(&hit);
+
+        results.push(TestResult {
+            name: test.name.clone(),
+            passed: test_passed,
+            expected: expected_str,
+            actual: actual_str,
+            error: if errors.is_empty() {
+                None
+            } else {
+                Some(errors.join("; "))
+            },
+        });
 
         if test_passed {
             passed += 1;
@@ -424,16 +418,13 @@ fn test_debug_top_down_entry() {
     println!("  Direction: {:?}", direction);
     println!("  Result: {:?}", hit);
 
-    assert!(hit.is_ok(), "Raycast should succeed");
-    let hit_result = hit.unwrap();
-
-    if let Some(ref h) = hit_result {
+    if let Some(ref h) = hit {
         println!("  Hit:");
         println!("    Position: {:?} (IVec3)", h.coord.pos);
         println!("    Depth: {}", h.coord.depth);
         println!("    Value: {}", h.value);
-        println!("    Normal: {:?}", h.normal);
-        println!("    Hit pos: {:?}", h.position);
+        println!("    Normal: {:?}", h.normal_axis);
+        println!("    Hit pos: {:?}", h.hit_pos);
         if let Some(ref debug) = h.debug {
             println!("  Debug:");
             println!("    Enter count: {}", debug.enter_count);
@@ -453,7 +444,7 @@ fn test_debug_top_down_entry() {
     //     // Node 0 is at IVec3(0, 0, 0) with value 1
     //     assert_eq!(h.coord.pos, IVec3::new(0, 0, 0), "Should hit Node 0");
     //     assert_eq!(h.value, 1, "Node 0 has value 1");
-    //     assert_eq!(h.normal, Axis::PosY, "Entering from +Y direction");
+    //     assert_eq!(h.normal(), Axis::PosY, "Entering from +Y direction");
     // }
 }
 
@@ -468,8 +459,7 @@ fn test_raycast_empty() {
         3,
         &is_empty,
     );
-    assert!(hit.is_ok());
-    assert!(hit.unwrap().is_none(), "Empty cube should not produce hit");
+    assert!(hit.is_none(), "Empty cube should not produce hit");
 }
 
 #[test]
@@ -479,7 +469,7 @@ fn test_raycast_invalid_direction() {
 
     // Zero direction should return error
     let hit = cube.raycast(Vec3::ZERO, Vec3::ZERO, 3, &is_empty);
-    assert!(hit.is_err(), "Zero direction should error");
+    assert!(hit.is_none(), "Zero direction should return None");
 }
 
 #[test]
@@ -515,8 +505,6 @@ fn test_raycast_deep_octree() {
     let dir = Vec3::new(0.0, 0.0, 1.0);
     let hit = cube.raycast(pos, dir, 2, &is_empty);
 
-    assert!(hit.is_ok());
-    let hit = hit.unwrap();
     assert!(hit.is_some(), "Should hit deep voxel");
     let hit = hit.unwrap();
 
@@ -525,7 +513,7 @@ fn test_raycast_deep_octree() {
     assert_eq!(hit.coord.pos, IVec3::new(0, 0, 0));
 
     // Check normal
-    assert_eq!(hit.normal, Axis::NegZ);
+    assert_eq!(hit.normal_axis, Axis::NegZ);
 }
 
 #[test]
@@ -559,17 +547,15 @@ fn test_max_depth_prevents_traversal() {
     let pos = Vec3::new(-0.75, -0.75, -1.0);
     let dir = Vec3::new(0.0, 0.0, 1.0);
     let hit_with_depth2 = cube.raycast(pos, dir, 2, &is_empty);
-    assert!(hit_with_depth2.is_ok());
     assert!(
-        hit_with_depth2.unwrap().is_some(),
+        hit_with_depth2.is_some(),
         "Should hit with sufficient depth"
     );
 
     // With max_depth=1, cannot traverse into depth 2, misses solid
     let hit_with_depth1 = cube.raycast(pos, dir, 1, &is_empty);
-    assert!(hit_with_depth1.is_ok());
     assert!(
-        hit_with_depth1.unwrap().is_none(),
+        hit_with_depth1.is_none(),
         "Should miss when depth limit prevents reaching solid"
     );
 }
@@ -585,8 +571,8 @@ fn test_ray_on_octant_boundary() {
     let hit = cube.raycast(pos, dir, 3, &is_empty);
 
     // Should still hit (boundary is inside cube)
-    assert!(hit.is_ok());
-    assert!(hit.unwrap().is_some(), "Ray on boundary should hit");
+    assert!(hit.is_some());
+    assert!(hit.is_some(), "Ray on boundary should hit");
 }
 
 #[test]
@@ -599,6 +585,6 @@ fn test_ray_at_corner() {
     let dir = Vec3::new(-1.0, -1.0, -1.0).normalize();
     let hit = cube.raycast(pos, dir, 3, &is_empty);
 
-    assert!(hit.is_ok());
-    assert!(hit.unwrap().is_some(), "Ray at corner should hit");
+    assert!(hit.is_some());
+    assert!(hit.is_some(), "Ray at corner should hit");
 }
