@@ -59,7 +59,9 @@ where
                 return false;
             }
 
-            let voxel_size = 1.0 / (1 << (max_depth - coord.depth + 1)) as f32;
+            // Clamp depth to max_depth to avoid underflow
+            let depth = coord.depth.min(max_depth);
+            let voxel_size = 1.0 / (1 << (max_depth - depth + 1)) as f32;
             let base_pos = coord.pos.as_vec3() * voxel_size;
 
             let mut should_subdivide = false;
