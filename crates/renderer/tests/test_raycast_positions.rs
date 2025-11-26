@@ -5,8 +5,6 @@ use renderer::scenes::create_octa_cube;
 #[test]
 fn test_raycast_at_various_positions() {
     let cube = create_octa_cube();
-    let is_empty = |v: &i32| *v == 0;
-    let max_depth = 1;
 
     println!("\n=== Testing Raycast at Various Positions ===");
     println!("Octa cube: solid at octants 0,1,2,4,5,6; empty at octants 3,7\n");
@@ -55,7 +53,7 @@ fn test_raycast_at_various_positions() {
 
         for (dx, dy, dz, dir_name) in &directions {
             let dir = glam::Vec3::new(*dx, *dy, *dz).normalize();
-            let result = cube.raycast(pos, dir, max_depth, &is_empty);
+            let result = cube::raycast(&cube, pos, dir, None);
 
             total_tests += 1;
 

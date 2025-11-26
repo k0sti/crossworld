@@ -30,7 +30,7 @@ struct RaycastHit {
     position: Vec3,
     normal: Vec3,
     value: i32,
-    enter_count: Option<u32>,
+    entry_count: Option<u32>,
 }
 
 /// Generic tracer interface that all tracers must implement
@@ -67,15 +67,15 @@ impl Tracer for CpuTracer {
         "CPU"
     }
 
-    fn raycast(&self, pos: Vec3, dir: Vec3, max_depth: u32) -> Option<RaycastHit> {
-        let is_empty = |v: &i32| *v == 0;
-        let hit = self.cube.raycast_debug(pos, dir, max_depth, &is_empty)?;
+    fn raycast(&self, pos: Vec3, dir: Vec3, _max_depth: u32) -> Option<RaycastHit> {
+        let mut debug = cube::RaycastDebugState::default();
+        let hit = cube::raycast(&self.cube, pos, dir, Some(&mut debug))?;
 
         Some(RaycastHit {
-            position: hit.hit_pos,
-            normal: hit.normal(),
+            position: hit.pos,
+            normal: hit.normal.as_vec3(),
             value: hit.value,
-            enter_count: hit.debug.as_ref().map(|d| d.enter_count),
+            entry_count: Some(debug.entry_count),
         })
     }
 }
@@ -108,10 +108,10 @@ impl Tracer for GlTracer {
         let hit = self.tracer.raycast_octree(pos, dir, max_depth).ok()??;
 
         Some(RaycastHit {
-            position: hit.hit_pos,
-            normal: hit.normal(),
+            position: hit.pos,
+            normal: hit.normal.as_vec3(),
             value: hit.value,
-            enter_count: hit.debug.as_ref().map(|d| d.enter_count),
+            entry_count: None, // GL tracer doesn't provide debug state
         })
     }
 
@@ -148,10 +148,10 @@ impl Tracer for GpuTracer {
         let hit = self.tracer.raycast_octree(pos, dir, max_depth).ok()??;
 
         Some(RaycastHit {
-            position: hit.hit_pos,
-            normal: hit.normal(),
+            position: hit.pos,
+            normal: hit.normal.as_vec3(),
             value: hit.value,
-            enter_count: hit.debug.as_ref().map(|d| d.enter_count),
+            entry_count: None, // GPU tracer doesn't provide debug state
         })
     }
 
@@ -241,18 +241,18 @@ fn test_tracer(tracer: &dyn Tracer, test: &TestCase) -> TestCaseResult {
                 }
             }
 
-            // Check enter count
-            if let Some(enter_count) = hit_result.enter_count {
-                if enter_count < test.expected_enter_count_min
-                    || enter_count > test.expected_enter_count_max
+            // Check entry count
+            if let Some(entry_count) = hit_result.entry_count {
+                if entry_count < test.expected_enter_count_min
+                    || entry_count > test.expected_enter_count_max
                 {
                     return TestCaseResult {
                         test_number: test.number,
                         test_name: test.name.clone(),
                         result: TestResult::Fail,
                         error: Some(format!(
-                            "Enter count {} outside range [{}, {}]",
-                            enter_count,
+                            "Entry count {} outside range [{}, {}]",
+                            entry_count,
                             test.expected_enter_count_min,
                             test.expected_enter_count_max
                         )),

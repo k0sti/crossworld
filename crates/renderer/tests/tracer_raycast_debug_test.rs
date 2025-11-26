@@ -9,52 +9,52 @@ use glam::Vec3;
 /// Expected debug state for a raycast test
 #[derive(Debug, Clone)]
 struct ExpectedDebugState {
-    /// Expected minimum enter count
-    min_enter_count: u32,
-    /// Expected maximum enter count
-    max_enter_count: u32,
-    /// Expected max depth reached
-    expected_max_depth: u32,
+    /// Expected minimum entry count
+    min_entry_count: u32,
+    /// Expected maximum entry count
+    max_entry_count: u32,
+    /// Expected minimum path length
+    expected_min_path_len: u32,
 }
 
 impl ExpectedDebugState {
-    fn exact(enter_count: u32, max_depth: u32) -> Self {
+    fn exact(entry_count: u32, min_path_len: u32) -> Self {
         Self {
-            min_enter_count: enter_count,
-            max_enter_count: enter_count,
-            expected_max_depth: max_depth,
+            min_entry_count: entry_count,
+            max_entry_count: entry_count,
+            expected_min_path_len: min_path_len,
         }
     }
 
-    fn range(min: u32, max: u32, max_depth: u32) -> Self {
+    fn range(min: u32, max: u32, min_path_len: u32) -> Self {
         Self {
-            min_enter_count: min,
-            max_enter_count: max,
-            expected_max_depth: max_depth,
+            min_entry_count: min,
+            max_entry_count: max,
+            expected_min_path_len: min_path_len,
         }
     }
 
     fn verify(&self, debug: &RaycastDebugState, test_name: &str, tracer_name: &str) {
         assert!(
-            debug.enter_count >= self.min_enter_count,
-            "{} ({}): enter_count {} is less than expected minimum {}",
+            debug.entry_count >= self.min_entry_count,
+            "{} ({}): entry_count {} is less than expected minimum {}",
             test_name,
             tracer_name,
-            debug.enter_count,
-            self.min_enter_count
+            debug.entry_count,
+            self.min_entry_count
         );
         assert!(
-            debug.enter_count <= self.max_enter_count,
-            "{} ({}): enter_count {} is greater than expected maximum {}",
+            debug.entry_count <= self.max_entry_count,
+            "{} ({}): entry_count {} is greater than expected maximum {}",
             test_name,
             tracer_name,
-            debug.enter_count,
-            self.max_enter_count
+            debug.entry_count,
+            self.max_entry_count
         );
-        assert_eq!(
-            debug.max_depth_reached, self.expected_max_depth,
-            "{} ({}): max_depth_reached {} != expected {}",
-            test_name, tracer_name, debug.max_depth_reached, self.expected_max_depth
+        assert!(
+            debug.path.len() as u32 >= self.expected_min_path_len,
+            "{} ({}): path length {} is less than expected minimum {}",
+            test_name, tracer_name, debug.path.len(), self.expected_min_path_len
         );
     }
 }
@@ -198,10 +198,9 @@ fn get_miss_test_cases() -> Vec<RaycastTestCase> {
 // ============================================================================
 
 fn run_test_cases_on_cube(cube: &Cube<i32>, test_cases: Vec<RaycastTestCase>, tracer_name: &str) {
-    let is_empty = |v: &i32| *v == 0;
-
     for test_case in test_cases {
-        let hit = cube.raycast_debug(test_case.pos, test_case.dir, 3, &is_empty);
+        let mut debug = RaycastDebugState::default();
+        let hit = cube::raycast(cube, test_case.pos, test_case.dir, Some(&mut debug));
 
         assert_eq!(
             hit.is_some(),
@@ -220,18 +219,10 @@ fn run_test_cases_on_cube(cube: &Cube<i32>, test_cases: Vec<RaycastTestCase>, tr
                 );
             }
 
-            assert!(
-                hit.debug.is_some(),
-                "{} ({}): debug state should be populated",
-                test_case.name,
-                tracer_name
-            );
-
-            if let Some(ref debug_state) = hit.debug {
-                test_case
-                    .expected_debug
-                    .verify(debug_state, test_case.name, tracer_name);
-            }
+            // Verify debug state
+            test_case
+                .expected_debug
+                .verify(&debug, test_case.name, tracer_name);
         }
     }
 }
@@ -261,32 +252,23 @@ fn test_cube_tracer_miss_cases() {
 #[test]
 fn test_cube_tracer_immediate_hit() {
     let cube = Cube::Solid(1i32);
-    let is_empty = |v: &i32| *v == 0;
 
     // Test entering face voxel that has color
     let pos = Vec3::new(0.5, 0.5, 0.0);
     let dir = Vec3::new(0.0, 0.0, 1.0);
-    let hit = cube.raycast_debug(pos, dir, 3, &is_empty);
+    let mut debug = RaycastDebugState::default();
+    let hit = cube::raycast(&cube, pos, dir, Some(&mut debug));
 
     assert!(hit.is_some(), "Cube: Should hit solid cube");
-    let hit_data = hit.unwrap();
-    assert!(
-        hit_data.debug.is_some(),
-        "Cube: Debug state should be populated"
-    );
+    let _hit_data = hit.unwrap();
 
-    let debug = hit_data.debug.unwrap();
-    // When entering face voxel has color cube, raycast steps should be 1
+    // When entering face voxel has color, raycast steps should be 1
     assert_eq!(
-        debug.enter_count, 1,
-        "Cube: Entering face voxel with color should have enter_count = 1"
+        debug.entry_count, 1,
+        "Cube: Entering face voxel with color should have entry_count = 1"
     );
     assert_eq!(
-        debug.max_depth_reached, 3,
-        "Cube: Max depth should match the max_depth parameter"
-    );
-    assert_eq!(
-        debug.traversed_nodes.len(),
+        debug.path.len(),
         1,
         "Cube: Should traverse exactly 1 node"
     );
