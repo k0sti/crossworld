@@ -6,7 +6,6 @@ pub mod core;
 pub mod io;
 pub mod material;
 pub mod mesh;
-pub mod raycast;
 pub mod render;
 pub mod traversal;
 
@@ -15,7 +14,8 @@ pub mod wasm;
 
 // Re-export main types from core
 pub use core::{
-    octant_char_to_index, octant_index_to_char, Cube, IVec3Ext, Octree, Quad, OCTANT_POSITIONS,
+    octant_char_to_index, octant_index_to_char, raycast, Cube, Hit, IVec3Ext, Octree, Quad,
+    RaycastDebugState, OCTANT_POSITIONS,
 };
 
 // Re-export axis types
@@ -32,9 +32,6 @@ pub use mesh::{
     generate_face_mesh, ColorMapper, DefaultMeshBuilder, Face, HsvColorMapper, MeshBuilder,
     PaletteColorMapper, VoxColorMapper,
 };
-
-// Re-export raycast types
-pub use raycast::{RaycastDebugState, RaycastError, RaycastHit};
 
 // Re-export IO types
 pub use io::{load_vox_to_cube, parse_csm, serialize_csm, CsmError};

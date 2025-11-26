@@ -206,7 +206,7 @@ fn test_raycast_depth1_octree() {
     ];
 
     for (i, (origin, direction, should_hit)) in test_cases.iter().enumerate() {
-        let hit = cube.raycast_debug(*origin, *direction, 1, &is_empty);
+        let hit = cube::raycast(&cube, *origin, *direction, None);
         assert_eq!(
             hit.is_some(),
             *should_hit,
@@ -232,11 +232,11 @@ struct TestResult {
     error: Option<String>,
 }
 
-fn format_hit_info(hit: &Option<RaycastHit<u8>>) -> String {
+fn format_hit_info(hit: &Option<cube::Hit<u8>>) -> String {
     match hit {
         Some(h) => format!(
             "Hit(pos={:?}, d={}, v={}, n={:?})",
-            h.coord.pos, h.coord.depth, h.value, h.normal_axis
+            h.coord.pos, h.coord.depth, h.value, h.normal
         ),
         None => "Miss".to_string(),
     }
@@ -263,7 +263,7 @@ fn test_raycast_table() {
     println!("╚══════════════════════════════════════════════════════════════════════════════╝\n");
 
     for (i, test) in tests.iter().enumerate() {
-        let hit = cube.raycast_debug(test.origin, test.direction, 1, &is_empty);
+        let hit = cube::raycast(&cube, test.origin, test.direction, None);
 
         let mut test_passed = true;
         let mut errors = Vec::new();
@@ -304,11 +304,11 @@ fn test_raycast_table() {
                     ));
                 }
 
-                if hit_data.normal_axis != test.expected_normal {
+                if hit_data.normal != test.expected_normal {
                     test_passed = false;
                     errors.push(format!(
                         "Normal: expected {:?}, got {:?}",
-                        test.expected_normal, hit_data.normal_axis
+                        test.expected_normal, hit_data.normal
                     ));
                 }
             }
@@ -406,7 +406,8 @@ fn test_debug_top_down_entry() {
     let origin = Vec3::new(-0.5, 3.0, -0.5);
     let direction = Vec3::new(0.0, -1.0, 0.0);
 
-    let hit = cube.raycast_debug(origin, direction, 1, &is_empty);
+    let mut debug = cube::RaycastDebugState::default();
+    let hit = cube::raycast(&cube, origin, direction, Some(&mut debug));
 
     println!("Test 16 Debug:");
     println!("  Origin: {:?}", origin);
@@ -418,19 +419,15 @@ fn test_debug_top_down_entry() {
         println!("    Position: {:?} (IVec3)", h.coord.pos);
         println!("    Depth: {}", h.coord.depth);
         println!("    Value: {}", h.value);
-        println!("    Normal: {:?}", h.normal_axis);
-        println!("    Hit pos: {:?}", h.hit_pos);
-        if let Some(ref debug) = h.debug {
-            println!("  Debug:");
-            println!("    Enter count: {}", debug.enter_count);
-            println!("    Max depth: {}", debug.max_depth_reached);
-            println!("    Traversed nodes: {:?}", debug.traversed_nodes);
-        }
+        println!("    Normal: {:?}", h.normal);
+        println!("    Hit pos: {:?}", h.pos);
     } else {
         println!("  Miss - no hit");
-        // Even on miss, we should have debug info attached somewhere
-        // But raycast_debug returns the debug only on hit
     }
+
+    println!("  Debug:");
+    println!("    Entry count: {}", debug.entry_count);
+    println!("    Traversed nodes: {} nodes", debug.path.len());
 
     // For now, just print the result without asserting
     // assert!(hit_result.is_some(), "Should hit Node 0 after passing through Node 2");
@@ -446,13 +443,12 @@ fn test_debug_top_down_entry() {
 #[test]
 fn test_raycast_empty() {
     let cube = Cube::Solid(0u8);
-    let is_empty = |v: &u8| *v == 0;
 
-    let hit = cube.raycast(
+    let hit = cube::raycast(
+        &cube,
         Vec3::new(0.0, 0.0, -1.0),
         Vec3::new(0.0, 0.0, 1.0),
-        3,
-        &is_empty,
+        None,
     );
     assert!(hit.is_none(), "Empty cube should not produce hit");
 }
@@ -460,10 +456,9 @@ fn test_raycast_empty() {
 #[test]
 fn test_raycast_invalid_direction() {
     let cube = Cube::Solid(1u8);
-    let is_empty = |v: &u8| *v == 0;
 
     // Zero direction should return error
-    let hit = cube.raycast(Vec3::ZERO, Vec3::ZERO, 3, &is_empty);
+    let hit = cube::raycast(&cube, Vec3::ZERO, Vec3::ZERO, None);
     assert!(hit.is_none(), "Zero direction should return None");
 }
 
@@ -493,12 +488,11 @@ fn test_raycast_deep_octree() {
         Rc::new(Cube::Solid(0u8)),
     ];
     let cube = Cube::Cubes(Box::new(root_children));
-    let is_empty = |v: &u8| *v == 0;
 
     // Cast ray into the deepest solid voxel
     let pos = Vec3::new(-0.75, -0.75, -1.0);
     let dir = Vec3::new(0.0, 0.0, 1.0);
-    let hit = cube.raycast(pos, dir, 2, &is_empty);
+    let hit = cube::raycast(&cube, pos, dir, None);
 
     assert!(hit.is_some(), "Should hit deep voxel");
     let hit = hit.unwrap();
@@ -508,7 +502,7 @@ fn test_raycast_deep_octree() {
     assert_eq!(hit.coord.pos, IVec3::new(0, 0, 0));
 
     // Check normal
-    assert_eq!(hit.normal_axis, Axis::NegZ);
+    assert_eq!(hit.normal, Axis::NegZ);
 }
 
 #[test]
@@ -536,34 +530,25 @@ fn test_max_depth_prevents_traversal() {
         Rc::new(Cube::Solid(0u8)),
     ];
     let cube = Cube::Cubes(Box::new(root_children));
-    let is_empty = |v: &u8| *v == 0;
 
-    // With max_depth=2, can traverse to depth 2 and hit solid
+    // Cast ray into the deepest solid voxel
     let pos = Vec3::new(-0.75, -0.75, -1.0);
     let dir = Vec3::new(0.0, 0.0, 1.0);
-    let hit_with_depth2 = cube.raycast(pos, dir, 2, &is_empty);
+    let hit = cube::raycast(&cube, pos, dir, None);
     assert!(
-        hit_with_depth2.is_some(),
-        "Should hit with sufficient depth"
-    );
-
-    // With max_depth=1, cannot traverse into depth 2, misses solid
-    let hit_with_depth1 = cube.raycast(pos, dir, 1, &is_empty);
-    assert!(
-        hit_with_depth1.is_none(),
-        "Should miss when depth limit prevents reaching solid"
+        hit.is_some(),
+        "Should hit deep voxel (new raycast always traverses full depth)"
     );
 }
 
 #[test]
 fn test_ray_on_octant_boundary() {
     let cube = Cube::Solid(1u8);
-    let is_empty = |v: &u8| *v == 0;
 
     // Ray starting exactly on boundary (at origin, the center)
     let pos = Vec3::new(0.0, 0.0, 0.0);
     let dir = Vec3::new(0.0, 0.0, 1.0);
-    let hit = cube.raycast(pos, dir, 3, &is_empty);
+    let hit = cube::raycast(&cube, pos, dir, None);
 
     // Should still hit (boundary is inside cube)
     assert!(hit.is_some());
@@ -573,12 +558,11 @@ fn test_ray_on_octant_boundary() {
 #[test]
 fn test_ray_at_corner() {
     let cube = Cube::Solid(1u8);
-    let is_empty = |v: &u8| *v == 0;
 
     // Ray at exact corner
     let pos = Vec3::new(1.0, 1.0, 1.0);
     let dir = Vec3::new(-1.0, -1.0, -1.0).normalize();
-    let hit = cube.raycast(pos, dir, 3, &is_empty);
+    let hit = cube::raycast(&cube, pos, dir, None);
 
     assert!(hit.is_some());
     assert!(hit.is_some(), "Ray at corner should hit");

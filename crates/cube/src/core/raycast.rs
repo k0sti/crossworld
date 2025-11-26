@@ -57,8 +57,8 @@ pub struct RaycastDebugState {
 // ============================================================================
 
 impl<T: Copy + Default + PartialEq> Cube<T> {
-    /// Raycast through octree (new implementation)
-    pub fn raycast_new(
+    /// Raycast through octree
+    pub fn raycast(
         &self,
         mut ray_origin: Vec3,
         ray_dir: Vec3,
@@ -106,7 +106,7 @@ impl<T: Copy + Default + PartialEq> Cube<T> {
                         depth: coord.depth + 1,
                     };
 
-                    let hit = child.raycast_new(
+                    let hit = child.raycast(
                         child_origin,
                         ray_dir,
                         normal,
@@ -158,8 +158,8 @@ impl<T: Copy + Default + PartialEq> Cube<T> {
         }
     }
 
-    /// Optimized raycast for axis-aligned rays (new implementation)
-    pub fn raycast_axis_new(
+    /// Optimized raycast for axis-aligned rays
+    pub fn raycast_axis(
         &self,
         mut ray_origin: Vec3,
         ray_axis: Axis,
@@ -209,7 +209,7 @@ impl<T: Copy + Default + PartialEq> Cube<T> {
                         depth: coord.depth + 1,
                     };
 
-                    let hit = child.raycast_axis_new(
+                    let hit = child.raycast_axis(
                         child_origin,
                         ray_axis,
                         child_coord,
@@ -288,7 +288,7 @@ pub fn raycast<T: Copy + Default + PartialEq>(
         };
         let axis = Axis::from_index_sign(i, dir_sign[i] as i32);
 
-        root.raycast_axis_new(
+        root.raycast_axis(
             ray_origin,
             axis,
             CubeCoord {
@@ -301,7 +301,7 @@ pub fn raycast<T: Copy + Default + PartialEq>(
         // Default entry normal (will be overwritten on first hit)
         let entry_axis = Axis::PosX;
 
-        root.raycast_new(
+        root.raycast(
             ray_origin,
             ray_dir,
             entry_axis,
