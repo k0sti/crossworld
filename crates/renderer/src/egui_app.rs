@@ -2,7 +2,8 @@
 
 use egui::{ColorImage, TextureHandle, TextureOptions};
 use glow::*;
-use renderer::{CameraConfig, CpuCubeTracer, GlCubeTracer, GpuTracer, Renderer, create_octa_cube};
+use renderer::{CameraConfig, CpuCubeTracer, GlCubeTracer, GpuTracer, Renderer};
+use renderer::scenes::TestModel;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
@@ -13,6 +14,7 @@ struct RenderRequest {
     time: f32,
     camera: Option<CameraConfig>,
     disable_lighting: bool,
+    model: TestModel,
 }
 
 // Response from CPU renderer thread
@@ -81,6 +83,7 @@ pub struct DualRendererApp {
 
     // Rendering settings
     disable_lighting: bool,
+    current_model: TestModel,
 
     // Current display frames
     cpu_latest_frame: Option<ColorImage>,
@@ -99,8 +102,9 @@ impl DualRendererApp {
     }
 
     pub unsafe fn new_with_sync(gl: &Arc<Context>, sync_mode: bool) -> Result<Self, String> {
-        // Create octa cube scene
-        let cube = create_octa_cube();
+        // Create default scene (Extended Octa Cube - Depth 2)
+        let default_model = TestModel::ExtendedOctaCube;
+        let cube = default_model.create();
 
         // Initialize GL renderer (WebGL 2.0 fragment shader)
         let mut gl_renderer = GlCubeTracer::new(cube.clone());
@@ -135,7 +139,9 @@ impl DualRendererApp {
         let response_clone = Arc::clone(&cpu_sync_response);
 
         thread::spawn(move || {
-            let mut cpu_renderer = CpuCubeTracer::new();
+            let initial_cube = default_model.create();
+            let mut cpu_renderer = CpuCubeTracer::new_with_cube(initial_cube);
+            let mut current_model = default_model;
 
             loop {
                 let request: Option<RenderRequest> = {
@@ -145,6 +151,13 @@ impl DualRendererApp {
 
                 if let Some(request) = request {
                     let start = std::time::Instant::now();
+
+                    // Recreate renderer if model changed
+                    if request.model != current_model {
+                        current_model = request.model;
+                        let new_cube = current_model.create();
+                        cpu_renderer = CpuCubeTracer::new_with_cube(new_cube);
+                    }
 
                     // Set lighting mode
                     cpu_renderer.set_disable_lighting(request.disable_lighting);
@@ -199,6 +212,7 @@ impl DualRendererApp {
             mouse_sensitivity: 0.005,
             zoom_sensitivity: 0.5,
             disable_lighting: false,
+            current_model: default_model,
             cpu_latest_frame: None,
             gl_latest_frame: None,
             gpu_latest_frame: None,
@@ -418,6 +432,7 @@ impl DualRendererApp {
             time,
             camera,
             disable_lighting: self.disable_lighting,
+            model: self.current_model,
         };
 
         *self.cpu_sync_request.lock().unwrap() = Some(request);
@@ -570,6 +585,36 @@ impl DualRendererApp {
                 }
                 ui.separator();
                 ui.checkbox(&mut self.disable_lighting, "Disable Lighting");
+                ui.separator();
+
+                // Model selector
+                ui.label("Test Model:");
+                let mut model_changed = false;
+                egui::ComboBox::from_label("")
+                    .selected_text(self.current_model.name())
+                    .show_ui(ui, |ui| {
+                        for model in TestModel::all() {
+                            if ui.selectable_value(&mut self.current_model, *model, model.name()).clicked() {
+                                model_changed = true;
+                            }
+                        }
+                    });
+
+                // Reload scene if model changed
+                if model_changed {
+                    let new_cube = self.current_model.create();
+                    self.gl_renderer = GlCubeTracer::new(new_cube.clone());
+                    unsafe {
+                        if let Err(e) = self.gl_renderer.init_gl(gl) {
+                            eprintln!("Failed to reinitialize GL renderer: {}", e);
+                        }
+                    }
+                    self.gpu_renderer = GpuTracer::new(new_cube.clone());
+                    unsafe {
+                        let _ = self.gpu_renderer.init_gl(gl);
+                    }
+                    // CPU renderer will be updated on next frame via sync thread
+                }
             });
         });
 
