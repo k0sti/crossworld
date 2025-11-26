@@ -12,6 +12,7 @@ struct RenderRequest {
     height: u32,
     time: f32,
     camera: Option<CameraConfig>,
+    disable_lighting: bool,
 }
 
 // Response from CPU renderer thread
@@ -144,6 +145,9 @@ impl DualRendererApp {
 
                 if let Some(request) = request {
                     let start = std::time::Instant::now();
+
+                    // Set lighting mode
+                    cpu_renderer.set_disable_lighting(request.disable_lighting);
 
                     if let Some(camera) = request.camera {
                         cpu_renderer.render_with_camera(request.width, request.height, &camera);
@@ -413,6 +417,7 @@ impl DualRendererApp {
             height,
             time,
             camera,
+            disable_lighting: self.disable_lighting,
         };
 
         *self.cpu_sync_request.lock().unwrap() = Some(request);
