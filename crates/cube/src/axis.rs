@@ -1,3 +1,4 @@
+use glam::IVec3;
 use glam::Vec3;
 
 /// Axis-aligned normal direction
@@ -68,6 +69,113 @@ impl Axis {
             Axis::PosY | Axis::NegY => 'y',
             Axis::PosZ | Axis::NegZ => 'z',
         }
+    }
+
+    /// Component index: 0=X, 1=Y, 2=Z
+    #[inline]
+    pub fn index(self) -> usize {
+        (self as usize) >> 1
+    }
+
+    /// Sign: 1 for Pos*, -1 for Neg*
+    #[inline]
+    pub fn sign(self) -> i32 {
+        1 - ((self as i32) & 1) * 2
+    }
+
+    #[inline]
+    pub fn sign_f32(self) -> f32 {
+        self.sign() as f32
+    }
+
+    /// Construct from component index and sign
+    #[inline]
+    pub fn from_index_sign(index: usize, sign: i32) -> Self {
+        const TABLE: [Axis; 6] = [
+            Axis::NegX,
+            Axis::PosX,
+            Axis::NegY,
+            Axis::PosY,
+            Axis::NegZ,
+            Axis::PosZ,
+        ];
+        TABLE[index * 2 + ((sign + 1) >> 1) as usize]
+    }
+
+    /// Flip direction: PosX <-> NegX, etc.
+    #[inline]
+    pub fn flip(self) -> Self {
+        const TABLE: [Axis; 6] = [
+            Axis::NegX,
+            Axis::PosX,
+            Axis::NegY,
+            Axis::PosY,
+            Axis::NegZ,
+            Axis::PosZ,
+        ];
+        TABLE[self as usize]
+    }
+
+    /// Unit vector
+    #[inline]
+    pub fn to_vec3(self) -> Vec3 {
+        const TABLE: [Vec3; 6] = [
+            Vec3::X,
+            Vec3::NEG_X,
+            Vec3::Y,
+            Vec3::NEG_Y,
+            Vec3::Z,
+            Vec3::NEG_Z,
+        ];
+        TABLE[self as usize]
+    }
+
+    /// Unit vector (integer)
+    #[inline]
+    pub fn to_ivec3(self) -> IVec3 {
+        const TABLE: [IVec3; 6] = [
+            IVec3::X,
+            IVec3::NEG_X,
+            IVec3::Y,
+            IVec3::NEG_Y,
+            IVec3::Z,
+            IVec3::NEG_Z,
+        ];
+        TABLE[self as usize]
+    }
+
+    /// Get this axis component from vector
+    #[inline]
+    pub fn of(self, v: Vec3) -> f32 {
+        v[self.index()]
+    }
+
+    /// Get this axis component from integer vector
+    #[inline]
+    pub fn of_i(self, v: IVec3) -> i32 {
+        v[self.index()]
+    }
+
+    /// Return vector with this component set to value
+    #[inline]
+    pub fn set(self, mut v: Vec3, val: f32) -> Vec3 {
+        v[self.index()] = val;
+        v
+    }
+
+    /// Return integer vector with this component set to value
+    #[inline]
+    pub fn set_i(self, mut v: IVec3, val: i32) -> IVec3 {
+        v[self.index()] = val;
+        v
+    }
+
+    /// Return integer vector with this component incremented by sign
+    #[inline]
+    pub fn step(self, mut v: IVec3) -> IVec3 {
+        let i = self.index();
+        v[i] += self.sign();
+        v
     }
 }
 

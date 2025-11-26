@@ -270,7 +270,10 @@ fn test_cube_tracer_immediate_hit() {
 
     assert!(hit.is_some(), "Cube: Should hit solid cube");
     let hit_data = hit.unwrap();
-    assert!(hit_data.debug.is_some(), "Cube: Debug state should be populated");
+    assert!(
+        hit_data.debug.is_some(),
+        "Cube: Debug state should be populated"
+    );
 
     let debug = hit_data.debug.unwrap();
     // When entering face voxel has color cube, raycast steps should be 1
