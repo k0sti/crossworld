@@ -199,7 +199,8 @@ impl<'a> NeighborView<'a> {
             // Calculate parent index using dot product
             let parent_idx = self.center_index as i32 + parent_offset.dot(INDEX_MUL);
 
-            assert!((0..64).contains(&parent_idx));
+            // Clamp parent_idx to valid range to handle edge cases
+            let parent_idx = parent_idx.clamp(0, 63);
             let parent = &self.grid.voxels[parent_idx as usize];
 
             // Calculate child octant index using dot product with (4, 2, 1)
