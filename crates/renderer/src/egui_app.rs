@@ -83,7 +83,9 @@ pub struct DualRendererApp {
 
     // Rendering settings
     disable_lighting: bool,
+    show_gl_errors: bool,
     current_model: TestModel,
+    single_voxel_material: u8, // Material value for SingleRedVoxel model (0-255)
 
     // Current display frames
     cpu_latest_frame: Option<ColorImage>,
@@ -212,7 +214,9 @@ impl DualRendererApp {
             mouse_sensitivity: 0.005,
             zoom_sensitivity: 0.5,
             disable_lighting: false,
+            show_gl_errors: false,
             current_model: default_model,
+            single_voxel_material: 224, // Default: red (R2G3B2 encoded)
             cpu_latest_frame: None,
             gl_latest_frame: None,
             gpu_latest_frame: None,
@@ -315,8 +319,9 @@ impl DualRendererApp {
 
             let start = std::time::Instant::now();
 
-            // Update lighting setting
+            // Update rendering settings
             self.gl_renderer.set_disable_lighting(self.disable_lighting);
+            self.gl_renderer.set_show_errors(self.show_gl_errors);
 
             if self.use_manual_camera {
                 self.gl_renderer.render_to_gl_with_camera(
@@ -580,13 +585,15 @@ impl DualRendererApp {
                 ));
             });
 
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 ui.checkbox(&mut self.use_manual_camera, "Manual Camera");
                 if self.use_manual_camera {
                     ui.label("(Drag: orbit, Scroll: zoom)");
                 }
                 ui.separator();
                 ui.checkbox(&mut self.disable_lighting, "Disable Lighting");
+                ui.separator();
+                ui.checkbox(&mut self.show_gl_errors, "Show GL Errors");
                 ui.separator();
 
                 // Model selector
@@ -616,6 +623,65 @@ impl DualRendererApp {
                         let _ = self.gpu_renderer.init_gl(gl);
                     }
                     // CPU renderer will be updated on next frame via sync thread
+                }
+
+                // Material selector for Single Red Voxel (depth 0) model
+                if self.current_model == TestModel::SingleRedVoxel {
+                    ui.separator();
+                    ui.label("Material:");
+                    let mut material_changed = false;
+
+                    // Preset material buttons
+                    egui::ComboBox::from_label("Preset")
+                        .selected_text(format!("{}", self.single_voxel_material))
+                        .show_ui(ui, |ui| {
+                            let presets = [
+                                (0, "Empty"),
+                                (1, "Error: Hot Pink"),
+                                (2, "Error: Red-Orange"),
+                                (3, "Error: Orange"),
+                                (4, "Error: Sky Blue"),
+                                (5, "Error: Purple"),
+                                (6, "Error: Spring Green"),
+                                (7, "Error: Yellow"),
+                                (10, "Palette: Index 10"),
+                                (50, "Palette: Index 50"),
+                                (100, "Palette: Index 100"),
+                                (224, "R2G3B2: Red"),
+                                (252, "R2G3B2: Yellow"),
+                            ];
+
+                            for (value, name) in presets {
+                                if ui.selectable_value(&mut self.single_voxel_material, value, name).clicked() {
+                                    material_changed = true;
+                                }
+                            }
+                        });
+
+                    // Numeric slider for fine control
+                    let mut mat_val = self.single_voxel_material as i32;
+                    if ui.add(egui::Slider::new(&mut mat_val, 0..=255).text("Value")).changed() {
+                        self.single_voxel_material = mat_val as u8;
+                        material_changed = true;
+                    }
+
+                    // Reload if material changed
+                    if material_changed {
+                        use cube::Cube;
+                        use std::rc::Rc;
+                        let new_cube = Rc::new(Cube::Solid(self.single_voxel_material));
+                        self.gl_renderer = GlCubeTracer::new(new_cube.clone());
+                        unsafe {
+                            if let Err(e) = self.gl_renderer.init_gl(gl) {
+                                eprintln!("Failed to reinitialize GL renderer: {}", e);
+                            }
+                        }
+                        self.gpu_renderer = GpuTracer::new(new_cube.clone());
+                        unsafe {
+                            let _ = self.gpu_renderer.init_gl(gl);
+                        }
+                        // CPU renderer will be updated on next frame via sync thread
+                    }
                 }
             });
         });

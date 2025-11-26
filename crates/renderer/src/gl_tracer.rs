@@ -24,6 +24,8 @@ pub struct GlCubeTracer {
     gl_program: Option<GlTracerGl>,
     /// If true, disable lighting and output pure material colors
     disable_lighting: bool,
+    /// If true, show error colors for debugging
+    show_errors: bool,
 }
 
 /// GPU-specific OpenGL resources
@@ -45,6 +47,7 @@ pub struct GlTracerGl {
     material_palette_location: Option<UniformLocation>,
     material_palette_texture: Option<Texture>,
     disable_lighting_location: Option<UniformLocation>,
+    show_errors_location: Option<UniformLocation>,
 }
 
 /// Raycast hit result for cube intersection
@@ -101,6 +104,7 @@ impl GlCubeTracer {
             bounds: CubeBounds::default(),
             gl_program: None,
             disable_lighting: false,
+            show_errors: false,
         }
     }
 
@@ -125,6 +129,21 @@ impl GlCubeTracer {
     /// Useful for debugging material system and color verification tests.
     pub fn set_disable_lighting(&mut self, disable: bool) {
         self.disable_lighting = disable;
+    }
+
+    /// Set whether to show error colors for debugging
+    ///
+    /// When enabled, displays different colors for different error types:
+    /// - Bright red: Bounds exceeded
+    /// - Dark red: Invalid pointer
+    /// - Orange: Invalid type ID
+    /// - Yellow: Truncated data
+    /// - Blue: Stack overflow
+    /// - Cyan: Iteration timeout
+    /// - Magenta: Invalid octant
+    /// - Purple: Pointer cycle
+    pub fn set_show_errors(&mut self, show_errors: bool) {
+        self.show_errors = show_errors;
     }
 
     /// Get the current lighting disable state
@@ -182,6 +201,7 @@ impl GlCubeTracer {
                     height,
                     camera,
                     self.disable_lighting,
+                    self.show_errors,
                 );
             }
         }
@@ -265,6 +285,7 @@ impl GlTracerGl {
             let octree_size_location = gl.get_uniform_location(program, "u_octree_size");
             let material_palette_location = gl.get_uniform_location(program, "u_material_palette");
             let disable_lighting_location = gl.get_uniform_location(program, "u_disable_lighting");
+            let show_errors_location = gl.get_uniform_location(program, "u_show_errors");
 
             // Debug: Print uniform locations
             println!("[GL Tracer] Uniform locations:");
@@ -295,6 +316,7 @@ impl GlTracerGl {
                 material_palette_location,
                 material_palette_texture,
                 disable_lighting_location,
+                show_errors_location,
             })
         }
     }
@@ -422,6 +444,7 @@ impl GlTracerGl {
         height: i32,
         camera: &CameraConfig,
         disable_lighting: bool,
+        show_errors: bool,
     ) {
         unsafe {
             // Set viewport
@@ -482,6 +505,9 @@ impl GlTracerGl {
             }
             if let Some(loc) = &self.disable_lighting_location {
                 gl.uniform_1_i32(Some(loc), if disable_lighting { 1 } else { 0 });
+            }
+            if let Some(loc) = &self.show_errors_location {
+                gl.uniform_1_i32(Some(loc), if show_errors { 1 } else { 0 });
             }
 
             // Bind material palette texture to unit 1
