@@ -6,7 +6,7 @@
 
 ---
 
-## MODIFIED Requirements
+## ADDED Requirements
 
 ### Requirement: Voxel Value in RaycastHit
 The cube raycast SHALL include the voxel value in the hit result to enable material systems and avoid tree traversal.
