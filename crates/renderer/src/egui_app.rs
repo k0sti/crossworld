@@ -102,8 +102,8 @@ impl DualRendererApp {
     }
 
     pub unsafe fn new_with_sync(gl: &Arc<Context>, sync_mode: bool) -> Result<Self, String> {
-        // Create default scene (Extended Octa Cube - Depth 2)
-        let default_model = TestModel::ExtendedOctaCube;
+        // Create default scene (Octa Cube - Depth 1 for debugging)
+        let default_model = TestModel::OctaCube;
         let cube = default_model.create();
 
         // Initialize GL renderer (WebGL 2.0 fragment shader)
