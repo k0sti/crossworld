@@ -19,6 +19,49 @@ uniform uint u_octree_data_size;  // Size of BCF data in bytes
 
 uniform sampler2D u_material_palette; // Material palette (128 entries)
 uniform bool u_disable_lighting; // If true, output pure material colors without lighting
+uniform bool u_show_errors; // If true, show error colors; if false, background color
+
+// ============================================================================
+// Error Material Values (1-7 are reserved for error conditions)
+// ============================================================================
+// Material value 0 = empty space (no hit)
+// Material values 1-7 = error conditions with animated checkered visualization
+// Material values 8+ = normal voxel materials
+
+// Get base color for error material values (1-7)
+vec3 getErrorMaterialColor(int material_value) {
+    if (material_value == 1) return vec3(1.0, 0.0, 0.3);      // Hot pink - Generic error
+    if (material_value == 2) return vec3(1.0, 0.2, 0.0);      // Red-orange - Bounds/pointer errors
+    if (material_value == 3) return vec3(1.0, 0.6, 0.0);      // Orange - Type validation errors
+    if (material_value == 4) return vec3(0.0, 0.8, 1.0);      // Sky blue - Stack/iteration errors
+    if (material_value == 5) return vec3(0.6, 0.0, 1.0);      // Purple - Octant errors
+    if (material_value == 6) return vec3(0.0, 1.0, 0.5);      // Spring green - Data truncation
+    if (material_value == 7) return vec3(1.0, 1.0, 0.0);      // Yellow - Unknown/other errors
+    return vec3(1.0, 0.0, 1.0); // Bright magenta fallback
+}
+
+// Apply animated checkered pattern to error materials
+vec3 applyErrorAnimation(vec3 base_color, vec2 pixel_coord, float time) {
+    // Create checkered pattern (8x8 pixel grid)
+    ivec2 grid_pos = ivec2(pixel_coord) / 8;
+
+    // Animate: oscillate between light and dark with period of 2 seconds
+    float anim = sin(time * 3.14159) * 0.5 + 0.5; // 0.0 to 1.0
+
+    // Determine if this grid cell should be light or dark
+    bool is_light_cell = ((grid_pos.x + grid_pos.y) % 2) == 0;
+
+    // Animate which cells are light: flip pattern every half cycle
+    bool flip_pattern = fract(time * 0.5) > 0.5;
+    if (flip_pattern) {
+        is_light_cell = !is_light_cell;
+    }
+
+    // Apply brightness: light cells get brightened, dark cells get darkened
+    float brightness = is_light_cell ? mix(0.7, 1.0, anim) : mix(0.3, 0.7, anim);
+
+    return base_color * brightness;
+}
 
 // Ray structure
 struct Ray {
@@ -32,7 +75,7 @@ struct HitInfo {
     float t;
     vec3 point;
     vec3 normal;
-    int value;
+    int value;  // Material value (1-7 = error conditions, 8+ = normal materials)
 };
 
 // Rotate vector by quaternion
@@ -119,13 +162,19 @@ vec3 decodeR2G3B2(int value) {
     return vec3(r, g, b);
 }
 
-// Get material color from value
-vec3 getMaterialColor(int value) {
+// Get material color from value (time-dependent for error materials)
+vec3 getMaterialColor(int value, vec2 pixel_coord, float time) {
     if (value < 0) {
         return vec3(0.0);
     }
 
-    // Values 0-127: Use palette texture
+    // Values 1-7: Error materials with animated checkered pattern
+    if (value >= 1 && value <= 7) {
+        vec3 base_color = getErrorMaterialColor(value);
+        return applyErrorAnimation(base_color, pixel_coord, time);
+    }
+
+    // Values 0, 8-127: Use palette texture
     if (value < 128) {
         // Sample center of texel
         float u = (float(value) + 0.5) / 128.0;
@@ -145,8 +194,10 @@ vec3 getMaterialColor(int value) {
 // ============================================================================
 
 // Read a single byte from BCF data at given offset (bounds checked)
-uint readU8(uint offset) {
+// Returns material error value (2) if out of bounds, otherwise 0
+uint readU8(uint offset, inout uint error_material) {
     if (offset >= u_octree_data_size) {
+        error_material = 2u; // Material 2 = bounds/pointer errors
         return 0u;
     }
     // 1D-like 2D texture: width = data_size, height = 1
@@ -156,19 +207,35 @@ uint readU8(uint offset) {
 
 // Read multi-byte pointer (little-endian)
 // ssss: size exponent (0=1 byte, 1=2 bytes, 2=4 bytes, 3=8 bytes)
-uint readPointer(uint offset, uint ssss) {
+uint readPointer(uint offset, uint ssss, inout uint error_material) {
+    uint ptr = 0u;
     if (ssss == 0u) {
-        return readU8(offset);
+        ptr = readU8(offset, error_material);
     } else if (ssss == 1u) {
-        return readU8(offset) | (readU8(offset + 1u) << 8);
+        ptr = readU8(offset, error_material) | (readU8(offset + 1u, error_material) << 8);
+        if (error_material == 2u) {
+            error_material = 6u; // Material 6 = data truncation
+        }
     } else if (ssss == 2u) {
-        return readU8(offset)
-             | (readU8(offset + 1u) << 8)
-             | (readU8(offset + 2u) << 16)
-             | (readU8(offset + 3u) << 24);
+        ptr = readU8(offset, error_material)
+             | (readU8(offset + 1u, error_material) << 8)
+             | (readU8(offset + 2u, error_material) << 16)
+             | (readU8(offset + 3u, error_material) << 24);
+        if (error_material == 2u) {
+            error_material = 6u; // Material 6 = data truncation
+        }
+    } else {
+        // 8-byte pointers not supported in WebGL
+        return 0u;
     }
-    // 8-byte pointers not supported in WebGL
-    return 0u;
+
+    // Validate pointer points within bounds
+    if (error_material == 0u && ptr >= u_octree_data_size) {
+        error_material = 2u; // Material 2 = invalid pointer
+        return 0u;
+    }
+
+    return ptr;
 }
 
 // Decode BCF type byte into its components
@@ -193,14 +260,15 @@ uint getOctant(vec3 pos, vec3 center) {
 // If returns non-zero value and child_offset == 0: leaf node with material value
 // If returns 0 and child_offset != 0: branch node, follow pointer
 // If both return 0: error or empty node
-uint parseBcfNode(uint offset, uint octant, out uint child_offset) {
+// error_material: 0 = no error, 1-7 = error material value
+uint parseBcfNode(uint offset, uint octant, out uint child_offset, inout uint error_material) {
     child_offset = 0u;
 
-    if (offset >= u_octree_data_size) {
-        return 0u;
+    uint type_byte = readU8(offset, error_material);
+    if (error_material != 0u) {
+        return error_material; // Return error material value
     }
 
-    uint type_byte = readU8(offset);
     uint msb, type_id, size_val;
     decodeTypeByte(type_byte, msb, type_id, size_val);
 
@@ -211,20 +279,41 @@ uint parseBcfNode(uint offset, uint octant, out uint child_offset) {
 
     // Extended leaf (0x80-0x8F): type_id = 0
     if (type_id == 0u) {
-        return readU8(offset + 1u);
+        uint value = readU8(offset + 1u, error_material);
+        if (error_material != 0u) return error_material;
+        return value;
     }
 
     // Octa-with-leaves (0x90-0x9F): type_id = 1
     if (type_id == 1u) {
-        return readU8(offset + 1u + octant);
+        // Validate octant
+        if (octant > 7u) {
+            error_material = 5u; // Material 5 = octant errors
+            return error_material;
+        }
+        uint value = readU8(offset + 1u + octant, error_material);
+        if (error_material != 0u) return error_material;
+        return value;
     }
 
     // Octa-with-pointers (0xA0-0xAF): type_id = 2
     if (type_id == 2u) {
+        // Validate octant
+        if (octant > 7u) {
+            error_material = 5u; // Material 5 = octant errors
+            return error_material;
+        }
         uint ssss = size_val;
         uint ptr_offset = offset + 1u + (octant * (1u << ssss));
-        child_offset = readPointer(ptr_offset, ssss);
+        child_offset = readPointer(ptr_offset, ssss, error_material);
+        if (error_material != 0u) return error_material;
         return 0u; // Not a leaf, follow pointer
+    }
+
+    // Invalid type ID (types 3-7 undefined)
+    if (type_id >= 3u && type_id <= 7u) {
+        error_material = 3u; // Material 3 = type validation errors
+        return error_material;
     }
 
     // Unknown type or error
@@ -370,7 +459,17 @@ HitInfo raycastBcfOctreeAxisAligned(vec3 pos, vec3 dir) {
 
             // Parse node
             uint child_offset;
-            uint value = parseBcfNode(node_offset, octant_idx, child_offset);
+            uint error_material = 0u;
+            uint value = parseBcfNode(node_offset, octant_idx, child_offset, error_material);
+
+            // Check for error (materials 1-7)
+            if (error_material != 0u) {
+                result.hit = true;
+                result.point = ray_pos;
+                result.normal = entry_normal;
+                result.value = int(error_material);
+                return result;
+            }
 
             if (value != 0u && child_offset == 0u) {
                 result.hit = true;
@@ -388,13 +487,18 @@ HitInfo raycastBcfOctreeAxisAligned(vec3 pos, vec3 dir) {
                 vec3 child_min = box_center + offset_vec * box_size * 0.25;
                 vec3 child_max = child_min + box_size * 0.5;
 
-                if (stack_ptr + 1 < MAX_STACK) {
-                    stack_ptr++;
-                    stack_offset[stack_ptr] = child_offset;
-                    stack_min[stack_ptr] = child_min;
-                    stack_max[stack_ptr] = child_max;
-                    stack_ray_pos[stack_ptr] = ray_pos;
+                if (stack_ptr + 1 >= MAX_STACK) {
+                    result.hit = true;
+                    result.point = ray_pos;
+                    result.normal = entry_normal;
+                    result.value = 4; // Material 4 = stack/iteration errors
+                    return result;
                 }
+                stack_ptr++;
+                stack_offset[stack_ptr] = child_offset;
+                stack_min[stack_ptr] = child_min;
+                stack_max[stack_ptr] = child_max;
+                stack_ray_pos[stack_ptr] = ray_pos;
                 break;
             }
 
@@ -410,6 +514,12 @@ HitInfo raycastBcfOctreeAxisAligned(vec3 pos, vec3 dir) {
             float boundary = float(octant[axis_idx]) - float(axis_sign + 1) * 0.5;
             ray_pos[axis_idx] = box_center[axis_idx] + boundary * box_size[axis_idx] * 0.5;
         }
+    }
+
+    // Iteration timeout - treat as error hit
+    if (iter >= MAX_ITERATIONS) {
+        result.hit = true;
+        result.value = 4; // Material 4 = stack/iteration errors
     }
 
     return result;
@@ -519,7 +629,17 @@ HitInfo raycastBcfOctree(vec3 pos, vec3 dir) {
 
             // Parse BCF node
             uint child_offset;
-            uint value = parseBcfNode(node_offset, octant_idx, child_offset);
+            uint error_material = 0u;
+            uint value = parseBcfNode(node_offset, octant_idx, child_offset, error_material);
+
+            // Check for error (materials 1-7)
+            if (error_material != 0u) {
+                result.hit = true;
+                result.point = ray_pos;
+                result.normal = current_normal;
+                result.value = int(error_material);
+                return result;
+            }
 
             if (value != 0u && child_offset == 0u) {
                 // Hit solid voxel - return immediately
@@ -537,15 +657,22 @@ HitInfo raycastBcfOctree(vec3 pos, vec3 dir) {
                 vec3 child_min = box_center + offset_vec * box_size * 0.25;
                 vec3 child_max = child_min + box_size * 0.5;
 
-                // Push child onto stack
-                if (stack_ptr + 1 < MAX_STACK) {
-                    stack_ptr++;
-                    stack_offset[stack_ptr] = child_offset;
-                    stack_min[stack_ptr] = child_min;
-                    stack_max[stack_ptr] = child_max;
-                    stack_ray_pos[stack_ptr] = ray_pos;
-                    stack_normal[stack_ptr] = current_normal; // Propagate normal
+                // Check stack overflow
+                if (stack_ptr + 1 >= MAX_STACK) {
+                    result.hit = true;
+                    result.point = ray_pos;
+                    result.normal = current_normal;
+                    result.value = 4; // Material 4 = stack/iteration errors
+                    return result;
                 }
+
+                // Push child onto stack
+                stack_ptr++;
+                stack_offset[stack_ptr] = child_offset;
+                stack_min[stack_ptr] = child_min;
+                stack_max[stack_ptr] = child_max;
+                stack_ray_pos[stack_ptr] = ray_pos;
+                stack_normal[stack_ptr] = current_normal; // Propagate normal
                 break; // Process child before continuing
             }
 
@@ -580,6 +707,12 @@ HitInfo raycastBcfOctree(vec3 pos, vec3 dir) {
                 break; // Exited this node
             }
         }
+    }
+
+    // Iteration timeout - treat as error hit
+    if (iter >= MAX_ITERATIONS) {
+        result.hit = true;
+        result.value = 4; // Material 4 = stack/iteration errors
     }
 
     return result;
@@ -625,11 +758,13 @@ void main() {
     HitInfo octreeHit = raycastBcfOctree(ray.origin, ray.direction);
 
     if (octreeHit.hit) {
-        // Get material color from voxel value
-        vec3 materialColor = getMaterialColor(octreeHit.value);
+        // Get material color from voxel value (materials 1-7 are animated error materials)
+        vec3 materialColor = getMaterialColor(octreeHit.value, gl_FragCoord.xy, u_time);
 
         // Apply lighting (or output pure color if disabled)
-        if (u_disable_lighting) {
+        // Skip lighting for error materials (1-7) to show them clearly
+        bool is_error_material = (octreeHit.value >= 1 && octreeHit.value <= 7);
+        if (u_disable_lighting || is_error_material) {
             color = materialColor;
         } else {
             // Lighting constants (match Rust constants exactly)
