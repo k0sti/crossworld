@@ -290,6 +290,129 @@ int minTimeAxis(vec3 t) {
     return 2;
 }
 
+// Simplified axis-aligned raycast (matches CPU raycast_axis)
+// Only traverses along one axis, avoiding floating-point precision issues
+HitInfo raycastBcfOctreeAxisAligned(vec3 pos, vec3 dir) {
+    HitInfo result;
+    result.hit = false;
+    result.t = 1e10;
+    result.value = 0;
+
+    const uint BCF_HEADER_SIZE = 12u;
+
+    // Find the dominant axis (non-zero component)
+    vec3 abs_dir = abs(dir);
+    int axis_idx;
+    if (abs_dir.x >= abs_dir.y && abs_dir.x >= abs_dir.z) {
+        axis_idx = 0;
+    } else if (abs_dir.y >= abs_dir.z) {
+        axis_idx = 1;
+    } else {
+        axis_idx = 2;
+    }
+
+    vec3 dir_sign = sign3(dir);
+    int axis_sign = int(dir_sign[axis_idx]);
+
+    // Find entry point if outside [-1,1]³
+    vec3 ray_origin = pos;
+    vec3 entry_normal = vec3(0.0);
+    entry_normal[axis_idx] = -float(axis_sign);
+
+    if (max(abs(pos.x), max(abs(pos.y), abs(pos.z))) > 1.0) {
+        vec3 t_entry = (-dir_sign - pos) / dir;
+        vec3 t_exit = (dir_sign - pos) / dir;
+        float t_enter = max(max(t_entry.x, t_entry.y), t_entry.z);
+        float t_leave = min(min(t_exit.x, t_exit.y), t_exit.z);
+
+        if (t_enter > t_leave || t_leave < 0.0) {
+            return result;
+        }
+        ray_origin = pos + dir * max(t_enter, 0.0);
+    }
+
+    // Stack for traversal
+    const int MAX_STACK = 16;
+    uint stack_offset[MAX_STACK];
+    vec3 stack_min[MAX_STACK];
+    vec3 stack_max[MAX_STACK];
+    vec3 stack_ray_pos[MAX_STACK];
+    int stack_ptr = 0;
+
+    // Push root
+    stack_offset[0] = BCF_HEADER_SIZE;
+    stack_min[0] = vec3(-1.0);
+    stack_max[0] = vec3(1.0);
+    stack_ray_pos[0] = ray_origin;
+
+    const int MAX_ITERATIONS = 512;
+    int iter = 0;
+
+    while (stack_ptr >= 0 && iter < MAX_ITERATIONS) {
+        iter++;
+
+        uint node_offset = stack_offset[stack_ptr];
+        vec3 box_min = stack_min[stack_ptr];
+        vec3 box_max = stack_max[stack_ptr];
+        vec3 ray_pos = stack_ray_pos[stack_ptr];
+        stack_ptr--;
+
+        // Axis-aligned traversal: only step along one axis
+        const int MAX_OCTANT_STEPS = 8;
+        for (int octant_step = 0; octant_step < MAX_OCTANT_STEPS; octant_step++) {
+            vec3 box_size = box_max - box_min;
+            vec3 box_center = (box_min + box_max) * 0.5;
+            vec3 local_pos = (ray_pos - box_center) / (box_size * 0.5);
+
+            // Compute octant
+            ivec3 octant = computeOctant(local_pos, dir_sign);
+            uint octant_idx = octantToIndex(octant);
+
+            // Parse node
+            uint child_offset;
+            uint value = parseBcfNode(node_offset, octant_idx, child_offset);
+
+            if (value != 0u && child_offset == 0u) {
+                result.hit = true;
+                result.point = ray_pos;
+                result.normal = entry_normal;
+                result.value = int(value);
+                return result;
+            }
+
+            if (child_offset != 0u) {
+                // Recurse into child
+                vec3 offset_vec = vec3(octant) * 2.0 - 1.0;
+                vec3 child_min = box_center + offset_vec * box_size * 0.25;
+                vec3 child_max = child_min + box_size * 0.5;
+
+                if (stack_ptr + 1 < MAX_STACK) {
+                    stack_ptr++;
+                    stack_offset[stack_ptr] = child_offset;
+                    stack_min[stack_ptr] = child_min;
+                    stack_max[stack_ptr] = child_max;
+                    stack_ray_pos[stack_ptr] = ray_pos;
+                }
+                break;
+            }
+
+            // Step to next octant along axis
+            octant[axis_idx] += axis_sign;
+
+            // Check if exited
+            if (octant[axis_idx] < 0 || octant[axis_idx] > 1) {
+                break;
+            }
+
+            // Compute new ray position at octant boundary
+            float boundary = float(octant[axis_idx]) - float(axis_sign + 1) * 0.5;
+            ray_pos[axis_idx] = box_center[axis_idx] + boundary * box_size[axis_idx] * 0.5;
+        }
+    }
+
+    return result;
+}
+
 // Raycast through BCF-encoded octree
 // pos: ray position in cube-local space [-1, 1]³
 // dir: normalized ray direction
@@ -302,6 +425,21 @@ HitInfo raycastBcfOctree(vec3 pos, vec3 dir) {
     // BCF header: magic (4 bytes) + version (4 bytes) + ssss (4 bytes)
     // Root node starts at offset 12
     const uint BCF_HEADER_SIZE = 12u;
+
+    // Check for axis-aligned ray (two components near zero)
+    // This matches CPU raycast.rs lines 275-299
+    vec3 abs_dir = abs(dir);
+    float max_comp = max(abs_dir.x, max(abs_dir.y, abs_dir.z));
+    vec3 near_zero = step(abs_dir, vec3(max_comp * 1e-6));
+
+    // Count how many components are near zero (should be 2 for axis-aligned)
+    float near_zero_count = near_zero.x + near_zero.y + near_zero.z;
+
+    if (near_zero_count >= 2.0) {
+        // Axis-aligned ray: use simplified traversal
+        // This avoids floating-point precision issues in DDA
+        return raycastBcfOctreeAxisAligned(pos, dir);
+    }
 
     // Find entry point if outside [-1,1]³
     vec3 dir_sign = sign3(dir);
@@ -372,10 +510,6 @@ HitInfo raycastBcfOctree(vec3 pos, vec3 dir) {
 
             // Transform to node-local [-1,1]³ space
             vec3 local_pos = (ray_pos - box_center) / (box_size * 0.5);
-
-            if (any(lessThan(local_pos, vec3(-1.0))) || any(greaterThan(local_pos, vec3(1.0)))) {
-                break; // Exited this node
-            }
 
             // Compute current octant
             ivec3 octant = computeOctant(local_pos, dir_sign);
