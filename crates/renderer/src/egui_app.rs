@@ -78,6 +78,9 @@ pub struct DualRendererApp {
     mouse_sensitivity: f32,
     zoom_sensitivity: f32,
 
+    // Rendering settings
+    disable_lighting: bool,
+
     // Current display frames
     cpu_latest_frame: Option<ColorImage>,
     gl_latest_frame: Option<ColorImage>,
@@ -191,6 +194,7 @@ impl DualRendererApp {
             use_manual_camera: false,
             mouse_sensitivity: 0.005,
             zoom_sensitivity: 0.5,
+            disable_lighting: false,
             cpu_latest_frame: None,
             gl_latest_frame: None,
             gpu_latest_frame: None,
@@ -292,6 +296,9 @@ impl DualRendererApp {
             gl.viewport(0, 0, width as i32, height as i32);
 
             let start = std::time::Instant::now();
+
+            // Update lighting setting
+            self.gl_renderer.set_disable_lighting(self.disable_lighting);
 
             if self.use_manual_camera {
                 self.gl_renderer.render_to_gl_with_camera(
@@ -556,6 +563,8 @@ impl DualRendererApp {
                 if self.use_manual_camera {
                     ui.label("(Drag: orbit, Scroll: zoom)");
                 }
+                ui.separator();
+                ui.checkbox(&mut self.disable_lighting, "Disable Lighting");
             });
         });
 

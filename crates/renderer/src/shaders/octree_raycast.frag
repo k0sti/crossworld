@@ -264,8 +264,31 @@ vec3 calculateEntryNormal(vec3 pos, vec3 dir) {
 }
 
 // ============================================================================
-// BCF Octree Traversal
+// BCF Octree Traversal (based on working CPU raycast algorithm)
 // ============================================================================
+
+// Helper: sign function (returns -1 or 1)
+vec3 sign3(vec3 v) {
+    return mix(vec3(-1.0), vec3(1.0), greaterThanEqual(v, vec3(0.0)));
+}
+
+// Compute starting octant; at boundary (pos=0), use ray direction
+ivec3 computeOctant(vec3 pos, vec3 dir_sign) {
+    bvec3 positive = greaterThan(pos, vec3(0.0)) || (equal(pos, vec3(0.0)) && greaterThan(dir_sign, vec3(0.0)));
+    return ivec3(positive);
+}
+
+// Convert octant ivec3 to index 0-7
+uint octantToIndex(ivec3 o) {
+    return uint(o.x + o.y * 2 + o.z * 4);
+}
+
+// Find axis with minimum time, return axis index (0=x, 1=y, 2=z)
+int minTimeAxis(vec3 t) {
+    if (t.x <= t.y && t.x <= t.z) return 0;
+    if (t.y <= t.z) return 1;
+    return 2;
+}
 
 // Raycast through BCF-encoded octree
 // pos: ray position in cube-local space [-1, 1]³
@@ -280,21 +303,53 @@ HitInfo raycastBcfOctree(vec3 pos, vec3 dir) {
     // Root node starts at offset 12
     const uint BCF_HEADER_SIZE = 12u;
 
-    // Stack for traversal (depth, offset, bounds)
-    // Max depth 8 for typical octrees
-    const int MAX_DEPTH = 8;
-    uint stack_offset[MAX_DEPTH];
-    vec3 stack_min[MAX_DEPTH];
-    vec3 stack_max[MAX_DEPTH];
+    // Find entry point if outside [-1,1]³
+    vec3 dir_sign = sign3(dir);
+    vec3 ray_origin = pos;
+    vec3 entry_normal = vec3(0.0, 1.0, 0.0); // Default entry normal
+
+    if (max(abs(pos.x), max(abs(pos.y), abs(pos.z))) > 1.0) {
+        vec3 t_entry = (-dir_sign - pos) / dir;
+        vec3 t_exit = (dir_sign - pos) / dir;
+        float t_enter = max(max(t_entry.x, t_entry.y), t_entry.z);
+        float t_leave = min(min(t_exit.x, t_exit.y), t_exit.z);
+
+        if (t_enter > t_leave || t_leave < 0.0) {
+            return result; // Ray misses cube
+        }
+        ray_origin = pos + dir * max(t_enter, 0.0);
+
+        // Calculate entry normal from which face we entered
+        vec3 entry_point = ray_origin;
+        vec3 abs_entry = abs(entry_point);
+        float max_comp = max(abs_entry.x, max(abs_entry.y, abs_entry.z));
+        const float EPSILON = 0.001;
+        if (abs(abs_entry.x - max_comp) < EPSILON) {
+            entry_normal = vec3(-sign(entry_point.x), 0.0, 0.0);
+        } else if (abs(abs_entry.y - max_comp) < EPSILON) {
+            entry_normal = vec3(0.0, -sign(entry_point.y), 0.0);
+        } else {
+            entry_normal = vec3(0.0, 0.0, -sign(entry_point.z));
+        }
+    }
+
+    // Stack for traversal (node offset, bounds, ray position, normal)
+    const int MAX_STACK = 16;
+    uint stack_offset[MAX_STACK];
+    vec3 stack_min[MAX_STACK];
+    vec3 stack_max[MAX_STACK];
+    vec3 stack_ray_pos[MAX_STACK];
+    vec3 stack_normal[MAX_STACK]; // Track entry normal
     int stack_ptr = 0;
 
-    // Initialize with root node
+    // Push root
     stack_offset[0] = BCF_HEADER_SIZE;
     stack_min[0] = vec3(-1.0);
     stack_max[0] = vec3(1.0);
+    stack_ray_pos[0] = ray_origin;
+    stack_normal[0] = entry_normal;
 
-    // Max iterations to prevent infinite loops
-    const int MAX_ITERATIONS = 256;
+    const int MAX_ITERATIONS = 512;
     int iter = 0;
 
     while (stack_ptr >= 0 && iter < MAX_ITERATIONS) {
@@ -304,60 +359,91 @@ HitInfo raycastBcfOctree(vec3 pos, vec3 dir) {
         uint node_offset = stack_offset[stack_ptr];
         vec3 box_min = stack_min[stack_ptr];
         vec3 box_max = stack_max[stack_ptr];
+        vec3 ray_pos = stack_ray_pos[stack_ptr];
+        vec3 current_normal = stack_normal[stack_ptr];
         stack_ptr--;
 
-        // Check if ray intersects this box
-        vec3 box_center = (box_min + box_max) * 0.5;
-        vec3 box_size = (box_max - box_min) * 0.5;
+        // Octant traversal loop (like Rust lines 97-148)
+        const int MAX_OCTANT_STEPS = 8;
+        for (int octant_step = 0; octant_step < MAX_OCTANT_STEPS; octant_step++) {
+            // Check if ray is still inside this node's bounds
+            vec3 box_size = box_max - box_min;
+            vec3 box_center = (box_min + box_max) * 0.5;
 
-        // Simple box intersection test
-        vec3 inv_dir = 1.0 / dir;
-        vec3 t_min = (box_min - pos) * inv_dir;
-        vec3 t_max = (box_max - pos) * inv_dir;
-        vec3 t1 = min(t_min, t_max);
-        vec3 t2 = max(t_min, t_max);
-        float t_near = max(max(t1.x, t1.y), t1.z);
-        float t_far = min(min(t2.x, t2.y), t2.z);
+            // Transform to node-local [-1,1]³ space
+            vec3 local_pos = (ray_pos - box_center) / (box_size * 0.5);
 
-        if (t_near > t_far || t_far < 0.0) {
-            continue; // No intersection
-        }
+            if (any(lessThan(local_pos, vec3(-1.0))) || any(greaterThan(local_pos, vec3(1.0)))) {
+                break; // Exited this node
+            }
 
-        // Calculate entry point and octant
-        vec3 entry = pos + dir * max(t_near, 0.0);
-        uint octant = getOctant(entry, box_center);
+            // Compute current octant
+            ivec3 octant = computeOctant(local_pos, dir_sign);
+            uint octant_idx = octantToIndex(octant);
 
-        // Parse BCF node
-        uint child_offset;
-        uint value = parseBcfNode(node_offset, octant, child_offset);
+            // Parse BCF node
+            uint child_offset;
+            uint value = parseBcfNode(node_offset, octant_idx, child_offset);
 
-        if (value != 0u && child_offset == 0u) {
-            // Hit a leaf with material value
-            vec3 normal = calculateEntryNormal((entry - box_min) / (box_max - box_min), dir);
-            result.hit = true;
-            result.t = max(t_near, 0.0);
-            result.point = entry;
-            result.normal = normal;
-            result.value = int(value);
-            return result;
-        } else if (child_offset != 0u) {
-            // Branch node - push child octant bounds onto stack
-            vec3 octant_min = box_min;
-            vec3 octant_max = box_center;
+            if (value != 0u && child_offset == 0u) {
+                // Hit solid voxel - return immediately
+                result.hit = true;
+                result.point = ray_pos;
+                result.normal = current_normal; // Use tracked normal
+                result.value = int(value);
+                return result;
+            }
 
-            if ((octant & 1u) != 0u) { octant_min.x = box_center.x; octant_max.x = box_max.x; }
-            if ((octant & 2u) != 0u) { octant_min.y = box_center.y; octant_max.y = box_max.y; }
-            if ((octant & 4u) != 0u) { octant_min.z = box_center.z; octant_max.z = box_max.z; }
+            if (child_offset != 0u) {
+                // Branch node - recurse into child
+                // Calculate child bounds
+                vec3 offset_vec = vec3(octant) * 2.0 - 1.0;
+                vec3 child_min = box_center + offset_vec * box_size * 0.25;
+                vec3 child_max = child_min + box_size * 0.5;
 
-            // Push child onto stack
-            if (stack_ptr + 1 < MAX_DEPTH) {
-                stack_ptr++;
-                stack_offset[stack_ptr] = child_offset;
-                stack_min[stack_ptr] = octant_min;
-                stack_max[stack_ptr] = octant_max;
+                // Push child onto stack
+                if (stack_ptr + 1 < MAX_STACK) {
+                    stack_ptr++;
+                    stack_offset[stack_ptr] = child_offset;
+                    stack_min[stack_ptr] = child_min;
+                    stack_max[stack_ptr] = child_max;
+                    stack_ray_pos[stack_ptr] = ray_pos;
+                    stack_normal[stack_ptr] = current_normal; // Propagate normal
+                }
+                break; // Process child before continuing
+            }
+
+            // Empty octant - step to next octant (DDA step from Rust lines 120-144)
+            // Calculate exit distance
+            bvec3 far_side = greaterThanEqual(local_pos * dir_sign, vec3(0.0));
+            vec3 adjusted = mix(local_pos, local_pos - dir_sign, far_side);
+            vec3 dist = abs(adjusted);
+            vec3 time = dist / abs(dir);
+
+            // Find exit axis
+            int exit_axis_idx = minTimeAxis(time);
+            float exit_time = time[exit_axis_idx];
+
+            // Advance ray to octant boundary
+            ray_pos += dir * exit_time;
+
+            // Step octant
+            int exit_sign = int(dir_sign[exit_axis_idx]);
+            octant[exit_axis_idx] += exit_sign;
+
+            // Snap to boundary
+            float boundary = float(octant[exit_axis_idx]) - float(exit_sign + 1) * 0.5;
+            ray_pos[exit_axis_idx] = box_center[exit_axis_idx] + boundary * box_size[exit_axis_idx] * 0.5;
+
+            // Update normal (entry normal is opposite of exit direction)
+            current_normal = vec3(0.0);
+            current_normal[exit_axis_idx] = -float(exit_sign);
+
+            // Check if exited parent cube
+            if (octant[exit_axis_idx] < 0 || octant[exit_axis_idx] > 1) {
+                break; // Exited this node
             }
         }
-        // If value == 0 and child_offset == 0, it's empty - continue to next stack item
     }
 
     return result;
