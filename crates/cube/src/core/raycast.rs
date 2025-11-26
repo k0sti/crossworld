@@ -161,7 +161,7 @@ impl<T: Copy + Default + PartialEq> Cube<T> {
     /// Optimized raycast for axis-aligned rays
     pub fn raycast_axis(
         &self,
-        mut ray_origin: Vec3,
+        ray_origin: Vec3,
         ray_axis: Axis,
         coord: CubeCoord,
         mut debug: Option<&mut RaycastDebugState>,
@@ -193,12 +193,10 @@ impl<T: Copy + Default + PartialEq> Cube<T> {
             Cube::Cubes(children) => {
                 let dir_sign = ray_axis.to_vec3();
                 let mut octant = compute_octant(ray_origin, dir_sign);
-
-                // Start from entry side along ray axis
                 let i = ray_axis.index();
-                octant = ray_axis.set_i(octant, if ray_axis.sign() > 0 { 0 } else { 1 });
 
-                for _ in 0..2 {
+                // Loop until we exit the cube
+                loop {
                     let child = &children[octant_to_index(octant)];
 
                     let offset = octant.as_vec3() * 2.0 - 1.0;
@@ -222,15 +220,11 @@ impl<T: Copy + Default + PartialEq> Cube<T> {
                     // Step to next octant
                     octant = ray_axis.step(octant);
 
-                    // Snap to boundary
-                    let boundary = octant[i] as f32 - (ray_axis.sign() + 1) as f32 * 0.5;
-                    ray_origin = ray_axis.set(ray_origin, boundary);
-
+                    // Check if we exited
                     if octant[i] < 0 || octant[i] > 1 {
                         return None;
                     }
                 }
-                None
             }
 
             // Handle other variants as solid
@@ -251,14 +245,18 @@ impl<T: Copy + Default + PartialEq> Cube<T> {
 /// Raycast through octree from origin in direction
 pub fn raycast<T: Copy + Default + PartialEq>(
     root: &Cube<T>,
-    mut ray_origin: Vec3,
+    ray_origin: Vec3,
     ray_dir: Vec3,
     debug: Option<&mut RaycastDebugState>,
 ) -> Option<Hit<T>> {
+    if ray_dir == Vec3::ZERO {
+        return None;
+    }
+
     let dir_sign = sign(ray_dir);
 
     // Find entry point if outside [-1,1]³
-    if ray_origin.abs().max_element() > 1.0 {
+    let ray_origin = if ray_origin.abs().max_element() > 1.0 {
         let t_entry = (-dir_sign - ray_origin) / ray_dir;
         let t_exit = (dir_sign - ray_origin) / ray_dir;
 
@@ -269,8 +267,10 @@ pub fn raycast<T: Copy + Default + PartialEq>(
             return None;
         }
 
-        ray_origin += ray_dir * t_enter.max(0.0);
-    }
+        ray_origin + ray_dir * t_enter.max(0.0)
+    } else {
+        ray_origin
+    };
 
     // Check for axis-aligned ray
     let abs_dir = ray_dir.abs();
@@ -298,8 +298,35 @@ pub fn raycast<T: Copy + Default + PartialEq>(
             debug,
         )
     } else {
-        // Default entry normal (will be overwritten on first hit)
-        let entry_axis = Axis::PosX;
+        // Default entry normal
+        let entry_axis;
+
+        // Check if we are on a boundary (within epsilon)
+        let abs_origin = ray_origin.abs();
+        let max_comp = abs_origin.max_element();
+
+        if (max_comp - 1.0).abs() < 1e-5 {
+            // On boundary: determine which face we are on
+            if (abs_origin.x - 1.0).abs() < 1e-5 {
+                entry_axis = Axis::from_index_sign(0, ray_origin.x.signum() as i32);
+            } else if (abs_origin.y - 1.0).abs() < 1e-5 {
+                entry_axis = Axis::from_index_sign(1, ray_origin.y.signum() as i32);
+            } else {
+                entry_axis = Axis::from_index_sign(2, ray_origin.z.signum() as i32);
+            }
+        } else {
+            // Inside: pick axis most opposed to ray direction
+            // This is a heuristic for "which face would we have entered from"
+            let i = if abs_dir.x >= abs_dir.y && abs_dir.x >= abs_dir.z {
+                0
+            } else if abs_dir.y >= abs_dir.z {
+                1
+            } else {
+                2
+            };
+            // Use negative direction sign (opposing face)
+            entry_axis = Axis::from_index_sign(i, -dir_sign[i] as i32);
+        }
 
         root.raycast(
             ray_origin,

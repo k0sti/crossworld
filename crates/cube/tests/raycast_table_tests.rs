@@ -4,6 +4,7 @@ use std::rc::Rc;
 
 /// Raycast test case from the comprehensive test table
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct RaycastTableTest {
     name: String,
     origin: Vec3,
@@ -88,13 +89,19 @@ fn parse_raycast_table() -> Result<Vec<RaycastTableTest>, String> {
     let lines: Vec<&str> = content.lines().collect();
 
     // Skip header (line 0) and separator (line 1)
-    for line in lines.iter().skip(2) {
-        if line.trim().is_empty() {
+    for (line_idx, line) in lines.iter().enumerate() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || !trimmed.starts_with('|') {
+            continue;
+        }
+
+        // Skip header and separator lines
+        if trimmed.contains("Ray Origin") || trimmed.contains("---") {
             continue;
         }
 
         // Split by | and filter empty entries
-        let cells: Vec<&str> = line
+        let cells: Vec<&str> = trimmed
             .split('|')
             .map(|s| s.trim())
             .filter(|s| !s.is_empty())
@@ -124,24 +131,29 @@ fn parse_raycast_table() -> Result<Vec<RaycastTableTest>, String> {
         };
 
         // Parse each field
-        let origin = parse_vec3(cells[0])?;
-        let direction = parse_vec3(cells[1])?;
+        let origin =
+            parse_vec3(cells[0]).map_err(|e| format!("Line {}: Origin: {}", line_idx + 3, e))?;
+        let direction =
+            parse_vec3(cells[1]).map_err(|e| format!("Line {}: Direction: {}", line_idx + 3, e))?;
         let should_hit = cells[2].trim().trim_matches('`') == "true";
-        let expected_pos = parse_ivec3(cells[3])?;
+        let expected_pos =
+            parse_ivec3(cells[3]).map_err(|e| format!("Line {}: Pos: {}", line_idx + 3, e))?;
         let expected_depth = cells[4]
             .trim()
             .parse::<u32>()
-            .map_err(|e| format!("Failed to parse depth: {}", e))?;
+            .map_err(|e| format!("Line {}: Depth: {}", line_idx + 3, e))?;
         let expected_voxel = cells[5]
             .trim()
             .parse::<u8>()
-            .map_err(|e| format!("Failed to parse voxel: {}", e))?;
+            .map_err(|e| format!("Line {}: Voxel: {}", line_idx + 3, e))?;
         let expected_visits = cells[6]
             .trim()
             .parse::<u32>()
-            .map_err(|e| format!("Failed to parse visits: {}", e))?;
-        let expected_normal = parse_axis(cells[7])?;
-        let expected_hit_pos = parse_vec3(cells[8])?;
+            .map_err(|e| format!("Line {}: Visits: {}", line_idx + 3, e))?;
+        let expected_normal =
+            parse_axis(cells[7]).map_err(|e| format!("Line {}: Normal: {}", line_idx + 3, e))?;
+        let expected_hit_pos =
+            parse_vec3(cells[8]).map_err(|e| format!("Line {}: HitPos: {}", line_idx + 3, e))?;
 
         tests.push(RaycastTableTest {
             name,
@@ -172,14 +184,14 @@ fn parse_raycast_table() -> Result<Vec<RaycastTableTest>, String> {
 /// - Node 7 (x=1, y=1, z=1): Empty(0)   // x+, y+, z+
 fn create_standard_test_octree() -> Cube<u8> {
     let children = [
-        Rc::new(Cube::Solid(1u8)), // 0: (x-, y-, z-) = 0*4 + 0*2 + 0 = 0
-        Rc::new(Cube::Solid(3u8)), // 1: (x-, y-, z+) = 0*4 + 0*2 + 1 = 1
-        Rc::new(Cube::Solid(0u8)), // 2: (x-, y+, z-) = 0*4 + 1*2 + 0 = 2
-        Rc::new(Cube::Solid(5u8)), // 3: (x-, y+, z+) = 0*4 + 1*2 + 1 = 3
-        Rc::new(Cube::Solid(2u8)), // 4: (x+, y-, z-) = 1*4 + 0*2 + 0 = 4
-        Rc::new(Cube::Solid(4u8)), // 5: (x+, y-, z+) = 1*4 + 0*2 + 1 = 5
-        Rc::new(Cube::Solid(0u8)), // 6: (x+, y+, z-) = 1*4 + 1*2 + 0 = 6
-        Rc::new(Cube::Solid(0u8)), // 7: (x+, y+, z+) = 1*4 + 1*2 + 1 = 7
+        Rc::new(Cube::Solid(1u8)), // 0: (0,0,0) -> 0
+        Rc::new(Cube::Solid(2u8)), // 1: (1,0,0) -> 1
+        Rc::new(Cube::Solid(0u8)), // 2: (0,1,0) -> 2
+        Rc::new(Cube::Solid(0u8)), // 3: (1,1,0) -> 3
+        Rc::new(Cube::Solid(3u8)), // 4: (0,0,1) -> 4
+        Rc::new(Cube::Solid(4u8)), // 5: (1,0,1) -> 5
+        Rc::new(Cube::Solid(5u8)), // 6: (0,1,1) -> 6
+        Rc::new(Cube::Solid(0u8)), // 7: (1,1,1) -> 7
     ];
     Cube::Cubes(Box::new(children))
 }
@@ -187,7 +199,7 @@ fn create_standard_test_octree() -> Cube<u8> {
 #[test]
 fn test_raycast_depth1_octree() {
     let cube = create_standard_test_octree();
-    let is_empty = |v: &u8| *v == 0;
+    let _is_empty = |v: &u8| *v == 0;
 
     // Test: Direct hits on solid voxels from various angles
     let test_cases = vec![
@@ -251,8 +263,9 @@ fn test_raycast_table() {
         "Should have parsed at least one test case"
     );
 
-    let cube = create_standard_test_octree();
-    let is_empty = |v: &u8| *v == 0;
+    let octree_cube = create_standard_test_octree();
+    let solid_cube = Cube::Solid(1u8);
+    let _is_empty = |v: &u8| *v == 0;
 
     let mut results = Vec::new();
     let mut passed = 0;
@@ -263,7 +276,14 @@ fn test_raycast_table() {
     println!("╚══════════════════════════════════════════════════════════════════════════════╝\n");
 
     for (i, test) in tests.iter().enumerate() {
-        let hit = cube::raycast(&cube, test.origin, test.direction, None);
+        // Tests 0-31 use the Octa-Cube (already in [-1,1]), Tests 32+ use the Solid Cube (in [0,1])
+        let (cube, origin) = if i < 32 {
+            (&octree_cube, test.origin)
+        } else {
+            (&solid_cube, test.origin * 2.0 - 1.0)
+        };
+
+        let hit = cube::raycast(cube, origin, test.direction, None);
 
         let mut test_passed = true;
         let mut errors = Vec::new();
@@ -399,7 +419,7 @@ fn test_debug_top_down_entry() {
         }
     }
 
-    let is_empty = |v: &u8| *v == 0;
+    let _is_empty = |v: &u8| *v == 0;
 
     // Ray from above at (-0.5, 3.0, -0.5) going down (0, -1, 0)
     // Should enter at Y=1, pass through Node 2 (empty at y+), then hit Node 0 (solid at y-)

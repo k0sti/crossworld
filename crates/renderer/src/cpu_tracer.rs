@@ -133,107 +133,85 @@ impl CpuCubeTracer {
 
     /// Render a ray and return the color
     fn render_ray(&self, ray: Ray) -> glam::Vec3 {
-        // Intersect with bounding box
-        let hit_info = intersect_box(ray, self.bounds.min, self.bounds.max);
-
         // Background color from constants
         let mut color = BACKGROUND_COLOR;
 
-        if hit_info.hit {
-            // Get cube bounds for coordinate transformation
-            let bounds = self.bounds;
+        // Call cube raycast directly (new API)
+        // The raycast expects coordinates in [-1, 1]³ space (origin-centered)
+        // The raycast handles rays from outside the cube and computes entry point automatically
+        // The raycast treats T::default() (0 for i32) as empty
+        let raycast_result = cube::raycast(
+            &self.cube,
+            ray.origin,
+            ray.direction.normalize(),
+            None, // No debug state
+        );
 
-            // CRITICAL FIX: Advance ray slightly into the cube before transforming to normalized space
-            // When we hit the bounding box surface, we're exactly ON the boundary.
-            // Starting a DDA raycast from a boundary position can cause traversal issues.
-            // Advance the ray by a small epsilon to ensure we start INSIDE the cube.
-            // Cube is 2 units wide, so 0.01 is 0.5% of the cube size - small but meaningful
-            const SURFACE_EPSILON: f32 = 0.01;
-            let advanced_hit_point = hit_info.point + ray.direction * SURFACE_EPSILON;
+        // DEBUG: Track raycast success rate
+        #[cfg(test)]
+        {
+            static HIT_COUNT: std::sync::atomic::AtomicUsize =
+                std::sync::atomic::AtomicUsize::new(0);
+            static MISS_COUNT: std::sync::atomic::AtomicUsize =
+                std::sync::atomic::AtomicUsize::new(0);
+            static ONCE: std::sync::Once = std::sync::Once::new();
 
-            // Transform advanced hit point from world space to normalized [0,1]³ cube space
-            let mut normalized_pos = (advanced_hit_point - bounds.min) / (bounds.max - bounds.min);
-
-            // Clamp to valid range to ensure we stay within the cube
-            const EPSILON: f32 = 0.001;
-            normalized_pos =
-                normalized_pos.clamp(glam::Vec3::splat(EPSILON), glam::Vec3::splat(1.0 - EPSILON));
-
-            // Call cube raycast directly (new API)
-            // The new raycast treats T::default() (0 for i32) as empty
-            let raycast_result = cube::raycast(
-                &self.cube,
-                normalized_pos,
-                ray.direction.normalize(),
-                None, // No debug state
-            );
-
-            // DEBUG: Track raycast success rate
-            #[cfg(test)]
-            {
-                static HIT_COUNT: std::sync::atomic::AtomicUsize =
-                    std::sync::atomic::AtomicUsize::new(0);
-                static MISS_COUNT: std::sync::atomic::AtomicUsize =
-                    std::sync::atomic::AtomicUsize::new(0);
-                static ONCE: std::sync::Once = std::sync::Once::new();
-
-                match &raycast_result {
-                    Some(_) => {
-                        HIT_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                    }
-                    None => {
-                        MISS_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                    }
-                }
-
-                // Print stats after first pixel is rendered
-                if HIT_COUNT.load(std::sync::atomic::Ordering::Relaxed)
-                    + MISS_COUNT.load(std::sync::atomic::Ordering::Relaxed)
-                    == 1
-                {
-                    println!("\n=== Raycast Debug (first pixel) ===");
-                    println!("  Position: {:?}", normalized_pos);
-                    println!("  Direction: {:?}", ray.direction.normalize());
-                    println!("  Hit: {}", raycast_result.is_some());
-                }
-
-                // Print final stats at end
-                ONCE.call_once(|| {
-                    // Register cleanup to print stats when test ends
-                    let _ = std::panic::catch_unwind(|| {});
-                });
-            }
-
-            match raycast_result {
-                Some(cube_hit) => {
-                    // Successful octree raycast - use detailed voxel information
-                    // Transform hit position back to world space
-                    let world_hit_point = cube_hit.pos * (bounds.max - bounds.min) + bounds.min;
-
-                    // Calculate distance from ray origin
-                    let t = (world_hit_point - ray.origin).length();
-
-                    // Create HitInfo for lighting calculation
-                    let hit_info = HitInfo {
-                        hit: true,
-                        t,
-                        point: world_hit_point,
-                        normal: cube_hit.normal.as_vec3(),
-                    };
-
-                    // Get material color from voxel value
-                    let material_color = cube::material::get_material_color(cube_hit.value);
-
-                    // Apply lighting (or output pure color if disabled)
-                    color = if self.disable_lighting {
-                        material_color
-                    } else {
-                        calculate_lighting(&hit_info, material_color)
-                    };
+            match &raycast_result {
+                Some(_) => {
+                    HIT_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 }
                 None => {
-                    // Miss - do nothing (color remains background)
+                    MISS_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 }
+            }
+
+            // Print stats after first pixel is rendered
+            if HIT_COUNT.load(std::sync::atomic::Ordering::Relaxed)
+                + MISS_COUNT.load(std::sync::atomic::Ordering::Relaxed)
+                == 1
+            {
+                println!("\n=== Raycast Debug (first pixel) ===");
+                println!("  Position: {:?}", ray.origin);
+                println!("  Direction: {:?}", ray.direction.normalize());
+                println!("  Hit: {}", raycast_result.is_some());
+            }
+
+            // Print final stats at end
+            ONCE.call_once(|| {
+                // Register cleanup to print stats when test ends
+                let _ = std::panic::catch_unwind(|| {});
+            });
+        }
+
+        match raycast_result {
+            Some(cube_hit) => {
+                // Successful octree raycast
+                // The hit position is already in [-1, 1]³ world space (same as bounds)
+                let world_hit_point = cube_hit.pos;
+
+                // Calculate distance from ray origin
+                let t = (world_hit_point - ray.origin).length();
+
+                // Create HitInfo for lighting calculation
+                let hit_info = HitInfo {
+                    hit: true,
+                    t,
+                    point: world_hit_point,
+                    normal: cube_hit.normal.as_vec3(),
+                };
+
+                // Get material color from voxel value
+                let material_color = cube::material::get_material_color(cube_hit.value);
+
+                // Apply lighting (or output pure color if disabled)
+                color = if self.disable_lighting {
+                    material_color
+                } else {
+                    calculate_lighting(&hit_info, material_color)
+                };
+            }
+            None => {
+                // Miss - do nothing (color remains background)
             }
         }
 
