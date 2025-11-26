@@ -147,6 +147,15 @@ fn analyze_pixels(pixels: &[u8], width: i32, height: i32) -> RenderAnalysis {
     }
 }
 
+/// Test output directory
+fn test_output_dir() -> std::path::PathBuf {
+    let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    path.push("tests");
+    path.push("output");
+    std::fs::create_dir_all(&path).expect("Failed to create test output directory");
+    path
+}
+
 fn save_debug_png(pixels: &[u8], width: i32, height: i32, filename: &str) {
     use image::{ImageBuffer, Rgba};
 
@@ -168,8 +177,11 @@ fn save_debug_png(pixels: &[u8], width: i32, height: i32, filename: &str) {
         }
     }
 
-    if let Err(e) = img.save(filename) {
+    let output_path = test_output_dir().join(filename);
+    if let Err(e) = img.save(&output_path) {
         eprintln!("Failed to save debug image: {}", e);
+    } else {
+        println!("  Saved to: {}", output_path.display());
     }
 }
 
@@ -242,7 +254,6 @@ fn test_both_tracers() {
     println!("  Unique colors: {}", analysis.unique_colors);
 
     save_debug_png(&pixels, width, height, "gl_tracer_output.png");
-    println!("  Debug image: gl_tracer_output.png");
 
     unsafe {
         gl_tracer.destroy_gl(&gl);
@@ -337,7 +348,6 @@ fn test_both_tracers() {
             }
 
             save_debug_png(&pixels, width, height, "gpu_tracer_output.png");
-            println!("\n  Debug image: gpu_tracer_output.png");
 
             unsafe {
                 gpu_tracer.destroy_gl(&gl);

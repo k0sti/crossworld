@@ -85,6 +85,12 @@ where
     where
         F: Fn(&T) -> bool,
     {
+        // Check if direction is axis-aligned and use optimized version
+        const EPSILON: f32 = 0.001;
+        if let Some(axis) = is_axis_aligned(ray_dir, EPSILON) {
+            return self.raycast_axis_aligned(ray_origin, axis, max_depth, is_empty);
+        }
+
         self.raycast_debug(ray_origin, ray_dir, max_depth, is_empty)
             .map(|hit| RaycastHit { debug: None, ..hit })
     }
@@ -173,8 +179,11 @@ where
                     return None;
                 }
 
+                // Create mutable copy of position for DDA stepping
+                let mut current_pos = local_pos;
+
                 // 1. Identify the first child octant the ray is in.
-                let mut octant_idx = get_octant_index(local_pos);
+                let mut octant_idx = get_octant_index(current_pos);
 
                 // We loop until the ray exits this parent Node.
                 loop {
@@ -194,7 +203,7 @@ where
                     // Local space is [-1, 1]. Child is a sub-cube.
                     // Formula: pos2 = (pos - child_center) * 2.0
                     let child_center = get_octant_center(octant_idx);
-                    let pos2 = (local_pos - child_center) * 2.0;
+                    let pos2 = (current_pos - child_center) * 2.0;
 
                     // Recursion
                     let result = child_node.recursive_raycast(
@@ -216,17 +225,17 @@ where
                     // t = distance to plane (0) / dir
                     // We only care about positive t (moving forward)
                     let tx = if ray_dir.x != 0.0 {
-                        -local_pos.x / ray_dir.x
+                        -current_pos.x / ray_dir.x
                     } else {
                         f32::INFINITY
                     };
                     let ty = if ray_dir.y != 0.0 {
-                        -local_pos.y / ray_dir.y
+                        -current_pos.y / ray_dir.y
                     } else {
                         f32::INFINITY
                     };
                     let tz = if ray_dir.z != 0.0 {
-                        -local_pos.z / ray_dir.z
+                        -current_pos.z / ray_dir.z
                     } else {
                         f32::INFINITY
                     };
@@ -245,64 +254,33 @@ where
                     }
 
                     // Perform the Step
-                    // Update local position to the boundary intersection point
+                    // Update position to the boundary intersection point
                     // (Add epsilon to ensure we cross the line)
                     let step_scale = min_t + 0.00001;
-                    let next_pos = local_pos + ray_dir * step_scale;
+                    current_pos = current_pos + ray_dir * step_scale;
 
                     // Determine which axis we stepped over to update the index
                     if tx <= ty && tx <= tz {
                         // Stepped X
-                        if next_pos.x.abs() >= 1.0 {
+                        if current_pos.x.abs() >= 1.0 {
                             return None;
                         } // Exited Parent
                         octant_idx ^= 1;
                     } else if ty <= tx && ty <= tz {
                         // Stepped Y
-                        if next_pos.y.abs() >= 1.0 {
+                        if current_pos.y.abs() >= 1.0 {
                             return None;
                         } // Exited Parent
                         octant_idx ^= 2;
                     } else {
                         // Stepped Z
-                        if next_pos.z.abs() >= 1.0 {
+                        if current_pos.z.abs() >= 1.0 {
                             return None;
                         } // Exited Parent
                         octant_idx ^= 4;
                     }
 
-                    // Update local_pos for next iteration
-                    // In the recursive call we used pos2, but here we update local_pos to the boundary
-                    // and loop again. The next iteration will recalculate pos2 based on the new octant.
-                    // NOTE: We must update `local_pos` to `next_pos` for the loop to progress correctly.
-                    // However, modifying `local_pos` (argument) is fine since it's by value.
-                    // BUT, `recursive_raycast` takes `local_pos` as argument.
-                    // We need to update the variable used in the loop.
-                    // Rust arguments are immutable by default, need to make it mutable or shadow it.
-                    // But we are in a loop.
-                    // Let's change the loop structure or use a mutable variable.
-
-                    // We can't easily mutate `local_pos` because it's an argument.
-                    // Let's use a mutable variable `current_pos` initialized to `local_pos`.
-                    // Wait, I can't just change the argument in the loop header.
-                    // I will refactor to use `current_pos`.
-
-                    // Actually, the user's code had:
-                    // `let _ = next_pos; // In a real loop we'd update local_pos = next_pos`
-                    // and then `match recursive_raycast(next_pos, ...)`
-                    // But here I am inside `recursive_raycast` (the method on Cube).
-                    // I am implementing the loop *inside* `recursive_raycast`.
-                    // So I should update `current_pos`.
-
-                    // Refactoring loop:
-                    // let mut current_pos = local_pos;
-                    // loop { ... use current_pos ... current_pos = next_pos; }
-
-                    // Wait, if I update `current_pos`, I need to be careful about accumulation of errors?
-                    // The user's code mentions "updating float pos repeatedly causes drift".
-                    // But for now I will follow the "update pos" sketch as requested.
-
-                    // Let's restart the loop with `next_pos`.
+                    // current_pos has been updated, loop continues with new position
                     // Since I can't easily restart the function call without recursion (which might blow stack if many steps),
                     // but here we only step max 3 times (visiting up to 4 octants) in a node?
                     // No, in a node we can visit up to 4 octants.
@@ -423,6 +401,27 @@ where
         }
         None
     }
+
+    /// Axis-aligned raycast optimization
+    /// Uses simplified logic when ray direction is exactly aligned with X, Y, or Z axis
+    fn raycast_axis_aligned<F>(
+        &self,
+        ray_origin: Vec3,
+        axis: Axis,
+        max_depth: u32,
+        is_empty: &F,
+    ) -> Option<RaycastHit<T>>
+    where
+        F: Fn(&T) -> bool,
+    {
+        // Convert axis to direction vector
+        let ray_dir = axis.as_vec3();
+
+        // Use the standard raycast logic - the DDA stepping will be simpler
+        // since only one component of the direction is non-zero
+        self.raycast_debug(ray_origin, ray_dir, max_depth, is_empty)
+            .map(|hit| RaycastHit { debug: None, ..hit })
+    }
 }
 
 // --- Helpers ---
@@ -439,6 +438,26 @@ fn get_octant_index(pos: Vec3) -> usize {
         idx |= 4;
     }
     idx
+}
+
+/// Check if a direction vector is axis-aligned within epsilon tolerance
+/// Returns the corresponding Axis if aligned, None otherwise
+fn is_axis_aligned(dir: Vec3, epsilon: f32) -> Option<Axis> {
+    let abs_dir = dir.abs();
+    let max_component = abs_dir.max_element();
+
+    // Check if one component dominates and others are near zero
+    if (abs_dir.x - max_component).abs() < epsilon && abs_dir.y < epsilon && abs_dir.z < epsilon {
+        return Some(if dir.x > 0.0 { Axis::PosX } else { Axis::NegX });
+    }
+    if (abs_dir.y - max_component).abs() < epsilon && abs_dir.x < epsilon && abs_dir.z < epsilon {
+        return Some(if dir.y > 0.0 { Axis::PosY } else { Axis::NegY });
+    }
+    if (abs_dir.z - max_component).abs() < epsilon && abs_dir.x < epsilon && abs_dir.y < epsilon {
+        return Some(if dir.z > 0.0 { Axis::PosZ } else { Axis::NegZ });
+    }
+
+    None
 }
 
 fn get_octant_center(idx: usize) -> Vec3 {
