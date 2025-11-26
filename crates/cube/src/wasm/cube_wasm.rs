@@ -5,7 +5,7 @@ use wasm_bindgen::prelude::*;
 use crate::{
     generate_face_mesh,
     glam::{IVec3, Vec3},
-    parse_csm, serialize_csm, ColorMapper, Cube, CubeCoord, DefaultMeshBuilder, Octree,
+    parse_csm, raycast, serialize_csm, ColorMapper, Cube, CubeCoord, DefaultMeshBuilder, Octree,
     PaletteColorMapper, VoxColorMapper,
 };
 
@@ -171,39 +171,36 @@ impl WasmCube {
         dir_y: f32,
         dir_z: f32,
         far: bool,
-        max_depth: u32,
+        _max_depth: u32,
     ) -> JsValue {
         let pos = Vec3::new(pos_x, pos_y, pos_z);
         let dir = Vec3::new(dir_x, dir_y, dir_z).normalize();
 
-        // Define empty test: value == -1 (empty) or value == 0 (air)
-        let is_empty = |v: &i32| *v == -1 || *v == 0;
-
-        // Perform raycast first
-        if let Some(hit) = self.inner.raycast(pos, dir, max_depth, &is_empty) {
+        // Perform raycast using the public API
+        if let Some(hit) = raycast(&self.inner, pos, dir, None) {
             let coord = if far {
                 // Return the cube coordinate where the ray hit (far side)
                 hit.coord
             } else {
                 // Return the cube coordinate on the near side (neighbor in opposite direction of normal)
-                let normal = hit.normal();
+                let normal_vec = hit.normal.to_vec3();
                 let offset = IVec3::new(
-                    -normal.x.signum() as i32,
-                    -normal.y.signum() as i32,
-                    -normal.z.signum() as i32,
+                    -normal_vec.x.signum() as i32,
+                    -normal_vec.y.signum() as i32,
+                    -normal_vec.z.signum() as i32,
                 );
                 CubeCoord::new(hit.coord.pos + offset, hit.coord.depth)
             };
 
-            let normal = hit.normal();
+            let normal = hit.normal.to_vec3();
             let result = RaycastResult {
                 x: coord.pos.x,
                 y: coord.pos.y,
                 z: coord.pos.z,
                 depth: coord.depth,
-                world_x: hit.hit_pos.x,
-                world_y: hit.hit_pos.y,
-                world_z: hit.hit_pos.z,
+                world_x: hit.pos.x,
+                world_y: hit.pos.y,
+                world_z: hit.pos.z,
                 normal_x: normal.x,
                 normal_y: normal.y,
                 normal_z: normal.z,
