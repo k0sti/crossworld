@@ -29,8 +29,8 @@ use std::rc::Rc;
 /// - 5: (+,-,+) bottom-right-front → WHITE (255)
 /// - 6: (-,+,+) top-left-front    → YELLOW (252)
 /// - 7: (+,+,+) top-right-front   → EMPTY (0)
-pub fn create_octa_cube() -> Rc<Cube<i32>> {
-    let children: [Rc<Cube<i32>>; 8] = [
+pub fn create_octa_cube() -> Rc<Cube<u8>> {
+    let children: [Rc<Cube<u8>>; 8] = [
         Rc::new(Cube::Solid(224)), // Red (r=3, g=0, b=0)
         Rc::new(Cube::Solid(252)), // Yellow (r=3, g=7, b=0)
         Rc::new(Cube::Solid(156)), // Green (r=0, g=7, b=0)

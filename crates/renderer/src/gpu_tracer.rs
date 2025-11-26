@@ -46,7 +46,7 @@ void main() {
 
 /// Compute shader raytracer
 pub struct GpuTracer {
-    cube: Rc<Cube<i32>>,
+    cube: Rc<Cube<u8>>,
     #[allow(dead_code)]
     bounds: CubeBounds,
     gl_state: Option<GpuTracerGl>,
@@ -69,7 +69,7 @@ struct GpuTracerGl {
 }
 
 impl GpuTracer {
-    pub fn new(cube: Rc<Cube<i32>>) -> Self {
+    pub fn new(cube: Rc<Cube<u8>>) -> Self {
         Self {
             cube,
             bounds: CubeBounds::default(),
@@ -139,7 +139,7 @@ impl GpuTracer {
     }
 
     /// Get reference to the cube
-    pub fn cube(&self) -> &Rc<Cube<i32>> {
+    pub fn cube(&self) -> &Rc<Cube<u8>> {
         &self.cube
     }
 
@@ -151,7 +151,7 @@ impl GpuTracer {
         pos: glam::Vec3,
         dir: glam::Vec3,
         _max_depth: u32,
-    ) -> Result<Option<cube::Hit<i32>>, String> {
+    ) -> Result<Option<cube::Hit<u8>>, String> {
         Ok(cube::raycast(&self.cube, pos, dir, None))
     }
 
