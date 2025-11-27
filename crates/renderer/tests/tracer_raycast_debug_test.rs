@@ -54,7 +54,10 @@ impl ExpectedDebugState {
         assert!(
             debug.path.len() as u32 >= self.expected_min_path_len,
             "{} ({}): path length {} is less than expected minimum {}",
-            test_name, tracer_name, debug.path.len(), self.expected_min_path_len
+            test_name,
+            tracer_name,
+            debug.path.len(),
+            self.expected_min_path_len
         );
     }
 }
@@ -267,11 +270,7 @@ fn test_cube_tracer_immediate_hit() {
         debug.entry_count, 1,
         "Cube: Entering face voxel with color should have entry_count = 1"
     );
-    assert_eq!(
-        debug.path.len(),
-        1,
-        "Cube: Should traverse exactly 1 node"
-    );
+    assert_eq!(debug.path.len(), 1, "Cube: Should traverse exactly 1 node");
 }
 
 // ============================================================================
