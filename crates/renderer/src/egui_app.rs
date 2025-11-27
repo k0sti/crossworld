@@ -2,8 +2,8 @@
 
 use egui::{ColorImage, TextureHandle, TextureOptions};
 use glow::*;
-use renderer::{CameraConfig, CpuCubeTracer, GlCubeTracer, GpuTracer, Renderer};
 use renderer::scenes::TestModel;
+use renderer::{CameraConfig, CpuCubeTracer, GlCubeTracer, GpuTracer, Renderer};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
@@ -603,7 +603,10 @@ impl DualRendererApp {
                     .selected_text(self.current_model.name())
                     .show_ui(ui, |ui| {
                         for model in TestModel::all() {
-                            if ui.selectable_value(&mut self.current_model, *model, model.name()).clicked() {
+                            if ui
+                                .selectable_value(&mut self.current_model, *model, model.name())
+                                .clicked()
+                            {
                                 model_changed = true;
                             }
                         }
@@ -652,7 +655,10 @@ impl DualRendererApp {
                             ];
 
                             for (value, name) in presets {
-                                if ui.selectable_value(&mut self.single_voxel_material, value, name).clicked() {
+                                if ui
+                                    .selectable_value(&mut self.single_voxel_material, value, name)
+                                    .clicked()
+                                {
                                     material_changed = true;
                                 }
                             }
@@ -660,7 +666,10 @@ impl DualRendererApp {
 
                     // Numeric slider for fine control
                     let mut mat_val = self.single_voxel_material as i32;
-                    if ui.add(egui::Slider::new(&mut mat_val, 0..=255).text("Value")).changed() {
+                    if ui
+                        .add(egui::Slider::new(&mut mat_val, 0..=255).text("Value"))
+                        .changed()
+                    {
                         self.single_voxel_material = mat_val as u8;
                         material_changed = true;
                     }
