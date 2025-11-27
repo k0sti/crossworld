@@ -6,8 +6,8 @@
 
 use crate::renderer::*;
 use crate::shader_utils;
-use cube::io::bcf::serialize_bcf;
 use cube::Cube;
+use cube::io::bcf::serialize_bcf;
 use glam::IVec3;
 use glow::*;
 use std::rc::Rc;
@@ -238,7 +238,7 @@ impl GlTracerGl {
 
             // Detect SSBO support (OpenGL 4.3+ or ES 3.1+)
             // For now, we'll use texture buffer as it's more widely supported
-            let use_ssbo = false; // TODO: Detect SSBO support properly
+            let _use_ssbo = false; // TODO: Detect SSBO support properly
 
             println!("[GL Tracer] Using texture buffer for octree data");
 
@@ -253,14 +253,14 @@ impl GlTracerGl {
             let width = bcf_data.len() as i32;
             gl.tex_image_2d(
                 TEXTURE_2D,
-                0,                // mip level
-                R8UI as i32,      // internal format
-                width,            // width
-                1,                // height (1 for 1D-like texture)
-                0,                // border
-                RED_INTEGER,      // format
-                UNSIGNED_BYTE,    // type
-                Some(&bcf_data),  // data
+                0,               // mip level
+                R8UI as i32,     // internal format
+                width,           // width
+                1,               // height (1 for 1D-like texture)
+                0,               // border
+                RED_INTEGER,     // format
+                UNSIGNED_BYTE,   // type
+                Some(&bcf_data), // data
             );
 
             // Set texture parameters

@@ -7,7 +7,6 @@ use std::rc::Rc;
 /// Pure Rust CPU raytracer that renders to an image buffer
 pub struct CpuCubeTracer {
     cube: Rc<Cube<u8>>,
-    bounds: CubeBounds,
     image_buffer: Option<ImageBuffer<Rgb<u8>, Vec<u8>>>,
     /// If true, disable lighting and output pure material colors
     disable_lighting: bool,
@@ -20,7 +19,6 @@ impl CpuCubeTracer {
 
         Self {
             cube,
-            bounds: CubeBounds::default(),
             image_buffer: None,
             disable_lighting: false,
         }
@@ -30,7 +28,6 @@ impl CpuCubeTracer {
     pub fn new_with_cube(cube: Rc<Cube<u8>>) -> Self {
         Self {
             cube,
-            bounds: CubeBounds::default(),
             image_buffer: None,
             disable_lighting: false,
         }
@@ -41,7 +38,6 @@ impl CpuCubeTracer {
         let cube = Self::parse_cube(cubscript);
         Self {
             cube,
-            bounds: CubeBounds::default(),
             image_buffer: None,
             disable_lighting: false,
         }

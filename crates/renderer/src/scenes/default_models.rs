@@ -23,22 +23,18 @@ fn parse_csm_u8(csm: &str) -> Rc<Cube<u8>> {
         match cube {
             Cube::Solid(v) => Cube::Solid(*v as u8),
             Cube::Cubes(children) => {
-                let converted: Vec<Rc<Cube<u8>>> = children
-                    .iter()
-                    .map(|c| Rc::new(convert_cube(c)))
-                    .collect();
+                let converted: Vec<Rc<Cube<u8>>> =
+                    children.iter().map(|c| Rc::new(convert_cube(c))).collect();
                 let array: [Rc<Cube<u8>>; 8] = converted.try_into().unwrap();
                 Cube::Cubes(Box::new(array))
             }
-            Cube::Planes { axis, quad: _ } => {
+            Cube::Planes { axis: _, quad: _ } => {
                 // Planes not fully implemented, fallback to solid
                 Cube::Solid(0)
             }
             Cube::Slices { axis, layers } => {
-                let converted: Vec<Rc<Cube<u8>>> = layers
-                    .iter()
-                    .map(|c| Rc::new(convert_cube(c)))
-                    .collect();
+                let converted: Vec<Rc<Cube<u8>>> =
+                    layers.iter().map(|c| Rc::new(convert_cube(c))).collect();
                 Cube::Slices {
                     axis: *axis,
                     layers: Rc::new(converted),
