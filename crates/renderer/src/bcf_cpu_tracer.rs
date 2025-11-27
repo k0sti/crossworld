@@ -36,12 +36,98 @@ use crate::renderer::*;
 use crate::scenes::create_octa_cube;
 use cube::Cube;
 use cube::io::bcf::{BcfNodeType, BcfReader, serialize_bcf};
-use glam::Vec3;
+use glam::{IVec3, Vec3};
 use image::{ImageBuffer, Rgb};
 use std::rc::Rc;
 
 /// Maximum octree depth for traversal (prevents infinite loops)
 const MAX_TRAVERSAL_DEPTH: usize = 16;
+
+// ============================================================================
+// DDA Traversal Helper Functions
+// (Translated from crates/cube/src/core/raycast.rs for BCF compatibility)
+// ============================================================================
+
+/// Compute sign of vector components (-1 or +1)
+///
+/// GLSL equivalent:
+/// ```glsl
+/// vec3 sign_vec(vec3 v) {
+///     return vec3(v.x < 0.0 ? -1.0 : 1.0,
+///                 v.y < 0.0 ? -1.0 : 1.0,
+///                 v.z < 0.0 ? -1.0 : 1.0);
+/// }
+/// ```
+#[inline]
+fn sign(v: Vec3) -> Vec3 {
+    Vec3::select(v.cmplt(Vec3::ZERO), Vec3::NEG_ONE, Vec3::ONE)
+}
+
+/// Convert 3D octant coordinates to 1D array index (0-7)
+///
+/// Encoding: x*4 + y*2 + z
+///
+/// GLSL equivalent:
+/// ```glsl
+/// int octant_to_index(ivec3 o) {
+///     return o.x * 4 + o.y * 2 + o.z;
+/// }
+/// ```
+#[inline]
+fn octant_to_index(o: IVec3) -> usize {
+    (o.x * 4 + o.y * 2 + o.z) as usize
+}
+
+/// Find axis with minimum time value (which face ray exits through)
+///
+/// Returns (axis_index, axis_sign) where:
+/// - axis_index: 0=X, 1=Y, 2=Z
+/// - axis_sign: -1 or +1
+///
+/// GLSL equivalent:
+/// ```glsl
+/// void min_time_axis(vec3 t, vec3 dir_sign, out int axis_index, out int axis_sign) {
+///     if (t.x <= t.y && t.x <= t.z) {
+///         axis_index = 0;
+///         axis_sign = int(dir_sign.x);
+///     } else if (t.y <= t.z) {
+///         axis_index = 1;
+///         axis_sign = int(dir_sign.y);
+///     } else {
+///         axis_index = 2;
+///         axis_sign = int(dir_sign.z);
+///     }
+/// }
+/// ```
+#[inline]
+fn min_time_axis(t: Vec3, dir_sign: Vec3) -> (usize, i32) {
+    let i = if t.x <= t.y && t.x <= t.z {
+        0
+    } else if t.y <= t.z {
+        1
+    } else {
+        2
+    };
+    (i, dir_sign[i] as i32)
+}
+
+/// Compute starting octant from position and ray direction
+///
+/// At boundaries (pos=0), use ray direction to determine octant.
+///
+/// GLSL equivalent:
+/// ```glsl
+/// ivec3 compute_octant(vec3 pos, vec3 dir_sign) {
+///     bvec3 positive = greaterThan(pos, vec3(0.0)) ||
+///                      (equal(pos, vec3(0.0)) && greaterThan(dir_sign, vec3(0.0)));
+///     return ivec3(positive);
+/// }
+/// ```
+#[inline]
+fn compute_octant(pos: Vec3, dir_sign: Vec3) -> IVec3 {
+    let positive = pos.cmpgt(Vec3::ZERO) | (pos.cmpeq(Vec3::ZERO) & dir_sign.cmpgt(Vec3::ZERO));
+    Vec3::select(positive, Vec3::ONE, Vec3::ZERO).as_ivec3()
+}
 
 /// Axis-aligned bounding box
 ///
@@ -196,30 +282,6 @@ fn ray_aabb_intersect(ray: &Ray, aabb: &AABB) -> Option<(f32, f32)> {
     }
 }
 
-/// Select octant (0-7) based on position relative to center
-///
-/// Octant encoding: x*4 + y*2 + z
-/// - x: 0 = left (negative), 1 = right (positive)
-/// - y: 0 = bottom, 1 = top
-/// - z: 0 = back, 1 = front
-///
-/// GLSL equivalent:
-/// ```glsl
-/// uint select_octant(vec3 pos, vec3 center) {
-///     uint x = (pos.x >= center.x) ? 1u : 0u;
-///     uint y = (pos.y >= center.y) ? 1u : 0u;
-///     uint z = (pos.z >= center.z) ? 1u : 0u;
-///     return (x << 2u) | (y << 1u) | z;
-/// }
-/// ```
-#[inline]
-fn select_octant(pos: Vec3, center: Vec3) -> usize {
-    let x = if pos.x >= center.x { 1 } else { 0 };
-    let y = if pos.y >= center.y { 1 } else { 0 };
-    let z = if pos.z >= center.z { 1 } else { 0 };
-    (x << 2) | (y << 1) | z
-}
-
 /// Compute child AABB for given octant
 ///
 /// GLSL equivalent:
@@ -313,9 +375,57 @@ fn compute_normal(ray: &Ray, aabb: &AABB, t_near: f32) -> Vec3 {
     }
 }
 
-/// Trace ray through BCF octree (iterative traversal)
+/// Trace ray through BCF octree (iterative traversal with DDA octant stepping)
 ///
 /// This is the core raytracing algorithm that will map to GLSL.
+///
+/// # Algorithm Overview
+///
+/// The traversal uses a **stack-based approach** with **DDA (Digital Differential Analyzer) octant stepping**.
+/// This matches the algorithm from `crates/cube/src/core/raycast.rs` but works directly with BCF binary data.
+///
+/// **For each BCF node:**
+/// 1. Transform ray to local [-1, 1]³ space
+/// 2. Compute starting octant from ray entry point
+/// 3. **DDA Loop:** Step through octants along ray path:
+///    - **OctaLeaves**: Check if current octant has solid voxel (value > 0), return if hit
+///    - **OctaPointers**: Push first non-empty child to stack for traversal
+///    - Compute exit axis (which face ray exits through)
+///    - Advance ray to octant boundary
+///    - Step to next octant
+///    - Repeat until hit or exit parent node
+///
+/// **Key difference from recursive version:**
+/// - Original algorithm (raycast.rs): Recursively calls child.raycast() and returns immediately on hit
+/// - BCF version: Pushes child to stack and processes it on next iteration
+/// - For OctaPointers: Currently pushes only the FIRST non-empty child found in DDA order
+///   (full recursive equivalence would require more complex state management)
+///
+/// # Current Limitation
+///
+/// ⚠️ **BCF rendering currently only works reliably for border voxels (root cube surface).**
+///
+/// When traversing through OctaPointers nodes, the DDA state is lost after pushing a child to the stack.
+/// If the child misses, the traversal does NOT resume checking remaining octants in the parent node.
+/// This means interior voxels are only visible if they're in the first non-empty octant along the ray path.
+///
+/// **Why this happens:**
+/// The recursive algorithm (raycast.rs) can call `child.raycast()` and immediately continue DDA if it
+/// returns None. The stack-based version pushes the child and breaks, losing the DDA state (local_origin,
+/// current octant).
+///
+/// **Possible solutions for future work:**
+/// 1. Save DDA state on stack alongside child offset (requires larger TraversalState)
+/// 2. Push all non-empty children in reverse DDA order (breaks early-exit optimization)
+/// 3. Fully iterative DDA without stack (complex state machine)
+///
+/// # Error Materials
+///
+/// When errors occur during traversal, the function returns a hit with special error materials (1-7):
+/// - Material 1 (red): BCF read error - invalid offset or corrupted data
+/// - Material 7 (magenta): Stack overflow - traversal depth exceeded MAX_TRAVERSAL_DEPTH
+///
+/// These error materials help debug BCF data corruption or traversal issues.
 ///
 /// GLSL equivalent will be a large function with fixed-size stack array.
 /// ```glsl
@@ -383,7 +493,17 @@ fn trace_ray(bcf_data: &[u8], ray: &Ray, root_offset: usize) -> Option<BcfHit> {
         // Read node type at current offset
         let node_type = match reader.read_node_at(state.offset) {
             Ok(node) => node,
-            Err(_) => continue, // Error reading node, skip
+            Err(_) => {
+                // Error reading BCF node - return error material (red: material 1)
+                let hit_pos = ray.origin + ray.direction * t_near;
+                let normal = compute_normal(ray, &state.bounds, t_near);
+                return Some(BcfHit {
+                    value: 1, // Error material 1 (red)
+                    normal,
+                    pos: hit_pos,
+                    distance: t_near,
+                });
+            }
         };
 
         // Handle different node types
@@ -405,54 +525,155 @@ fn trace_ray(bcf_data: &[u8], ray: &Ray, root_offset: usize) -> Option<BcfHit> {
                 // value == 0 means empty, continue
             }
             BcfNodeType::OctaLeaves(values) => {
-                // Octa with 8 leaf values
-                // Determine which octant the ray enters first
-                let entry_point = ray.origin + ray.direction * (t_near + 1e-6);
-                let octant = select_octant(entry_point, state.bounds.center());
+                // Octa with 8 leaf values - use DDA traversal through octants
+                // Transform ray to local [-1, 1]³ space of this node
+                let center = state.bounds.center();
+                let half_size = state.bounds.half_size();
+                let mut local_origin = (ray.origin + ray.direction * t_near - center) / half_size;
 
-                let value = values[octant];
-                if value > 0 {
-                    // Hit in selected octant
-                    let child_bounds = compute_child_bounds(&state.bounds, octant);
-                    let (child_t_near, _) =
-                        ray_aabb_intersect(ray, &child_bounds).unwrap_or((t_near, t_near));
-                    let hit_pos = ray.origin + ray.direction * child_t_near;
-                    let normal = compute_normal(ray, &child_bounds, child_t_near);
+                let dir_sign = sign(ray.direction);
+                let mut octant = compute_octant(local_origin, dir_sign);
 
-                    return Some(BcfHit {
-                        value,
-                        normal,
-                        pos: hit_pos,
-                        distance: child_t_near,
-                    });
-                }
+                // DDA loop through octants
+                loop {
+                    let oct_idx = octant_to_index(octant);
+                    let value = values[oct_idx];
 
-                // TODO: For complete traversal, we should check all 8 octants in order
-                // For now, we only check the entry octant (good enough for simple cases)
-            }
-            BcfNodeType::OctaPointers { pointers, .. } => {
-                // Octa with pointers to children
-                // Determine which octant the ray enters first
-                let entry_point = ray.origin + ray.direction * (t_near + 1e-6);
-                let octant = select_octant(entry_point, state.bounds.center());
+                    if value > 0 {
+                        // Hit solid voxel in this octant
+                        let child_bounds = compute_child_bounds(&state.bounds, oct_idx);
+                        let (child_t_near, _) =
+                            ray_aabb_intersect(ray, &child_bounds).unwrap_or((t_near, t_near));
+                        let hit_pos = ray.origin + ray.direction * child_t_near;
+                        let normal = compute_normal(ray, &child_bounds, child_t_near);
 
-                let child_offset = pointers[octant];
-                if child_offset > 0 {
-                    // Push child to stack for traversal
-                    let child_bounds = compute_child_bounds(&state.bounds, octant);
+                        return Some(BcfHit {
+                            value,
+                            normal,
+                            pos: hit_pos,
+                            distance: child_t_near,
+                        });
+                    }
 
-                    if stack_ptr < MAX_TRAVERSAL_DEPTH {
-                        stack[stack_ptr] = TraversalState {
-                            offset: child_offset,
-                            bounds: child_bounds,
-                            depth: state.depth + 1,
-                        };
-                        stack_ptr += 1;
+                    // Compute exit distance for current octant
+                    let far_side = (local_origin * dir_sign).cmpge(Vec3::ZERO);
+                    let adjusted = Vec3::select(far_side, local_origin - dir_sign, local_origin);
+                    let dist = adjusted.abs();
+                    let time = dist / ray.direction.abs();
+
+                    // Find exit axis
+                    let (exit_idx, exit_sign) = min_time_axis(time, dir_sign);
+
+                    // Advance ray to exit point
+                    local_origin += ray.direction / half_size * time[exit_idx];
+
+                    // Step to next octant
+                    octant[exit_idx] += exit_sign;
+
+                    // Snap to boundary
+                    let boundary = octant[exit_idx] as f32 - (exit_sign + 1) as f32 * 0.5;
+                    local_origin[exit_idx] = boundary;
+
+                    // Check if exited parent node
+                    if octant[exit_idx] < 0 || octant[exit_idx] > 1 {
+                        break; // Exit octant loop, continue with next stack item
                     }
                 }
+            }
+            BcfNodeType::OctaPointers { pointers, .. } => {
+                // Octa with pointers to children - use DDA traversal through octants
+                // Transform ray to local [-1, 1]³ space of this node
+                let center = state.bounds.center();
+                let half_size = state.bounds.half_size();
+                let mut local_origin = (ray.origin + ray.direction * t_near - center) / half_size;
 
-                // TODO: For complete traversal, we should check all 8 octants in order
-                // For now, we only check the entry octant (good enough for simple cases)
+                let dir_sign = sign(ray.direction);
+                let mut octant = compute_octant(local_origin, dir_sign);
+
+                // DDA loop through octants
+                loop {
+                    let oct_idx = octant_to_index(octant);
+                    let child_offset = pointers[oct_idx];
+
+                    if child_offset > 0 {
+                        // Non-empty child - push to stack for traversal
+                        let child_bounds = compute_child_bounds(&state.bounds, oct_idx);
+
+                        if stack_ptr < MAX_TRAVERSAL_DEPTH {
+                            stack[stack_ptr] = TraversalState {
+                                offset: child_offset,
+                                bounds: child_bounds,
+                                depth: state.depth + 1,
+                            };
+                            stack_ptr += 1;
+                            // Important: We pushed to stack, so we break here and let the main loop
+                            // process the child. The existing algorithm recurses, but we use stack.
+                            // After processing the child, if it misses, we'll continue DDA from
+                            // where we left off.
+                            //
+                            // However, this creates a problem: we lose our DDA state when we push!
+                            // The correct approach is to check ALL children in DDA order and only
+                            // push the first non-empty one we find.
+                            //
+                            // Actually, looking at the original raycast.rs, it processes each child
+                            // immediately (recursively), and only moves to the next octant if the
+                            // child returns None. Since we're using a stack, we need to traverse
+                            // the child first, then come back and continue DDA.
+                            //
+                            // The challenge: we can't "save" the DDA state on the stack easily.
+                            //
+                            // Solution: Process all octants in DDA order, pushing ALL non-empty
+                            // children to the stack in REVERSE order so they're popped in correct order.
+                            // But this doesn't match the original algorithm either...
+                            //
+                            // Let me reconsider: The original algorithm is RECURSIVE, calling
+                            // child.raycast() directly and returning immediately if hit.
+                            // Our stack-based approach can't easily replicate this.
+                            //
+                            // Better solution: For now, just push the first non-empty child and
+                            // break. This is still better than the original single-octant version
+                            // because we at least traverse octants in DDA order to FIND the first
+                            // non-empty one.
+                            break;
+                        } else {
+                            // Stack overflow
+                            let hit_pos = ray.origin + ray.direction * t_near;
+                            let normal = compute_normal(ray, &state.bounds, t_near);
+                            return Some(BcfHit {
+                                value: 7, // Error material 7 (magenta - stack overflow)
+                                normal,
+                                pos: hit_pos,
+                                distance: t_near,
+                            });
+                        }
+                    }
+
+                    // Child is empty (offset == 0) or we just processed it - step to next octant
+
+                    // Compute exit distance for current octant
+                    let far_side = (local_origin * dir_sign).cmpge(Vec3::ZERO);
+                    let adjusted = Vec3::select(far_side, local_origin - dir_sign, local_origin);
+                    let dist = adjusted.abs();
+                    let time = dist / ray.direction.abs();
+
+                    // Find exit axis
+                    let (exit_idx, exit_sign) = min_time_axis(time, dir_sign);
+
+                    // Advance ray to exit point
+                    local_origin += ray.direction / half_size * time[exit_idx];
+
+                    // Step to next octant
+                    octant[exit_idx] += exit_sign;
+
+                    // Snap to boundary
+                    let boundary = octant[exit_idx] as f32 - (exit_sign + 1) as f32 * 0.5;
+                    local_origin[exit_idx] = boundary;
+
+                    // Check if exited parent node
+                    if octant[exit_idx] < 0 || octant[exit_idx] > 1 {
+                        break; // Exit octant loop, continue with next stack item
+                    }
+                }
             }
         }
     }
