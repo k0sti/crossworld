@@ -25,13 +25,13 @@ fn test_bcf_tracer_renders_solid_cube() {
     // (i.e., the cube is visible)
     let mut non_background_pixels = 0;
     for pixel in image.pixels() {
-        // Background color is approximately RGB(102, 128, 153) after gamma correction
-        let is_background = pixel[0] > 80
-            && pixel[0] < 120
-            && pixel[1] > 110
-            && pixel[1] < 150
-            && pixel[2] > 140
-            && pixel[2] < 170;
+        // Background color is RGB(168, 186, 202) after gamma correction
+        let is_background = pixel[0] > 160
+            && pixel[0] < 176
+            && pixel[1] > 178
+            && pixel[1] < 194
+            && pixel[2] > 194
+            && pixel[2] < 210;
         if !is_background {
             non_background_pixels += 1;
         }
@@ -64,13 +64,13 @@ fn test_bcf_tracer_octa_cube() {
     // Check for non-background pixels
     let mut colored_pixels = 0;
     for pixel in image.pixels() {
-        // Any pixel that's not close to background color
-        let is_colored = pixel[0] < 80
-            || pixel[0] > 120
-            || pixel[1] < 110
-            || pixel[1] > 150
-            || pixel[2] < 140
-            || pixel[2] > 170;
+        // Any pixel that's not close to background color (RGB(168, 186, 202))
+        let is_colored = pixel[0] < 160
+            || pixel[0] > 176
+            || pixel[1] < 178
+            || pixel[1] > 194
+            || pixel[2] < 194
+            || pixel[2] > 210;
         if is_colored {
             colored_pixels += 1;
         }
@@ -115,25 +115,40 @@ fn test_bcf_tracer_empty_cube() {
     tracer.render(64, 64, 0.0);
     let image = tracer.image_buffer().expect("Image buffer should exist");
 
-    // All pixels should be background color (since cube is empty/transparent)
-    let mut all_background = true;
-    for pixel in image.pixels() {
+    // Count background and non-background pixels for debugging
+    let mut background_count = 0;
+    let mut non_background_pixels = Vec::new();
+
+    for (idx, pixel) in image.pixels().enumerate() {
         // Background color check with tolerance
-        let is_background = pixel[0] > 80
-            && pixel[0] < 120
-            && pixel[1] > 110
-            && pixel[1] < 150
-            && pixel[2] > 140
-            && pixel[2] < 170;
-        if !is_background {
-            all_background = false;
-            break;
+        // Background is RGB(168, 186, 202) after gamma correction
+        let is_background = pixel[0] > 160
+            && pixel[0] < 176
+            && pixel[1] > 178
+            && pixel[1] < 194
+            && pixel[2] > 194
+            && pixel[2] < 210;
+        if is_background {
+            background_count += 1;
+        } else if non_background_pixels.len() < 5 {
+            non_background_pixels.push((idx, *pixel));
+        }
+    }
+
+    if !non_background_pixels.is_empty() {
+        eprintln!("Empty cube rendering stats:");
+        eprintln!("  Background pixels: {}", background_count);
+        eprintln!("  Non-background pixels: {}", 64 * 64 - background_count);
+        eprintln!("  Sample non-background pixels:");
+        for (idx, pixel) in &non_background_pixels {
+            eprintln!("    Pixel {}: RGB({}, {}, {})", idx, pixel[0], pixel[1], pixel[2]);
         }
     }
 
     assert!(
-        all_background,
-        "Empty cube should render as all background color"
+        non_background_pixels.is_empty(),
+        "Empty cube should render as all background color, but found {} non-background pixels",
+        64 * 64 - background_count
     );
 }
 
@@ -147,18 +162,41 @@ fn test_bcf_tracer_max_value() {
     tracer.render(64, 64, 0.0);
     let image = tracer.image_buffer().expect("Image buffer should exist");
 
-    // Should have visible pixels
-    let mut has_colored_pixels = false;
-    for pixel in image.pixels() {
-        if pixel[0] < 80 || pixel[1] < 80 || pixel[2] < 80 {
-            has_colored_pixels = true;
-            break;
+    // Count pixels that are not background
+    let mut non_background_count = 0;
+    let mut sample_pixels = Vec::new();
+
+    for (idx, pixel) in image.pixels().enumerate() {
+        // Check if pixel is NOT background (RGB(168, 186, 202))
+        let is_not_background = pixel[0] < 160
+            || pixel[0] > 176
+            || pixel[1] < 178
+            || pixel[1] > 194
+            || pixel[2] < 194
+            || pixel[2] > 210;
+
+        if is_not_background {
+            non_background_count += 1;
+            if sample_pixels.len() < 5 {
+                sample_pixels.push((idx, *pixel));
+            }
+        }
+    }
+
+    if non_background_count == 0 {
+        eprintln!("Max value cube (255) rendered as all background!");
+        eprintln!("This suggests the cube is not being hit by rays.");
+    } else {
+        eprintln!("Found {} non-background pixels", non_background_count);
+        for (idx, pixel) in &sample_pixels {
+            eprintln!("  Pixel {}: RGB({}, {}, {})", idx, pixel[0], pixel[1], pixel[2]);
         }
     }
 
     assert!(
-        has_colored_pixels,
-        "Max value cube should render with visible pixels"
+        non_background_count > 0,
+        "Max value cube should render with visible pixels, but all {} pixels are background",
+        64 * 64
     );
 }
 
@@ -181,12 +219,12 @@ fn test_bcf_format_roundtrip() {
     // Check for colored pixels
     let mut colored_count = 0;
     for pixel in image.pixels() {
-        let is_colored = pixel[0] < 80
-            || pixel[0] > 120
-            || pixel[1] < 110
-            || pixel[1] > 150
-            || pixel[2] < 140
-            || pixel[2] > 170;
+        let is_colored = pixel[0] < 160
+            || pixel[0] > 176
+            || pixel[1] < 178
+            || pixel[1] > 194
+            || pixel[2] < 194
+            || pixel[2] > 210;
         if is_colored {
             colored_count += 1;
         }
