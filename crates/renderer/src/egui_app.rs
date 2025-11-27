@@ -3,7 +3,7 @@
 use egui::{ColorImage, TextureHandle, TextureOptions};
 use glow::*;
 use renderer::scenes::TestModel;
-use renderer::{CameraConfig, CpuCubeTracer, GlCubeTracer, GpuTracer, Renderer};
+use renderer::{BcfCpuTracer, CameraConfig, CpuCubeTracer, GlCubeTracer, Renderer};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
@@ -28,7 +28,7 @@ struct RenderResponse {
 enum DiffSource {
     Cpu,
     Gl,
-    Gpu,
+    BcfCpu,
 }
 
 impl DiffSource {
@@ -36,7 +36,7 @@ impl DiffSource {
         match self {
             DiffSource::Cpu => "CPU",
             DiffSource::Gl => "GL (WebGL 2.0)",
-            DiffSource::Gpu => "GPU (Compute)",
+            DiffSource::BcfCpu => "BCF CPU",
         }
     }
 }
@@ -46,19 +46,17 @@ pub struct DualRendererApp {
     cpu_sync_request: Arc<Mutex<Option<RenderRequest>>>,
     cpu_sync_response: Arc<Mutex<Option<RenderResponse>>>,
     gl_renderer: GlCubeTracer,
-    gpu_renderer: GpuTracer,
+    bcf_cpu_renderer: BcfCpuTracer,
 
-    // GL framebuffers for each renderer
+    // GL framebuffers for GL renderer
     gl_framebuffer: Option<Framebuffer>,
     gl_texture: Option<Texture>,
-    gpu_framebuffer: Option<Framebuffer>,
-    gpu_texture: Option<Texture>,
     framebuffer_size: (i32, i32),
 
     // egui textures
     cpu_texture: Option<TextureHandle>,
     gl_egui_texture: Option<TextureHandle>,
-    gpu_egui_texture: Option<TextureHandle>,
+    bcf_cpu_texture: Option<TextureHandle>,
     diff_texture: Option<TextureHandle>,
 
     // Timing
@@ -68,7 +66,7 @@ pub struct DualRendererApp {
     fps: f32,
     cpu_render_time_ms: f32,
     gl_render_time_ms: f32,
-    gpu_render_time_ms: f32,
+    bcf_cpu_render_time_ms: f32,
 
     // Settings
     render_size: (u32, u32),
@@ -90,7 +88,7 @@ pub struct DualRendererApp {
     // Current display frames
     cpu_latest_frame: Option<ColorImage>,
     gl_latest_frame: Option<ColorImage>,
-    gpu_latest_frame: Option<ColorImage>,
+    bcf_cpu_latest_frame: Option<ColorImage>,
 
     // Diff comparison settings
     diff_left: DiffSource,
@@ -114,17 +112,8 @@ impl DualRendererApp {
             gl_renderer.init_gl(gl)?;
         }
 
-        // Initialize GPU renderer (compute shader stub)
-        let mut gpu_renderer = GpuTracer::new(cube.clone());
-        let gpu_available = unsafe {
-            match gpu_renderer.init_gl(gl) {
-                Ok(_) => true,
-                Err(e) => {
-                    println!("GPU compute shader not available: {}", e);
-                    false
-                }
-            }
-        };
+        // Initialize BCF CPU renderer
+        let bcf_cpu_renderer = BcfCpuTracer::new_from_cube(cube.clone());
 
         let render_size = (400, 300);
 
@@ -189,15 +178,13 @@ impl DualRendererApp {
             cpu_sync_request,
             cpu_sync_response,
             gl_renderer,
-            gpu_renderer,
+            bcf_cpu_renderer,
             gl_framebuffer: None,
             gl_texture: None,
-            gpu_framebuffer: None,
-            gpu_texture: None,
             framebuffer_size: (0, 0),
             cpu_texture: None,
             gl_egui_texture: None,
-            gpu_egui_texture: None,
+            bcf_cpu_texture: None,
             diff_texture: None,
             start_time: std::time::Instant::now(),
             frame_count: 0,
@@ -205,7 +192,7 @@ impl DualRendererApp {
             fps: 0.0,
             cpu_render_time_ms: 0.0,
             gl_render_time_ms: 0.0,
-            gpu_render_time_ms: if gpu_available { 0.0 } else { -1.0 },
+            bcf_cpu_render_time_ms: 0.0,
             render_size,
             sync_mode,
             camera,
@@ -219,7 +206,7 @@ impl DualRendererApp {
             single_voxel_material: 224, // Default: red (R2G3B2 encoded)
             cpu_latest_frame: None,
             gl_latest_frame: None,
-            gpu_latest_frame: None,
+            bcf_cpu_latest_frame: None,
             diff_left: DiffSource::Cpu,
             diff_right: DiffSource::Gl,
         })
@@ -235,13 +222,6 @@ impl DualRendererApp {
                 if let Some(tex) = self.gl_texture {
                     gl.delete_texture(tex);
                 }
-                if let Some(fb) = self.gpu_framebuffer {
-                    gl.delete_framebuffer(fb);
-                }
-                if let Some(tex) = self.gpu_texture {
-                    gl.delete_texture(tex);
-                }
-
                 // Create GL renderer texture and framebuffer
                 let gl_texture = gl.create_texture().unwrap();
                 gl.bind_texture(TEXTURE_2D, Some(gl_texture));
@@ -269,39 +249,10 @@ impl DualRendererApp {
                     0,
                 );
 
-                // Create GPU renderer texture and framebuffer
-                let gpu_texture = gl.create_texture().unwrap();
-                gl.bind_texture(TEXTURE_2D, Some(gpu_texture));
-                gl.tex_image_2d(
-                    TEXTURE_2D,
-                    0,
-                    RGBA as i32,
-                    width,
-                    height,
-                    0,
-                    RGBA,
-                    UNSIGNED_BYTE,
-                    None,
-                );
-                gl.tex_parameter_i32(TEXTURE_2D, TEXTURE_MIN_FILTER, LINEAR as i32);
-                gl.tex_parameter_i32(TEXTURE_2D, TEXTURE_MAG_FILTER, LINEAR as i32);
-
-                let gpu_framebuffer = gl.create_framebuffer().unwrap();
-                gl.bind_framebuffer(FRAMEBUFFER, Some(gpu_framebuffer));
-                gl.framebuffer_texture_2d(
-                    FRAMEBUFFER,
-                    COLOR_ATTACHMENT0,
-                    TEXTURE_2D,
-                    Some(gpu_texture),
-                    0,
-                );
-
                 gl.bind_framebuffer(FRAMEBUFFER, None);
 
                 self.gl_texture = Some(gl_texture);
                 self.gl_framebuffer = Some(gl_framebuffer);
-                self.gpu_texture = Some(gpu_texture);
-                self.gpu_framebuffer = Some(gpu_framebuffer);
                 self.framebuffer_size = (width, height);
             }
         }
@@ -342,40 +293,21 @@ impl DualRendererApp {
         }
     }
 
-    pub unsafe fn render_gpu_to_texture(&mut self, gl: &Arc<Context>, time: f32) {
-        if self.gpu_render_time_ms < 0.0 {
-            // GPU renderer not available
-            return;
-        }
-
+    pub unsafe fn render_bcf_cpu(&mut self, _gl: &Arc<Context>, time: f32) {
         let (width, height) = self.render_size;
 
-        unsafe {
-            self.ensure_framebuffer(gl, width as i32, height as i32);
+        // Render BCF CPU tracer
+        let start = std::time::Instant::now();
 
-            // Render GPU tracer
-            gl.bind_framebuffer(FRAMEBUFFER, self.gpu_framebuffer);
-            gl.viewport(0, 0, width as i32, height as i32);
+        self.bcf_cpu_renderer.set_disable_lighting(self.disable_lighting);
 
-            let start = std::time::Instant::now();
-
-            if self.use_manual_camera {
-                self.gpu_renderer.render_to_gl_with_camera(
-                    gl,
-                    width as i32,
-                    height as i32,
-                    &self.camera,
-                );
-            } else {
-                self.gpu_renderer
-                    .render_to_gl(gl, width as i32, height as i32, time);
-            }
-
-            gl.finish();
-            self.gpu_render_time_ms = start.elapsed().as_secs_f32() * 1000.0;
-
-            gl.bind_framebuffer(FRAMEBUFFER, None);
+        if self.use_manual_camera {
+            self.bcf_cpu_renderer.render_with_camera(width, height, &self.camera);
+        } else {
+            self.bcf_cpu_renderer.render(width, height, time);
         }
+
+        self.bcf_cpu_render_time_ms = start.elapsed().as_secs_f32() * 1000.0;
     }
 
     unsafe fn read_framebuffer_to_image(
@@ -554,7 +486,7 @@ impl DualRendererApp {
         match source {
             DiffSource::Cpu => self.cpu_latest_frame.as_ref(),
             DiffSource::Gl => self.gl_latest_frame.as_ref(),
-            DiffSource::Gpu => self.gpu_latest_frame.as_ref(),
+            DiffSource::BcfCpu => self.bcf_cpu_latest_frame.as_ref(),
         }
     }
 
@@ -564,7 +496,7 @@ impl DualRendererApp {
         // Render all tracers
         unsafe {
             self.render_gl_to_texture(gl, time);
-            self.render_gpu_to_texture(gl, time);
+            self.render_bcf_cpu(gl, time);
         }
         self.render_cpu(time);
 
@@ -621,10 +553,7 @@ impl DualRendererApp {
                             eprintln!("Failed to reinitialize GL renderer: {}", e);
                         }
                     }
-                    self.gpu_renderer = GpuTracer::new(new_cube.clone());
-                    unsafe {
-                        let _ = self.gpu_renderer.init_gl(gl);
-                    }
+                    self.bcf_cpu_renderer = BcfCpuTracer::new_from_cube(new_cube.clone());
                     // CPU renderer will be updated on next frame via sync thread
                 }
 
@@ -685,10 +614,7 @@ impl DualRendererApp {
                                 eprintln!("Failed to reinitialize GL renderer: {}", e);
                             }
                         }
-                        self.gpu_renderer = GpuTracer::new(new_cube.clone());
-                        unsafe {
-                            let _ = self.gpu_renderer.init_gl(gl);
-                        }
+                        self.bcf_cpu_renderer = BcfCpuTracer::new_from_cube(new_cube.clone());
                         // CPU renderer will be updated on next frame via sync thread
                     }
                 }
@@ -702,10 +628,20 @@ impl DualRendererApp {
             {
                 self.gl_latest_frame = Some(gl_img);
             }
-            if let Some(gpu_img) =
-                unsafe { self.read_framebuffer_to_image(gl, self.gpu_framebuffer) }
-            {
-                self.gpu_latest_frame = Some(gpu_img);
+            // Get BCF CPU tracer image
+            if let Some(bcf_image) = self.bcf_cpu_renderer.image_buffer() {
+                let (width, height) = (bcf_image.width() as usize, bcf_image.height() as usize);
+                let mut pixels = vec![0u8; width * height * 4];
+                for (i, pixel) in bcf_image.pixels().enumerate() {
+                    pixels[i * 4] = pixel[0];
+                    pixels[i * 4 + 1] = pixel[1];
+                    pixels[i * 4 + 2] = pixel[2];
+                    pixels[i * 4 + 3] = 255;
+                }
+                self.bcf_cpu_latest_frame = Some(ColorImage::from_rgba_unmultiplied(
+                    [width, height],
+                    &pixels,
+                ));
             }
 
             // Calculate diff
@@ -727,9 +663,9 @@ impl DualRendererApp {
                 self.gl_egui_texture =
                     Some(ctx.load_texture("gl_render", gl_img.clone(), TextureOptions::LINEAR));
             }
-            if let Some(ref gpu_img) = self.gpu_latest_frame {
-                self.gpu_egui_texture =
-                    Some(ctx.load_texture("gpu_render", gpu_img.clone(), TextureOptions::LINEAR));
+            if let Some(ref bcf_img) = self.bcf_cpu_latest_frame {
+                self.bcf_cpu_texture =
+                    Some(ctx.load_texture("bcf_cpu_render", bcf_img.clone(), TextureOptions::LINEAR));
             }
 
             // 2x2 Grid layout
@@ -763,16 +699,16 @@ impl DualRendererApp {
                     }
                     ui.end_row();
 
-                    // Row 2: GPU | Diff
-                    let gpu_response = Self::render_view_static(
+                    // Row 2: BCF CPU | Diff
+                    let bcf_response = Self::render_view_static(
                         ui,
-                        "GPU",
-                        "Compute Shader",
-                        self.gpu_render_time_ms,
-                        &self.gpu_egui_texture,
+                        "BCF CPU",
+                        "BCF Traversal (CPU)",
+                        self.bcf_cpu_render_time_ms,
+                        &self.bcf_cpu_texture,
                         self.render_size,
                     );
-                    if let Some(r) = gpu_response {
+                    if let Some(r) = bcf_response {
                         responses.push(r);
                     }
                     self.render_diff_view(ui);
@@ -843,8 +779,8 @@ impl DualRendererApp {
                         );
                         ui.selectable_value(
                             &mut self.diff_left,
-                            DiffSource::Gpu,
-                            DiffSource::Gpu.name(),
+                            DiffSource::BcfCpu,
+                            DiffSource::BcfCpu.name(),
                         );
                     });
 
@@ -865,8 +801,8 @@ impl DualRendererApp {
                         );
                         ui.selectable_value(
                             &mut self.diff_right,
-                            DiffSource::Gpu,
-                            DiffSource::Gpu.name(),
+                            DiffSource::BcfCpu,
+                            DiffSource::BcfCpu.name(),
                         );
                     });
             });
@@ -914,14 +850,8 @@ impl DualRendererApp {
             if let Some(tex) = self.gl_texture {
                 gl.delete_texture(tex);
             }
-            if let Some(fb) = self.gpu_framebuffer {
-                gl.delete_framebuffer(fb);
-            }
-            if let Some(tex) = self.gpu_texture {
-                gl.delete_texture(tex);
-            }
             self.gl_renderer.destroy_gl(gl);
-            self.gpu_renderer.destroy_gl(gl);
+            // BCF CPU renderer has no GL resources to destroy
         }
     }
 }
