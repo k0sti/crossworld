@@ -218,37 +218,6 @@ impl<'a> NeighborView<'a> {
     }
 }
 
-/// Coordinate for tracking position during traversal
-///
-/// Uses center-based coordinate system matching the [-1,1]³ raycast space:
-/// - Root cube (depth=0) has pos = (0, 0, 0)
-/// - Child positions offset by ±1 in each direction
-/// - At depth d, positions range from -(2^d) to +(2^d) in steps of 2
-#[derive(Debug, Clone, Copy)]
-pub struct CubeCoord {
-    /// Position in octree space (center-based)
-    /// Root: (0, 0, 0), children offset by ±1
-    pub pos: IVec3,
-    /// Current depth level (0 = root)
-    pub depth: u32,
-}
-
-impl CubeCoord {
-    pub fn new(pos: IVec3, depth: u32) -> Self {
-        Self { pos, depth }
-    }
-
-    /// Create child coordinate for octant
-    /// Child position = parent_pos * 2 + offset where offset ∈ {-1,+1}³
-    pub fn child(&self, octant_idx: usize) -> Self {
-        let offset = IVec3::from_octant_index(octant_idx);
-        Self {
-            pos: self.pos * 2 + offset,
-            depth: self.depth + 1,
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

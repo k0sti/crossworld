@@ -14,8 +14,8 @@ pub mod wasm;
 
 // Re-export main types from core
 pub use core::{
-    octant_char_to_index, octant_index_to_char, raycast, Cube, Hit, IVec3Ext, Octree, Quad,
-    RaycastDebugState, OCTANT_POSITIONS,
+    octant_char_to_index, octant_index_to_char, raycast, Box, Cube, CubeCoord, Hit, IVec3Ext,
+    Octree, Quad, RaycastDebugState, OCTANT_POSITIONS,
 };
 
 // Re-export axis types
@@ -23,8 +23,8 @@ pub use axis::Axis;
 
 // Re-export traversal types
 pub use traversal::{
-    traverse_octree, visit_faces, CubeCoord, FaceInfo, NeighborGrid, NeighborView,
-    TraversalVisitor, OFFSET_BACK, OFFSET_DOWN, OFFSET_FRONT, OFFSET_LEFT, OFFSET_RIGHT, OFFSET_UP,
+    traverse_octree, visit_faces, FaceInfo, NeighborGrid, NeighborView, TraversalVisitor,
+    OFFSET_BACK, OFFSET_DOWN, OFFSET_FRONT, OFFSET_LEFT, OFFSET_RIGHT, OFFSET_UP,
 };
 
 // Re-export mesh types
