@@ -56,14 +56,14 @@ where
         &mut |view, coord, _subleaf| {
             let center_id = view.center().id();
 
-            // Clamp depth to max_depth to avoid underflow
-            let depth = coord.depth.min(max_depth);
-            let voxel_size = 1.0 / (1 << (max_depth - depth + 1)) as f32;
+            let voxel_size = 1.0 / (1 << (max_depth - coord.depth + 1)) as f32;
 
-            // Convert center-based coordinates [-1,+1] to world space [0,1]
-            // Formula: world = (center + 1) * 0.5 * voxel_size
-            // This maps (-1,-1,-1) → (0,0,0) and (+1,+1,+1) → (1,1,1) when depth=0
-            let base_pos = (coord.pos.as_vec3() + 1.0) * 0.5 * voxel_size;
+            // Convert center-based coordinates to world space [0,1]
+            // At depth d, positions range from -(2^(max_depth-d+1)-1) to +(2^(max_depth-d+1)-1) in steps of 2
+            // Map this range to [0,1] by: (pos + max_pos) * voxel_size / 2
+            // where max_pos = 2^(max_depth-d+1) - 1
+            let num_voxels = (1 << (max_depth - coord.depth + 1)) as f32;
+            let base_pos = (coord.pos.as_vec3() + num_voxels - 1.0) * voxel_size / 2.0;
 
             let mut should_subdivide = false;
 

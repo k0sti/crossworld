@@ -218,6 +218,40 @@ impl<'a> NeighborView<'a> {
     }
 }
 
+/// Coordinate for tracking position during traversal
+///
+/// Uses center-based coordinate system matching the [-1,1]³ raycast space:
+/// - Traversal starts at depth=max_depth with 8 octants at positions (±1, ±1, ±1)
+/// - Child positions calculated as: parent_pos * 2 + offset where offset ∈ {-1,+1}³
+/// - Depth decrements as we traverse deeper (max_depth → 0)
+/// - At depth d, there are 2^(max_depth-d+1) voxels per axis
+/// - Base case: depth=0 means maximum subdivision reached
+#[derive(Debug, Clone, Copy)]
+pub struct CubeCoord {
+    /// Position in octree space (center-based)
+    /// At depth=max_depth: positions are (±1, ±1, ±1)
+    /// At depth=0: positions range widely based on max_depth
+    pub pos: IVec3,
+    /// Current depth level (max_depth at start, decrements to 0)
+    pub depth: u32,
+}
+
+impl CubeCoord {
+    pub fn new(pos: IVec3, depth: u32) -> Self {
+        Self { pos, depth }
+    }
+
+    /// Create child coordinate for octant
+    /// Child position = parent_pos * 2 + offset where offset ∈ {-1,+1}³
+    pub fn child(&self, octant_idx: usize) -> Self {
+        let offset = IVec3::from_octant_index(octant_idx);
+        Self {
+            pos: self.pos * 2 + offset,
+            depth: self.depth - 1,  // Decrement depth as we go deeper
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
