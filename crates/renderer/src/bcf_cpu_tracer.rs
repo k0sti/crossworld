@@ -65,17 +65,17 @@ fn sign(v: Vec3) -> Vec3 {
 
 /// Convert 3D octant coordinates to 1D array index (0-7)
 ///
-/// Encoding: x*4 + y*2 + z
+/// Encoding: x + y*2 + z*4
 ///
 /// GLSL equivalent:
 /// ```glsl
 /// int octant_to_index(ivec3 o) {
-///     return o.x * 4 + o.y * 2 + o.z;
+///     return o.x + o.y * 2 + o.z * 4;
 /// }
 /// ```
 #[inline]
 fn octant_to_index(o: IVec3) -> usize {
-    (o.x * 4 + o.y * 2 + o.z) as usize
+    (o.x + o.y * 2 + o.z * 4) as usize
 }
 
 /// Find axis with minimum time value (which face ray exits through)
