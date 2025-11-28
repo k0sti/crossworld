@@ -54,15 +54,16 @@ where
     traverse_octree(
         &grid,
         &mut |view, coord, _subleaf| {
-            // Only process empty voxels
-            if view.center().id() != 0 {
-                return false;
-            }
+            let center_id = view.center().id();
 
             // Clamp depth to max_depth to avoid underflow
             let depth = coord.depth.min(max_depth);
             let voxel_size = 1.0 / (1 << (max_depth - depth + 1)) as f32;
-            let base_pos = coord.pos.as_vec3() * voxel_size;
+
+            // Convert center-based coordinates [-1,+1] to world space [0,1]
+            // Formula: world = (center + 1) * 0.5 * voxel_size
+            // This maps (-1,-1,-1) → (0,0,0) and (+1,+1,+1) → (1,1,1) when depth=0
+            let base_pos = (coord.pos.as_vec3() + 1.0) * 0.5 * voxel_size;
 
             let mut should_subdivide = false;
 
@@ -76,17 +77,34 @@ where
                     }
 
                     let neighbor_id = neighbor_cube.id();
-                    if neighbor_id == 0 {
-                        continue; // Skip empty neighbors
+
+                    // Generate face if there's a transition between solid and empty
+                    let is_viewing_from_empty = center_id == 0 && neighbor_id != 0;
+                    let is_viewing_from_solid = center_id != 0 && neighbor_id == 0;
+
+                    if !is_viewing_from_empty && !is_viewing_from_solid {
+                        continue;
                     }
 
+                    // Face material: use solid voxel's material
+                    let material_id = if is_viewing_from_empty { neighbor_id } else { center_id };
+
+                    // Face position adjustment:
+                    // - From empty→solid: face is on neighbor's side, offset points toward it
+                    // - From solid→empty: face is on our side, need to negate offset
+                    let position_offset = if is_viewing_from_solid {
+                        -offset_vec // Invert direction when viewing from solid
+                    } else {
+                        offset_vec
+                    };
+
                     // Found a visible face!
-                    let face_position = base_pos + offset_vec * voxel_size;
+                    let face_position = base_pos + position_offset * voxel_size;
                     visitor(&FaceInfo {
                         face,
                         position: face_position,
                         size: voxel_size,
-                        material_id: neighbor_id,
+                        material_id,
                         viewer_coord: coord,
                     });
                 }
