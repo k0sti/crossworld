@@ -17,9 +17,11 @@ default:
     @echo "  just server-prod      - Run game server (production mode)"
     @echo "  just gen-cert         - Generate self-signed certificate for development"
     @echo "  just test-client      - Run test client to connect to server"
-    @echo "  just raycast-report   - Test raycast algorithm (octree traversal logic)"
+    @echo "  just raycast-report   - Generate comprehensive raycast test report for all tracers"
     @echo "  just raytrace-report  - Test rendering output (color accuracy, tracer consistency)"
     @echo "  just test-raytracing  - Run complete raytracing test suite (raycast + raytrace)"
+    @echo "  just planet           - Run native voxel editor (Bevy)"
+    @echo "  just planet-release   - Run native voxel editor (optimized build)"
     @echo ""
 
 # Build WASM module in development mode
@@ -129,7 +131,7 @@ raycast-report:
     @echo "║  Tests: Octree traversal, hit detection, normals, positions, edge cases     ║"
     @echo "╚══════════════════════════════════════════════════════════════════════════════╝"
     @echo ""
-    cargo test --package cube --test raycast_table_tests -- --nocapture --test-threads=1
+    cargo test --test raycast_test_report -- --nocapture --test-threads=1
 
 # Test rendering output across all tracers (visual correctness)
 raytrace-report:
@@ -156,3 +158,11 @@ test-raytracing:
     just raycast-report
     @echo ""
     just raytrace-report
+
+# Run native voxel editor (Bevy) in development mode
+planet:
+    cargo run --bin planet
+
+# Run native voxel editor (Bevy) in release mode
+planet-release:
+    cargo run --release --bin planet
