@@ -169,29 +169,29 @@ fn setup(
     let geometry_data = world_cube.generate_mesh();
 
     info!("World mesh generated: {} vertices, {} indices",
-        geometry_data.vertices.len() / 3,
-        geometry_data.indices.len());
+        geometry_data.vertices().len() / 3,
+        geometry_data.indices().len());
 
     // Convert to Bevy mesh
     let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, default());
 
     // Positions (Vec3)
     let positions: Vec<[f32; 3]> = geometry_data
-        .vertices
+        .vertices()
         .chunks(3)
         .map(|chunk| [chunk[0], chunk[1], chunk[2]])
         .collect();
 
     // Normals (Vec3)
     let normals: Vec<[f32; 3]> = geometry_data
-        .normals
+        .normals()
         .chunks(3)
         .map(|chunk| [chunk[0], chunk[1], chunk[2]])
         .collect();
 
     // Colors (Vec3)
     let colors: Vec<[f32; 3]> = geometry_data
-        .colors
+        .colors()
         .chunks(3)
         .map(|chunk| [chunk[0], chunk[1], chunk[2]])
         .collect();
@@ -199,7 +199,7 @@ fn setup(
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
     mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, colors);
-    mesh.insert_indices(Indices::U32(geometry_data.indices.clone()));
+    mesh.insert_indices(Indices::U32(geometry_data.indices()));
 
     // Spawn world entity with physics
     info!("Spawning world entity with collider...");
