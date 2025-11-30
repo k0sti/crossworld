@@ -450,3 +450,159 @@ fn bench_bcf_tracer_render_time() {
     // Sanity check: should complete in reasonable time (< 5 seconds for 256x256)
     assert!(elapsed.as_secs() < 5, "Render took too long: {:?}", elapsed);
 }
+
+/// Test: BCF tracer handles depth 3 cube with random subdivisions
+#[test]
+fn test_bcf_tracer_depth_3_cube() {
+    use renderer::scenes::create_depth_3_cube;
+
+    let cube = create_depth_3_cube();
+    let mut tracer = BcfCpuTracer::new_from_cube(cube);
+
+    // Render a 128x128 image
+    tracer.render(128, 128, 0.0);
+
+    let image = tracer.image_buffer().expect("Image buffer should exist");
+
+    // Basic sanity check
+    assert_eq!(image.width(), 128);
+    assert_eq!(image.height(), 128);
+
+    // Check for non-background pixels
+    let mut colored_pixels = 0;
+    for pixel in image.pixels() {
+        // Any pixel that's not close to background color (RGB(168, 186, 202))
+        let is_colored = pixel[0] < 160
+            || pixel[0] > 176
+            || pixel[1] < 178
+            || pixel[1] > 194
+            || pixel[2] < 194
+            || pixel[2] > 210;
+        if is_colored {
+            colored_pixels += 1;
+        }
+    }
+
+    // Depth 3 cube has complex structure with random cubes
+    // We expect at least 10% of pixels to show the cube
+    assert!(
+        colored_pixels > 128 * 128 / 10,
+        "Expected at least {} colored pixels in depth 3 cube, got {}",
+        128 * 128 / 10,
+        colored_pixels
+    );
+
+    eprintln!(
+        "Depth 3 cube rendered with {} colored pixels ({:.1}%)",
+        colored_pixels,
+        (colored_pixels as f32 / (128.0 * 128.0)) * 100.0
+    );
+}
+
+/// Test: Debug BCF serialization for depth 3 cube
+#[test]
+fn test_bcf_depth_3_serialization() {
+    use renderer::scenes::create_depth_3_cube;
+
+    let cube = create_depth_3_cube();
+
+    // Serialize to BCF
+    let bcf_data = serialize_bcf(&cube);
+
+    eprintln!("Depth 3 cube BCF data:");
+    eprintln!("  Total size: {} bytes", bcf_data.len());
+    eprintln!("  First 64 bytes: {:?}", &bcf_data[..64.min(bcf_data.len())]);
+
+    // Check that we have a reasonable amount of data
+    // Depth 3 should have more data than depth 2
+    assert!(
+        bcf_data.len() > 100,
+        "BCF data seems too small for depth 3: {} bytes",
+        bcf_data.len()
+    );
+}
+
+/// Test: Compare BCF tracer with Pure Rust tracer for depth 3 cube
+#[test]
+fn test_bcf_vs_pure_rust_depth_3() {
+    use renderer::scenes::create_depth_3_cube;
+
+    let cube = create_depth_3_cube();
+
+    // Create BCF tracer
+    let mut bcf_tracer = BcfCpuTracer::new_from_cube(cube.clone());
+    bcf_tracer.set_disable_lighting(true); // Disable lighting for exact color comparison
+
+    // Create Pure Rust tracer
+    let mut rust_tracer = CpuCubeTracer::new_with_cube(cube.clone());
+    rust_tracer.set_disable_lighting(true); // Disable lighting for exact color comparison
+
+    // Render with both tracers
+    let width = 64;
+    let height = 64;
+    bcf_tracer.render(width, height, 0.0);
+    rust_tracer.render(width, height, 0.0);
+
+    let bcf_image = bcf_tracer.image_buffer().expect("BCF image should exist");
+    let rust_image = rust_tracer.image_buffer().expect("Rust image should exist");
+
+    // Compare pixel-by-pixel
+    let mut different_pixels = 0;
+    let mut total_non_background = 0;
+
+    for y in 0..height {
+        for x in 0..width {
+            let bcf_pixel = bcf_image.get_pixel(x, y);
+            let rust_pixel = rust_image.get_pixel(x, y);
+
+            // Skip background pixels (both tracers should agree on background)
+            let is_background = rust_pixel[0] > 160
+                && rust_pixel[0] < 176
+                && rust_pixel[1] > 178
+                && rust_pixel[1] < 194
+                && rust_pixel[2] > 194
+                && rust_pixel[2] < 210;
+
+            if !is_background {
+                total_non_background += 1;
+
+                // Check if pixels are significantly different
+                let r_diff = (bcf_pixel[0] as i32 - rust_pixel[0] as i32).abs();
+                let g_diff = (bcf_pixel[1] as i32 - rust_pixel[1] as i32).abs();
+                let b_diff = (bcf_pixel[2] as i32 - rust_pixel[2] as i32).abs();
+
+                // Allow small differences due to lighting/rounding (threshold: 10)
+                if r_diff > 10 || g_diff > 10 || b_diff > 10 {
+                    different_pixels += 1;
+
+                    // Print first few differences for debugging
+                    if different_pixels <= 5 {
+                        eprintln!(
+                            "Pixel ({}, {}): BCF={:?}, Rust={:?}, diff=({}, {}, {})",
+                            x, y, bcf_pixel, rust_pixel, r_diff, g_diff, b_diff
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    let difference_percent = if total_non_background > 0 {
+        (different_pixels as f32 / total_non_background as f32) * 100.0
+    } else {
+        0.0
+    };
+
+    eprintln!(
+        "Depth 3 comparison: {}/{} non-background pixels differ ({:.1}%)",
+        different_pixels, total_non_background, difference_percent
+    );
+
+    // BCF and Pure Rust tracers should match closely
+    // Allow up to 5% difference due to implementation variations
+    assert!(
+        difference_percent < 5.0,
+        "BCF tracer differs from Pure Rust tracer by {:.1}% (expected < 5%)",
+        difference_percent
+    );
+}

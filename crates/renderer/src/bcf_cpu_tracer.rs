@@ -32,6 +32,7 @@
 //! - GLSL has limited stack (use fixed-size arrays for traversal stack)
 //! - GLSL loops must have compile-time bounds (use `for (int i = 0; i < MAX_DEPTH; i++)`)
 
+use crate::bcf_raycast::bcf_raycast;
 use crate::renderer::*;
 use crate::scenes::create_octa_cube;
 use cube::Cube;
@@ -806,8 +807,8 @@ impl BcfCpuTracer {
     fn render_ray(&self, ray: &Ray, time: f32) -> Vec3 {
         let mut color = BACKGROUND_COLOR;
 
-        // Trace ray through BCF octree
-        if let Some(hit) = trace_ray(&self.bcf_data, ray, self.root_offset) {
+        // Trace ray through BCF octree using new bcf_raycast
+        if let Some(hit) = bcf_raycast(&self.bcf_data, ray.origin, ray.direction) {
             // Check if this is an error material (1-7)
             let is_error_material = hit.value >= 1 && hit.value <= 7;
 
@@ -824,11 +825,17 @@ impl BcfCpuTracer {
             color = if self.disable_lighting || is_error_material {
                 material_color
             } else {
+                // Convert Axis to Vec3 normal
+                let normal = hit.normal.as_vec3();
+
+                // Calculate distance (not stored in new Hit, but not needed for lighting)
+                let distance = (hit.pos - ray.origin).length();
+
                 let hit_info = HitInfo {
                     hit: true,
-                    t: hit.distance,
+                    t: distance,
                     point: hit.pos,
-                    normal: hit.normal,
+                    normal,
                 };
                 calculate_lighting(&hit_info, material_color)
             };
