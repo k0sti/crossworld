@@ -15,9 +15,6 @@ pub use visit_faces::{visit_faces, FaceInfo};
 
 // traverse_octree and TraversalVisitor are defined in this file and exported directly
 
-/// Index multiplier for converting 3D position to linear index: x + y*4 + z*16
-const INDEX_MUL: IVec3 = IVec3::new(1, 4, 16);
-
 /// Visitor function type for octree traversal
 ///
 /// Called only for leaf nodes (Solid, Planes, Slices, or at depth==0).
@@ -59,14 +56,16 @@ pub type TraversalVisitor<'a> = &'a mut dyn FnMut(NeighborView, CubeCoord, bool)
 /// ```
 pub fn traverse_octree(grid: &NeighborGrid, visitor: TraversalVisitor, max_depth: u32) {
     // Traverse the center 2x2x2 octants
-    // Center offset in grid: (1,1,1) = 1 + 1*4 + 1*16 = 21
-    const CENTER_OFFSET: i32 = 21;
-
     for octant_idx in 0..8 {
         let octant_pos = IVec3::from_octant_index(octant_idx);
-        // Center-based coordinates: compute grid index with signed arithmetic
-        // octant_pos has values -1 or +1, so the dot product can be negative
-        let grid_idx = CENTER_OFFSET + octant_pos.dot(INDEX_MUL);
+
+        // Convert center-based {-1,+1} to grid coordinates [1,2]
+        // Formula: grid = (center_based + 3) / 2, where -1 → 1, +1 → 2
+        let grid_x = (octant_pos.x + 3) / 2;
+        let grid_y = (octant_pos.y + 3) / 2;
+        let grid_z = (octant_pos.z + 3) / 2;
+        let grid_idx = NeighborGrid::xyz_to_index(grid_x, grid_y, grid_z);
+
         let view = NeighborView::new(grid, grid_idx as usize);
         let coord = CubeCoord::new(octant_pos, max_depth);
         traverse_recursive(view, coord, visitor, false);
@@ -99,10 +98,16 @@ fn traverse_recursive(
                 // Subdivide leaf and traverse children
                 // create_child_grid will replicate the solid value into 8 children
                 let child_grid = view.create_child_grid();
-                const CENTER_OFFSET: i32 = 21;
+
                 for octant_idx in 0..8 {
                     let octant_pos = IVec3::from_octant_index(octant_idx);
-                    let child_grid_idx = CENTER_OFFSET + octant_pos.dot(INDEX_MUL);
+
+                    // Convert center-based {-1,+1} to grid coordinates [1,2]
+                    let grid_x = (octant_pos.x + 3) / 2;
+                    let grid_y = (octant_pos.y + 3) / 2;
+                    let grid_z = (octant_pos.z + 3) / 2;
+                    let child_grid_idx = NeighborGrid::xyz_to_index(grid_x, grid_y, grid_z);
+
                     let child_view = NeighborView::new(&child_grid, child_grid_idx as usize);
                     let child_coord = coord.child(octant_idx);
                     traverse_recursive(child_view, child_coord, visitor, true);
@@ -112,10 +117,16 @@ fn traverse_recursive(
         Cube::Cubes(_children) => {
             // Branch node - traverse children without calling visitor
             let child_grid = view.create_child_grid();
-            const CENTER_OFFSET: i32 = 21;
+
             for octant_idx in 0..8 {
                 let octant_pos = IVec3::from_octant_index(octant_idx);
-                let child_grid_idx = CENTER_OFFSET + octant_pos.dot(INDEX_MUL);
+
+                // Convert center-based {-1,+1} to grid coordinates [1,2]
+                let grid_x = (octant_pos.x + 3) / 2;
+                let grid_y = (octant_pos.y + 3) / 2;
+                let grid_z = (octant_pos.z + 3) / 2;
+                let child_grid_idx = NeighborGrid::xyz_to_index(grid_x, grid_y, grid_z);
+
                 let child_view = NeighborView::new(&child_grid, child_grid_idx as usize);
                 let child_coord = coord.child(octant_idx);
                 traverse_recursive(child_view, child_coord, visitor, false);

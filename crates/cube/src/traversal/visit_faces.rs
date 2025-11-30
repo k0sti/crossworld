@@ -29,8 +29,12 @@ pub struct FaceInfo {
 /// Kept for reference. Use `visit_faces` instead.
 #[deprecated(note = "Use visit_faces instead - this implementation is broken")]
 #[allow(dead_code)]
-pub fn visit_faces_old<F>(root: &Cube<u8>, mut visitor: F, max_depth: u32, border_materials: [u8; 4])
-where
+pub fn visit_faces_old<F>(
+    root: &Cube<u8>,
+    mut visitor: F,
+    max_depth: u32,
+    border_materials: [u8; 4],
+) where
     F: FnMut(&FaceInfo),
 {
     let grid = NeighborGrid::new(root, border_materials);
@@ -130,8 +134,17 @@ where
             let voxel_size = 1.0 / (2 << coord.depth) as f32;
 
             // Convert from center-based coordinates to [0,1] world space
-            // Center-based coords are in {-1, +1} for depth 0, so we scale and offset to [0,1]
-            let base_pos = coord.pos.as_vec3() * voxel_size + Vec3::splat(0.5);
+            // Center-based coords are in {-1, +1} steps, so we scale by half size
+            // Formula: (pos - 1) * (size / 2) + 0.5
+            // This maps -1 -> 0.0, 1 -> 0.5 (for size 0.5)
+            let half_size = voxel_size * 0.5;
+            let base_pos = (coord.pos.as_vec3() - Vec3::splat(1.0)) * half_size + Vec3::splat(0.5);
+
+            // Debug print
+            // println!(
+            //     "DEBUG: depth={}, pos={}, size={}, half={}, base={}",
+            //     coord.depth, coord.pos, voxel_size, half_size, base_pos
+            // );
 
             let mut should_subdivide = false;
 
@@ -141,7 +154,9 @@ where
             // - Check LEFT neighbor (-X) → render LEFT face
             // - Check RIGHT neighbor (+X) → render RIGHT face
             // etc.
-            use crate::traversal::{OFFSET_LEFT, OFFSET_RIGHT, OFFSET_DOWN, OFFSET_UP, OFFSET_BACK, OFFSET_FRONT};
+            use crate::traversal::{
+                OFFSET_BACK, OFFSET_DOWN, OFFSET_FRONT, OFFSET_LEFT, OFFSET_RIGHT, OFFSET_UP,
+            };
 
             let directions = [
                 (Face::Left, OFFSET_LEFT, Vec3::new(-1.0, 0.0, 0.0)),
@@ -152,7 +167,7 @@ where
                 (Face::Front, OFFSET_FRONT, Vec3::new(0.0, 0.0, 1.0)),
             ];
 
-            for (face, dir_offset, offset_vec) in directions {
+            for (face, dir_offset, _offset_vec) in directions {
                 if let Some(neighbor_cube) = view.get(dir_offset) {
                     // Check if neighbor is subdivided
                     if !neighbor_cube.is_leaf() {
@@ -167,20 +182,19 @@ where
 
                     // Found a visible face! Solid voxel bordering empty
                     // The face is ON the solid voxel, facing toward the empty neighbor
-                    let face_position = base_pos + offset_vec * voxel_size;
+                    // We pass the voxel's position because Face::vertices handles the offsets
                     visitor(&FaceInfo {
                         face,
-                        position: face_position,
+                        position: base_pos,
                         size: voxel_size,
                         material_id: center_id, // Use the solid voxel's material
                         viewer_coord: coord,
                     });
                 } else {
                     // Neighbor is None (outside grid bounds) - treat as empty and render face
-                    let face_position = base_pos + offset_vec * voxel_size;
                     visitor(&FaceInfo {
                         face,
-                        position: face_position,
+                        position: base_pos,
                         size: voxel_size,
                         material_id: center_id,
                         viewer_coord: coord,
