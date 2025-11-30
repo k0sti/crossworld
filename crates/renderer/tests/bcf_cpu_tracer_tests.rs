@@ -141,7 +141,10 @@ fn test_bcf_tracer_empty_cube() {
         eprintln!("  Non-background pixels: {}", 64 * 64 - background_count);
         eprintln!("  Sample non-background pixels:");
         for (idx, pixel) in &non_background_pixels {
-            eprintln!("    Pixel {}: RGB({}, {}, {})", idx, pixel[0], pixel[1], pixel[2]);
+            eprintln!(
+                "    Pixel {}: RGB({}, {}, {})",
+                idx, pixel[0], pixel[1], pixel[2]
+            );
         }
     }
 
@@ -189,7 +192,10 @@ fn test_bcf_tracer_max_value() {
     } else {
         eprintln!("Found {} non-background pixels", non_background_count);
         for (idx, pixel) in &sample_pixels {
-            eprintln!("  Pixel {}: RGB({}, {}, {})", idx, pixel[0], pixel[1], pixel[2]);
+            eprintln!(
+                "  Pixel {}: RGB({}, {}, {})",
+                idx, pixel[0], pixel[1], pixel[2]
+            );
         }
     }
 
@@ -327,6 +333,99 @@ fn test_bcf_vs_cpu_tracer_comparison() {
         max_diff < 30,
         "Maximum pixel difference too large: {}",
         max_diff
+    );
+}
+
+/// Test: BCF tracer handles depth 2 extended octa cube
+#[test]
+fn test_bcf_tracer_depth_2_extended_octa() {
+    use renderer::scenes::create_extended_octa_cube;
+
+    let cube = create_extended_octa_cube();
+    let mut tracer = BcfCpuTracer::new_from_cube(cube);
+
+    // Render a 128x128 image
+    tracer.render(128, 128, 0.0);
+
+    let image = tracer.image_buffer().expect("Image buffer should exist");
+
+    // Basic sanity check
+    assert_eq!(image.width(), 128);
+    assert_eq!(image.height(), 128);
+
+    // Check for non-background pixels
+    let mut colored_pixels = 0;
+    for pixel in image.pixels() {
+        // Any pixel that's not close to background color (RGB(168, 186, 202))
+        let is_colored = pixel[0] < 160
+            || pixel[0] > 176
+            || pixel[1] < 178
+            || pixel[1] > 194
+            || pixel[2] < 194
+            || pixel[2] > 210;
+        if is_colored {
+            colored_pixels += 1;
+        }
+    }
+
+    // Extended octa cube has more voxels than basic octa cube
+    // We expect at least 10% of pixels to show the cube
+    assert!(
+        colored_pixels > 128 * 128 / 10,
+        "Expected at least {} colored pixels in depth 2 cube, got {}",
+        128 * 128 / 10,
+        colored_pixels
+    );
+
+    eprintln!(
+        "Depth 2 extended octa cube rendered with {} colored pixels ({:.1}%)",
+        colored_pixels,
+        (colored_pixels as f32 / (128.0 * 128.0)) * 100.0
+    );
+}
+
+/// Test: Error material colors are rendered correctly
+#[test]
+fn test_bcf_tracer_error_materials() {
+    // Create a cube with error material values (1-7)
+    // Material 1 should render as hot pink, not black
+    let error_cube = Rc::new(Cube::Solid(1u8)); // Error material 1
+    let mut tracer = BcfCpuTracer::new_from_cube(error_cube);
+
+    // Render
+    tracer.render(64, 64, 0.0);
+    let image = tracer.image_buffer().expect("Image buffer should exist");
+
+    // Find a pixel that hits the cube (not background)
+    let mut found_error_color = false;
+    for pixel in image.pixels() {
+        // Background color check
+        let is_background = pixel[0] > 160
+            && pixel[0] < 176
+            && pixel[1] > 178
+            && pixel[1] < 194
+            && pixel[2] > 194
+            && pixel[2] < 210;
+
+        if !is_background {
+            // Error material 1 is hot pink (1.0, 0.0, 0.3)
+            // After gamma correction: (255, 0, ~155)
+            // Should be RED heavy, not black
+            assert!(
+                pixel[0] > 200,
+                "Error material 1 should be hot pink (red component high), got RGB({}, {}, {})",
+                pixel[0],
+                pixel[1],
+                pixel[2]
+            );
+            found_error_color = true;
+            break;
+        }
+    }
+
+    assert!(
+        found_error_color,
+        "Should find at least one error material pixel"
     );
 }
 

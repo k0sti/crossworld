@@ -43,6 +43,55 @@ use std::rc::Rc;
 /// Maximum octree depth for traversal (prevents infinite loops)
 const MAX_TRAVERSAL_DEPTH: usize = 16;
 
+/// Get error material color (materials 1-7 are reserved for errors)
+///
+/// Error material colors (matching GL shader octree_raycast.frag):
+/// - 1: Hot pink (generic error)
+/// - 2: Red-orange (bounds/pointer errors)
+/// - 3: Orange (type validation errors)
+/// - 4: Sky blue (stack/iteration errors)
+/// - 5: Purple (octant errors)
+/// - 6: Spring green (data truncation)
+/// - 7: Yellow (unknown/other errors)
+///
+/// With animation enabled, returns animated checkered pattern.
+/// Without animation, returns solid error color.
+#[inline]
+fn get_error_material_color(value: u8, pos: Vec3, time: f32, animate: bool) -> Vec3 {
+    let base_color = match value {
+        1 => Vec3::new(1.0, 0.0, 0.3),   // Hot pink - Generic error
+        2 => Vec3::new(1.0, 0.2, 0.0),   // Red-orange - Bounds/pointer errors
+        3 => Vec3::new(1.0, 0.6, 0.0),   // Orange - Type validation errors
+        4 => Vec3::new(0.0, 0.8, 1.0),   // Sky blue - Stack/iteration errors
+        5 => Vec3::new(0.6, 0.0, 1.0),   // Purple - Octant errors
+        6 => Vec3::new(0.0, 1.0, 0.498), // Spring green - Data truncation
+        7 => Vec3::new(1.0, 1.0, 0.0),   // Yellow - Unknown/other errors
+        _ => Vec3::new(1.0, 0.0, 1.0),   // Magenta - Invalid error material
+    };
+
+    if !animate {
+        return base_color;
+    }
+
+    // Apply animated checkered pattern (matching GL shader)
+    // 8x8 checker based on position
+    let checker_size = 8.0;
+    let checker_x = ((pos.x * checker_size).floor() as i32) & 1;
+    let checker_y = ((pos.y * checker_size).floor() as i32) & 1;
+    let checker_z = ((pos.z * checker_size).floor() as i32) & 1;
+    let checker = ((checker_x + checker_y + checker_z) & 1) == 1;
+
+    // Brightness oscillation (2 second period)
+    let brightness = 0.5 + 0.5 * (time * std::f32::consts::PI).sin();
+
+    // Apply checker and brightness
+    if checker {
+        base_color * brightness
+    } else {
+        base_color * (1.0 - brightness * 0.5)
+    }
+}
+
 // ============================================================================
 // DDA Traversal Helper Functions
 // (Translated from crates/cube/src/core/raycast.rs for BCF compatibility)
@@ -389,7 +438,7 @@ fn compute_normal(ray: &Ray, aabb: &AABB, t_near: f32) -> Vec3 {
 /// 2. Compute starting octant from ray entry point
 /// 3. **DDA Loop:** Step through octants along ray path:
 ///    - **OctaLeaves**: Check if current octant has solid voxel (value > 0), return if hit
-///    - **OctaPointers**: Push first non-empty child to stack for traversal
+///    - **OctaPointers**: Collect ALL non-empty children in DDA order, push to stack in reverse
 ///    - Compute exit axis (which face ray exits through)
 ///    - Advance ray to octant boundary
 ///    - Step to next octant
@@ -397,27 +446,9 @@ fn compute_normal(ray: &Ray, aabb: &AABB, t_near: f32) -> Vec3 {
 ///
 /// **Key difference from recursive version:**
 /// - Original algorithm (raycast.rs): Recursively calls child.raycast() and returns immediately on hit
-/// - BCF version: Pushes child to stack and processes it on next iteration
-/// - For OctaPointers: Currently pushes only the FIRST non-empty child found in DDA order
-///   (full recursive equivalence would require more complex state management)
-///
-/// # Current Limitation
-///
-/// ⚠️ **BCF rendering currently only works reliably for border voxels (root cube surface).**
-///
-/// When traversing through OctaPointers nodes, the DDA state is lost after pushing a child to the stack.
-/// If the child misses, the traversal does NOT resume checking remaining octants in the parent node.
-/// This means interior voxels are only visible if they're in the first non-empty octant along the ray path.
-///
-/// **Why this happens:**
-/// The recursive algorithm (raycast.rs) can call `child.raycast()` and immediately continue DDA if it
-/// returns None. The stack-based version pushes the child and breaks, losing the DDA state (local_origin,
-/// current octant).
-///
-/// **Possible solutions for future work:**
-/// 1. Save DDA state on stack alongside child offset (requires larger TraversalState)
-/// 2. Push all non-empty children in reverse DDA order (breaks early-exit optimization)
-/// 3. Fully iterative DDA without stack (complex state machine)
+/// - BCF version: Collects all non-empty children the ray passes through in DDA order,
+///   then pushes them to stack in reverse order (so they're processed closest-first)
+/// - This ensures all voxels along the ray path are checked, matching recursive behavior
 ///
 /// # Error Materials
 ///
@@ -590,65 +621,23 @@ fn trace_ray(bcf_data: &[u8], ray: &Ray, root_offset: usize) -> Option<BcfHit> {
                 let dir_sign = sign(ray.direction);
                 let mut octant = compute_octant(local_origin, dir_sign);
 
-                // DDA loop through octants
+                // Collect all non-empty children in DDA order
+                // We need to check ALL octants the ray passes through, not just the first
+                let mut children_to_visit = Vec::new();
+
+                // DDA loop through octants to collect non-empty children
                 loop {
                     let oct_idx = octant_to_index(octant);
                     let child_offset = pointers[oct_idx];
 
                     if child_offset > 0 {
-                        // Non-empty child - push to stack for traversal
+                        // Non-empty child - record it with its bounds and entry distance
                         let child_bounds = compute_child_bounds(&state.bounds, oct_idx);
+                        let (child_t_near, _) =
+                            ray_aabb_intersect(ray, &child_bounds).unwrap_or((t_near, t_near));
 
-                        if stack_ptr < MAX_TRAVERSAL_DEPTH {
-                            stack[stack_ptr] = TraversalState {
-                                offset: child_offset,
-                                bounds: child_bounds,
-                                depth: state.depth + 1,
-                            };
-                            stack_ptr += 1;
-                            // Important: We pushed to stack, so we break here and let the main loop
-                            // process the child. The existing algorithm recurses, but we use stack.
-                            // After processing the child, if it misses, we'll continue DDA from
-                            // where we left off.
-                            //
-                            // However, this creates a problem: we lose our DDA state when we push!
-                            // The correct approach is to check ALL children in DDA order and only
-                            // push the first non-empty one we find.
-                            //
-                            // Actually, looking at the original raycast.rs, it processes each child
-                            // immediately (recursively), and only moves to the next octant if the
-                            // child returns None. Since we're using a stack, we need to traverse
-                            // the child first, then come back and continue DDA.
-                            //
-                            // The challenge: we can't "save" the DDA state on the stack easily.
-                            //
-                            // Solution: Process all octants in DDA order, pushing ALL non-empty
-                            // children to the stack in REVERSE order so they're popped in correct order.
-                            // But this doesn't match the original algorithm either...
-                            //
-                            // Let me reconsider: The original algorithm is RECURSIVE, calling
-                            // child.raycast() directly and returning immediately if hit.
-                            // Our stack-based approach can't easily replicate this.
-                            //
-                            // Better solution: For now, just push the first non-empty child and
-                            // break. This is still better than the original single-octant version
-                            // because we at least traverse octants in DDA order to FIND the first
-                            // non-empty one.
-                            break;
-                        } else {
-                            // Stack overflow
-                            let hit_pos = ray.origin + ray.direction * t_near;
-                            let normal = compute_normal(ray, &state.bounds, t_near);
-                            return Some(BcfHit {
-                                value: 7, // Error material 7 (magenta - stack overflow)
-                                normal,
-                                pos: hit_pos,
-                                distance: t_near,
-                            });
-                        }
+                        children_to_visit.push((child_offset, child_bounds, child_t_near));
                     }
-
-                    // Child is empty (offset == 0) or we just processed it - step to next octant
 
                     // Compute exit distance for current octant
                     let far_side = (local_origin * dir_sign).cmpge(Vec3::ZERO);
@@ -671,7 +660,30 @@ fn trace_ray(bcf_data: &[u8], ray: &Ray, root_offset: usize) -> Option<BcfHit> {
 
                     // Check if exited parent node
                     if octant[exit_idx] < 0 || octant[exit_idx] > 1 {
-                        break; // Exit octant loop, continue with next stack item
+                        break; // Exit octant loop
+                    }
+                }
+
+                // Push all collected children to stack in REVERSE order
+                // (so they pop in DDA order: closest first)
+                for (child_offset, child_bounds, _child_t_near) in children_to_visit.iter().rev() {
+                    if stack_ptr < MAX_TRAVERSAL_DEPTH {
+                        stack[stack_ptr] = TraversalState {
+                            offset: *child_offset,
+                            bounds: *child_bounds,
+                            depth: state.depth + 1,
+                        };
+                        stack_ptr += 1;
+                    } else {
+                        // Stack overflow
+                        let hit_pos = ray.origin + ray.direction * t_near;
+                        let normal = compute_normal(ray, &state.bounds, t_near);
+                        return Some(BcfHit {
+                            value: 7, // Error material 7 (yellow - stack overflow)
+                            normal,
+                            pos: hit_pos,
+                            distance: t_near,
+                        });
                     }
                 }
             }
@@ -758,7 +770,7 @@ impl BcfCpuTracer {
             direction: ray_data.direction.normalize(),
         };
 
-        self.render_ray(&ray)
+        self.render_ray(&ray, time)
     }
 
     /// Render a single pixel with explicit camera configuration
@@ -783,20 +795,30 @@ impl BcfCpuTracer {
             direction: ray_data.direction.normalize(),
         };
 
-        self.render_ray(&ray)
+        // Use time=0.0 for static camera (no animation)
+        self.render_ray(&ray, 0.0)
     }
 
     /// Render a ray and return the color
-    fn render_ray(&self, ray: &Ray) -> Vec3 {
+    fn render_ray(&self, ray: &Ray, time: f32) -> Vec3 {
         let mut color = BACKGROUND_COLOR;
 
         // Trace ray through BCF octree
         if let Some(hit) = trace_ray(&self.bcf_data, ray, self.root_offset) {
-            // Get material color
-            let material_color = cube::material::get_material_color(hit.value as i32);
+            // Check if this is an error material (1-7)
+            let is_error_material = hit.value >= 1 && hit.value <= 7;
+
+            let material_color = if is_error_material {
+                // Error materials: use special error colors with animation
+                get_error_material_color(hit.value, hit.pos, time, true)
+            } else {
+                // Normal materials: use material registry
+                cube::material::get_material_color(hit.value as i32)
+            };
 
             // Apply lighting or output pure color
-            color = if self.disable_lighting {
+            // Error materials skip lighting (always emissive)
+            color = if self.disable_lighting || is_error_material {
                 material_color
             } else {
                 let hit_info = HitInfo {
