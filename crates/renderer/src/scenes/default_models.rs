@@ -150,6 +150,85 @@ pub fn create_extended_octa_cube() -> Rc<Cube<u8>> {
 }
 
 // ============================================================================
+// Depth 3: Random Cubes (Size 8)
+// ============================================================================
+
+/// Depth 3 cube with random subdivisions and scattered cubes
+///
+/// Structure:
+/// - Depth 0: Root octree (8 children)
+/// - Depth 1: Some octants subdivided (depth 2 extended octa + new subdivisions)
+/// - Depth 2: Further subdivisions with random solid voxels
+/// - Depth 3: Deepest level with scattered colored cubes
+///
+/// This creates a complex structure with cubes at multiple depths:
+/// - Octant 0: Depth 2 subdivision with random pattern
+/// - Octant 1: Depth 3 subdivision (deepest, most complex)
+/// - Octant 2: Simple solid (green)
+/// - Octant 3: Depth 2 subdivision with sparse cubes
+/// - Octant 4: Simple solid (blue)
+/// - Octant 5: Depth 2 subdivision (packed rainbow from extended octa)
+/// - Octant 6: Depth 3 subdivision with random scattered cubes
+/// - Octant 7: Empty
+///
+/// Colors used (R2G3B2):
+/// - 224: Red    (r=3, g=0, b=0)
+/// - 248: Orange (r=3, g=5, b=0)
+/// - 252: Yellow (r=3, g=7, b=0)
+/// - 156: Green  (r=0, g=7, b=0)
+/// - 159: Cyan   (r=0, g=7, b=3)
+/// - 131: Blue   (r=0, g=0, b=3)
+/// - 227: Purple (r=3, g=0, b=3)
+/// - 255: White  (r=3, g=7, b=3)
+///
+/// CSM:
+/// ```
+/// > [
+///   # Octant 0: Depth 2 with random pattern
+///   [224 0 0 252 0 131 0 255]
+///
+///   # Octant 1: Depth 3 (deepest subdivision)
+///   [[248 0 159 0 0 227 0 0] 0 [0 224 0 156 0 0 255 0] 0 0 [131 0 252 0 248 0 0 159] 0 0]
+///
+///   # Octant 2: Simple solid green
+///   156
+///
+///   # Octant 3: Depth 2 sparse
+///   [0 248 0 0 159 0 227 0]
+///
+///   # Octant 4: Simple solid blue
+///   131
+///
+///   # Octant 5: Depth 2 packed rainbow (from extended octa)
+///   [224 248 252 156 159 131 227 255]
+///
+///   # Octant 6: Depth 3 with scattered cubes
+///   [0 [0 0 224 0 252 0 0 131] 0 0 [248 0 0 159 0 227 0 0] 255 0 [0 156 0 0 0 255 0 224]]
+///
+///   # Octant 7: Empty
+///   0
+/// ]
+/// ```
+pub fn create_depth_3_cube() -> Rc<Cube<u8>> {
+    const CSM: &str = "> [[224 0 0 252 0 131 0 255] [[248 0 159 0 0 227 0 0] 0 [0 224 0 156 0 0 255 0] 0 0 [131 0 252 0 248 0 0 159] 0 0] 156 [0 248 0 0 159 0 227 0] 131 [224 248 252 156 159 131 227 255] [0 [0 0 224 0 252 0 0 131] 0 0 [248 0 0 159 0 227 0 0] 255 0 [0 156 0 0 0 255 0 224]] 0]";
+    parse_csm_u8(CSM)
+}
+
+/// Simple depth 3 cube for debugging - minimal structure
+///
+/// Structure:
+/// - Octant 0: Red (solid)
+/// - Octant 1: Depth 2 subdivision with one yellow voxel at octant 0
+///   - This creates a depth 3 structure: root -> octant 1 -> octant 0 -> yellow
+/// - All other octants: Empty
+///
+/// CSM: `> [224 [[252 0 0 0 0 0 0 0] 0 0 0 0 0 0 0] 0 0 0 0 0 0]`
+pub fn create_simple_depth_3_cube() -> Rc<Cube<u8>> {
+    const CSM: &str = "> [224 [[252 0 0 0 0 0 0 0] 0 0 0 0 0 0 0] 0 0 0 0 0 0]";
+    parse_csm_u8(CSM)
+}
+
+// ============================================================================
 // Depth 1: Alternative Cube Types (Size 2)
 // ============================================================================
 
@@ -236,6 +315,7 @@ pub enum TestModel {
     SingleRedVoxel,   // Depth 0
     OctaCube,         // Depth 1
     ExtendedOctaCube, // Depth 2
+    Depth3Cube,       // Depth 3
 
     // Alternative cube types (depth 1)
     QuadCube,
@@ -251,6 +331,7 @@ impl TestModel {
             TestModel::SingleRedVoxel,
             TestModel::OctaCube,
             TestModel::ExtendedOctaCube,
+            TestModel::Depth3Cube,
             TestModel::QuadCube,
             TestModel::LayerCube,
             TestModel::SdfCube,
@@ -264,6 +345,7 @@ impl TestModel {
             TestModel::SingleRedVoxel => 0,
             TestModel::OctaCube => 1,
             TestModel::ExtendedOctaCube => 2,
+            TestModel::Depth3Cube => 3,
             TestModel::QuadCube => 1,
             TestModel::LayerCube => 1,
             TestModel::SdfCube => 1,
@@ -277,6 +359,7 @@ impl TestModel {
             TestModel::SingleRedVoxel => "Single Red Voxel (Depth 0)",
             TestModel::OctaCube => "Octa Cube (Depth 1)",
             TestModel::ExtendedOctaCube => "Extended Octa Cube (Depth 2)",
+            TestModel::Depth3Cube => "Depth 3 Cube (Random Cubes)",
             TestModel::QuadCube => "Quad Cube (Planes)",
             TestModel::LayerCube => "Layer Cube (Slices)",
             TestModel::SdfCube => "SDF Cube (Corners)",
@@ -290,6 +373,7 @@ impl TestModel {
             TestModel::SingleRedVoxel => "single",
             TestModel::OctaCube => "octa",
             TestModel::ExtendedOctaCube => "extended",
+            TestModel::Depth3Cube => "depth3",
             TestModel::QuadCube => "quad",
             TestModel::LayerCube => "layer",
             TestModel::SdfCube => "sdf",
@@ -303,6 +387,7 @@ impl TestModel {
             TestModel::SingleRedVoxel => create_single_red_voxel(),
             TestModel::OctaCube => create_octa_cube(),
             TestModel::ExtendedOctaCube => create_extended_octa_cube(),
+            TestModel::Depth3Cube => create_depth_3_cube(),
             TestModel::QuadCube => create_quad_cube(),
             TestModel::LayerCube => create_layer_cube(),
             TestModel::SdfCube => create_sdf_cube(),
