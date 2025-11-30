@@ -1,5 +1,4 @@
 use bevy::prelude::*;
-use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
 use bevy::input::mouse::{MouseMotion, MouseWheel};
 use bevy::render::mesh::{Indices, PrimitiveTopology};
 use bevy_rapier3d::prelude::*;
@@ -141,11 +140,10 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_plugins(RapierPhysicsPlugin::<NoUserData>::default())
-        .add_plugins(FrameTimeDiagnosticsPlugin)
         .insert_resource(config)
         .init_resource::<CameraController>()
         .add_systems(Startup, setup)
-        .add_systems(Update, (camera_controls, debug_info))
+        .add_systems(Update, camera_controls)
         .run();
 }
 
@@ -239,20 +237,6 @@ fn setup(
 
     info!("Scene setup complete");
     info!("Configuration: gravity={}, timestep={}", config.physics.gravity, config.physics.timestep);
-}
-
-/// Debug info display
-fn debug_info(
-    diagnostics: Res<DiagnosticsStore>,
-) {
-    // Display FPS every second (simplified - would use proper timing in full implementation)
-    if let Some(fps) = diagnostics.get(&FrameTimeDiagnosticsPlugin::FPS) {
-        if let Some(value) = fps.smoothed() {
-            if value < 45.0 {
-                warn!("FPS: {:.1}", value);
-            }
-        }
-    }
 }
 
 /// Camera controls system - orbit camera with mouse
