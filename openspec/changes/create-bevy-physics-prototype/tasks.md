@@ -21,16 +21,16 @@
 - [x] Add Bevy default plugins and RapierPhysicsPlugin
 - [x] Implement config loading from `config.toml`
 - [x] Create startup system to initialize world, camera, and lighting
-- [ ] Add camera orbit/free-fly controls (reuse patterns from editor)
-- [ ] Implement debug info overlay (FPS, entity count, physics stats)
+- [x] Add camera orbit/free-fly controls (reuse patterns from editor)
+- [x] Implement debug info overlay (FPS, entity count, physics stats)
+- [x] Create flake.nix for NixOS development environment
 
 ## Phase 4: World Generation
-- [ ] Create `WorldCube` from config parameters (macro_depth, micro_depth, seed)
-- [ ] Generate world mesh using `generate_frame()`
-- [ ] Spawn world as static Bevy entity with mesh and collider
+- [x] Create `WorldCube` from config parameters (macro_depth, micro_depth, seed)
+- [x] Generate world mesh using `generate_mesh()`
+- [x] Spawn world as static Bevy entity with mesh component
 - [ ] Use `VoxelColliderBuilder::from_cube()` for world collision
-- [ ] Add visual ground plane for reference
-- [ ] Verify world renders correctly
+- [ ] Verify world renders correctly in dev environment
 
 ## Phase 5: Voxel Object System
 - [ ] Implement system to load .vox files from `packages/app/dist/assets/models/vox/`

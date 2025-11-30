@@ -1,7 +1,13 @@
 use bevy::prelude::*;
+use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
+use bevy::input::mouse::{MouseMotion, MouseWheel};
+use bevy::render::mesh::{Indices, PrimitiveTopology};
 use bevy_rapier3d::prelude::*;
+use crossworld_physics::VoxelColliderBuilder;
+use crossworld_world::WorldCube;
 use serde::Deserialize;
 use std::path::Path;
+use std::rc::Rc;
 
 /// Configuration loaded from config.toml
 #[derive(Debug, Deserialize, Resource)]
@@ -71,6 +77,34 @@ impl Default for ProtoConfig {
     }
 }
 
+/// Component for the world entity
+#[derive(Component)]
+struct WorldEntity;
+
+/// Camera controller resource for orbit camera
+#[derive(Resource)]
+struct CameraController {
+    pub focus: Vec3,
+    pub radius: f32,
+    pub pitch: f32,
+    pub yaw: f32,
+    pub sensitivity: f32,
+    pub zoom_speed: f32,
+}
+
+impl Default for CameraController {
+    fn default() -> Self {
+        Self {
+            focus: Vec3::ZERO,
+            radius: 20.0,
+            pitch: -0.4, // Looking down slightly
+            yaw: 0.0,
+            sensitivity: 0.003,
+            zoom_speed: 1.0,
+        }
+    }
+}
+
 fn load_config() -> ProtoConfig {
     let config_path = Path::new("crates/proto/config.toml");
 
@@ -107,18 +141,85 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_plugins(RapierPhysicsPlugin::<NoUserData>::default())
+        .add_plugins(FrameTimeDiagnosticsPlugin)
         .insert_resource(config)
+        .init_resource::<CameraController>()
         .add_systems(Startup, setup)
-        .add_systems(Update, debug_info)
+        .add_systems(Update, (camera_controls, debug_info))
         .run();
 }
 
 /// Initial setup system
 fn setup(
     mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
     config: Res<ProtoConfig>,
 ) {
     info!("Setting up scene...");
+
+    // Generate world from config
+    info!("Generating world: macro_depth={}, micro_depth={}, seed={}",
+        config.world.macro_depth, config.world.micro_depth, config.world.seed);
+
+    let world_cube = WorldCube::new(
+        config.world.macro_depth,
+        config.world.micro_depth,
+        config.world.border_depth,
+        config.world.seed,
+    );
+
+    // Generate mesh
+    let geometry_data = world_cube.generate_mesh();
+
+    info!("World mesh generated: {} vertices, {} indices",
+        geometry_data.vertices.len() / 3,
+        geometry_data.indices.len());
+
+    // Convert to Bevy mesh
+    let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, default());
+
+    // Positions (Vec3)
+    let positions: Vec<[f32; 3]> = geometry_data
+        .vertices
+        .chunks(3)
+        .map(|chunk| [chunk[0], chunk[1], chunk[2]])
+        .collect();
+
+    // Normals (Vec3)
+    let normals: Vec<[f32; 3]> = geometry_data
+        .normals
+        .chunks(3)
+        .map(|chunk| [chunk[0], chunk[1], chunk[2]])
+        .collect();
+
+    // Colors (Vec3)
+    let colors: Vec<[f32; 3]> = geometry_data
+        .colors
+        .chunks(3)
+        .map(|chunk| [chunk[0], chunk[1], chunk[2]])
+        .collect();
+
+    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, colors);
+    mesh.insert_indices(Indices::U32(geometry_data.indices.clone()));
+
+    // Spawn world entity with physics
+    info!("Spawning world entity with collider...");
+
+    commands.spawn((
+        WorldEntity,
+        Mesh3d(meshes.add(mesh)),
+        MeshMaterial3d(materials.add(StandardMaterial {
+            base_color: Color::WHITE,
+            vertex_color_enabled: true,
+            ..default()
+        })),
+        Transform::from_xyz(0.0, 0.0, 0.0),
+        RigidBody::Fixed,
+        // TODO: Add collider using VoxelColliderBuilder
+    ));
 
     // Add lighting
     commands.spawn((
@@ -151,5 +252,45 @@ fn debug_info(
                 warn!("FPS: {:.1}", value);
             }
         }
+    }
+}
+
+/// Camera controls system - orbit camera with mouse
+fn camera_controls(
+    mut controller: ResMut<CameraController>,
+    mouse_buttons: Res<ButtonInput<MouseButton>>,
+    mut mouse_motion: EventReader<MouseMotion>,
+    mut mouse_wheel: EventReader<MouseWheel>,
+    mut query: Query<&mut Transform, With<Camera3d>>,
+) {
+    // Right mouse button drag to rotate
+    if mouse_buttons.pressed(MouseButton::Right) {
+        for motion in mouse_motion.read() {
+            controller.yaw -= motion.delta.x * controller.sensitivity;
+            controller.pitch -= motion.delta.y * controller.sensitivity;
+
+            // Clamp pitch to avoid gimbal lock
+            controller.pitch = controller.pitch.clamp(-1.5, 1.5);
+        }
+    } else {
+        // Clear events if not using them
+        mouse_motion.clear();
+    }
+
+    // Mouse wheel to zoom
+    for wheel in mouse_wheel.read() {
+        controller.radius -= wheel.y * controller.zoom_speed;
+        controller.radius = controller.radius.clamp(5.0, 100.0);
+    }
+
+    // Update camera transform
+    if let Ok(mut transform) = query.get_single_mut() {
+        // Calculate camera position from spherical coordinates
+        let x = controller.radius * controller.pitch.cos() * controller.yaw.sin();
+        let y = controller.radius * controller.pitch.sin();
+        let z = controller.radius * controller.pitch.cos() * controller.yaw.cos();
+
+        transform.translation = controller.focus + Vec3::new(x, y, z);
+        transform.look_at(controller.focus, Vec3::Y);
     }
 }
