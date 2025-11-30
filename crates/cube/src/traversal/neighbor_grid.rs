@@ -29,7 +29,7 @@ pub const OFFSET_FRONT: i32 = 16;
 /// - +z: index + 16
 pub struct NeighborGrid {
     /// 4x4x4 = 64 voxels
-    pub voxels: [Rc<Cube<u8>>; 64],
+    pub voxels: [Rc<Cube<i32>>; 64],
 }
 
 impl NeighborGrid {
@@ -40,8 +40,8 @@ impl NeighborGrid {
     /// * `border_materials` - Array of 4 material IDs for border voxels at each Y layer [y0, y1, y2, y3]
     ///   - For world: [hard_rock, water, air, air] or similar
     ///   - For avatars: [0, 0, 0, 0] for empty borders
-    pub fn new(root: &Cube<u8>, border_materials: [u8; 4]) -> Self {
-        let mut voxels: [Rc<Cube<u8>>; 64] = std::array::from_fn(|i| {
+    pub fn new(root: &Cube<i32>, border_materials: [i32; 4]) -> Self {
+        let mut voxels: [Rc<Cube<i32>>; 64] = std::array::from_fn(|i| {
             let (_x, y, _z) = Self::index_to_xyz(i);
 
             // All voxels at Y layer y use border_materials[y]
@@ -108,7 +108,7 @@ impl NeighborGrid {
     /// Get neighbor at offset from current index
     /// Returns None if out of bounds
     #[inline]
-    pub fn get_neighbor(&self, index: usize, dx: i32, dy: i32, dz: i32) -> Option<&Rc<Cube<u8>>> {
+    pub fn get_neighbor(&self, index: usize, dx: i32, dy: i32, dz: i32) -> Option<&Rc<Cube<i32>>> {
         let (x, y, z) = Self::index_to_xyz(index);
         let nx = x + dx;
         let ny = y + dy;
@@ -138,14 +138,14 @@ impl<'a> NeighborView<'a> {
 
     /// Get the center voxel
     #[inline]
-    pub fn center(&self) -> &Rc<Cube<u8>> {
+    pub fn center(&self) -> &Rc<Cube<i32>> {
         &self.grid.voxels[self.center_index]
     }
 
     /// Get neighbor by offset
     /// Use constants: OFFSET_LEFT, OFFSET_RIGHT, OFFSET_DOWN, OFFSET_UP, OFFSET_BACK, OFFSET_FRONT
     #[inline]
-    pub fn get(&self, offset: i32) -> Option<&Rc<Cube<u8>>> {
+    pub fn get(&self, offset: i32) -> Option<&Rc<Cube<i32>>> {
         let neighbor_idx = self.center_index as i32 + offset;
         if (0..64).contains(&neighbor_idx) {
             Some(&self.grid.voxels[neighbor_idx as usize])
@@ -171,7 +171,7 @@ impl<'a> NeighborView<'a> {
     /// }
     /// ```
     #[inline]
-    pub fn neighbor(&self, offset: i32) -> Option<&Rc<Cube<u8>>> {
+    pub fn neighbor(&self, offset: i32) -> Option<&Rc<Cube<i32>>> {
         self.get(offset)
     }
 
@@ -183,7 +183,7 @@ impl<'a> NeighborView<'a> {
     /// - parent_offset = (p + 1) / 2 - 1  (gives -1, 0, 0, 1)
     /// - child_pos = (p + 1) % 2          (gives 1, 0, 1, 0)
     pub fn create_child_grid(&self) -> NeighborGrid {
-        let voxels: [Rc<Cube<u8>>; 64] = std::array::from_fn(|i| {
+        let voxels: [Rc<Cube<i32>>; 64] = std::array::from_fn(|i| {
             let pos = NeighborGrid::index_to_pos(i);
 
             // Calculate parent offset and child position using formula
