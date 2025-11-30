@@ -133,15 +133,15 @@ impl MeshBuilder for DefaultMeshBuilder {
 /// * `border_materials` - Array of 4 material IDs for border voxels at each Y layer [y0, y1, y2, y3]
 /// * `base_depth` - The depth at which voxels are 1 unit in size (for UV scaling)
 pub fn generate_face_mesh<B, F>(
-    root: &Cube<u8>,
+    root: &Cube<i32>,
     builder: &mut B,
     color_fn: F,
     _max_depth: u32,
-    border_materials: [u8; 4],
+    border_materials: [i32; 4],
     base_depth: u32,
 ) where
     B: MeshBuilder,
-    F: Fn(u8) -> [f32; 3] + Copy,
+    F: Fn(i32) -> [f32; 3] + Copy,
 {
     // Use visit_faces to iterate through all visible faces
     visit_faces(
