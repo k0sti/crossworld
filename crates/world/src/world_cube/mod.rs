@@ -162,55 +162,13 @@ impl WorldCube {
         // The mesh generator will automatically calculate correct voxel sizes
         // for each depth level, ensuring subdivided voxels render at correct positions
 
-        // Convert Cube<u8> to Cube<i32> for mesh generation
-        // Octree uses u8 for materials, but mesh generation expects i32
-        fn convert_quad_to_i32(quad: &cube::Quad<u8>) -> cube::Quad<i32> {
-            match quad {
-                cube::Quad::Solid(v) => cube::Quad::Solid(*v as i32),
-                cube::Quad::Quads(children) => {
-                    let converted: Vec<std::rc::Rc<cube::Quad<i32>>> =
-                        children.iter().map(|c| std::rc::Rc::new(convert_quad_to_i32(c))).collect();
-                    let array: [std::rc::Rc<cube::Quad<i32>>; 4] = converted.try_into().unwrap();
-                    cube::Quad::Quads(Box::new(array))
-                }
-            }
-        }
-
-        fn convert_to_i32(cube: &Cube<u8>) -> Cube<i32> {
-            match cube {
-                Cube::Solid(v) => Cube::Solid(*v as i32),
-                Cube::Cubes(children) => {
-                    let converted: Vec<std::rc::Rc<Cube<i32>>> =
-                        children.iter().map(|c| std::rc::Rc::new(convert_to_i32(c))).collect();
-                    let array: [std::rc::Rc<Cube<i32>>; 8] = converted.try_into().unwrap();
-                    Cube::Cubes(Box::new(array))
-                }
-                Cube::Planes { axis, quad } => {
-                    Cube::Planes {
-                        axis: *axis,
-                        quad: std::rc::Rc::new(convert_quad_to_i32(quad)),
-                    }
-                }
-                Cube::Slices { axis, layers } => {
-                    let converted: Vec<std::rc::Rc<Cube<i32>>> =
-                        layers.iter().map(|c| std::rc::Rc::new(convert_to_i32(c))).collect();
-                    Cube::Slices {
-                        axis: *axis,
-                        layers: std::rc::Rc::new(converted),
-                    }
-                }
-            }
-        }
-
-        let root_i32 = convert_to_i32(&self.octree.root);
-
         // Use face-based mesh generation with neighbor culling
         // Base depth is where voxels are 1 unit in size (macro_depth + border_depth)
         let base_depth = self.macro_depth + self.border_depth;
         cube::generate_face_mesh(
-            &root_i32,
+            &self.octree.root,
             &mut builder,
-            |index| color_mapper.map(index as u8),
+            |index| color_mapper.map(index),
             self.render_depth,
             border_materials,
             base_depth,
