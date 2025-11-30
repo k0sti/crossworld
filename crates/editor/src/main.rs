@@ -6,12 +6,14 @@ mod voxel_scene;
 mod mesh_sync;
 mod raycast;
 mod cursor;
+mod editing;
 
 use camera::{CameraPlugin, OrbitCamera};
 use voxel_scene::VoxelScenePlugin;
 use mesh_sync::MeshSyncPlugin;
 use raycast::RaycastPlugin;
 use cursor::CursorPlugin;
+use editing::EditingPlugin;
 
 fn main() {
     App::new()
@@ -29,6 +31,7 @@ fn main() {
         .add_plugins(MeshSyncPlugin)
         .add_plugins(RaycastPlugin)
         .add_plugins(CursorPlugin)
+        .add_plugins(EditingPlugin)
         .add_plugins(EditorPlugin)
         .run();
 }

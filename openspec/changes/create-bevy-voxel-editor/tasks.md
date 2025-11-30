@@ -76,11 +76,11 @@
 - [x] 2.1.1 Create `src/camera.rs` module
 - [x] 2.1.2 Define `OrbitCamera` component with target, distance, angles
 - [x] 2.1.3 Implement camera controller system:
-  - Right-click drag → rotate (azimuth/elevation)
-  - Middle-click drag → pan
+  - Right-click drag → rotate (azimuth/elevation) - **IMPROVED**: Increased rotation speed from 0.005 to 0.01 for more responsive rotation
+  - Middle-click drag → pan - **DISABLED**: Panning disabled to keep cube fixed at origin
   - Scroll wheel → zoom
 - [x] 2.1.4 Add camera distance limits (min: 1.0, max: 100.0)
-- [x] 2.1.5 Add smooth interpolation for camera movement
+- [x] 2.1.5 Add smooth interpolation for camera movement - **IMPROVED**: Increased smoothing from 0.1 to 0.5 for more responsive camera
 
 ### 2.2 Camera keyboard shortcuts
 - [x] 2.2.1 Implement 'F' key to frame scene (fit all voxels)
@@ -183,29 +183,32 @@
 ## Phase 6: Voxel Editing
 
 ### 6.1 EditorState resource
-- [ ] 6.1.1 Create `src/editing.rs` module
-- [ ] 6.1.2 Define EditorState resource with:
-  - current_tool: EditorTool enum (Place, Remove, Paint, Select)
-  - paint_mode: PaintMode
-  - selected_material: u8
-  - selected_brush: Option<VoxelBrush>
-  - continuous_paint: bool
-  - last_paint_position: Option<IVec3>
+- [x] 6.1.1 Create `src/editing.rs` module
+- [x] 6.1.2 Extended EditorState in cursor.rs with:
+  - selected_material: u8 ✓
+  - continuous_paint: bool ✓
+  - last_paint_position: Option<IVec3> ✓
+  - Note: Full EditorTool/PaintMode enums deferred to Phase 5
 
 ### 6.2 Single material placement system
-- [ ] 6.2.1 Detect left-click or left-click-hold on mouse button input
-- [ ] 6.2.2 Check if paint mode is Single and cursor is positioned
-- [ ] 6.2.3 Get cursor position and size from EditorState
-- [ ] 6.2.4 For each voxel in cursor volume (size^3 iterations):
+- [x] 6.2.1 Detect left-click or left-click-hold on mouse button input
+- [x] 6.2.2 Check cursor is positioned (valid flag)
+- [x] 6.2.3 Get cursor position and size from EditorState
+- [x] 6.2.4 For each voxel in cursor volume (size^3 iterations):
   - Call `set_voxel_at_depth(x, y, z, depth, material_id)`
-- [ ] 6.2.5 Mark mesh_dirty = true
-- [ ] 6.2.6 Create PlaceVoxelsCommand (batch) and add to history
-- [ ] 6.2.7 Handle single voxel (size=1) vs multi-voxel placement
+- [x] 6.2.5 Mark mesh_dirty = true
+- [ ] 6.2.6 Create PlaceVoxelsCommand (batch) and add to history (undo/redo deferred to Phase 17)
+- [x] 6.2.7 Handle single voxel (size=1) vs multi-voxel placement
+
+### 6.2.8 Material selection system
+- [x] 6.2.8.1 Implement 0-9 key bindings to select materials 0-9
+- [x] 6.2.8.2 Update selected_material in EditorState
+- [x] 6.2.8.3 Log material selection for user feedback
 
 ### 6.3 Brush placement system
-- [ ] 6.3.1 Detect left-click or left-click-hold when paint mode is Brush
-- [ ] 6.3.2 Check if brush is selected and cursor is positioned
-- [ ] 6.3.3 Get cursor position and active brush from EditorState
+- [ ] 6.3.1 Detect left-click or left-click-hold when paint mode is Brush (Phase 5 required)
+- [ ] 6.3.2 Check if brush is selected and cursor is positioned (Phase 5 required)
+- [ ] 6.3.3 Get cursor position and active brush from EditorState (Phase 5 required)
 - [ ] 6.3.4 Apply scale_depth to brush voxels (multiply coordinates by 2^scale_depth)
 - [ ] 6.3.5 For each voxel in scaled brush:
   - Call `set_voxel_at_depth(cursor_pos + voxel_offset, depth, voxel_material)`
@@ -213,22 +216,20 @@
 - [ ] 6.3.7 Create PlaceBrushCommand and add to history
 
 ### 6.4 Continuous paint mode
-- [ ] 6.4.1 Track left mouse button state (pressed/released)
-- [ ] 6.4.2 Set continuous_paint = true when button pressed
-- [ ] 6.4.3 Set continuous_paint = false when button released
-- [ ] 6.4.4 During continuous_paint, check if cursor position changed
-- [ ] 6.4.5 If cursor moved to new coordinate, perform paint operation
-- [ ] 6.4.6 Store last_paint_position to prevent duplicate paints at same coord
-- [ ] 6.4.7 Reset last_paint_position when button released
+- [x] 6.4.1 Track left mouse button state (pressed/released)
+- [x] 6.4.2 Set continuous_paint = true when button pressed
+- [x] 6.4.3 Set continuous_paint = false when button released
+- [x] 6.4.4 During continuous_paint, check if cursor position changed
+- [x] 6.4.5 If cursor moved to new coordinate, perform paint operation
+- [x] 6.4.6 Store last_paint_position to prevent duplicate paints at same coord
+- [x] 6.4.7 Reset last_paint_position when button released
 
 ### 6.5 Voxel removal system
-- [ ] 6.5.1 Detect Shift+left-click or Delete key
-- [ ] 6.5.2 Check if cursor is positioned (raycast valid)
-- [ ] 6.5.3 Handle removal based on paint mode:
-  - Single: remove cursor volume
-  - Brush: remove brush-shaped volume
-- [ ] 6.5.4 Mark mesh_dirty = true
-- [ ] 6.5.5 Create RemoveVoxelsCommand (batch) and add to history
+- [x] 6.5.1 Detect Shift+left-click or Delete key
+- [x] 6.5.2 Check if cursor is positioned (raycast valid)
+- [x] 6.5.3 Handle removal (removes cursor volume, sets voxels to air)
+- [x] 6.5.4 Mark mesh_dirty = true
+- [ ] 6.5.5 Create RemoveVoxelsCommand (batch) and add to history (undo/redo deferred to Phase 17)
 
 ## Phase 7: Camera System
 
