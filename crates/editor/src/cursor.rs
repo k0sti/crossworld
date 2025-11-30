@@ -53,6 +53,7 @@ impl CubeCursor {
     }
 
     /// Get cursor bounds as min and max voxel coordinates
+    #[allow(dead_code)]
     pub fn bounds(&self) -> (IVec3, IVec3) {
         let half_size = (self.size / 2) as i32;
         let center = IVec3::new(

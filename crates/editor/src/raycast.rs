@@ -9,6 +9,7 @@ pub struct RaycastResult {
     /// Normal vector of the face that was hit (axis-aligned)
     pub face_normal: Vec3,
     /// Distance from ray origin to hit point
+    #[allow(dead_code)]
     pub distance: f32,
     /// Voxel coordinate that was hit (integer coordinates)
     pub voxel_coord: IVec3,
@@ -16,6 +17,7 @@ pub struct RaycastResult {
 
 impl RaycastResult {
     /// Calculate the position for placing a voxel (hit position + face normal)
+    #[allow(dead_code)]
     pub fn placement_position(&self) -> Vec3 {
         self.hit_position + self.face_normal
     }
