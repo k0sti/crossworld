@@ -22,11 +22,22 @@ pub fn serialize_bcf(cube: &Cube<u8>) -> Vec<u8> {
 /// BCF writer implementation
 struct BcfWriterV2 {
     buffer: Vec<u8>,
+    base_offset: usize, // Offset where this writer's buffer will be placed in the final file
 }
 
 impl BcfWriterV2 {
     fn new() -> Self {
-        Self { buffer: Vec::new() }
+        Self {
+            buffer: Vec::new(),
+            base_offset: 0,
+        }
+    }
+
+    fn with_base_offset(base_offset: usize) -> Self {
+        Self {
+            buffer: Vec::new(),
+            base_offset,
+        }
     }
 
     /// Serialize cube to BCF format
@@ -96,53 +107,57 @@ impl BcfWriterV2 {
 
         let node_offset = self.buffer.len();
 
-        // Write children to temporary buffer
+        // Calculate pointer size needed (conservative estimate)
+        let max_possible_offset = node_offset + 1 + 8 * 8 + children.len() * 100; // Rough estimate
+        let ssss = Self::calc_ssss(max_possible_offset);
+        let pointer_size = 1 << ssss;
+
+        // Calculate where children will start in the final buffer
+        let children_start = node_offset + 1 + 8 * pointer_size;
+
+        // Write children to temporary buffer WITH correct base offset
         let mut temp_children = Vec::new();
         let mut child_sizes = Vec::with_capacity(8);
 
-        for child in children {
-            let mut child_writer = BcfWriterV2 { buffer: Vec::new() };
+        for (_i, child) in children.iter().enumerate() {
+            // Calculate where THIS child will be in the final buffer
+            let child_base_offset = children_start + temp_children.len();
+
+            // Create child writer with correct base offset
+            let mut child_writer = BcfWriterV2::with_base_offset(child_base_offset);
             child_writer.write_node(child.as_ref());
             child_sizes.push(child_writer.buffer.len());
             temp_children.extend_from_slice(&child_writer.buffer);
         }
 
-        // Calculate child offsets in final buffer
-        // They will be at: node_offset + 1 (type byte) + 8*pointer_size + offset_in_temp
-        // But we don't know pointer_size yet, so we need to iterate
-
-        // First, calculate pointer size needed
-        // Maximum possible offset is node_offset + 1 + 8*8 + temp_children.len()
-        let max_possible_offset = node_offset + 1 + 8 * 8 + temp_children.len();
-        let ssss = Self::calc_ssss(max_possible_offset);
-        let pointer_size = 1 << ssss;
-
-        // Now calculate actual child offsets
-        let children_start = node_offset + 1 + 8 * pointer_size;
+        // Calculate actual child offsets
+        // Offsets are relative to current buffer, but we write ABSOLUTE offsets for the final file
         let mut child_offsets = Vec::with_capacity(8);
         let mut offset_in_temp = 0;
 
         for &size in &child_sizes {
-            child_offsets.push(children_start + offset_in_temp);
+            // Offset in final file = base_offset + current_buffer_position + children_start + offset_in_temp
+            let absolute_offset = self.base_offset + children_start + offset_in_temp;
+            child_offsets.push(absolute_offset);
             offset_in_temp += size;
         }
 
         // Write node header: type byte
         self.buffer.push(OCTA_POINTERS_BASE | ssss);
 
-        // Write pointers
-        for &offset in &child_offsets {
+        // Write pointers (absolute offsets in final file)
+        for &absolute_offset in &child_offsets {
             match pointer_size {
-                1 => self.buffer.push(offset as u8),
+                1 => self.buffer.push(absolute_offset as u8),
                 2 => self
                     .buffer
-                    .extend_from_slice(&(offset as u16).to_le_bytes()),
+                    .extend_from_slice(&(absolute_offset as u16).to_le_bytes()),
                 4 => self
                     .buffer
-                    .extend_from_slice(&(offset as u32).to_le_bytes()),
+                    .extend_from_slice(&(absolute_offset as u32).to_le_bytes()),
                 8 => self
                     .buffer
-                    .extend_from_slice(&(offset as u64).to_le_bytes()),
+                    .extend_from_slice(&(absolute_offset as u64).to_le_bytes()),
                 _ => unreachable!(),
             }
         }
