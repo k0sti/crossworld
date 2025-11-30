@@ -32,6 +32,7 @@
 //! - GLSL has limited stack (use fixed-size arrays for traversal stack)
 //! - GLSL loops must have compile-time bounds (use `for (int i = 0; i < MAX_DEPTH; i++)`)
 
+use crate::bcf_raycast::bcf_raycast;
 use crate::renderer::*;
 use crate::scenes::create_octa_cube;
 use cube::Cube;
@@ -333,13 +334,16 @@ fn ray_aabb_intersect(ray: &Ray, aabb: &AABB) -> Option<(f32, f32)> {
 
 /// Compute child AABB for given octant
 ///
+/// Note: octant index is computed as: x + y*2 + z*4
+/// So to extract components: x = index & 1, y = (index >> 1) & 1, z = (index >> 2) & 1
+///
 /// GLSL equivalent:
 /// ```glsl
 /// void compute_child_bounds(vec3 parent_min, vec3 parent_max, uint octant, out vec3 child_min, out vec3 child_max) {
 ///     vec3 center = (parent_min + parent_max) * 0.5;
-///     uint x = (octant >> 2u) & 1u;
+///     uint x = octant & 1u;
 ///     uint y = (octant >> 1u) & 1u;
-///     uint z = octant & 1u;
+///     uint z = (octant >> 2u) & 1u;
 ///
 ///     child_min = vec3(
 ///         (x == 0u) ? parent_min.x : center.x,
@@ -357,9 +361,9 @@ fn ray_aabb_intersect(ray: &Ray, aabb: &AABB) -> Option<(f32, f32)> {
 #[inline]
 fn compute_child_bounds(parent: &AABB, octant: usize) -> AABB {
     let center = parent.center();
-    let x = (octant >> 2) & 1;
+    let x = octant & 1;
     let y = (octant >> 1) & 1;
-    let z = octant & 1;
+    let z = (octant >> 2) & 1;
 
     let min = Vec3::new(
         if x == 0 { parent.min.x } else { center.x },
@@ -803,8 +807,8 @@ impl BcfCpuTracer {
     fn render_ray(&self, ray: &Ray, time: f32) -> Vec3 {
         let mut color = BACKGROUND_COLOR;
 
-        // Trace ray through BCF octree
-        if let Some(hit) = trace_ray(&self.bcf_data, ray, self.root_offset) {
+        // Trace ray through BCF octree using new bcf_raycast
+        if let Some(hit) = bcf_raycast(&self.bcf_data, ray.origin, ray.direction) {
             // Check if this is an error material (1-7)
             let is_error_material = hit.value >= 1 && hit.value <= 7;
 
@@ -821,11 +825,17 @@ impl BcfCpuTracer {
             color = if self.disable_lighting || is_error_material {
                 material_color
             } else {
+                // Convert Axis to Vec3 normal
+                let normal = hit.normal.as_vec3();
+
+                // Calculate distance (not stored in new Hit, but not needed for lighting)
+                let distance = (hit.pos - ray.origin).length();
+
                 let hit_info = HitInfo {
                     hit: true,
-                    t: hit.distance,
+                    t: distance,
                     point: hit.pos,
-                    normal: hit.normal,
+                    normal,
                 };
                 calculate_lighting(&hit_info, material_color)
             };
@@ -839,6 +849,54 @@ impl BcfCpuTracer {
 impl Default for BcfCpuTracer {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_compute_child_bounds_bit_extraction() {
+        // Test that octant index extraction matches octant_to_index encoding
+        let parent = AABB::new(Vec3::splat(-1.0), Vec3::splat(1.0));
+
+        // Test all 8 octants
+        let test_cases = [
+            (0, Vec3::new(-1.0, -1.0, -1.0), Vec3::new(0.0, 0.0, 0.0)), // x=0, y=0, z=0
+            (1, Vec3::new(0.0, -1.0, -1.0), Vec3::new(1.0, 0.0, 0.0)),  // x=1, y=0, z=0
+            (2, Vec3::new(-1.0, 0.0, -1.0), Vec3::new(0.0, 1.0, 0.0)),  // x=0, y=1, z=0
+            (3, Vec3::new(0.0, 0.0, -1.0), Vec3::new(1.0, 1.0, 0.0)),   // x=1, y=1, z=0
+            (4, Vec3::new(-1.0, -1.0, 0.0), Vec3::new(0.0, 0.0, 1.0)),  // x=0, y=0, z=1
+            (5, Vec3::new(0.0, -1.0, 0.0), Vec3::new(1.0, 0.0, 1.0)),   // x=1, y=0, z=1
+            (6, Vec3::new(-1.0, 0.0, 0.0), Vec3::new(0.0, 1.0, 1.0)),   // x=0, y=1, z=1
+            (7, Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 1.0, 1.0)),    // x=1, y=1, z=1
+        ];
+
+        for (octant, expected_min, expected_max) in test_cases.iter() {
+            let bounds = compute_child_bounds(&parent, *octant);
+            assert_eq!(bounds.min, *expected_min, "Octant {} min mismatch", octant);
+            assert_eq!(bounds.max, *expected_max, "Octant {} max mismatch", octant);
+        }
+    }
+
+    #[test]
+    fn test_octant_to_index_inverse() {
+        // Verify that extracting x, y, z from index gives correct octant coordinates
+        for octant in 0..8 {
+            let x = octant & 1;
+            let y = (octant >> 1) & 1;
+            let z = (octant >> 2) & 1;
+
+            // Reconstruct index using octant_to_index formula
+            let reconstructed = octant_to_index(IVec3::new(x as i32, y as i32, z as i32));
+
+            assert_eq!(
+                reconstructed, octant,
+                "Octant {} extraction failed: got x={}, y={}, z={}, reconstructed={}",
+                octant, x, y, z, reconstructed
+            );
+        }
     }
 }
 
