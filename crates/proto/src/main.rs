@@ -189,11 +189,11 @@ fn setup(
         .map(|chunk| [chunk[0], chunk[1], chunk[2]])
         .collect();
 
-    // Colors (Vec3)
-    let colors: Vec<[f32; 3]> = geometry_data
+    // Colors (Vec4 - RGBA, add alpha = 1.0)
+    let colors: Vec<[f32; 4]> = geometry_data
         .colors()
         .chunks(3)
-        .map(|chunk| [chunk[0], chunk[1], chunk[2]])
+        .map(|chunk| [chunk[0], chunk[1], chunk[2], 1.0])
         .collect();
 
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
