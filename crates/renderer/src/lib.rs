@@ -7,6 +7,7 @@
 //! - **gpu_tracer**: Compute shader raytracer for high-performance rendering
 
 pub mod bcf_cpu_tracer;
+pub mod bcf_raycast;
 pub mod cpu_tracer;
 pub mod gl_tracer;
 pub mod gpu_tracer;
