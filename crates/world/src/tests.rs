@@ -3,6 +3,48 @@ use super::world_cube::WorldCube as WorldCubeInternal;
 use cube::Cube;
 
 #[test]
+fn test_mesh_generation_produces_output() {
+    // Test that mesh generation actually produces vertices and indices
+    let world_cube = WorldCubeInternal::new(3, 5, 1, 12345);
+
+    let geometry = world_cube.generate_mesh();
+
+    println!("Vertices: {}", geometry.vertices().len());
+    println!("Indices: {}", geometry.indices().len());
+    println!("Normals: {}", geometry.normals().len());
+    println!("Colors: {}", geometry.colors().len());
+
+    assert!(
+        !geometry.vertices().is_empty(),
+        "Mesh should generate vertices"
+    );
+    assert!(
+        !geometry.indices().is_empty(),
+        "Mesh should generate indices"
+    );
+    assert!(
+        geometry.vertices().len() % 3 == 0,
+        "Vertices should be in groups of 3 (xyz)"
+    );
+    assert!(
+        geometry.indices().len() % 3 == 0,
+        "Indices should be in groups of 3 (triangles)"
+    );
+
+    // Verify we have matching normals and colors
+    assert_eq!(
+        geometry.vertices().len(),
+        geometry.normals().len(),
+        "Should have same number of vertex and normal components"
+    );
+    assert_eq!(
+        geometry.vertices().len(),
+        geometry.colors().len(),
+        "Should have same number of vertex and color components"
+    );
+}
+
+#[test]
 fn test_basic_voxel_operations() {
     // Create WorldCube directly (no WASM wrapper needed for tests)
     let mut world_cube = WorldCubeInternal::new(3, 2, 0, 12345); // macro_depth=3, micro_depth=2, seed=12345

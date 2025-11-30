@@ -1,6 +1,6 @@
 /// Trait for mapping voxel indices to RGB colors
 pub trait ColorMapper {
-    fn map(&self, index: i32) -> [f32; 3];
+    fn map(&self, index: u8) -> [f32; 3];
 }
 
 /// HSV-based color mapper (existing behavior)
@@ -29,13 +29,11 @@ impl Default for HsvColorMapper {
 }
 
 impl ColorMapper for HsvColorMapper {
-    fn map(&self, index: i32) -> [f32; 3] {
-        if index < 0 {
-            [1.0, 0.0, 0.0] // Red for negative
-        } else if index == 0 {
+    fn map(&self, index: u8) -> [f32; 3] {
+        if index == 0 {
             [0.0, 0.0, 0.0] // Black for zero
         } else {
-            let hue = (index % 360) as f32;
+            let hue = (index as u32 % 360) as f32;
             hsv_to_rgb(hue, self.saturation, self.value)
         }
     }
@@ -103,13 +101,13 @@ impl PaletteColorMapper {
 }
 
 impl ColorMapper for PaletteColorMapper {
-    fn map(&self, index: i32) -> [f32; 3] {
+    fn map(&self, index: u8) -> [f32; 3] {
         if self.colors.is_empty() {
             return [1.0, 0.0, 1.0]; // Magenta for error
         }
 
-        if index <= 0 {
-            return [0.0, 0.0, 0.0]; // Black for zero/negative
+        if index == 0 {
+            return [0.0, 0.0, 0.0]; // Black for zero
         }
 
         let idx = ((index - 1) as usize) % self.colors.len();
@@ -157,8 +155,8 @@ impl Default for VoxColorMapper {
 }
 
 impl ColorMapper for VoxColorMapper {
-    fn map(&self, index: i32) -> [f32; 3] {
-        let color = crate::material::get_material_color(index);
+    fn map(&self, index: u8) -> [f32; 3] {
+        let color = crate::material::get_material_color(index as i32);
         [color.x, color.y, color.z]
     }
 }

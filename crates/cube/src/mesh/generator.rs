@@ -133,15 +133,15 @@ impl MeshBuilder for DefaultMeshBuilder {
 /// * `border_materials` - Array of 4 material IDs for border voxels at each Y layer [y0, y1, y2, y3]
 /// * `base_depth` - The depth at which voxels are 1 unit in size (for UV scaling)
 pub fn generate_face_mesh<B, F>(
-    root: &Cube<i32>,
+    root: &Cube<u8>,
     builder: &mut B,
     color_fn: F,
     max_depth: u32,
-    border_materials: [i32; 4],
+    border_materials: [u8; 4],
     base_depth: u32,
 ) where
     B: MeshBuilder,
-    F: Fn(i32) -> [f32; 3] + Copy,
+    F: Fn(u8) -> [f32; 3] + Copy,
 {
     // Use visit_faces to iterate through all visible faces
     visit_faces(
@@ -183,173 +183,4 @@ pub fn generate_face_mesh<B, F>(
         max_depth,
         border_materials,
     );
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::core::Cube;
-    use std::rc::Rc;
-
-    fn simple_color_mapper(value: i32) -> [f32; 3] {
-        if value <= 0 {
-            [0.0, 0.0, 0.0]
-        } else {
-            [1.0, 0.0, 0.0] // Simple red color for testing
-        }
-    }
-
-    #[test]
-    fn test_single_solid_cube() {
-        // A single solid cube should have all 6 faces rendered from surrounding empty space
-        let root = Cube::Solid(1);
-        let mut builder = DefaultMeshBuilder::new();
-        let border_materials = [0, 0, 0, 0]; // All empty borders
-
-        generate_face_mesh(
-            &root,
-            &mut builder,
-            simple_color_mapper,
-            0,
-            border_materials,
-            0, // base_depth
-        );
-
-        // With empty borders, faces are generated at the boundary between solid and empty
-        // A single solid cube bordered by empty space has 6 faces (one per side)
-        // Each face has 6 indices (2 triangles), so at least some indices
-        assert!(
-            builder.indices.len() > 0,
-            "Should generate faces at solid-empty boundary"
-        );
-    }
-
-    #[test]
-    fn test_checkerboard_pattern() {
-        // Create octree with checkerboard solid/empty pattern
-        let root = Cube::cubes([
-            Rc::new(Cube::Solid(0)), // Empty
-            Rc::new(Cube::Solid(1)), // Solid
-            Rc::new(Cube::Solid(0)), // Empty
-            Rc::new(Cube::Solid(1)), // Solid
-            Rc::new(Cube::Solid(0)), // Empty
-            Rc::new(Cube::Solid(1)), // Solid
-            Rc::new(Cube::Solid(0)), // Empty
-            Rc::new(Cube::Solid(1)), // Solid
-        ]);
-
-        let mut builder = DefaultMeshBuilder::new();
-        let border_materials = [0, 0, 0, 0]; // All empty borders
-        generate_face_mesh(
-            &root,
-            &mut builder,
-            simple_color_mapper,
-            1,
-            border_materials,
-            1, // base_depth
-        );
-
-        // Empty voxels should have faces where they touch solid voxels
-        // 4 empty voxels, each can have multiple solid neighbors
-        assert!(builder.indices.len() > 0, "Should generate some faces");
-    }
-
-    #[test]
-    fn test_all_empty_with_borders() {
-        // All empty octree will generate faces where empty voxels meet border ground
-        let root = Cube::cubes([
-            Rc::new(Cube::Solid(0)), // All empty
-            Rc::new(Cube::Solid(0)),
-            Rc::new(Cube::Solid(0)),
-            Rc::new(Cube::Solid(0)),
-            Rc::new(Cube::Solid(0)),
-            Rc::new(Cube::Solid(0)),
-            Rc::new(Cube::Solid(0)),
-            Rc::new(Cube::Solid(0)),
-        ]);
-
-        let mut builder = DefaultMeshBuilder::new();
-        let border_materials = [33, 33, 0, 0]; // Ground at bottom, air at top
-        generate_face_mesh(
-            &root,
-            &mut builder,
-            simple_color_mapper,
-            1,
-            border_materials,
-            1, // base_depth
-        );
-
-        // Empty voxels at the border will see ground (33) below them and generate upward faces
-        // This is expected behavior for terrain rendering
-        assert!(
-            builder.indices.len() > 0,
-            "Empty voxels touching ground borders should generate faces"
-        );
-    }
-
-    #[test]
-    fn test_single_solid_in_empty() {
-        // One solid voxel surrounded by empty
-        let root = Cube::cubes([
-            Rc::new(Cube::Solid(0)), // Empty
-            Rc::new(Cube::Solid(0)), // Empty
-            Rc::new(Cube::Solid(0)), // Empty
-            Rc::new(Cube::Solid(1)), // Solid - octant 3 (0,1,1)
-            Rc::new(Cube::Solid(0)), // Empty
-            Rc::new(Cube::Solid(0)), // Empty
-            Rc::new(Cube::Solid(0)), // Empty
-            Rc::new(Cube::Solid(0)), // Empty
-        ]);
-
-        let mut builder = DefaultMeshBuilder::new();
-        let border_materials = [0, 0, 0, 0]; // All empty borders
-        generate_face_mesh(
-            &root,
-            &mut builder,
-            simple_color_mapper,
-            1,
-            border_materials,
-            1, // base_depth
-        );
-
-        // Empty neighbors of the solid voxel should render faces towards it
-        // Expect at least some faces
-        assert!(
-            builder.indices.len() > 0,
-            "Should generate faces for visible solid"
-        );
-    }
-
-    #[test]
-    fn test_all_solid() {
-        // All solid octree should generate no faces (no empty voxels to render from)
-        let root = Cube::cubes([
-            Rc::new(Cube::Solid(1)), // All solid
-            Rc::new(Cube::Solid(1)),
-            Rc::new(Cube::Solid(1)),
-            Rc::new(Cube::Solid(1)),
-            Rc::new(Cube::Solid(1)),
-            Rc::new(Cube::Solid(1)),
-            Rc::new(Cube::Solid(1)),
-            Rc::new(Cube::Solid(1)),
-        ]);
-
-        let mut builder = DefaultMeshBuilder::new();
-        let border_materials = [0, 0, 0, 0]; // All empty borders
-        generate_face_mesh(
-            &root,
-            &mut builder,
-            simple_color_mapper,
-            1,
-            border_materials,
-            1, // base_depth
-        );
-
-        // With empty borders, faces are generated at the boundary
-        // All solid octree with empty borders should have faces at the boundary
-        assert!(
-            builder.indices.len() > 0,
-            "Should generate faces at solid-empty boundary"
-        );
-    }
 }

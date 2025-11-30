@@ -22,8 +22,16 @@ pub fn sync_voxel_mesh(
     // Generate mesh from WorldCube (acquire lock)
     let geometry = scene.world.lock().generate_frame();
 
+    info!("WorldCube generated: {} vertex components, {} indices, {} normals, {} colors",
+          geometry.vertices().len(),
+          geometry.indices().len(),
+          geometry.normals().len(),
+          geometry.colors().len());
+
     if geometry.vertices().is_empty() || geometry.indices().is_empty() {
-        info!("No geometry to render");
+        warn!("No geometry to render! vertices: {}, indices: {}",
+              geometry.vertices().len(),
+              geometry.indices().len());
         scene.clear_dirty();
         return;
     }
