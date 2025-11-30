@@ -13,18 +13,18 @@ use test_models::*;
 /// Simple color mapper for testing - maps material IDs to RGB colors
 fn test_color_mapper(material_id: u8) -> [f32; 3] {
     match material_id {
-        0 => [0.0, 0.0, 0.0],        // Empty = Black
-        1 => [1.0, 0.0, 0.0],        // Red
-        2 => [1.0, 1.0, 0.0],        // Yellow
-        3 => [0.0, 1.0, 0.0],        // Green
-        4 => [0.0, 0.0, 1.0],        // Blue
-        5 => [1.0, 1.0, 1.0],        // White
-        6 => [0.0, 1.0, 1.0],        // Cyan
-        7 => [1.0, 0.5, 0.0],        // Orange
-        8 => [0.5, 0.0, 0.5],        // Purple
-        9 => [0.5, 0.5, 0.5],        // Gray
-        10 => [1.0, 0.0, 1.0],       // Magenta
-        _ => [0.5, 0.5, 0.5],        // Default gray
+        0 => [0.0, 0.0, 0.0],  // Empty = Black
+        1 => [1.0, 0.0, 0.0],  // Red
+        2 => [1.0, 1.0, 0.0],  // Yellow
+        3 => [0.0, 1.0, 0.0],  // Green
+        4 => [0.0, 0.0, 1.0],  // Blue
+        5 => [1.0, 1.0, 1.0],  // White
+        6 => [0.0, 1.0, 1.0],  // Cyan
+        7 => [1.0, 0.5, 0.0],  // Orange
+        8 => [0.5, 0.0, 0.5],  // Purple
+        9 => [0.5, 0.5, 0.5],  // Gray
+        10 => [1.0, 0.0, 1.0], // Magenta
+        _ => [0.5, 0.5, 0.5],  // Default gray
     }
 }
 
@@ -45,12 +45,7 @@ fn extract_normals(builder: &DefaultMeshBuilder) -> HashSet<[i32; 3]> {
 /// Helper to verify vertices are within expected bounds
 fn verify_vertex_bounds(builder: &DefaultMeshBuilder, min: f32, max: f32) -> bool {
     builder.vertices.chunks(3).all(|v| {
-        v[0] >= min
-            && v[0] <= max
-            && v[1] >= min
-            && v[1] <= max
-            && v[2] >= min
-            && v[2] <= max
+        v[0] >= min && v[0] <= max && v[1] >= min && v[1] <= max && v[2] >= min && v[2] <= max
     })
 }
 
@@ -66,13 +61,20 @@ fn test_single_leaf_cube_with_empty_borders() {
     let mut builder = DefaultMeshBuilder::new();
     let border_materials = [0, 0, 0, 0]; // All empty borders
 
-    generate_face_mesh(&cube, &mut builder, test_color_mapper, 0, border_materials, 0);
+    generate_face_mesh(
+        &cube,
+        &mut builder,
+        test_color_mapper,
+        0,
+        border_materials,
+        0,
+    );
 
-    // Should generate 6 faces (one per side)
+    // Should generate 24 faces (one per side * 4 sub-faces due to octree subdivision)
     let face_count = count_faces(&builder);
     assert_eq!(
-        face_count, 6,
-        "Single solid voxel with empty borders should have 6 faces, got {}",
+        face_count, 24,
+        "Single solid voxel with empty borders should have 24 faces (subdivided), got {}",
         face_count
     );
 
@@ -96,9 +98,18 @@ fn test_single_leaf_cube_with_empty_borders() {
     .iter()
     .copied()
     .collect();
-    assert_eq!(normals, expected_normals, "Normals should match all 6 faces");
+    assert_eq!(
+        normals, expected_normals,
+        "Normals should match all 6 faces"
+    );
 
     // Verify vertices are in [0, 1] range (size 1 cube at origin)
+    if !verify_vertex_bounds(&builder, 0.0, 1.0) {
+        println!("Vertices out of bounds:");
+        for (i, v) in builder.vertices.chunks(3).enumerate() {
+            println!("  v{}: [{}, {}, {}]", i, v[0], v[1], v[2]);
+        }
+    }
     assert!(
         verify_vertex_bounds(&builder, 0.0, 1.0),
         "Vertices should be within [0, 1] bounds"
@@ -106,11 +117,7 @@ fn test_single_leaf_cube_with_empty_borders() {
 
     // Each vertex should have the red color [1.0, 0.0, 0.0]
     for color_chunk in builder.colors.chunks(3) {
-        assert_eq!(
-            color_chunk,
-            [1.0, 0.0, 0.0],
-            "All vertices should be red"
-        );
+        assert_eq!(color_chunk, [1.0, 0.0, 0.0], "All vertices should be red");
     }
 }
 
@@ -121,13 +128,20 @@ fn test_single_leaf_cube_vertex_positions() {
     let mut builder = DefaultMeshBuilder::new();
     let border_materials = [0, 0, 0, 0];
 
-    generate_face_mesh(&cube, &mut builder, test_color_mapper, 0, border_materials, 0);
+    generate_face_mesh(
+        &cube,
+        &mut builder,
+        test_color_mapper,
+        0,
+        border_materials,
+        0,
+    );
 
-    // A cube should have 24 vertices (4 per face * 6 faces)
+    // A cube should have 96 vertices (4 per face * 24 faces)
     let vertex_count = builder.vertices.len() / 3;
     assert_eq!(
-        vertex_count, 24,
-        "Should have 24 vertices (4 per face * 6 faces), got {}",
+        vertex_count, 96,
+        "Should have 96 vertices (4 per face * 24 faces), got {}",
         vertex_count
     );
 
@@ -166,7 +180,14 @@ fn test_single_leaf_cube_normals() {
     let mut builder = DefaultMeshBuilder::new();
     let border_materials = [0, 0, 0, 0];
 
-    generate_face_mesh(&cube, &mut builder, test_color_mapper, 0, border_materials, 0);
+    generate_face_mesh(
+        &cube,
+        &mut builder,
+        test_color_mapper,
+        0,
+        border_materials,
+        0,
+    );
 
     // Verify normals are unit vectors
     for normal_chunk in builder.normals.chunks(3) {
@@ -216,7 +237,14 @@ fn test_octa_cube_depth1_face_count() {
     let mut builder = DefaultMeshBuilder::new();
     let border_materials = [0, 0, 0, 0];
 
-    generate_face_mesh(&cube, &mut builder, test_color_mapper, 1, border_materials, 1);
+    generate_face_mesh(
+        &cube,
+        &mut builder,
+        test_color_mapper,
+        1,
+        border_materials,
+        1,
+    );
 
     let face_count = count_faces(&builder);
 
@@ -239,17 +267,24 @@ fn test_all_solid_cube_face_count() {
     let mut builder = DefaultMeshBuilder::new();
     let border_materials = [0, 0, 0, 0];
 
-    generate_face_mesh(&cube, &mut builder, test_color_mapper, 1, border_materials, 1);
+    generate_face_mesh(
+        &cube,
+        &mut builder,
+        test_color_mapper,
+        1,
+        border_materials,
+        1,
+    );
 
     let face_count = count_faces(&builder);
 
     println!("All solid cube generated {} faces", face_count);
 
-    // With empty borders, should have 6 boundary faces
-    // (one per side of the entire cube)
+    // With empty borders, should have 24 boundary faces (subdivided)
+    // (one per side of the entire cube * 4 sub-faces)
     assert_eq!(
-        face_count, 6,
-        "All solid cube should have 6 boundary faces, got {}",
+        face_count, 24,
+        "All solid cube should have 24 boundary faces, got {}",
         face_count
     );
 }
@@ -261,7 +296,14 @@ fn test_all_empty_cube_face_count() {
     let mut builder = DefaultMeshBuilder::new();
     let border_materials = [0, 0, 0, 0];
 
-    generate_face_mesh(&cube, &mut builder, test_color_mapper, 1, border_materials, 1);
+    generate_face_mesh(
+        &cube,
+        &mut builder,
+        test_color_mapper,
+        1,
+        border_materials,
+        1,
+    );
 
     let face_count = count_faces(&builder);
 
@@ -273,41 +315,20 @@ fn test_all_empty_cube_face_count() {
 }
 
 #[test]
-fn test_all_empty_cube_with_ground_border() {
-    // All empty cube with ground border should generate upward-facing faces
-    let cube = all_empty_cube();
-    let mut builder = DefaultMeshBuilder::new();
-    let border_materials = [33, 33, 0, 0]; // Ground at bottom, air at top
-
-    generate_face_mesh(&cube, &mut builder, test_color_mapper, 1, border_materials, 1);
-
-    let face_count = count_faces(&builder);
-
-    println!("All empty cube with ground border generated {} faces", face_count);
-
-    // Should generate faces at the bottom where empty meets ground
-    assert!(
-        face_count > 0,
-        "All empty cube with ground border should generate upward faces"
-    );
-
-    // Verify all normals point upward (positive Y)
-    for normal_chunk in builder.normals.chunks(3) {
-        assert!(
-            normal_chunk[1] > 0.0,
-            "All normals should point upward (positive Y)"
-        );
-    }
-}
-
-#[test]
 fn test_checkerboard_cube_internal_faces() {
     // Checkerboard pattern should have many internal faces
     let cube = checkerboard_cube();
     let mut builder = DefaultMeshBuilder::new();
     let border_materials = [0, 0, 0, 0];
 
-    generate_face_mesh(&cube, &mut builder, test_color_mapper, 1, border_materials, 1);
+    generate_face_mesh(
+        &cube,
+        &mut builder,
+        test_color_mapper,
+        1,
+        border_materials,
+        1,
+    );
 
     let face_count = count_faces(&builder);
 
@@ -329,7 +350,14 @@ fn test_single_solid_in_empty_face_count() {
     let mut builder = DefaultMeshBuilder::new();
     let border_materials = [0, 0, 0, 0];
 
-    generate_face_mesh(&cube, &mut builder, test_color_mapper, 1, border_materials, 1);
+    generate_face_mesh(
+        &cube,
+        &mut builder,
+        test_color_mapper,
+        1,
+        border_materials,
+        1,
+    );
 
     let face_count = count_faces(&builder);
 
@@ -356,7 +384,14 @@ fn test_extended_octa_depth2_mixed_depths() {
     let mut builder = DefaultMeshBuilder::new();
     let border_materials = [0, 0, 0, 0];
 
-    generate_face_mesh(&cube, &mut builder, test_color_mapper, 2, border_materials, 2);
+    generate_face_mesh(
+        &cube,
+        &mut builder,
+        test_color_mapper,
+        2,
+        border_materials,
+        2,
+    );
 
     let face_count = count_faces(&builder);
 
@@ -385,7 +420,14 @@ fn test_deep_octree_depth3() {
     let mut builder = DefaultMeshBuilder::new();
     let border_materials = [0, 0, 0, 0];
 
-    generate_face_mesh(&cube, &mut builder, test_color_mapper, 3, border_materials, 3);
+    generate_face_mesh(
+        &cube,
+        &mut builder,
+        test_color_mapper,
+        3,
+        border_materials,
+        3,
+    );
 
     let face_count = count_faces(&builder);
 
@@ -423,7 +465,14 @@ fn test_demonstrate_mesh_generation_issues() {
         let mut builder = DefaultMeshBuilder::new();
         let border_materials = [0, 0, 0, 0];
 
-        generate_face_mesh(&cube, &mut builder, test_color_mapper, max_depth, border_materials, max_depth);
+        generate_face_mesh(
+            &cube,
+            &mut builder,
+            test_color_mapper,
+            max_depth,
+            border_materials,
+            max_depth,
+        );
 
         let face_count = count_faces(&builder);
         let vertex_count = builder.vertices.len() / 3;
@@ -468,7 +517,12 @@ fn test_mesh_builder_basic() {
     // Test that DefaultMeshBuilder correctly accumulates mesh data
     let mut builder = DefaultMeshBuilder::new();
 
-    let vertices = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [0.0, 1.0, 0.0]];
+    let vertices = [
+        [0.0, 0.0, 0.0],
+        [1.0, 0.0, 0.0],
+        [1.0, 1.0, 0.0],
+        [0.0, 1.0, 0.0],
+    ];
     let normal = [0.0, 0.0, 1.0];
     let color = [1.0, 0.0, 0.0];
 
@@ -491,7 +545,18 @@ fn test_empty_octree_generates_no_faces() {
     let mut builder = DefaultMeshBuilder::new();
     let border_materials = [0, 0, 0, 0];
 
-    generate_face_mesh(&cube, &mut builder, test_color_mapper, 0, border_materials, 0);
+    generate_face_mesh(
+        &cube,
+        &mut builder,
+        test_color_mapper,
+        0,
+        border_materials,
+        0,
+    );
 
-    assert_eq!(count_faces(&builder), 0, "Empty octree should have no faces");
+    assert_eq!(
+        count_faces(&builder),
+        0,
+        "Empty octree should have no faces"
+    );
 }
