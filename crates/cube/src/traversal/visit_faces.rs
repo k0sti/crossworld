@@ -15,7 +15,7 @@ pub struct FaceInfo {
     /// Size of the voxel
     pub size: f32,
     /// Material ID of the solid voxel
-    pub material_id: i32,
+    pub material_id: u8,
     /// Coordinate of the empty voxel from which the face is visible
     pub viewer_coord: CubeCoord,
 }
@@ -30,10 +30,10 @@ pub struct FaceInfo {
 #[deprecated(note = "Use visit_faces instead - this implementation is broken")]
 #[allow(dead_code)]
 pub fn visit_faces_old<F>(
-    root: &Cube<i32>,
+    root: &Cube<u8>,
     mut visitor: F,
     max_depth: u32,
-    border_materials: [i32; 4],
+    border_materials: [u8; 4],
 ) where
     F: FnMut(&FaceInfo),
 {
@@ -113,7 +113,7 @@ pub fn visit_faces_old<F>(
 ///         face_info.face, face_info.position, face_info.material_id);
 /// }, [0, 0, 0, 0]);
 /// ```
-pub fn visit_faces<F>(root: &Cube<i32>, mut visitor: F, border_materials: [i32; 4])
+pub fn visit_faces<F>(root: &Cube<u8>, mut visitor: F, border_materials: [u8; 4])
 where
     F: FnMut(&FaceInfo),
 {

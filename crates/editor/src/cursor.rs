@@ -74,6 +74,12 @@ impl CubeCursor {
 pub struct EditorState {
     pub cursor: CubeCursor,
     pub focus_mode: FocusMode,
+    /// Selected material index for voxel placement
+    pub selected_material: u8,
+    /// Whether continuous painting is active (mouse button held)
+    pub continuous_paint: bool,
+    /// Last painted position to prevent duplicates during continuous paint
+    pub last_paint_position: Option<IVec3>,
 }
 
 impl Default for EditorState {
@@ -81,6 +87,9 @@ impl Default for EditorState {
         Self {
             cursor: CubeCursor::default(),
             focus_mode: FocusMode::Far, // Start in Far mode (for placing)
+            selected_material: 1, // Default to material 1 (grass/stone, not air)
+            continuous_paint: false,
+            last_paint_position: None,
         }
     }
 }

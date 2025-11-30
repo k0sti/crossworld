@@ -44,7 +44,7 @@ impl WorldCube {
     /// Set voxel in world cube at specified depth
     /// depth: octree depth (7=finest detail, 4=coarse, etc.)
     #[wasm_bindgen(js_name = setVoxelAtDepth)]
-    pub fn set_voxel_at_depth(&self, x: i32, y: i32, z: i32, depth: u32, color_index: i32) {
+    pub fn set_voxel_at_depth(&self, x: i32, y: i32, z: i32, depth: u32, color_index: u8) {
         // Validate coordinates before borrowing to avoid poisoning RefCell on error
         let max_coord = (1 << depth) - 1;
         if x < 0 || x > max_coord || y < 0 || y > max_coord || z < 0 || z > max_coord {

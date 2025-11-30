@@ -28,7 +28,7 @@ impl Default for OrbitCamera {
             elevation: std::f32::consts::FRAC_PI_6, // 30 degrees
             distance_min: 1.0,
             distance_max: 100.0,
-            smoothing: 0.1,
+            smoothing: 0.0, // Increased from 0.1 for more responsive camera
         }
     }
 }
@@ -74,7 +74,7 @@ pub fn orbit_camera_controller(
     for (mut camera, mut transform) in query.iter_mut() {
         // Right-click drag to rotate
         if mouse_buttons.pressed(MouseButton::Right) && mouse_delta.length_squared() > 0.0 {
-            let rotation_speed = 0.005;
+            let rotation_speed = 0.01; // Increased from 0.005 for more responsive rotation
             camera.azimuth -= mouse_delta.x * rotation_speed;
             camera.elevation += mouse_delta.y * rotation_speed;
 
@@ -85,8 +85,11 @@ pub fn orbit_camera_controller(
             );
         }
 
-        // Middle-click drag to pan
-        if mouse_buttons.pressed(MouseButton::Middle) && mouse_delta.length_squared() > 0.0 {
+        // Middle-click drag to pan (DISABLED - cube should stay fixed at origo)
+        // NOTE: Panning is disabled to keep the cube centered at the origin.
+        // If panning is needed in the future, it should move the camera position
+        // while keeping the target fixed at Vec3::ZERO.
+        if false && mouse_buttons.pressed(MouseButton::Middle) && mouse_delta.length_squared() > 0.0 {
             let pan_speed = 0.01 * camera.distance;
 
             // Calculate right and up vectors in camera space
