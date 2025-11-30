@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use bevy::input::mouse::{MouseMotion, MouseWheel};
 use bevy::render::mesh::{Indices, PrimitiveTopology};
 use bevy_rapier3d::prelude::*;
-use crossworld_world::WorldCube;
+use crossworld_world::NativeWorldCube as WorldCube;
 use serde::Deserialize;
 use std::path::Path;
 
