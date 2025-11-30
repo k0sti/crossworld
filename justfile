@@ -22,6 +22,7 @@ default:
     @echo "  just test-raytracing  - Run complete raytracing test suite (raycast + raytrace)"
     @echo "  just planet           - Run native voxel editor (Bevy)"
     @echo "  just planet-release   - Run native voxel editor (optimized build)"
+    @echo "  just proto            - Run physics prototype (Bevy)"
     @echo ""
 
 # Build WASM module in development mode
@@ -166,3 +167,7 @@ planet:
 # Run native voxel editor (Bevy) in release mode
 planet-release:
     cargo run --release --bin planet
+
+# Run physics prototype (Bevy)
+proto:
+    cargo run --bin proto

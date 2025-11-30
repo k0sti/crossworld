@@ -18,31 +18,8 @@ use std::rc::Rc;
 /// CSM parser returns Cube<i32>, but we convert to u8 for material indices
 fn parse_csm_u8(csm: &str) -> Rc<Cube<u8>> {
     let octree = parse_csm(csm).expect("Failed to parse CSM");
-    // Convert Cube<i32> to Cube<u8>
-    fn convert_cube(cube: &Cube<i32>) -> Cube<u8> {
-        match cube {
-            Cube::Solid(v) => Cube::Solid(*v as u8),
-            Cube::Cubes(children) => {
-                let converted: Vec<Rc<Cube<u8>>> =
-                    children.iter().map(|c| Rc::new(convert_cube(c))).collect();
-                let array: [Rc<Cube<u8>>; 8] = converted.try_into().unwrap();
-                Cube::Cubes(Box::new(array))
-            }
-            Cube::Planes { axis: _, quad: _ } => {
-                // Planes not fully implemented, fallback to solid
-                Cube::Solid(0)
-            }
-            Cube::Slices { axis, layers } => {
-                let converted: Vec<Rc<Cube<u8>>> =
-                    layers.iter().map(|c| Rc::new(convert_cube(c))).collect();
-                Cube::Slices {
-                    axis: *axis,
-                    layers: Rc::new(converted),
-                }
-            }
-        }
-    }
-    Rc::new(convert_cube(&octree.root))
+    // Octree.root is already Cube<u8>, so just clone it
+    Rc::new(octree.root.clone())
 }
 
 // ============================================================================
