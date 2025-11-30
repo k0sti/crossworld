@@ -180,7 +180,6 @@ pub fn generate_face_mesh<B, F>(
                 builder.add_face(vertices, normal, color);
             }
         },
-        max_depth,
         border_materials,
     );
 }

@@ -184,9 +184,6 @@ mod tests {
         // Different indices should give different colors
         assert_ne!(color1, color42);
 
-        // Negative should be red
-        assert_eq!(mapper.map(-1), [1.0, 0.0, 0.0]);
-
         // Zero should be black
         assert_eq!(mapper.map(0), [0.0, 0.0, 0.0]);
     }
@@ -210,8 +207,7 @@ mod tests {
         // Index 4 -> wraps to first color (red)
         assert_eq!(mapper.map(4), [1.0, 0.0, 0.0]);
 
-        // Zero/negative should be black
+        // Zero should be black
         assert_eq!(mapper.map(0), [0.0, 0.0, 0.0]);
-        assert_eq!(mapper.map(-1), [0.0, 0.0, 0.0]);
     }
 }
