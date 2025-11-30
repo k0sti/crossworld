@@ -15,6 +15,7 @@ wasm-opt = false
 [features]
 default = []
 wasm = ["dep:wasm-bindgen", "dep:serde", "dep:serde-wasm-bindgen"]
+bevy = []
 
 [dependencies]
 # Physics engine - use git version for latest features

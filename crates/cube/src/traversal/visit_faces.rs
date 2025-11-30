@@ -43,7 +43,7 @@ pub fn visit_faces_old<F>(
         &grid,
         &mut |view, coord, _subleaf| {
             // Only process empty voxels - THIS IS THE PROBLEM
-            if view.center().id() != 0 {
+            if (**view.center()).id() != 0 {
                 return false;
             }
 
@@ -58,12 +58,12 @@ pub fn visit_faces_old<F>(
             for (face, dir_offset, offset_vec) in Face::DIRECTIONS {
                 if let Some(neighbor_cube) = view.get(dir_offset) {
                     // Check if neighbor is subdivided
-                    if !neighbor_cube.is_leaf() {
+                    if !(**neighbor_cube).is_leaf() {
                         should_subdivide = true;
                         continue;
                     }
 
-                    let neighbor_id = neighbor_cube.id();
+                    let neighbor_id = (**neighbor_cube).id();
                     if neighbor_id == 0 {
                         continue; // Skip empty neighbors
                     }
@@ -124,7 +124,7 @@ where
         &grid,
         &mut |view, coord, _subleaf| {
             // Only process SOLID voxels (inverted logic from old implementation)
-            let center_id = view.center().id();
+            let center_id = (**view.center()).id();
             if center_id == 0 {
                 return false; // Skip empty voxels
             }
@@ -170,12 +170,12 @@ where
             for (face, dir_offset, _offset_vec) in directions {
                 if let Some(neighbor_cube) = view.get(dir_offset) {
                     // Check if neighbor is subdivided
-                    if !neighbor_cube.is_leaf() {
+                    if !(**neighbor_cube).is_leaf() {
                         should_subdivide = true;
                         continue;
                     }
 
-                    let neighbor_id = neighbor_cube.id();
+                    let neighbor_id = (**neighbor_cube).id();
                     if neighbor_id != 0 {
                         continue; // Skip solid neighbors (no face between two solids)
                     }

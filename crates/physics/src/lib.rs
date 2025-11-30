@@ -7,6 +7,10 @@ mod world;
 #[cfg(feature = "wasm")]
 mod wasm;
 
+// Native-only utilities for Bevy integration
+#[cfg(not(target_arch = "wasm32"))]
+pub mod native;
+
 pub use character_controller::{CharacterController, CharacterControllerConfig, RaycastHit};
 pub use collider::{
     create_box_collider, create_capsule_collider, create_sphere_collider, VoxelColliderBuilder,

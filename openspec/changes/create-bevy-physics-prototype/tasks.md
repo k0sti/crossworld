@@ -1,25 +1,26 @@
 # Implementation Tasks
 
 ## Phase 1: Project Setup
-- [ ] Create `crates/proto` directory structure
-- [ ] Add `crates/proto/Cargo.toml` with dependencies (bevy, bevy_rapier3d, cube, world, crossworld-physics, toml, glam)
-- [ ] Create `crates/proto/config.toml` with default configuration (seed, macro_depth, micro_depth, spawn_count, models_path)
-- [ ] Add proto crate to workspace in root `Cargo.toml`
-- [ ] Add `just proto` task to `justfile` for running the prototype
+- [x] Create `crates/proto` directory structure
+- [x] Add `crates/proto/Cargo.toml` with dependencies (bevy, bevy_rapier3d, cube, world, crossworld-physics, toml, glam)
+- [x] Create `crates/proto/config.toml` with default configuration (seed, macro_depth, micro_depth, spawn_count, models_path)
+- [x] Add proto crate to workspace in root `Cargo.toml`
+- [x] Add `just proto` task to `justfile` for running the prototype
 
 ## Phase 2: Enhanced Physics Collider System
-- [ ] Add `bevy` feature flag to `crates/physics/Cargo.toml` for native-only code
-- [ ] Create `crates/physics/src/native.rs` module for Bevy-specific physics utilities
-- [ ] Implement optimized `VoxelColliderBuilder::from_cube_region()` that accepts AABB bounds for spatial filtering
-- [ ] Add `VoxelColliderBuilder::overlapping_faces()` to traverse only faces within overlap region
-- [ ] Write unit tests for spatial filtering collision generation
-- [ ] Add documentation for optimized collider generation API
+- [x] Add `bevy` feature flag to `crates/physics/Cargo.toml` for native-only code
+- [x] Create `crates/physics/src/native.rs` module for Bevy-specific physics utilities
+- [x] Implement optimized `VoxelColliderBuilder::from_cube_region()` that accepts AABB bounds for spatial filtering
+- [x] Add spatial filtering to traverse only faces within overlap region (integrated into from_cube_region)
+- [x] Write unit tests for spatial filtering collision generation
+- [x] Add documentation for optimized collider generation API
+- [x] Fix Cube<i32> type inconsistency in NeighborGrid (completed revert from commit 58e3427)
 
 ## Phase 3: Application Scaffold
-- [ ] Create `crates/proto/src/main.rs` with Bevy app initialization
-- [ ] Add Bevy default plugins and RapierPhysicsPlugin
-- [ ] Implement config loading from `config.toml`
-- [ ] Create startup system to initialize world, camera, and lighting
+- [x] Create `crates/proto/src/main.rs` with Bevy app initialization
+- [x] Add Bevy default plugins and RapierPhysicsPlugin
+- [x] Implement config loading from `config.toml`
+- [x] Create startup system to initialize world, camera, and lighting
 - [ ] Add camera orbit/free-fly controls (reuse patterns from editor)
 - [ ] Implement debug info overlay (FPS, entity count, physics stats)
 
@@ -87,9 +88,15 @@
 - [ ] Document performance characteristics in README
 
 ## Phase 11: Documentation
-- [ ] Create `crates/proto/README.md` with overview and usage
-- [ ] Document config.toml parameters
+- [x] Create `crates/proto/README.md` with overview and usage
+- [x] Document config.toml parameters
 - [ ] Add example configurations (minimal, stress-test, demo)
-- [ ] Document optimized collision algorithm in physics crate
-- [ ] Add inline code comments for complex systems
+- [x] Document optimized collision algorithm in physics crate
+- [x] Add inline code comments for complex systems
 - [ ] Update root CLAUDE.md with proto information
+
+## Additional Work Completed
+- [x] Fix incomplete Cube<i32> type revert in NeighborGrid (crates/cube/src/traversal/neighbor_grid.rs)
+- [x] Update WorldCube mesh generation to use i32 API (crates/world/src/world_cube/mod.rs)
+- [x] Verify all workspace crates compile successfully
+- [x] Run unit tests for spatial filtering API

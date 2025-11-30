@@ -1,0 +1,21 @@
+[world]
+macro_depth = 3      # Terrain generation depth (0-7)
+micro_depth = 4      # Detail/edit depth (0-7)
+border_depth = 1     # Blending layer depth
+seed = 12345         # Procedural generation seed
+
+[physics]
+gravity = -9.81      # Y-axis gravity (m/s²)
+timestep = 0.016666  # Physics timestep (1/60 second)
+
+[spawning]
+spawn_count = 20                    # Number of cubes to spawn
+models_path = "packages/app/dist/assets/models/vox/"
+min_height = 20.0                   # Minimum spawn Y position
+max_height = 50.0                   # Maximum spawn Y position
+spawn_radius = 30.0                 # X/Z spawn radius from origin
+
+[player]
+move_speed = 5.0     # Movement speed (units/sec)
+jump_force = 8.0     # Jump impulse magnitude
+camera_distance = 10.0  # Orbit camera distance
