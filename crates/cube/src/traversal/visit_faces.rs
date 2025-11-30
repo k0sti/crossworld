@@ -97,7 +97,6 @@ where
 /// # Arguments
 /// * `root` - The root cube of the octree
 /// * `visitor` - Callback invoked for each visible face
-/// * `max_depth` - Maximum depth to traverse
 /// * `border_materials` - Material IDs for the 4 border layers [y0, y1, y2, y3]
 ///
 /// # Example
@@ -108,14 +107,15 @@ where
 /// visit_faces(&root, |face_info| {
 ///     println!("Face {:?} at {:?} with material {}",
 ///         face_info.face, face_info.position, face_info.material_id);
-/// }, 3, [0, 0, 0, 0]);
+/// }, [0, 0, 0, 0]);
 /// ```
-pub fn visit_faces<F>(root: &Cube<u8>, mut visitor: F, max_depth: u32, border_materials: [u8; 4])
+pub fn visit_faces<F>(root: &Cube<u8>, mut visitor: F, border_materials: [u8; 4])
 where
     F: FnMut(&FaceInfo),
 {
     let grid = NeighborGrid::new(root, border_materials);
 
+    // Traverse with depth 0 - we'll visit all octants as leaves
     traverse_octree(
         &grid,
         &mut |view, coord, _subleaf| {
@@ -125,10 +125,13 @@ where
                 return false; // Skip empty voxels
             }
 
-            // Clamp depth to max_depth to avoid underflow
-            let depth = coord.depth.min(max_depth);
-            let voxel_size = 1.0 / (1 << (max_depth - depth + 1)) as f32;
-            let base_pos = coord.pos.as_vec3() * voxel_size;
+            // Calculate voxel size from coord.depth
+            // voxel_size = 1.0 / 2^(coord.depth + 1)
+            let voxel_size = 1.0 / (2 << coord.depth) as f32;
+
+            // Convert from center-based coordinates to [0,1] world space
+            // Center-based coords are in {-1, +1} for depth 0, so we scale and offset to [0,1]
+            let base_pos = coord.pos.as_vec3() * voxel_size + Vec3::splat(0.5);
 
             let mut should_subdivide = false;
 
@@ -187,6 +190,6 @@ where
 
             should_subdivide
         },
-        max_depth,
+        0,
     );
 }

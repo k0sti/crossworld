@@ -42,19 +42,13 @@ impl NeighborGrid {
     ///   - For avatars: [0, 0, 0, 0] for empty borders
     pub fn new(root: &Cube<u8>, border_materials: [u8; 4]) -> Self {
         let mut voxels: [Rc<Cube<u8>>; 64] = std::array::from_fn(|i| {
-            let (x, y, z) = Self::index_to_xyz(i);
+            let (_x, y, _z) = Self::index_to_xyz(i);
 
-            // Determine if this is a border voxel
-            let is_border = x == 0 || x == 3 || y == 0 || y == 3 || z == 0 || z == 3;
-
-            if is_border {
-                // Border voxels use material from corresponding Y layer
-                Rc::new(Cube::Solid(border_materials[y as usize]))
-            } else {
-                // Non-border: placeholder, will be filled next
-                // Use top layer material as default
-                Rc::new(Cube::Solid(border_materials[3]))
-            }
+            // All voxels at Y layer y use border_materials[y]
+            // This ensures grid(y, _, _) = border_materials[y]
+            // Border voxels keep this material, non-border voxels will be overwritten
+            // by root octants in the next step
+            Rc::new(Cube::Solid(border_materials[y as usize]))
         });
 
         // Fill center 2x2x2 with root octants
@@ -313,7 +307,7 @@ mod tests {
 
     #[test]
     fn test_neighbor_view() {
-        let root = Cube::tabulate(|i| Cube::Solid(i as i32));
+        let root = Cube::tabulate(|i| Cube::Solid(i as u8));
         let border_materials = [33, 33, 0, 0]; // Ground at bottom, sky at top
         let grid = NeighborGrid::new(&root, border_materials);
 
