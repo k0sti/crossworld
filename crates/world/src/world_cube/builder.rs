@@ -3,25 +3,25 @@ use noise::{Fbm, NoiseFn, Perlin};
 use std::rc::Rc;
 
 // Material indices from materials.json
-const HARD_GROUND: i32 = 16; // Bedrock
-const STONE: i32 = 20; // Primary underground
-const DIRT: i32 = 18; // Underground and surface
-const GRASS: i32 = 19; // Surface vegetation
-const WATER: i32 = 17; // Water bodies
-const SAND: i32 = 22; // Beaches and deserts
-const SANDSTONE: i32 = 23; // Desert underground
-const GRAVEL: i32 = 24; // River beds
-const CLAY: i32 = 25; // Underground pockets
-const SNOW: i32 = 26; // Mountain peaks
-const ICE_SOLID: i32 = 27; // Frozen biomes
-const GRANITE: i32 = 30; // Mountain core
-const ANDESITE: i32 = 32; // Mountain variation
-const LIMESTONE: i32 = 34; // Underground caves
-const BASALT: i32 = 35; // Volcanic areas
-const COAL: i32 = 48; // Ore veins
-const IRON: i32 = 49; // Ore veins
-const NETHERRACK: i32 = 29; // Deep underground
-const COBBLESTONE: i32 = 21; // Stone variation
+const HARD_GROUND: u8 = 16; // Bedrock
+const STONE: u8 = 20; // Primary underground
+const DIRT: u8 = 18; // Underground and surface
+const GRASS: u8 = 19; // Surface vegetation
+const WATER: u8 = 17; // Water bodies
+const SAND: u8 = 22; // Beaches and deserts
+const SANDSTONE: u8 = 23; // Desert underground
+const GRAVEL: u8 = 24; // River beds
+const CLAY: u8 = 25; // Underground pockets
+const SNOW: u8 = 26; // Mountain peaks
+const ICE_SOLID: u8 = 27; // Frozen biomes
+const GRANITE: u8 = 30; // Mountain core
+const ANDESITE: u8 = 32; // Mountain variation
+const LIMESTONE: u8 = 34; // Underground caves
+const BASALT: u8 = 35; // Volcanic areas
+const COAL: u8 = 48; // Ore veins
+const IRON: u8 = 49; // Ore veins
+const NETHERRACK: u8 = 29; // Deep underground
+const COBBLESTONE: u8 = 21; // Stone variation
 
 /// Biome type determined by temperature and moisture
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -37,7 +37,7 @@ enum Biome {
 }
 
 /// Build octree for ground with advanced terrain generation
-pub fn build_ground_octree(noise: &Perlin, fbm: &Fbm<Perlin>, depth: u32) -> Cube<i32> {
+pub fn build_ground_octree(noise: &Perlin, fbm: &Fbm<Perlin>, depth: u32) -> Cube<u8> {
     // Start recursive build at (0,0,0) with specified depth
     // Simplify after building to optimize octree structure
     build_octree_recursive(0, 0, 0, depth, depth, noise, fbm).simplified()
@@ -56,7 +56,7 @@ fn build_octree_recursive(
     max_depth: u32,
     noise: &Perlin,
     fbm: &Fbm<Perlin>,
-) -> Cube<i32> {
+) -> Cube<u8> {
     if depth == 0 {
         // Base case: create leaf voxel
         let voxel_x = base_x;
@@ -75,7 +75,7 @@ fn build_octree_recursive(
     // Recursive case: create 8 children at next depth level
     let step = 1 << depth; // 2^depth
 
-    let children: [Rc<Cube<i32>>; 8] = std::array::from_fn(|octant_idx| {
+    let children: [Rc<Cube<u8>>; 8] = std::array::from_fn(|octant_idx| {
         let offset = IVec3::from_octant_index(octant_idx);
         let child_x = base_x + offset.x * step;
         let child_y = base_y + offset.y * step;
@@ -178,7 +178,7 @@ fn get_voxel_value(
     max_depth: u32,
     noise: &Perlin,
     fbm: &Fbm<Perlin>,
-) -> i32 {
+) -> u8 {
     let height = get_terrain_height(x, z, max_depth, noise, fbm);
     let depth_below = height - y as f64;
 

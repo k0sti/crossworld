@@ -65,7 +65,7 @@ pub struct Color {
 /// All operations return new cube instances (functional/immutable pattern).
 #[wasm_bindgen]
 pub struct WasmCube {
-    inner: Rc<Cube<i32>>,
+    inner: Rc<Cube<u8>>,
 }
 
 #[wasm_bindgen]
@@ -73,16 +73,16 @@ impl WasmCube {
     /// Create a solid cube with uniform value
     ///
     /// # Arguments
-    /// * `value` - Voxel value (-1 = empty, 0+ = color index)
+    /// * `value` - Voxel value (0 = empty, 1+ = color index)
     #[wasm_bindgen(constructor)]
-    pub fn new(value: i32) -> Self {
+    pub fn new(value: u8) -> Self {
         Self {
             inner: Rc::new(Cube::Solid(value)),
         }
     }
 
     /// Create a solid cube (alias for constructor)
-    pub fn solid(value: i32) -> Self {
+    pub fn solid(value: u8) -> Self {
         Self::new(value)
     }
 

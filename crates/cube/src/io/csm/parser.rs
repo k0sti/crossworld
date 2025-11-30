@@ -3,7 +3,7 @@ use crate::core::{octant_char_to_index, Cube, Octree};
 use nom::{
     branch::alt,
     bytes::complete::take_while,
-    character::complete::{char, i32 as nom_i32, multispace0, one_of},
+    character::complete::{char, multispace0, one_of, u8 as nom_u8},
     combinator::{map, opt, value},
     multi::many0,
     sequence::{delimited, preceded, tuple},
@@ -73,15 +73,15 @@ fn mirror_axes(input: &str) -> IResult<&str, Vec<Axis>> {
 }
 
 // Cube value parsing
-fn cube_value(input: &str) -> IResult<&str, Cube<i32>> {
-    map(nom_i32, Cube::solid)(input)
+fn cube_value(input: &str) -> IResult<&str, Cube<u8>> {
+    map(nom_u8, Cube::solid)(input)
 }
 
 // Reference parsing (<path>)
 fn cube_reference<'a>(
     input: &'a str,
-    prev_epoch: &Option<HashMap<Vec<usize>, Rc<Cube<i32>>>>,
-) -> IResult<&'a str, Cube<i32>> {
+    prev_epoch: &Option<HashMap<Vec<usize>, Rc<Cube<u8>>>>,
+) -> IResult<&'a str, Cube<u8>> {
     let (input, _) = char('<')(input)?;
     let (input, p) = path(input)?;
 
@@ -105,8 +105,8 @@ fn cube_reference<'a>(
 // Array parsing [...]
 fn cube_array<'a>(
     input: &'a str,
-    prev_epoch: &Option<HashMap<Vec<usize>, Rc<Cube<i32>>>>,
-) -> IResult<&'a str, Cube<i32>> {
+    prev_epoch: &Option<HashMap<Vec<usize>, Rc<Cube<u8>>>>,
+) -> IResult<&'a str, Cube<u8>> {
     let (input, _) = char('[')(input)?;
     let (input, _) = ws_or_comment(input)?;
 
@@ -136,8 +136,8 @@ fn cube_array<'a>(
 // Swap application (^xyz <cube>)
 fn cube_swap<'a>(
     input: &'a str,
-    prev_epoch: &Option<HashMap<Vec<usize>, Rc<Cube<i32>>>>,
-) -> IResult<&'a str, Cube<i32>> {
+    prev_epoch: &Option<HashMap<Vec<usize>, Rc<Cube<u8>>>>,
+) -> IResult<&'a str, Cube<u8>> {
     let (input, axes) = swap_axes(input)?;
     let (input, _) = ws_or_comment(input)?;
     let (input, cube) = parse_cube_inner(input, prev_epoch)?;
@@ -147,8 +147,8 @@ fn cube_swap<'a>(
 // Mirror application (/xyz <cube>)
 fn cube_mirror<'a>(
     input: &'a str,
-    prev_epoch: &Option<HashMap<Vec<usize>, Rc<Cube<i32>>>>,
-) -> IResult<&'a str, Cube<i32>> {
+    prev_epoch: &Option<HashMap<Vec<usize>, Rc<Cube<u8>>>>,
+) -> IResult<&'a str, Cube<u8>> {
     let (input, axes) = mirror_axes(input)?;
     let (input, _) = ws_or_comment(input)?;
     let (input, cube) = parse_cube_inner(input, prev_epoch)?;
@@ -158,8 +158,8 @@ fn cube_mirror<'a>(
 // Main cube parser
 fn parse_cube_inner<'a>(
     input: &'a str,
-    prev_epoch: &Option<HashMap<Vec<usize>, Rc<Cube<i32>>>>,
-) -> IResult<&'a str, Cube<i32>> {
+    prev_epoch: &Option<HashMap<Vec<usize>, Rc<Cube<u8>>>>,
+) -> IResult<&'a str, Cube<u8>> {
     preceded(
         ws_or_comment,
         alt((
@@ -175,8 +175,8 @@ fn parse_cube_inner<'a>(
 // Statement parsing (>path cube)
 fn statement<'a>(
     input: &'a str,
-    prev_epoch: &Option<HashMap<Vec<usize>, Rc<Cube<i32>>>>,
-) -> IResult<&'a str, (Vec<usize>, Cube<i32>)> {
+    prev_epoch: &Option<HashMap<Vec<usize>, Rc<Cube<u8>>>>,
+) -> IResult<&'a str, (Vec<usize>, Cube<u8>)> {
     let (input, _) = ws_or_comment(input)?;
     let (input, _) = char('>')(input)?;
     let (input, p) = path(input)?;
@@ -193,8 +193,8 @@ fn epoch_separator(input: &str) -> IResult<&str, ()> {
 // Epoch parsing
 fn epoch<'a>(
     input: &'a str,
-    prev_epoch: &Option<HashMap<Vec<usize>, Rc<Cube<i32>>>>,
-) -> IResult<&'a str, HashMap<Vec<usize>, Rc<Cube<i32>>>> {
+    prev_epoch: &Option<HashMap<Vec<usize>, Rc<Cube<u8>>>>,
+) -> IResult<&'a str, HashMap<Vec<usize>, Rc<Cube<u8>>>> {
     let mut assignments = HashMap::new();
     let mut remaining = input;
 
@@ -222,7 +222,7 @@ fn epoch<'a>(
 
 // Full model parser
 fn parse_model(input: &str) -> IResult<&str, Octree> {
-    let mut prev_epoch: Option<HashMap<Vec<usize>, Rc<Cube<i32>>>> = None;
+    let mut prev_epoch: Option<HashMap<Vec<usize>, Rc<Cube<u8>>>> = None;
     let mut current_epoch = HashMap::new();
     let mut remaining = input;
 
@@ -262,9 +262,9 @@ fn parse_model(input: &str) -> IResult<&str, Octree> {
 
 // Build cube from partial assignments
 fn build_cube_from_assignments(
-    assignments: &HashMap<Vec<usize>, Rc<Cube<i32>>>,
+    assignments: &HashMap<Vec<usize>, Rc<Cube<u8>>>,
     prefix: &[usize],
-) -> Cube<i32> {
+) -> Cube<u8> {
     // Check for direct assignment
     if let Some(cube) = assignments.get(prefix) {
         return (**cube).clone();
@@ -280,7 +280,7 @@ fn build_cube_from_assignments(
     }
 
     // Build children
-    let children: Vec<Rc<Cube<i32>>> = (0..8)
+    let children: Vec<Rc<Cube<u8>>> = (0..8)
         .map(|i| {
             let mut child_prefix = prefix.to_vec();
             child_prefix.push(i);
