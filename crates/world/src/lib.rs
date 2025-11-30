@@ -4,6 +4,15 @@ mod world_cube;
 #[cfg(test)]
 mod tests;
 
+// Re-export for native use (non-WASM)
+#[cfg(not(target_arch = "wasm32"))]
+pub use world_cube::WorldCube as NativeWorldCube;
+
+// GeometryData is used by both WASM and native, but defined differently
+// For native, just re-export the WASM version's fields
+#[cfg(not(target_arch = "wasm32"))]
+pub use GeometryData as NativeGeometryData;
+
 use std::cell::RefCell;
 use wasm_bindgen::prelude::*;
 use world_cube::WorldCube as WorldCubeInternal;
