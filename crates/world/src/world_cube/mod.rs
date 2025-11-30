@@ -75,10 +75,10 @@ impl WorldCube {
     /// # Example
     /// With 1 border layer, the world is subdivided vertically into 4 levels.
     /// At each XZ position, we have 4 vertical slices from bottom to top.
-    fn add_border_layers(world: Cube<i32>, layers: u32) -> Cube<i32> {
-        const HARD_GROUND: i32 = 16;
-        const WATER: i32 = 17;
-        const AIR: i32 = 0;
+    fn add_border_layers(world: Cube<u8>, layers: u32) -> Cube<u8> {
+        const HARD_GROUND: u8 = 16;
+        const WATER: u8 = 17;
+        const AIR: u8 = 0;
 
         let mut result = world;
 
@@ -123,7 +123,7 @@ impl WorldCube {
     ///   * depth=3: coords [0,7] (8×8×8 voxels, 1 voxel = 1 world unit)
     ///
     /// The octree will automatically subdivide to support the requested depth
-    pub fn set_voxel_at_depth(&mut self, x: i32, y: i32, z: i32, depth: u32, color_index: i32) {
+    pub fn set_voxel_at_depth(&mut self, x: i32, y: i32, z: i32, depth: u32, color_index: u8) {
         let pos = IVec3::new(x, y, z);
         self.octree.root = self
             .octree
@@ -144,7 +144,7 @@ impl WorldCube {
 
     /// Get a reference to the octree root (for testing)
     #[cfg(test)]
-    pub fn get_root(&self) -> &Cube<i32> {
+    pub fn get_root(&self) -> &Cube<u8> {
         &self.octree.root
     }
 
@@ -162,6 +162,14 @@ impl WorldCube {
         // The mesh generator will automatically calculate correct voxel sizes
         // for each depth level, ensuring subdivided voxels render at correct positions
 
+        // No conversion needed - octree now uses Cube<u8> directly
+        let border_materials_u8 = [
+            border_materials[0] as u8,
+            border_materials[1] as u8,
+            border_materials[2] as u8,
+            border_materials[3] as u8,
+        ];
+
         // Use face-based mesh generation with neighbor culling
         // Base depth is where voxels are 1 unit in size (macro_depth + border_depth)
         let base_depth = self.macro_depth + self.border_depth;
@@ -170,7 +178,7 @@ impl WorldCube {
             &mut builder,
             |index| color_mapper.map(index as u8),
             self.render_depth,
-            border_materials,
+            border_materials_u8,
             base_depth,
         );
 
@@ -206,14 +214,14 @@ impl WorldCube {
 
     /// Get reference to the root cube
     #[allow(dead_code)]
-    pub fn root(&self) -> &Cube<i32> {
+    pub fn root(&self) -> &Cube<u8> {
         &self.octree.root
     }
 
     /// Set a new root cube
     ///
     /// Replaces the entire octree root. The cube will be simplified automatically.
-    pub fn set_root(&mut self, cube: Cube<i32>) {
+    pub fn set_root(&mut self, cube: Cube<u8>) {
         self.octree.root = cube.simplified();
     }
 }

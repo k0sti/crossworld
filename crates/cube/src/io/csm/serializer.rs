@@ -9,7 +9,7 @@ pub fn serialize_csm(tree: &Octree) -> String {
 }
 
 /// Serialize a cube with its path prefix
-fn serialize_cube(cube: &Cube<i32>, path: &[usize], output: &mut String) {
+fn serialize_cube(cube: &Cube<u8>, path: &[usize], output: &mut String) {
     match cube {
         Cube::Solid(value) => {
             // Only output non-zero values
@@ -41,12 +41,12 @@ fn serialize_cube(cube: &Cube<i32>, path: &[usize], output: &mut String) {
 
 /// Check if children should be written as an inline array
 /// Returns true if all children are simple Solid values
-fn should_write_as_array(children: &[std::rc::Rc<Cube<i32>>; 8]) -> bool {
+fn should_write_as_array(children: &[std::rc::Rc<Cube<u8>>; 8]) -> bool {
     children.iter().all(|c| matches!(&**c, Cube::Solid(_)))
 }
 
 /// Format children as an array string like "[1 2 3 4 5 6 7 8]"
-fn format_array(children: &[std::rc::Rc<Cube<i32>>; 8]) -> String {
+fn format_array(children: &[std::rc::Rc<Cube<u8>>; 8]) -> String {
     let values: Vec<String> = children
         .iter()
         .map(|c| match &**c {

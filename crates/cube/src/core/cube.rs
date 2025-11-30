@@ -418,15 +418,15 @@ impl<T: Clone + PartialEq> Cube<T> {
     }
 }
 
-impl Cube<i32> {
+impl Cube<u8> {
     /// Get ID value for this cube
     #[inline]
-    pub fn id(&self) -> i32 {
+    pub fn id(&self) -> u8 {
         match self {
             Cube::Solid(v) => *v,
             Cube::Cubes(children) => {
                 // Return most common ID among children (like Scala version)
-                let ids: Vec<i32> = children.iter().map(|c| c.id()).collect();
+                let ids: Vec<u8> = children.iter().map(|c| c.id()).collect();
                 // Simple mode calculation - just return first for now
                 ids[0]
             }
@@ -436,12 +436,12 @@ impl Cube<i32> {
 
     /// Get ID at specific position and depth
     #[inline]
-    pub fn get_id(&self, depth: u32, pos: IVec3) -> i32 {
+    pub fn get_id(&self, depth: u32, pos: IVec3) -> u8 {
         self.get(CubeCoord::new(pos, depth)).id()
     }
 
     /// Merge two cubes (union operation with preference for non-empty)
-    pub fn add(&self, other: &Cube<i32>) -> Self {
+    pub fn add(&self, other: &Cube<u8>) -> Self {
         match (self, other) {
             (Cube::Solid(a), Cube::Solid(b)) => {
                 // Prefer non-zero value
@@ -475,13 +475,13 @@ impl Cube<i32> {
     /// Places this cube at 'pos' within depth 'depth' space
     pub fn shift(&self, depth: u32, pos: IVec3) -> Self {
         let index = (IVec3::ONE - pos.step0()).to_octant_index();
-        let mut layer: [Cube<i32>; 8] = std::array::from_fn(|_| Cube::Solid(0));
+        let mut layer: [Cube<u8>; 8] = std::array::from_fn(|_| Cube::Solid(0));
         layer[index] = self.clone();
         Self::shift_internal(&layer, depth, pos)
     }
 
     /// Internal helper for shift operation
-    fn shift_internal(parent: &[Cube<i32>; 8], depth: u32, pos: IVec3) -> Self {
+    fn shift_internal(parent: &[Cube<u8>; 8], depth: u32, pos: IVec3) -> Self {
         if depth == 0 {
             return parent[0].clone();
         }
@@ -506,7 +506,7 @@ impl Cube<i32> {
     }
 
     /// Shift 8-cube layer by offset vector
-    fn shift_layer(octants: &[Cube<i32>; 8], offset: IVec3) -> [Cube<i32>; 8] {
+    fn shift_layer(octants: &[Cube<u8>; 8], offset: IVec3) -> [Cube<u8>; 8] {
         std::array::from_fn(|i| {
             let o: IVec3 = IVec3::from_octant_index(i) + offset;
             let parent: IVec3 = o >> 1;
@@ -527,7 +527,7 @@ impl Cube<i32> {
         match self {
             Cube::Solid(v) => Cube::Solid(*v),
             Cube::Cubes(children) => {
-                let mut new_children: Vec<Rc<Cube<i32>>> = children.to_vec();
+                let mut new_children: Vec<Rc<Cube<u8>>> = children.to_vec();
 
                 for axis in axes {
                     match axis {
@@ -573,7 +573,7 @@ impl Cube<i32> {
         match self {
             Cube::Solid(v) => Cube::Solid(*v),
             Cube::Cubes(children) => {
-                let mut new_children: Vec<Rc<Cube<i32>>> = children
+                let mut new_children: Vec<Rc<Cube<u8>>> = children
                     .iter()
                     .map(|c| Rc::new(c.apply_mirror(axes)))
                     .collect();
@@ -618,23 +618,6 @@ impl Cube<i32> {
     }
 }
 
-impl Cube<u8> {
-    /// Get ID value for this cube
-    #[inline]
-    pub fn id(&self) -> u8 {
-        match self {
-            Cube::Solid(v) => *v,
-            Cube::Cubes(children) => {
-                // Return most common ID among children (like Scala version)
-                let ids: Vec<u8> = children.iter().map(|c| c.id()).collect();
-                // Simple mode calculation - just return first for now
-                ids[0]
-            }
-            _ => 0,
-        }
-    }
-}
-
 /// Convert octant char (a-h) to index (0-7)
 pub fn octant_char_to_index(c: char) -> Option<usize> {
     match c {
@@ -668,11 +651,11 @@ pub fn octant_index_to_char(index: usize) -> Option<char> {
 /// Main octree structure
 #[derive(Debug, Clone)]
 pub struct Octree {
-    pub root: Cube<i32>,
+    pub root: Cube<u8>,
 }
 
 impl Octree {
-    pub fn new(root: Cube<i32>) -> Self {
+    pub fn new(root: Cube<u8>) -> Self {
         Octree { root }
     }
 
@@ -691,7 +674,7 @@ impl Octree {
     ///
     /// # Returns
     /// A new Octree with the voxel set
-    pub fn set_voxel(&self, x: i32, y: i32, z: i32, depth: u32, value: i32) -> Self {
+    pub fn set_voxel(&self, x: i32, y: i32, z: i32, depth: u32, value: u8) -> Self {
         Octree {
             root: self.root.update(
                 CubeCoord {
@@ -821,9 +804,9 @@ mod tests {
         ]);
 
         // Test get at depth 1 (center-based: positions are -1 or +1)
-        assert_eq!(<Cube<i32>>::id(&cube.get(CubeCoord::new(IVec3::new(-1, -1, -1), 1))), 1); // Octant 0
-        assert_eq!(<Cube<i32>>::id(&cube.get(CubeCoord::new(IVec3::new(1, -1, -1), 1))), 5); // Octant 4
-        assert_eq!(<Cube<i32>>::id(&cube.get(CubeCoord::new(IVec3::new(1, 1, 1), 1))), 8); // Octant 7
+        assert_eq!(<Cube<u8>>::id(&cube.get(CubeCoord::new(IVec3::new(-1, -1, -1), 1))), 1); // Octant 0
+        assert_eq!(<Cube<u8>>::id(&cube.get(CubeCoord::new(IVec3::new(1, -1, -1), 1))), 5); // Octant 4
+        assert_eq!(<Cube<u8>>::id(&cube.get(CubeCoord::new(IVec3::new(1, 1, 1), 1))), 8); // Octant 7
     }
 
     #[test]
@@ -836,11 +819,11 @@ mod tests {
 
         // Verify the update
         assert_eq!(
-            <Cube<i32>>::id(&updated.get(CubeCoord::new(IVec3::new(3, -1, -1), 2))),
+            <Cube<u8>>::id(&updated.get(CubeCoord::new(IVec3::new(3, -1, -1), 2))),
             42
         );
         assert_eq!(
-            <Cube<i32>>::id(&updated.get(CubeCoord::new(IVec3::new(-3, -3, -3), 2))),
+            <Cube<u8>>::id(&updated.get(CubeCoord::new(IVec3::new(-3, -3, -3), 2))),
             0
         );
     }
@@ -915,36 +898,38 @@ mod tests {
 
         // Adding two solids prefers non-zero
         let merged = a.add(&b);
-        assert_eq!(<Cube<i32>>::id(&merged), 2);
+        assert_eq!(<Cube<u8>>::id(&merged), 2);
 
         let c = Cube::Solid(0);
         let merged2 = a.add(&c);
-        assert_eq!(<Cube<i32>>::id(&merged2), 1);
+        assert_eq!(<Cube<u8>>::id(&merged2), 1);
     }
 
     #[test]
     fn test_cube_tabulate() {
-        let cube = Cube::tabulate(|i| Cube::Solid(i as i32));
+        let cube = Cube::tabulate(|i| Cube::Solid(i as u8));
 
         // Verify each octant has correct value
         for i in 0..8 {
             if let Some(child) = cube.get_child(i) {
-                assert_eq!(<Cube<i32>>::id(child), i as i32);
+                assert_eq!(<Cube<u8>>::id(child), i as u8);
             }
         }
     }
 
     #[test]
     fn test_cube_tabulate_vector() {
-        let cube = Cube::tabulate_vector(|v| Cube::Solid(v.x + v.y * 2 + v.z * 4));
+        let cube = Cube::tabulate_vector(|v| {
+            // Map center-based coordinates to positive values for u8
+            let val = ((v.x + 1) + (v.y + 1) * 4 + (v.z + 1) * 16) as u8;
+            Cube::Solid(val)
+        });
 
         // Test a few positions (center-based: -1 or +1)
-        // Octant 0: (-1,-1,-1) => -1 + -2 + -4 = -7
-        assert_eq!(<Cube<i32>>::id(cube.get_child(0).unwrap()), -7);
-        // Octant 7: (1,1,1) => 1 + 2 + 4 = 7
-        assert_eq!(<Cube<i32>>::id(cube.get_child(7).unwrap()), 7);
-        // Octant 4: (1,-1,-1) => 1 + -2 + -4 = -5
-        assert_eq!(<Cube<i32>>::id(cube.get_child(4).unwrap()), -5);
+        // Octant 0: (-1,-1,-1) => (0, 0, 0) => 0
+        assert_eq!(<Cube<u8>>::id(cube.get_child(0).unwrap()), 0);
+        // Octant 7: (1,1,1) => (2, 2, 2) => 2 + 8 + 32 = 42
+        assert_eq!(<Cube<u8>>::id(cube.get_child(7).unwrap()), 42);
     }
 
     #[test]
@@ -976,8 +961,8 @@ mod tests {
             for y in 0..size {
                 for x in 0..size {
                     let pos = offset + IVec3::new(x, y, z);
-                    let id1 = <Cube<i32>>::id(&result1.get(CubeCoord::new(pos, depth)));
-                    let id2 = <Cube<i32>>::id(&result2.get(CubeCoord::new(pos, depth)));
+                    let id1 = <Cube<u8>>::id(&result1.get(CubeCoord::new(pos, depth)));
+                    let id2 = <Cube<u8>>::id(&result2.get(CubeCoord::new(pos, depth)));
                     assert_eq!(
                         id1, id2,
                         "Mismatch at position {:?}: update_depth={}, update_depth_tree={}",
@@ -1026,8 +1011,8 @@ mod tests {
             for y in 0..size {
                 for x in 0..size {
                     let pos = offset + IVec3::new(x, y, z);
-                    let id_loop = <Cube<i32>>::id(&result_loop.get(CubeCoord::new(pos, depth)));
-                    let id_tree = <Cube<i32>>::id(&result_tree.get(CubeCoord::new(pos, depth)));
+                    let id_loop = <Cube<u8>>::id(&result_loop.get(CubeCoord::new(pos, depth)));
+                    let id_tree = <Cube<u8>>::id(&result_tree.get(CubeCoord::new(pos, depth)));
                     assert_eq!(
                         id_loop, id_tree,
                         "Mismatch at position {:?}: update_depth={}, update_depth_tree={}",

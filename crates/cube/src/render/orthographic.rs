@@ -233,7 +233,7 @@ pub fn render_orthographic_3d(
 }
 
 /// Recursively render a cube to the image (2D pixel-level rendering)
-fn render_cube_2d(cube: &Cube<i32>, params: RenderParams2D) {
+fn render_cube_2d(cube: &Cube<u8>, params: RenderParams2D) {
     match cube {
         Cube::Solid(value) => {
             if *value != 0 {
@@ -315,7 +315,7 @@ fn extract_voxels_from_octree(
                 let size = voxel_size * scale_factor as f32;
 
                 // Get color and convert to u8
-                let rgb = mapper.map(*value as u8);
+                let rgb = mapper.map(*value);
                 let color = [
                     (rgb[0] * 255.0) as u8,
                     (rgb[1] * 255.0) as u8,
@@ -451,7 +451,7 @@ fn draw_mesh_voxel_3d(params: DrawParams3D) {
 fn draw_voxel_2d(
     position: (f32, f32, f32),
     size: f32,
-    value: i32,
+    value: u8,
     direction: ViewDirection,
     image: &mut RenderedImage,
     mapper: &dyn ColorMapper,
@@ -460,7 +460,7 @@ fn draw_voxel_2d(
     let (u_range, v_range, _depth) = project_voxel(position, size, direction);
 
     // Get color from mapper
-    let color = mapper.map(value as u8);
+    let color = mapper.map(value);
     let color_u8 = [
         (color[0] * 255.0) as u8,
         (color[1] * 255.0) as u8,
