@@ -38,7 +38,7 @@ impl VoxelColliderBuilder {
     ///
     /// # Returns
     /// Rapier Collider containing compound shape of all exposed faces
-    pub fn from_cube(cube: &Rc<Cube<i32>>, max_depth: u32) -> Collider {
+    pub fn from_cube(cube: &Rc<Cube<u8>>, max_depth: u32) -> Collider {
         Self::from_cube_region(cube, max_depth, None)
     }
 
@@ -63,7 +63,7 @@ impl VoxelColliderBuilder {
     /// - Typical reduction: 70-90% fewer faces for small overlap regions
     #[cfg(not(target_arch = "wasm32"))]
     pub fn from_cube_region(
-        cube: &Rc<Cube<i32>>,
+        cube: &Rc<Cube<u8>>,
         max_depth: u32,
         region: Option<rapier3d::parry::bounding_volume::Aabb>,
     ) -> Collider {
@@ -107,7 +107,7 @@ impl VoxelColliderBuilder {
     /// WASM-compatible version that doesn't support spatial filtering
     #[cfg(target_arch = "wasm32")]
     pub fn from_cube_region(
-        cube: &Rc<Cube<i32>>,
+        cube: &Rc<Cube<u8>>,
         max_depth: u32,
         _region: Option<()>, // Dummy parameter for API compatibility
     ) -> Collider {
