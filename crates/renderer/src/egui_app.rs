@@ -299,10 +299,12 @@ impl DualRendererApp {
         // Render BCF CPU tracer
         let start = std::time::Instant::now();
 
-        self.bcf_cpu_renderer.set_disable_lighting(self.disable_lighting);
+        self.bcf_cpu_renderer
+            .set_disable_lighting(self.disable_lighting);
 
         if self.use_manual_camera {
-            self.bcf_cpu_renderer.render_with_camera(width, height, &self.camera);
+            self.bcf_cpu_renderer
+                .render_with_camera(width, height, &self.camera);
         } else {
             self.bcf_cpu_renderer.render(width, height, time);
         }
@@ -638,10 +640,8 @@ impl DualRendererApp {
                     pixels[i * 4 + 2] = pixel[2];
                     pixels[i * 4 + 3] = 255;
                 }
-                self.bcf_cpu_latest_frame = Some(ColorImage::from_rgba_unmultiplied(
-                    [width, height],
-                    &pixels,
-                ));
+                self.bcf_cpu_latest_frame =
+                    Some(ColorImage::from_rgba_unmultiplied([width, height], &pixels));
             }
 
             // Calculate diff
@@ -664,8 +664,11 @@ impl DualRendererApp {
                     Some(ctx.load_texture("gl_render", gl_img.clone(), TextureOptions::LINEAR));
             }
             if let Some(ref bcf_img) = self.bcf_cpu_latest_frame {
-                self.bcf_cpu_texture =
-                    Some(ctx.load_texture("bcf_cpu_render", bcf_img.clone(), TextureOptions::LINEAR));
+                self.bcf_cpu_texture = Some(ctx.load_texture(
+                    "bcf_cpu_render",
+                    bcf_img.clone(),
+                    TextureOptions::LINEAR,
+                ));
             }
 
             // 2x2 Grid layout
