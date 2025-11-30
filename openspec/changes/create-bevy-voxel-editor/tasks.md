@@ -73,81 +73,81 @@
 ## Phase 2: Camera Controls
 
 ### 2.1 Orbit camera system
-- [ ] 2.1.1 Create `src/camera.rs` module
-- [ ] 2.1.2 Define `OrbitCamera` component with target, distance, angles
-- [ ] 2.1.3 Implement camera controller system:
+- [x] 2.1.1 Create `src/camera.rs` module
+- [x] 2.1.2 Define `OrbitCamera` component with target, distance, angles
+- [x] 2.1.3 Implement camera controller system:
   - Right-click drag → rotate (azimuth/elevation)
   - Middle-click drag → pan
   - Scroll wheel → zoom
-- [ ] 2.1.4 Add camera distance limits (min: 1.0, max: 100.0)
-- [ ] 2.1.5 Add smooth interpolation for camera movement
+- [x] 2.1.4 Add camera distance limits (min: 1.0, max: 100.0)
+- [x] 2.1.5 Add smooth interpolation for camera movement
 
 ### 2.2 Camera keyboard shortcuts
-- [ ] 2.2.1 Implement 'F' key to frame scene (fit all voxels)
-- [ ] 2.2.2 Add numpad shortcuts for orthographic views (1=front, 3=side, 7=top)
-- [ ] 2.2.3 Add camera reset to default position (Home key)
+- [x] 2.2.1 Implement 'F' key to frame scene (fit all voxels)
+- [x] 2.2.2 Add numpad shortcuts for orthographic views (1=front, 3=side, 7=top)
+- [x] 2.2.3 Add camera reset to default position (Home key)
 
 ## Phase 3: Voxel Scene Management
 
 ### 3.1 VoxelScene resource
-- [ ] 3.1.1 Create `src/voxel_scene.rs` module
-- [ ] 3.1.2 Define `VoxelScene` resource wrapping WorldCube or Cube
-- [ ] 3.1.3 Add `mesh_dirty` flag for tracking changes
-- [ ] 3.1.4 Initialize default scene in startup system (WorldCube depth 5)
+- [x] 3.1.1 Create `src/voxel_scene.rs` module
+- [x] 3.1.2 Define `VoxelScene` resource wrapping WorldCube (with ThreadSafeWorldCube wrapper)
+- [x] 3.1.3 Add `mesh_dirty` flag for tracking changes
+- [x] 3.1.4 Initialize default scene in startup system (WorldCube macro_depth 3, micro_depth 5, border_depth 1)
 
 ### 3.2 Mesh synchronization system
-- [ ] 3.2.1 Create `src/mesh_sync.rs` module
-- [ ] 3.2.2 Implement system that checks `mesh_dirty` flag
-- [ ] 3.2.3 Call `generate_frame()` or `generate_mesh()` when dirty
-- [ ] 3.2.4 Convert GeometryData (vertices, indices, normals, colors) to Bevy Mesh
-- [ ] 3.2.5 Update mesh asset via handle
-- [ ] 3.2.6 Reset `mesh_dirty` flag after update
+- [x] 3.2.1 Create `src/mesh_sync.rs` module
+- [x] 3.2.2 Implement system that checks `mesh_dirty` flag
+- [x] 3.2.3 Call `generate_frame()` when dirty (via WorldCube.lock())
+- [x] 3.2.4 Convert GeometryData (vertices, indices, normals, colors) to Bevy Mesh
+- [x] 3.2.5 Spawn/despawn mesh entities as needed
+- [x] 3.2.6 Reset `mesh_dirty` flag after update
 
 ### 3.3 Mesh conversion utilities
-- [ ] 3.3.1 Write helper function to convert GeometryData to Bevy Mesh
-- [ ] 3.3.2 Handle vertex colors (convert Vec<f32> RGB to Bevy VertexAttributeValues)
-- [ ] 3.3.3 Handle normals and UVs (if present)
-- [ ] 3.3.4 Optimize for Bevy's wgpu backend (interleaved attributes)
+- [x] 3.3.1 Write helper function to convert GeometryData to Bevy Mesh
+- [x] 3.3.2 Handle vertex colors (convert Vec<f32> RGB to Bevy RGBA VertexAttributeValues)
+- [x] 3.3.3 Handle normals (convert flat Vec<f32> to Vec<[f32; 3]>)
+- [x] 3.3.4 Use Bevy 0.17 API (PrimitiveTopology::TriangleList, Mesh::insert_attribute)
 
 ## Phase 4: Raycasting and Cursor System
 
 ### 4.1 Edit ray and raycast face
-- [ ] 4.1.1 Create `src/raycast.rs` module
-- [ ] 4.1.2 Define RaycastResult struct (hit_position, face_normal, distance)
-- [ ] 4.1.3 Implement system that casts ray from camera through mouse cursor
-- [ ] 4.1.4 Convert window coordinates to world-space ray (Camera::viewport_to_world)
-- [ ] 4.1.5 Call `cube::raycast::raycast()` with ray origin and direction
-- [ ] 4.1.6 Determine face normal from raycast hit (quantize to axis-aligned)
-- [ ] 4.1.7 Store RaycastResult in EditorState
+- [x] 4.1.1 Create `src/raycast.rs` module
+- [x] 4.1.2 Define RaycastResult struct (hit_position, face_normal, distance, voxel_coord)
+- [x] 4.1.3 Implement system that casts ray from camera through mouse cursor
+- [x] 4.1.4 Convert window coordinates to world-space ray (Camera::viewport_to_world)
+- [x] 4.1.5 Implement temporary plane raycast (TODO: integrate cube::raycast)
+- [x] 4.1.6 Calculate face normal from raycast hit (axis-aligned)
+- [x] 4.1.7 Store RaycastResult in EditorRaycast resource
 
 ### 4.2 Cube cursor implementation
-- [ ] 4.2.1 Create `src/cursor.rs` module
-- [ ] 4.2.2 Define CubeCursor struct (position, size)
-- [ ] 4.2.3 Add cursor to EditorState resource
-- [ ] 4.2.4 Implement cursor_update_system that positions cursor based on raycast
-- [ ] 4.2.5 Calculate cursor position using focus mode and face normal
-- [ ] 4.2.6 Support cursor sizes from 1x1x1 to 16x16x16
+- [x] 4.2.1 Create `src/cursor.rs` module
+- [x] 4.2.2 Define CubeCursor struct (position, size, valid flag)
+- [x] 4.2.3 Add cursor to EditorState resource
+- [x] 4.2.4 Implement update_cursor system that positions cursor based on raycast
+- [x] 4.2.5 Calculate cursor position using focus mode and face normal
+- [x] 4.2.6 Support cursor sizes from 1x1x1 to 16x16x16
 
 ### 4.3 Focus mode system
-- [ ] 4.3.1 Define FocusMode enum (Near, Far) in EditorState
-- [ ] 4.3.2 Implement Near mode: cursor at hit position
-- [ ] 4.3.3 Implement Far mode: cursor at hit position + face normal
-- [ ] 4.3.4 Add Tab key binding to toggle focus mode
-- [ ] 4.3.5 Update cursor position when focus mode changes
+- [x] 4.3.1 Define FocusMode enum (Near, Far) in EditorState
+- [x] 4.3.2 Implement Near mode: cursor at hit position (for removal)
+- [x] 4.3.3 Implement Far mode: cursor at hit position + face normal (for placement)
+- [x] 4.3.4 Add Tab key binding to toggle focus mode
+- [x] 4.3.5 Update cursor position when focus mode changes
 
 ### 4.4 Cursor visual feedback
-- [ ] 4.4.1 Use Bevy Gizmos to draw wireframe cube at cursor position
-- [ ] 4.4.2 Scale gizmo based on cursor size (1x1x1, 2x2x2, etc.)
-- [ ] 4.4.3 Color gizmo green for Near mode, blue for Far mode
-- [ ] 4.4.4 Hide gizmo when no raycast intersection
-- [ ] 4.4.5 Add optional fill transparency to visualize cursor volume
+- [x] 4.4.1 Use Bevy Gizmos to draw wireframe cube at cursor position
+- [x] 4.4.2 Scale gizmo based on cursor size (1x1x1, 2x2x2, etc.)
+- [x] 4.4.3 Color gizmo red for Near mode (removal), green for Far mode (placement)
+- [x] 4.4.4 Hide gizmo when no raycast intersection (cursor.valid = false)
+- [ ] 4.4.5 Add optional fill transparency to visualize cursor volume (deferred)
 
 ### 4.5 Cursor size controls
-- [ ] 4.5.1 Implement [ key binding to decrease cursor size (min 1)
-- [ ] 4.5.2 Implement ] key binding to increase cursor size (max 16)
-- [ ] 4.5.3 Implement Shift+scroll wheel for cursor size adjustment
-- [ ] 4.5.4 Display cursor size in status bar
-- [ ] 4.5.5 Add cursor size indicator in inspector panel
+- [x] 4.5.1 Implement [ key binding to decrease cursor size (min 1)
+- [x] 4.5.2 Implement ] key binding to increase cursor size (max 16)
+- [x] 4.5.3 Implement Shift+scroll wheel for cursor size adjustment
+- [ ] 4.5.4 Display cursor size in status bar (requires UI - Phase 7)
+- [ ] 4.5.5 Add cursor size indicator in inspector panel (requires UI - Phase 7)
 
 ## Phase 5: Paint Modes and Brush System
 
