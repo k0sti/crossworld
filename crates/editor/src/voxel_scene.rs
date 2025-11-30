@@ -21,7 +21,7 @@ impl ThreadSafeWorldCube {
         }
     }
 
-    pub fn lock(&self) -> std::sync::MutexGuard<WorldCube> {
+    pub fn lock(&self) -> std::sync::MutexGuard<'_, WorldCube> {
         self.inner.lock().unwrap()
     }
 }
@@ -62,6 +62,7 @@ impl Default for VoxelScene {
 
 impl VoxelScene {
     /// Create a new VoxelScene with specified parameters
+    #[allow(dead_code)]
     pub fn new(macro_depth: u32, micro_depth: u32, border_depth: u32, seed: u32) -> Self {
         let world = WorldCube::new(macro_depth, micro_depth, border_depth, seed);
 
@@ -73,6 +74,7 @@ impl VoxelScene {
     }
 
     /// Mark the mesh as needing regeneration
+    #[allow(dead_code)]
     pub fn mark_dirty(&mut self) {
         self.mesh_dirty = true;
     }
