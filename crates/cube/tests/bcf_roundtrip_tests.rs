@@ -490,14 +490,9 @@ fn test_canonical_depth3_simple() {
 }
 
 #[test]
-#[should_panic(expected = "Canonical encoding failed")]
-fn test_canonical_depth3_nested_pointers_fails() {
-    // This test documents that deeply nested pointer structures
-    // have non-canonical encodings due to pointer size variations.
-    //
-    // The deserialized structure is semantically correct, but the binary
-    // encoding differs because the serializer may choose different pointer
-    // sizes (SSSS field) based on the final file layout.
+fn test_canonical_depth3_nested_pointers() {
+    // With the serializer fix (absolute offsets), even deeply nested pointer
+    // structures now produce canonical encodings!
 
     let deep_pattern1 = Cube::Cubes(Box::new([
         Rc::new(create_octa_leaves([1, 2, 3, 4, 5, 6, 7, 8])),
@@ -533,4 +528,49 @@ fn test_canonical_depth3_nested_pointers_fails() {
     ]));
 
     assert_canonical(&cube); // Expected to panic with message about canonical encoding
+}
+
+// ============================================================================
+// Debug Tests for Parser Bug Investigation
+// ============================================================================
+
+#[test]
+fn test_minimal_depth3_parser_bug() {
+    // Minimal reproduction of the parser bug
+    // Structure: Root -> Middle -> Inner (all OCTA_POINTERS)
+    let inner = create_octa_leaves([1, 2, 3, 4, 5, 6, 7, 8]);
+    let middle = Cube::Cubes(Box::new([
+        Rc::new(inner),
+        Rc::new(Cube::Solid(0)),
+        Rc::new(Cube::Solid(0)),
+        Rc::new(Cube::Solid(0)),
+        Rc::new(Cube::Solid(0)),
+        Rc::new(Cube::Solid(0)),
+        Rc::new(Cube::Solid(0)),
+        Rc::new(Cube::Solid(0)),
+    ]));
+    let root = Cube::Cubes(Box::new([
+        Rc::new(middle),
+        Rc::new(Cube::Solid(0)),
+        Rc::new(Cube::Solid(0)),
+        Rc::new(Cube::Solid(0)),
+        Rc::new(Cube::Solid(0)),
+        Rc::new(Cube::Solid(0)),
+        Rc::new(Cube::Solid(0)),
+        Rc::new(Cube::Solid(0)),
+    ]));
+
+    eprintln!("\n=== MINIMAL DEPTH 3 BUG TEST ===");
+    eprintln!("Original structure:");
+    eprintln!("{:#?}", root);
+
+    let bytes = serialize_bcf(&root);
+    eprintln!("\nSerialized to {} bytes:", bytes.len());
+    eprintln!("{:?}", bytes);
+
+    let parsed = parse_bcf(&bytes).expect("Parse failed");
+    eprintln!("\nParsed structure:");
+    eprintln!("{:#?}", parsed);
+
+    assert_eq!(root, parsed, "Parser bug: structures should match");
 }
