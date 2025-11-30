@@ -161,49 +161,16 @@ impl WorldCube {
         // Use render_depth for traversal to find all voxels (terrain + subdivisions)
         // The mesh generator will automatically calculate correct voxel sizes
         // for each depth level, ensuring subdivided voxels render at correct positions
-        // Convert Cube<i32> to Cube<u8> for mesh generation
-        // World uses i32 internally for terrain values, but mesh gen expects u8 materials
-        fn convert_to_u8(cube: &Cube<i32>) -> Cube<u8> {
-            match cube {
-                Cube::Solid(v) => Cube::Solid((*v).clamp(0, 255) as u8),
-                Cube::Cubes(children) => {
-                    let converted: Vec<std::rc::Rc<Cube<u8>>> =
-                        children.iter().map(|c| std::rc::Rc::new(convert_to_u8(c))).collect();
-                    let array: [std::rc::Rc<Cube<u8>>; 8] = converted.try_into().unwrap();
-                    Cube::Cubes(Box::new(array))
-                }
-                Cube::Planes { axis: _, quad: _ } => {
-                    // Convert Quad recursively (not expected in world terrain, but handle it)
-                    Cube::Solid(0) // Simplified - planes not used in terrain
-                }
-                Cube::Slices { axis, layers } => {
-                    let converted: Vec<std::rc::Rc<Cube<u8>>> =
-                        layers.iter().map(|c| std::rc::Rc::new(convert_to_u8(c))).collect();
-                    Cube::Slices {
-                        axis: *axis,
-                        layers: std::rc::Rc::new(converted),
-                    }
-                }
-            }
-        }
-
-        let root_u8 = convert_to_u8(&self.octree.root);
-        let border_materials_u8 = [
-            border_materials[0].clamp(0, 255) as u8,
-            border_materials[1].clamp(0, 255) as u8,
-            border_materials[2].clamp(0, 255) as u8,
-            border_materials[3].clamp(0, 255) as u8,
-        ];
 
         // Use face-based mesh generation with neighbor culling
         // Base depth is where voxels are 1 unit in size (macro_depth + border_depth)
         let base_depth = self.macro_depth + self.border_depth;
         cube::generate_face_mesh(
-            &root_u8,
+            &self.octree.root,
             &mut builder,
-            |index| color_mapper.map(index),
+            |index| color_mapper.map(index as u8),
             self.render_depth,
-            border_materials_u8,
+            border_materials,
             base_depth,
         );
 
