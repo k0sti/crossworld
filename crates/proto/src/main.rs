@@ -2,11 +2,9 @@ use bevy::prelude::*;
 use bevy::input::mouse::{MouseMotion, MouseWheel};
 use bevy::render::mesh::{Indices, PrimitiveTopology};
 use bevy_rapier3d::prelude::*;
-use crossworld_physics::VoxelColliderBuilder;
 use crossworld_world::WorldCube;
 use serde::Deserialize;
 use std::path::Path;
-use std::rc::Rc;
 
 /// Configuration loaded from config.toml
 #[derive(Debug, Deserialize, Resource)]
@@ -211,7 +209,6 @@ fn setup(
         Mesh3d(meshes.add(mesh)),
         MeshMaterial3d(materials.add(StandardMaterial {
             base_color: Color::WHITE,
-            vertex_color_enabled: true,
             ..default()
         })),
         Transform::from_xyz(0.0, 0.0, 0.0),
