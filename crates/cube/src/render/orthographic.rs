@@ -315,7 +315,7 @@ fn extract_voxels_from_octree(
                 let size = voxel_size * scale_factor as f32;
 
                 // Get color and convert to u8
-                let rgb = mapper.map(*value);
+                let rgb = mapper.map(*value as u8);
                 let color = [
                     (rgb[0] * 255.0) as u8,
                     (rgb[1] * 255.0) as u8,
@@ -460,7 +460,7 @@ fn draw_voxel_2d(
     let (u_range, v_range, _depth) = project_voxel(position, size, direction);
 
     // Get color from mapper
-    let color = mapper.map(value);
+    let color = mapper.map(value as u8);
     let color_u8 = [
         (color[0] * 255.0) as u8,
         (color[1] * 255.0) as u8,
