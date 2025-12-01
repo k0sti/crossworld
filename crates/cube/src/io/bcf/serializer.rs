@@ -119,7 +119,7 @@ impl BcfWriterV2 {
         let mut temp_children = Vec::new();
         let mut child_sizes = Vec::with_capacity(8);
 
-        for (_i, child) in children.iter().enumerate() {
+        for child in children.iter() {
             // Calculate where THIS child will be in the final buffer
             let child_base_offset = children_start + temp_children.len();
 

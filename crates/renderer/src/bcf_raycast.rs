@@ -11,10 +11,10 @@
 //!
 //! Algorithm mirrors crates/cube/src/core/raycast.rs exactly.
 
+use cube::CubeCoord;
 use cube::axis::Axis;
 use cube::core::raycast::Hit;
 use cube::io::bcf::{BcfNodeType, BcfReader};
-use cube::CubeCoord;
 use glam::{IVec3, Vec3};
 
 // ============================================================================
@@ -94,11 +94,7 @@ struct TraversalState {
 /// # Returns
 /// - `Some(Hit<u8>)` if ray hits a non-empty voxel
 /// - `None` if ray misses or exits cube
-pub fn bcf_raycast(
-    bcf_data: &[u8],
-    ray_origin: Vec3,
-    ray_dir: Vec3,
-) -> Option<Hit<u8>> {
+pub fn bcf_raycast(bcf_data: &[u8], ray_origin: Vec3, ray_dir: Vec3) -> Option<Hit<u8>> {
     if ray_dir == Vec3::ZERO {
         return None;
     }
@@ -151,11 +147,7 @@ pub fn bcf_raycast(
 /// Axis-aligned raycast (optimized path)
 ///
 /// Matches cube::raycast_axis signature and behavior.
-pub fn bcf_raycast_axis(
-    bcf_data: &[u8],
-    ray_origin: Vec3,
-    ray_axis: Axis,
-) -> Option<Hit<u8>> {
+pub fn bcf_raycast_axis(bcf_data: &[u8], ray_origin: Vec3, ray_axis: Axis) -> Option<Hit<u8>> {
     let reader = BcfReader::new(bcf_data);
     let header = reader.read_header().ok()?;
 
@@ -164,13 +156,7 @@ pub fn bcf_raycast_axis(
         depth: 0,
     };
 
-    bcf_raycast_axis_impl(
-        &reader,
-        header.root_offset,
-        ray_origin,
-        ray_axis,
-        coord,
-    )
+    bcf_raycast_axis_impl(&reader, header.root_offset, ray_origin, ray_axis, coord)
 }
 
 // ============================================================================
@@ -298,7 +284,16 @@ fn bcf_raycast_impl(
                 let mut normal = state.normal;
 
                 // Collect all non-empty children in DDA order
-                let mut children_to_visit: [(usize, Vec3, Axis, CubeCoord); 8] = [(0, Vec3::ZERO, Axis::PosX, CubeCoord { pos: IVec3::ZERO, depth: 0 }); 8];
+                let mut children_to_visit: [(usize, Vec3, Axis, CubeCoord); 8] = [(
+                    0,
+                    Vec3::ZERO,
+                    Axis::PosX,
+                    CubeCoord {
+                        pos: IVec3::ZERO,
+                        depth: 0,
+                    },
+                );
+                    8];
                 let mut children_count = 0;
 
                 loop {
@@ -316,7 +311,8 @@ fn bcf_raycast_impl(
                         };
 
                         // Record child for later processing
-                        children_to_visit[children_count] = (child_offset, child_origin, normal, child_coord);
+                        children_to_visit[children_count] =
+                            (child_offset, child_origin, normal, child_coord);
                         children_count += 1;
                     }
 
@@ -352,7 +348,8 @@ fn bcf_raycast_impl(
                 // (so they pop in DDA order: closest first)
                 for i in (0..children_count).rev() {
                     if stack_ptr < MAX_TRAVERSAL_DEPTH {
-                        let (child_offset, child_origin, child_normal, child_coord) = children_to_visit[i];
+                        let (child_offset, child_origin, child_normal, child_coord) =
+                            children_to_visit[i];
                         stack[stack_ptr] = TraversalState {
                             offset: child_offset,
                             local_origin: child_origin,

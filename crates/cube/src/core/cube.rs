@@ -804,9 +804,18 @@ mod tests {
         ]);
 
         // Test get at depth 1 (center-based: positions are -1 or +1)
-        assert_eq!(<Cube<u8>>::id(&cube.get(CubeCoord::new(IVec3::new(-1, -1, -1), 1))), 1); // Octant 0
-        assert_eq!(<Cube<u8>>::id(&cube.get(CubeCoord::new(IVec3::new(1, -1, -1), 1))), 5); // Octant 4
-        assert_eq!(<Cube<u8>>::id(&cube.get(CubeCoord::new(IVec3::new(1, 1, 1), 1))), 8); // Octant 7
+        assert_eq!(
+            <Cube<u8>>::id(&cube.get(CubeCoord::new(IVec3::new(-1, -1, -1), 1))),
+            1
+        ); // Octant 0
+        assert_eq!(
+            <Cube<u8>>::id(&cube.get(CubeCoord::new(IVec3::new(1, -1, -1), 1))),
+            5
+        ); // Octant 4
+        assert_eq!(
+            <Cube<u8>>::id(&cube.get(CubeCoord::new(IVec3::new(1, 1, 1), 1))),
+            8
+        ); // Octant 7
     }
 
     #[test]

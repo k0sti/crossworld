@@ -168,13 +168,7 @@ pub fn generate_face_mesh<B, F>(
                 let uvs = face_info
                     .face
                     .uvs(position.x, position.y, position.z, size, uv_scale);
-                builder.add_textured_face(
-                    vertices,
-                    normal,
-                    color,
-                    uvs,
-                    face_info.material_id as u8,
-                );
+                builder.add_textured_face(vertices, normal, color, uvs, face_info.material_id);
             } else {
                 // Solid color material (0-1, 128-255)
                 builder.add_face(vertices, normal, color);

@@ -5,7 +5,6 @@ use glam::Vec3;
 /// These constants define a simple directional lighting model with ambient
 /// and diffuse components. All tracers (CPU, GL, GPU) use these same values
 /// to ensure consistent visual output.
-
 /// Directional light direction (normalized)
 ///
 /// Light comes from upper-right-front direction.

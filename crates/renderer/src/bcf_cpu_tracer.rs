@@ -8,6 +8,9 @@
 //! - **Iterative traversal**: No recursion (stack-based instead)
 //! - **Explicit operations**: All math and logic explicit (maps to GLSL)
 //! - **Zero smart pointers**: No Rc/Box (use offsets/indices instead)
+
+// Work in progress: Allow dead code for now
+#![allow(dead_code)]
 //! - **GPU-compatible types**: Vec3, u8, usize, f32 (map to GLSL types)
 //! - **Documented algorithm**: Each step documented for GLSL translation
 //!

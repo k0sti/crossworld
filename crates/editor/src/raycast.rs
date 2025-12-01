@@ -68,7 +68,12 @@ pub fn update_raycast(
 }
 
 /// Temporary raycast against a plane (will be replaced with voxel raycast)
-fn raycast_plane(origin: Vec3, direction: Vec3, plane_point: Vec3, plane_normal: Vec3) -> Option<RaycastResult> {
+fn raycast_plane(
+    origin: Vec3,
+    direction: Vec3,
+    plane_point: Vec3,
+    plane_normal: Vec3,
+) -> Option<RaycastResult> {
     let denom = plane_normal.dot(direction);
 
     // Check if ray is parallel to plane
@@ -94,7 +99,11 @@ fn raycast_plane(origin: Vec3, direction: Vec3, plane_point: Vec3, plane_normal:
 
     Some(RaycastResult {
         hit_position,
-        face_normal: if denom < 0.0 { plane_normal } else { -plane_normal },
+        face_normal: if denom < 0.0 {
+            plane_normal
+        } else {
+            -plane_normal
+        },
         distance: t,
         voxel_coord,
     })
@@ -105,8 +114,7 @@ pub struct RaycastPlugin;
 
 impl Plugin for RaycastPlugin {
     fn build(&self, app: &mut App) {
-        app
-            .init_resource::<EditorRaycast>()
+        app.init_resource::<EditorRaycast>()
             .add_systems(Update, update_raycast);
     }
 }

@@ -511,7 +511,10 @@ fn test_bcf_depth_3_serialization() {
 
     eprintln!("Depth 3 cube BCF data:");
     eprintln!("  Total size: {} bytes", bcf_data.len());
-    eprintln!("  First 64 bytes: {:?}", &bcf_data[..64.min(bcf_data.len())]);
+    eprintln!(
+        "  First 64 bytes: {:?}",
+        &bcf_data[..64.min(bcf_data.len())]
+    );
 
     // Check that we have a reasonable amount of data
     // Depth 3 should have more data than depth 2

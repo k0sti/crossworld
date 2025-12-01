@@ -1,6 +1,6 @@
-use bevy::prelude::*;
-use bevy::input::mouse::MouseWheel;
 use crate::raycast::{EditorRaycast, RaycastResult};
+use bevy::input::mouse::MouseWheel;
+use bevy::prelude::*;
 
 /// Focus mode determines where cursor appears relative to raycast hit
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -87,7 +87,7 @@ impl Default for EditorState {
         Self {
             cursor: CubeCursor::default(),
             focus_mode: FocusMode::Far, // Start in Far mode (for placing)
-            selected_material: 1, // Default to material 1 (grass/stone, not air)
+            selected_material: 1,       // Default to material 1 (grass/stone, not air)
             continuous_paint: false,
             last_paint_position: None,
         }
@@ -95,10 +95,7 @@ impl Default for EditorState {
 }
 
 /// System that updates cursor position based on raycast
-pub fn update_cursor(
-    mut state: ResMut<EditorState>,
-    raycast: Res<EditorRaycast>,
-) {
+pub fn update_cursor(mut state: ResMut<EditorState>, raycast: Res<EditorRaycast>) {
     if let Some(result) = &raycast.result {
         state.cursor.valid = true;
         state.cursor.position = calculate_cursor_position(result, state.focus_mode);
@@ -177,10 +174,7 @@ pub fn cursor_scroll_controls(
 }
 
 /// System that draws cursor visualization using Bevy Gizmos
-pub fn draw_cursor_gizmo(
-    state: Res<EditorState>,
-    mut gizmos: Gizmos,
-) {
+pub fn draw_cursor_gizmo(state: Res<EditorState>, mut gizmos: Gizmos) {
     if !state.cursor.valid {
         return;
     }
@@ -208,13 +202,15 @@ pub struct CursorPlugin;
 
 impl Plugin for CursorPlugin {
     fn build(&self, app: &mut App) {
-        app
-            .init_resource::<EditorState>()
-            .add_systems(Update, (
+        app.init_resource::<EditorState>().add_systems(
+            Update,
+            (
                 update_cursor,
                 cursor_keyboard_controls,
                 cursor_scroll_controls,
                 draw_cursor_gizmo,
-            ).chain());
+            )
+                .chain(),
+        );
     }
 }
