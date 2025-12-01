@@ -6,8 +6,60 @@ use crate::{
     generate_face_mesh,
     glam::{IVec3, Vec3},
     parse_csm, raycast, serialize_csm, ColorMapper, Cube, CubeCoord, DefaultMeshBuilder, Octree,
-    PaletteColorMapper, VoxColorMapper,
+    PaletteColorMapper, Quad, VoxColorMapper,
 };
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/// Convert Cube<i32> to Cube<u8> by casting values
+fn convert_cube_i32_to_u8(cube: Cube<i32>) -> Cube<u8> {
+    match cube {
+        Cube::Solid(v) => Cube::Solid(v as u8),
+        Cube::Cubes(children) => {
+            let mut new_children: Vec<Cube<u8>> = Vec::with_capacity(8);
+            for child in (*children).into_iter() {
+                new_children.push(convert_cube_i32_to_u8((*child).clone()));
+            }
+            let array: [Cube<u8>; 8] = new_children.try_into().expect("Vec must have 8 elements");
+            let boxed: Box<[Rc<Cube<u8>>; 8]> = Box::new(array.map(Rc::new));
+            Cube::Cubes(boxed)
+        }
+        Cube::Planes { axis, quad } => {
+            Cube::Planes {
+                axis,
+                quad: Rc::new(convert_quad_i32_to_u8((*quad).clone())),
+            }
+        }
+        Cube::Slices { axis, layers } => {
+            let new_layers: Vec<Rc<Cube<u8>>> = layers
+                .iter()
+                .map(|layer| Rc::new(convert_cube_i32_to_u8((**layer).clone())))
+                .collect();
+            Cube::Slices {
+                axis,
+                layers: Rc::new(new_layers),
+            }
+        }
+    }
+}
+
+/// Convert Quad<i32> to Quad<u8> by casting values
+fn convert_quad_i32_to_u8(quad: Quad<i32>) -> Quad<u8> {
+    match quad {
+        Quad::Solid(v) => Quad::Solid(v as u8),
+        Quad::Quads(children) => {
+            let mut new_children: Vec<Quad<u8>> = Vec::with_capacity(4);
+            for child in (*children).into_iter() {
+                new_children.push(convert_quad_i32_to_u8((*child).clone()));
+            }
+            let array: [Quad<u8>; 4] = new_children.try_into().expect("Vec must have 4 elements");
+            let boxed: Box<[Rc<Quad<u8>>; 4]> = Box::new(array.map(Rc::new));
+            Quad::Quads(boxed)
+        }
+    }
+}
 
 // ============================================================================
 // Result Types
@@ -377,9 +429,14 @@ pub fn load_vox(
 ) -> Result<WasmCube, JsValue> {
     let align = Vec3::new(align_x, align_y, align_z);
     match crate::load_vox_to_cube(bytes, align) {
-        Ok(cube) => Ok(WasmCube {
-            inner: Rc::new(cube),
-        }),
+        Ok(cube_i32) => {
+            // Convert Cube<i32> to Cube<u8>
+            // Material IDs from .vox files are in range 0-255
+            let cube_u8 = convert_cube_i32_to_u8(cube_i32);
+            Ok(WasmCube {
+                inner: Rc::new(cube_u8),
+            })
+        }
         Err(e) => {
             let error = ParseError {
                 error: format!("Failed to load .vox file: {}", e),

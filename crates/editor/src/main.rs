@@ -2,6 +2,7 @@ use bevy::prelude::*;
 use bevy_egui::EguiPlugin;
 
 mod camera;
+mod config;
 mod voxel_scene;
 mod mesh_sync;
 mod raycast;
@@ -12,6 +13,7 @@ mod file_ops;
 mod ui;
 
 use camera::{CameraPlugin, OrbitCamera};
+use config::EditorConfig;
 use voxel_scene::VoxelScenePlugin;
 use mesh_sync::MeshSyncPlugin;
 use raycast::RaycastPlugin;
@@ -32,6 +34,7 @@ fn main() {
             ..default()
         }))
         .add_plugins(EguiPlugin::default())
+        .init_resource::<EditorConfig>()
         .add_plugins(CameraPlugin)
         .add_plugins(VoxelScenePlugin)
         .add_plugins(MeshSyncPlugin)
@@ -55,8 +58,6 @@ impl Plugin for EditorPlugin {
 
 fn setup_scene(
     mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     // Spawn orbit camera at (10, 10, 10) looking at origin
     let orbit_camera = OrbitCamera::new(Vec3::ZERO, 15.0);
@@ -84,14 +85,14 @@ fn setup_scene(
     });
 
     // Add a ground plane as a visual reference
-    commands.spawn((
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(20.0, 20.0))),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::srgb(0.3, 0.5, 0.3),
-            ..default()
-        })),
-        Transform::from_xyz(0.0, -0.5, 0.0),
-    ));
+    // commands.spawn((
+    //     Mesh3d(meshes.add(Plane3d::default().mesh().size(20.0, 20.0))),
+    //     MeshMaterial3d(materials.add(StandardMaterial {
+    //         base_color: Color::srgb(0.3, 0.5, 0.3),
+    //         ..default()
+    //     })),
+    //     Transform::from_xyz(0.0, -0.5, 0.0),
+    // ));
 
     info!("Crossworld Voxel Editor initialized");
     info!("Camera positioned at (10, 10, 10) looking at origin");

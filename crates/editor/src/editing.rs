@@ -1,11 +1,15 @@
 use bevy::prelude::*;
+use cube::Cube;
+use std::rc::Rc;
 use crate::cursor::EditorState;
 use crate::voxel_scene::VoxelScene;
+use crate::config::EditorConfig;
 
 /// System that handles voxel placement via left-click
 pub fn handle_voxel_placement(
     mut state: ResMut<EditorState>,
     mut scene: ResMut<VoxelScene>,
+    config: Res<EditorConfig>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     keyboard: Res<ButtonInput<KeyCode>>,
 ) {
@@ -49,20 +53,26 @@ pub fn handle_voxel_placement(
         let half_size = size / 2;
 
         let mut voxels_placed = 0;
+        let mut new_cube = {
+            let cube_lock = scene.cube.lock();
+            (**cube_lock).clone()
+        };
 
         for x in 0..size {
             for y in 0..size {
                 for z in 0..size {
                     let voxel_pos = cursor_pos + IVec3::new(x - half_size, y - half_size, z - half_size);
 
-                    // Place voxel at micro depth (depth 5)
-                    let world_cube = scene.world.lock();
-                    world_cube.set_voxel_at_depth(
-                        voxel_pos.x,
-                        voxel_pos.y,
-                        voxel_pos.z,
-                        5, // micro depth
-                        state.selected_material,
+                    // Create voxel with selected material
+                    let voxel = Cube::Solid(state.selected_material);
+
+                    // Update cube at max depth
+                    new_cube = new_cube.update(
+                        cube::CubeCoord::new(
+                            glam::IVec3::new(voxel_pos.x, voxel_pos.y, voxel_pos.z),
+                            config.max_depth,
+                        ),
+                        voxel,
                     );
                     voxels_placed += 1;
                 }
@@ -70,6 +80,11 @@ pub fn handle_voxel_placement(
         }
 
         if voxels_placed > 0 {
+            // Replace cube in scene
+            {
+                let mut cube_lock = scene.cube.lock();
+                *cube_lock = Rc::new(new_cube);
+            }
             scene.mesh_dirty = true;
             state.last_paint_position = Some(cursor_pos);
             info!(
@@ -84,6 +99,7 @@ pub fn handle_voxel_placement(
 pub fn handle_voxel_removal(
     state: Res<EditorState>,
     mut scene: ResMut<VoxelScene>,
+    config: Res<EditorConfig>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     keyboard: Res<ButtonInput<KeyCode>>,
 ) {
@@ -107,20 +123,26 @@ pub fn handle_voxel_removal(
     let half_size = size / 2;
 
     let mut voxels_removed = 0;
+    let mut new_cube = {
+        let cube_lock = scene.cube.lock();
+        (**cube_lock).clone()
+    };
 
     for x in 0..size {
         for y in 0..size {
             for z in 0..size {
                 let voxel_pos = cursor_pos + IVec3::new(x - half_size, y - half_size, z - half_size);
 
-                // Remove voxel at micro depth (set to air = 0)
-                let world_cube = scene.world.lock();
-                world_cube.set_voxel_at_depth(
-                    voxel_pos.x,
-                    voxel_pos.y,
-                    voxel_pos.z,
-                    5, // micro depth
-                    0, // air material
+                // Remove voxel (set to empty = 0)
+                let empty_voxel = Cube::Solid(0);
+
+                // Update cube at max depth
+                new_cube = new_cube.update(
+                    cube::CubeCoord::new(
+                        glam::IVec3::new(voxel_pos.x, voxel_pos.y, voxel_pos.z),
+                        config.max_depth,
+                    ),
+                    empty_voxel,
                 );
                 voxels_removed += 1;
             }
@@ -128,6 +150,11 @@ pub fn handle_voxel_removal(
     }
 
     if voxels_removed > 0 {
+        // Replace cube in scene
+        {
+            let mut cube_lock = scene.cube.lock();
+            *cube_lock = Rc::new(new_cube);
+        }
         scene.mesh_dirty = true;
         info!("Removed {} voxels at {:?}", voxels_removed, cursor_pos);
     }

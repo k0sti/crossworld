@@ -12,7 +12,23 @@ interface CubeEditorViewProps {
 
 const CUBE_MAX_DEPTH = 4  // 2^4 = 16x16x16
 const CUBE_SIZE = 1 << CUBE_MAX_DEPTH  // 16
-const MODEL_ID = 'editor-model'
+
+// Cursor structure: CubeCoord (start and depth), box size, and brush data
+interface Cursor {
+  // CubeCoord components
+  x: number        // Grid position X
+  y: number        // Grid position Y
+  z: number        // Grid position Z
+  depth: number    // Depth level (0 for now)
+
+  // Box size (Vec3i)
+  sizeX: number    // Size in X (1 for now)
+  sizeY: number    // Size in Y (1 for now)
+  sizeZ: number    // Size in Z (1 for now)
+
+  // Brush data (WasmCube)
+  brush: any       // The voxel/cube to place
+}
 
 export function CubeEditorView(_props: CubeEditorViewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -30,20 +46,23 @@ export function CubeEditorView(_props: CubeEditorViewProps) {
   const [selectedColorIndex, setSelectedColorIndex] = useState(0)
   const [isPaletteOpen, setIsPaletteOpen] = useState(false)
   const [wasmModule, setWasmModule] = useState<any>(null)
-  const [cursorPosition, setCursorPosition] = useState<{ x: number; y: number; z: number } | null>(null)
-  const depth = CUBE_MAX_DEPTH // Always use max depth
+  const [cube, setCube] = useState<any>(null)
+  const [cursor, setCursor] = useState<Cursor | null>(null)
+  const depth = CUBE_MAX_DEPTH // Always use max depth for voxel placement
 
-  // Initialize WASM module
+  // Initialize WASM module and create empty cube
   useEffect(() => {
     import('cube').then(async (wasmModule) => {
       await wasmModule.default()  // Initialize WASM
       const wasm = wasmModule as any // Type assertion needed for dynamic import
-      wasm.create_model(MODEL_ID, CUBE_MAX_DEPTH)
-      wasm.set_model_palette(MODEL_ID, palette)
+
+      // Create an empty cube (value 0 = empty)
+      const emptyCube = new wasm.WasmCube(0)
+      setCube(emptyCube)
       setWasmModule(wasm)
       console.log('[CubeEditor] WASM module initialized')
     }).catch(console.error)
-  }, [palette])
+  }, [])
 
   // Initialize Three.js scene (only once)
   useEffect(() => {
@@ -218,9 +237,22 @@ export function CubeEditorView(_props: CubeEditorViewProps) {
               previewBoxPos: { x: clampedX.toFixed(6), z: clampedZ.toFixed(6) }
             })
 
-            // Update cursor position state
-            const newCursorPos = { x: gridX, y: 0, z: gridZ }
-            setCursorPosition(newCursorPos)
+            // Create cursor with CubeCoord, box size, and brush data
+            // For now: depth=0, size=(1,1,1)
+            if (wasmModule) {
+              const brush = new wasmModule.WasmCube(selectedColorIndex + 1)
+              const newCursor: Cursor = {
+                x: gridX,
+                y: 0,
+                z: gridZ,
+                depth: 0,  // Only depth=0 supported for now
+                sizeX: 1,
+                sizeY: 1,
+                sizeZ: 1,
+                brush
+              }
+              setCursor(newCursor)
+            }
 
             // Position preview box on top of ground (y = voxelSize / 2)
             const boxY = voxelSize / 2
@@ -230,7 +262,7 @@ export function CubeEditorView(_props: CubeEditorViewProps) {
             previewBox.visible = true
             previewWireframe.visible = true
           } else {
-            setCursorPosition(null)
+            setCursor(null)
             previewBox.visible = false
             previewWireframe.visible = false
           }
@@ -291,13 +323,12 @@ export function CubeEditorView(_props: CubeEditorViewProps) {
     }
   }, [depth])
 
-  // Update WASM palette when it changes
+  // Regenerate mesh when palette changes
   useEffect(() => {
-    if (wasmModule) {
-      wasmModule.set_model_palette(MODEL_ID, palette)
+    if (cube) {
       updateMesh() // Regenerate mesh with new colors
     }
-  }, [palette, wasmModule])
+  }, [palette, cube])
 
   // Update preview box color when selected color changes
   useEffect(() => {
@@ -309,79 +340,51 @@ export function CubeEditorView(_props: CubeEditorViewProps) {
     }
   }, [selectedColor])
 
+  // Update cursor brush when selected color changes
+  useEffect(() => {
+    if (cursor && wasmModule) {
+      const newBrush = new wasmModule.WasmCube(selectedColorIndex + 1)
+      setCursor({
+        ...cursor,
+        brush: newBrush
+      })
+    }
+  }, [selectedColorIndex, wasmModule])
+
   // Handle canvas click to place voxel
-  const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!canvasRef.current || !cameraRef.current || !wasmModule) return
+  const handleCanvasClick = (_e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!cube || !cursor) return
 
-    const rect = canvasRef.current.getBoundingClientRect()
-    const x = ((e.clientX - rect.left) / rect.width) * 2 - 1
-    const y = -((e.clientY - rect.top) / rect.height) * 2 + 1
-
-    const raycaster = new THREE.Raycaster()
-    raycaster.setFromCamera(new THREE.Vector2(x, y), cameraRef.current)
-
-    // Find ground plane
-    const scene = sceneRef.current
-    if (!scene) return
-
-    const groundPlane = scene.children.find(
-      child => child instanceof THREE.Mesh && child.material && !(child.material as THREE.MeshBasicMaterial).visible
-    )
-
-    console.log('[CubeEditor] Click raycast:', {
-      groundPlaneFound: !!groundPlane,
-      sceneChildren: scene.children.length
+    console.log('[CubeEditor] Click details:', {
+      cursorPos: { x: cursor.x, y: cursor.y, z: cursor.z },
+      depth: cursor.depth,
+      size: { x: cursor.sizeX, y: cursor.sizeY, z: cursor.sizeZ }
     })
 
-    if (!groundPlane) {
-      console.warn('[CubeEditor] Ground plane not found!')
-      return
-    }
+    // Use cursor position and brush to update the cube
+    // Note: cursor.depth is always 0 for now, but we place at max depth
+    const newCube = cube.update(cursor.x, cursor.y, cursor.z, depth, cursor.brush)
+    setCube(newCube)
 
-    const intersects = raycaster.intersectObject(groundPlane)
+    console.log('[CubeEditor] Voxel placed using cursor brush')
 
-    if (intersects.length > 0) {
-      const point = intersects[0].point
-
-      // Convert world coordinates to grid coordinates at max depth
-      // World coordinates are [0, CUBE_SIZE], grid coordinates are [0, CUBE_SIZE)
-      const gridX = Math.floor(point.x)
-      const gridY = 0  // Draw at ground level (voxel will be positioned at y=0.5)
-      const gridZ = Math.floor(point.z)
-
-      // Clamp to valid range [0, CUBE_SIZE)
-      const clampedX = Math.max(0, Math.min(CUBE_SIZE - 1, gridX))
-      const clampedZ = Math.max(0, Math.min(CUBE_SIZE - 1, gridZ))
-
-      console.log('[CubeEditor] Click details:', {
-        clickPoint: { x: point.x.toFixed(6), y: point.y.toFixed(6), z: point.z.toFixed(6) },
-        gridCoords: { x: gridX, y: gridY, z: gridZ },
-        clampedCoords: { x: clampedX, y: gridY, z: clampedZ },
-        depth,
-        colorIndex: selectedColorIndex,
-        color: selectedColor
-      })
-
-      // Call WASM draw function (add 1 to index because palette mapper uses index-1)
-      const result = wasmModule.draw(MODEL_ID, selectedColorIndex + 1, clampedX, gridY, clampedZ, depth)
-
-      // Check for errors
-      if (result && result.error) {
-        console.error('[CubeEditor] Draw error:', result.error)
-        return
-      }
-
-      console.log('[CubeEditor] Draw result:', result)
-
-      // Update mesh
-      updateMesh()
-    }
+    // Update mesh
+    updateMesh()
   }
 
   const updateMesh = () => {
-    if (!wasmModule || !sceneRef.current) return
+    if (!cube || !sceneRef.current) return
 
-    const meshResult = wasmModule.get_model_mesh(MODEL_ID)
+    // Convert palette to color format expected by WASM (RGB 0.0-1.0 range)
+    const paletteColors = palette.map(hexColor => {
+      const r = parseInt(hexColor.slice(1, 3), 16) / 255
+      const g = parseInt(hexColor.slice(3, 5), 16) / 255
+      const b = parseInt(hexColor.slice(5, 7), 16) / 255
+      return { r, g, b }
+    })
+
+    // Generate mesh with palette
+    const meshResult = cube.generateMesh(paletteColors, CUBE_MAX_DEPTH)
 
     if (meshResult && meshResult.error) {
       console.error('[CubeEditor] Mesh error:', meshResult.error)
@@ -471,8 +474,9 @@ export function CubeEditorView(_props: CubeEditorViewProps) {
   const handleClear = () => {
     if (!wasmModule) return
 
-    // Recreate model
-    wasmModule.create_model(MODEL_ID, CUBE_MAX_DEPTH)
+    // Create a new empty cube
+    const emptyCube = new wasmModule.WasmCube(0)
+    setCube(emptyCube)
 
     // Clear mesh
     if (geometryMeshRef.current && sceneRef.current) {
@@ -486,12 +490,20 @@ export function CubeEditorView(_props: CubeEditorViewProps) {
   }
 
   const handleSave = () => {
-    // TODO: Implement save functionality
+    if (!cube) return
+
+    // TODO: Implement save functionality using cube.printScript(false)
+    // const csm = cube.printScript(false)
+    // Save to localStorage or file
     console.log('[CubeEditor] Save not yet implemented')
   }
 
   const handleExport = () => {
+    if (!cube) return
+
     // TODO: Implement export functionality
+    // Option 1: Export as CSM using cube.printScript(false)
+    // Option 2: Export as .vox file (requires implementing vox export in Rust)
     console.log('[CubeEditor] Export not yet implemented')
   }
 
@@ -579,7 +591,7 @@ export function CubeEditorView(_props: CubeEditorViewProps) {
         selectedColorIndex={selectedColorIndex}
         onColorSelect={handleColorSelect}
         onColorChange={handleColorChange}
-        cursorPosition={cursorPosition}
+        cursorPosition={cursor ? { x: cursor.x, y: cursor.y, z: cursor.z } : null}
       />
     </Box>
   )
