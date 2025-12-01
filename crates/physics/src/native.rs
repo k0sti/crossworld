@@ -4,12 +4,7 @@
 /// in native builds (not compiled to WASM).
 
 #[cfg(feature = "bevy")]
-pub use bevy_integration::*;
-
-#[cfg(feature = "bevy")]
 mod bevy_integration {
-    use super::*;
-
     // Bevy-specific utilities will be added here as needed
     // For example: Bevy component conversion, resource helpers, etc.
 }

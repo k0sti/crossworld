@@ -1,25 +1,34 @@
 //! Test to verify 3D texture data generation for GL tracer
 
 use cube::Cube;
-use glam::{IVec3, Vec3};
+use glam::Vec3;
 use renderer::scenes::create_octa_cube;
-use std::rc::Rc;
 
-/// Sample cube at a position - copied from gl_tracer.rs
-fn sample_cube_at_position(cube: &Cube<i32>, pos: Vec3, max_depth: u32) -> i32 {
-    match cube {
-        Cube::Solid(value) => *value,
-        _ => {
-            let grid_size = 1 << max_depth;
-            let octree_pos = IVec3::new(
-                (pos.x * grid_size as f32).floor() as i32,
-                (pos.y * grid_size as f32).floor() as i32,
-                (pos.z * grid_size as f32).floor() as i32,
-            );
-            let octree_pos = octree_pos.clamp(IVec3::ZERO, IVec3::splat(grid_size - 1));
-            cube.get_id(max_depth, octree_pos)
+/// Sample cube at a normalized position [0,1] in each axis
+fn sample_cube_at_position(cube: &Cube<u8>, pos: Vec3, max_depth: u32) -> u8 {
+    fn sample_recursive(cube: &Cube<u8>, pos: Vec3, depth: u32) -> u8 {
+        match cube {
+            Cube::Solid(value) => *value,
+            Cube::Cubes(children) if depth > 0 => {
+                // Determine which octant the position falls into
+                let octant_x = if pos.x >= 0.5 { 1 } else { 0 };
+                let octant_y = if pos.y >= 0.5 { 1 } else { 0 };
+                let octant_z = if pos.z >= 0.5 { 1 } else { 0 };
+                let octant = octant_x * 4 + octant_y * 2 + octant_z;
+
+                // Recursively sample within the child octant
+                let child_pos = Vec3::new(
+                    (pos.x - octant_x as f32 * 0.5) * 2.0,
+                    (pos.y - octant_y as f32 * 0.5) * 2.0,
+                    (pos.z - octant_z as f32 * 0.5) * 2.0,
+                );
+                sample_recursive(&children[octant], child_pos, depth - 1)
+            }
+            _ => cube.id(), // For Planes/Slices or depth 0, return representative ID
         }
     }
+
+    sample_recursive(cube, pos, max_depth)
 }
 
 #[test]
@@ -46,7 +55,7 @@ fn test_3d_texture_data_generation() {
                     (z as f32 + 0.5) / SIZE as f32,
                 );
 
-                let value = sample_cube_at_position(&cube, pos, 3);
+                let value = sample_cube_at_position(&*cube, pos, 3);
                 let idx = x + y * SIZE + z * SIZE * SIZE;
                 voxel_data[idx] = if value != 0 { 255 } else { 0 };
 
@@ -122,7 +131,7 @@ fn test_specific_octants() {
 
     println!("Testing octant centers:");
     for (octant_id, pos, expected) in octant_tests {
-        let value = sample_cube_at_position(&cube, pos, 3);
+        let value = sample_cube_at_position(&*cube, pos, 3);
         let status = if value == expected { "✓" } else { "✗" };
         println!(
             "  {} Octant {}: pos={:.3},{:.3},{:.3} -> value={} (expected {})",

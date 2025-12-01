@@ -307,7 +307,7 @@ mod tests {
 
     #[test]
     fn test_neighbor_view() {
-        let root = Cube::tabulate(|i| Cube::Solid(i as i32));
+        let root = Cube::tabulate(|i| Cube::Solid(i as u8));
         let border_materials = [33, 33, 0, 0]; // Ground at bottom, sky at top
         let grid = NeighborGrid::new(&root, border_materials);
 
