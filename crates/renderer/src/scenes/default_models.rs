@@ -15,10 +15,9 @@ use std::rc::Rc;
 
 /// Parse CSM string into Cube<u8>
 ///
-/// CSM parser returns Cube<i32>, but we convert to u8 for material indices
+/// CSM parser now directly returns Cube<u8>
 fn parse_csm_u8(csm: &str) -> Rc<Cube<u8>> {
     let octree = parse_csm(csm).expect("Failed to parse CSM");
-    // Octree.root is already Cube<u8>, so just clone it
     Rc::new(octree.root.clone())
 }
 

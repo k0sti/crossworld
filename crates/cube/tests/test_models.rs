@@ -10,45 +10,8 @@ use std::rc::Rc;
 /// Parse CSM string and return as Cube<u8>
 fn parse_test_csm(csm: &str) -> Rc<Cube<u8>> {
     let octree = parse_csm(csm).expect("Failed to parse CSM");
-    // Convert Cube<i32> to Cube<u8>
-    fn convert_cube(cube: &Cube<i32>) -> Cube<u8> {
-        match cube {
-            Cube::Solid(v) => Cube::Solid(*v as u8),
-            Cube::Cubes(children) => {
-                let converted: Vec<Rc<Cube<u8>>> =
-                    children.iter().map(|c| Rc::new(convert_cube(c))).collect();
-                let array: [Rc<Cube<u8>>; 8] = converted.try_into().unwrap();
-                Cube::Cubes(Box::new(array))
-            }
-            Cube::Planes { axis, quad } => {
-                // Convert Quad<i32> to Quad<u8>
-                fn convert_quad(q: &Quad<i32>) -> Quad<u8> {
-                    match q {
-                        Quad::Solid(v) => Quad::Solid(*v as u8),
-                        Quad::Quads(children) => {
-                            let converted: Vec<Rc<Quad<u8>>> =
-                                children.iter().map(|c| Rc::new(convert_quad(c))).collect();
-                            let array: [Rc<Quad<u8>>; 4] = converted.try_into().unwrap();
-                            Quad::Quads(Box::new(array))
-                        }
-                    }
-                }
-                Cube::Planes {
-                    axis: *axis,
-                    quad: Rc::new(convert_quad(quad))
-                }
-            },
-            Cube::Slices { axis, layers } => {
-                let converted: Vec<Rc<Cube<u8>>> =
-                    layers.iter().map(|c| Rc::new(convert_cube(c))).collect();
-                Cube::Slices {
-                    axis: *axis,
-                    layers: Rc::new(converted),
-                }
-            }
-        }
-    }
-    Rc::new(convert_cube(&octree.root))
+    // octree.root is already Cube<u8>, just wrap in Rc
+    Rc::new(octree.root)
 }
 
 // ============================================================================
