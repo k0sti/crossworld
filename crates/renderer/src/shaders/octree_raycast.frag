@@ -525,7 +525,112 @@ HitInfo raycastBcfOctreeAxisAligned(vec3 pos, vec3 dir) {
     return result;
 }
 
-// Raycast through BCF-encoded octree
+// BCF Node Type Constants (matching BCF specification)
+const uint NODE_TYPE_INLINE_LEAF = 0u;
+const uint NODE_TYPE_EXTENDED_LEAF = 1u;
+const uint NODE_TYPE_OCTA_LEAVES = 2u;
+const uint NODE_TYPE_OCTA_POINTERS = 3u;
+
+// Stack depth and iteration limits (matching CPU implementation)
+const int MAX_STACK_DEPTH = 16;
+const int MAX_ITERATIONS = 256;
+
+// Read BCF node type and extract values/pointers
+// Returns node type and fills out value or children arrays
+void readBcfNode(uint offset, out uint node_type, out uint value, out uint values[8], out uint pointers[8], out uint ssss, inout uint error_material) {
+    uint type_byte = readU8(offset, error_material);
+    if (error_material != 0u) {
+        node_type = NODE_TYPE_INLINE_LEAF;
+        value = error_material;
+        return;
+    }
+
+    // Inline leaf (0x00-0x7F)
+    if (type_byte <= 0x7Fu) {
+        node_type = NODE_TYPE_INLINE_LEAF;
+        value = type_byte & 0x7Fu;
+        return;
+    }
+
+    uint msb_type = (type_byte >> 4u) & 0x3u;
+
+    // Extended leaf (0x80-0x8F)
+    if (msb_type == 0u) {
+        node_type = NODE_TYPE_EXTENDED_LEAF;
+        value = readU8(offset + 1u, error_material);
+        if (error_material != 0u) value = error_material;
+        return;
+    }
+
+    // Octa-leaves (0x90-0x9F)
+    if (msb_type == 1u) {
+        node_type = NODE_TYPE_OCTA_LEAVES;
+        for (int i = 0; i < 8; i++) {
+            values[i] = readU8(offset + 1u + uint(i), error_material);
+            if (error_material != 0u) {
+                values[i] = error_material;
+                return;
+            }
+        }
+        return;
+    }
+
+    // Octa-pointers (0xA0-0xAF)
+    if (msb_type == 2u) {
+        node_type = NODE_TYPE_OCTA_POINTERS;
+        ssss = type_byte & 0x0Fu;
+        uint ptr_offset = offset + 1u;
+        uint ptr_size = 1u << ssss;
+        for (int i = 0; i < 8; i++) {
+            pointers[i] = readPointer(ptr_offset, ssss, error_material);
+            if (error_material != 0u) {
+                pointers[i] = 0u;
+                return;
+            }
+            ptr_offset += ptr_size;
+        }
+        return;
+    }
+
+    // Invalid type
+    node_type = NODE_TYPE_INLINE_LEAF;
+    value = 3u; // Error material 3 (type validation error)
+    error_material = 3u;
+}
+
+// Encode axis as integer (for normal tracking)
+// 0 = no axis, 1-3 = +X,+Y,+Z, 4-6 = -X,-Y,-Z
+int encodeAxis(vec3 normal) {
+    if (length(normal) < 0.1) return 0;
+    if (normal.x > 0.9) return 1;   // +X
+    if (normal.y > 0.9) return 2;   // +Y
+    if (normal.z > 0.9) return 3;   // +Z
+    if (normal.x < -0.9) return 4;  // -X
+    if (normal.y < -0.9) return 5;  // -Y
+    if (normal.z < -0.9) return 6;  // -Z
+    return 0;
+}
+
+// Decode axis integer to vec3 normal
+vec3 decodeAxis(int axis) {
+    if (axis == 1) return vec3(1.0, 0.0, 0.0);   // +X
+    if (axis == 2) return vec3(0.0, 1.0, 0.0);   // +Y
+    if (axis == 3) return vec3(0.0, 0.0, 1.0);   // +Z
+    if (axis == 4) return vec3(-1.0, 0.0, 0.0);  // -X
+    if (axis == 5) return vec3(0.0, -1.0, 0.0);  // -Y
+    if (axis == 6) return vec3(0.0, 0.0, -1.0);  // -Z
+    return vec3(0.0, 1.0, 0.0); // Default
+}
+
+// Flip axis (for converting exit to entry normal)
+int flipAxis(int axis) {
+    if (axis >= 1 && axis <= 3) return axis + 3; // +XYZ -> -XYZ
+    if (axis >= 4 && axis <= 6) return axis - 3; // -XYZ -> +XYZ
+    return axis;
+}
+
+// Raycast through BCF-encoded octree using correct [-1,1]³ normalized space algorithm
+// This implementation matches bcf_raycast.rs lines 184-379
 // pos: ray position in cube-local space [-1, 1]³
 // dir: normalized ray direction
 HitInfo raycastBcfOctree(vec3 pos, vec3 dir) {
@@ -534,29 +639,23 @@ HitInfo raycastBcfOctree(vec3 pos, vec3 dir) {
     result.t = 1e10;
     result.value = 0;
 
-    // BCF header: magic (4 bytes) + version (4 bytes) + ssss (4 bytes)
-    // Root node starts at offset 12
     const uint BCF_HEADER_SIZE = 12u;
 
-    // Check for axis-aligned ray (two components near zero)
-    // This matches CPU raycast.rs lines 275-299
+    // Check for axis-aligned ray (use specialized traversal)
     vec3 abs_dir = abs(dir);
     float max_comp = max(abs_dir.x, max(abs_dir.y, abs_dir.z));
     vec3 near_zero = step(abs_dir, vec3(max_comp * 1e-6));
-
-    // Count how many components are near zero (should be 2 for axis-aligned)
     float near_zero_count = near_zero.x + near_zero.y + near_zero.z;
-
     if (near_zero_count >= 2.0) {
-        // Axis-aligned ray: use simplified traversal
-        // This avoids floating-point precision issues in DDA
         return raycastBcfOctreeAxisAligned(pos, dir);
     }
 
-    // Find entry point if outside [-1,1]³
+    // Compute direction signs
     vec3 dir_sign = sign3(dir);
+
+    // Find entry point if outside [-1,1]³
     vec3 ray_origin = pos;
-    vec3 entry_normal = vec3(0.0, 1.0, 0.0); // Default entry normal
+    int entry_normal_axis = 0;
 
     if (max(abs(pos.x), max(abs(pos.y), abs(pos.z))) > 1.0) {
         vec3 t_entry = (-dir_sign - pos) / dir;
@@ -567,152 +666,234 @@ HitInfo raycastBcfOctree(vec3 pos, vec3 dir) {
         if (t_enter > t_leave || t_leave < 0.0) {
             return result; // Ray misses cube
         }
+
         ray_origin = pos + dir * max(t_enter, 0.0);
 
-        // Calculate entry normal from which face we entered
+        // Calculate entry normal
         vec3 entry_point = ray_origin;
         vec3 abs_entry = abs(entry_point);
-        float max_comp = max(abs_entry.x, max(abs_entry.y, abs_entry.z));
+        float max_entry = max(abs_entry.x, max(abs_entry.y, abs_entry.z));
         const float EPSILON = 0.001;
-        if (abs(abs_entry.x - max_comp) < EPSILON) {
-            entry_normal = vec3(-sign(entry_point.x), 0.0, 0.0);
-        } else if (abs(abs_entry.y - max_comp) < EPSILON) {
-            entry_normal = vec3(0.0, -sign(entry_point.y), 0.0);
+        if (abs(abs_entry.x - max_entry) < EPSILON) {
+            entry_normal_axis = entry_point.x > 0.0 ? 4 : 1; // -X or +X
+        } else if (abs(abs_entry.y - max_entry) < EPSILON) {
+            entry_normal_axis = entry_point.y > 0.0 ? 5 : 2; // -Y or +Y
         } else {
-            entry_normal = vec3(0.0, 0.0, -sign(entry_point.z));
+            entry_normal_axis = entry_point.z > 0.0 ? 6 : 3; // -Z or +Z
         }
     }
 
-    // Stack for traversal (node offset, bounds, ray position, normal)
-    const int MAX_STACK = 16;
-    uint stack_offset[MAX_STACK];
-    vec3 stack_min[MAX_STACK];
-    vec3 stack_max[MAX_STACK];
-    vec3 stack_ray_pos[MAX_STACK];
-    vec3 stack_normal[MAX_STACK]; // Track entry normal
+    // Stack arrays for traversal state (NO bounds arrays!)
+    // Each node lives in its own [-1,1]³ normalized space
+    uint stack_offset[MAX_STACK_DEPTH];
+    vec3 stack_local_origin[MAX_STACK_DEPTH];
+    vec3 stack_ray_dir[MAX_STACK_DEPTH];
+    int stack_normal[MAX_STACK_DEPTH];
+    // Note: coord not needed for rendering, only for debugging
     int stack_ptr = 0;
 
-    // Push root
+    // Initialize stack with root node (bcf_raycast_impl lines 202-212)
     stack_offset[0] = BCF_HEADER_SIZE;
-    stack_min[0] = vec3(-1.0);
-    stack_max[0] = vec3(1.0);
-    stack_ray_pos[0] = ray_origin;
-    stack_normal[0] = entry_normal;
+    stack_local_origin[0] = ray_origin;
+    stack_ray_dir[0] = dir;
+    stack_normal[0] = entry_normal_axis;
+    stack_ptr = 1;
 
-    const int MAX_ITERATIONS = 512;
+    // Main traversal loop (bcf_raycast_impl lines 215-376)
     int iter = 0;
-
-    while (stack_ptr >= 0 && iter < MAX_ITERATIONS) {
+    while (stack_ptr > 0 && iter < MAX_ITERATIONS) {
         iter++;
 
-        // Pop from stack
-        uint node_offset = stack_offset[stack_ptr];
-        vec3 box_min = stack_min[stack_ptr];
-        vec3 box_max = stack_max[stack_ptr];
-        vec3 ray_pos = stack_ray_pos[stack_ptr];
-        vec3 current_normal = stack_normal[stack_ptr];
+        // Pop state from stack (lines 217-218)
         stack_ptr--;
+        uint node_offset = stack_offset[stack_ptr];
+        vec3 local_origin = stack_local_origin[stack_ptr];
+        vec3 ray_dir = stack_ray_dir[stack_ptr];
+        int normal_axis = stack_normal[stack_ptr];
 
-        // Octant traversal loop (like Rust lines 97-148)
-        const int MAX_OCTANT_STEPS = 8;
-        for (int octant_step = 0; octant_step < MAX_OCTANT_STEPS; octant_step++) {
-            // Check if ray is still inside this node's bounds
-            vec3 box_size = box_max - box_min;
-            vec3 box_center = (box_min + box_max) * 0.5;
+        // Read BCF node at current offset (lines 220-224)
+        uint node_type;
+        uint leaf_value = 0u;
+        uint leaf_values[8];
+        uint child_pointers[8];
+        uint ssss = 0u;
+        uint error_material = 0u;
 
-            // Transform to node-local [-1,1]³ space
-            vec3 local_pos = (ray_pos - box_center) / (box_size * 0.5);
+        readBcfNode(node_offset, node_type, leaf_value, leaf_values, child_pointers, ssss, error_material);
 
-            // Compute current octant
-            ivec3 octant = computeOctant(local_pos, dir_sign);
-            uint octant_idx = octantToIndex(octant);
+        if (error_material != 0u) {
+            result.hit = true;
+            result.point = local_origin;
+            result.normal = decodeAxis(normal_axis);
+            result.value = int(error_material);
+            return result;
+        }
 
-            // Parse BCF node
-            uint child_offset;
-            uint error_material = 0u;
-            uint value = parseBcfNode(node_offset, octant_idx, child_offset, error_material);
-
-            // Check for error (materials 1-7)
-            if (error_material != 0u) {
+        // Handle inline/extended leaf (lines 227-238)
+        if (node_type == NODE_TYPE_INLINE_LEAF || node_type == NODE_TYPE_EXTENDED_LEAF) {
+            if (leaf_value != 0u) {
+                // Hit non-empty voxel
                 result.hit = true;
-                result.point = ray_pos;
-                result.normal = current_normal;
-                result.value = int(error_material);
+                result.point = local_origin;
+                result.normal = decodeAxis(normal_axis);
+                result.value = int(leaf_value);
                 return result;
             }
+            // Empty voxel, continue to next stack item
+            continue;
+        }
 
-            if (value != 0u && child_offset == 0u) {
-                // Hit solid voxel - return immediately
-                result.hit = true;
-                result.point = ray_pos;
-                result.normal = current_normal; // Use tracked normal
-                result.value = int(value);
-                return result;
-            }
+        // Handle octa-leaves (lines 240-290)
+        if (node_type == NODE_TYPE_OCTA_LEAVES) {
+            ivec3 octant = computeOctant(local_origin, dir_sign);
+            vec3 current_origin = local_origin;
+            int current_normal = normal_axis;
 
-            if (child_offset != 0u) {
-                // Branch node - recurse into child
-                // Calculate child bounds
-                vec3 offset_vec = vec3(octant) * 2.0 - 1.0;
-                vec3 child_min = box_center + offset_vec * box_size * 0.25;
-                vec3 child_max = child_min + box_size * 0.5;
+            // DDA loop through octants
+            for (int step = 0; step < 8; step++) {
+                // Check bounds
+                if (octant.x < 0 || octant.x > 1 || octant.y < 0 || octant.y > 1 || octant.z < 0 || octant.z > 1) {
+                    break;
+                }
 
-                // Check stack overflow
-                if (stack_ptr + 1 >= MAX_STACK) {
+                uint oct_idx = octantToIndex(octant);
+                uint value = leaf_values[oct_idx];
+
+                if (value != 0u) {
+                    // Hit non-empty voxel
                     result.hit = true;
-                    result.point = ray_pos;
-                    result.normal = current_normal;
-                    result.value = 4; // Material 4 = stack/iteration errors
+                    result.point = current_origin;
+                    result.normal = decodeAxis(current_normal);
+                    result.value = int(value);
                     return result;
                 }
 
-                // Push child onto stack
+                // DDA step to next octant (lines 264-289)
+                bvec3 far_side = greaterThanEqual(current_origin * dir_sign, vec3(0.0));
+                vec3 adjusted = mix(current_origin, current_origin - dir_sign, far_side);
+                vec3 dist = abs(adjusted);
+                vec3 time = dist / abs(ray_dir);
+
+                int exit_axis_idx = minTimeAxis(time);
+                float exit_time = time[exit_axis_idx];
+
+                // Advance ray
+                current_origin += ray_dir * exit_time;
+
+                // Step octant
+                int exit_sign = int(dir_sign[exit_axis_idx]);
+                octant[exit_axis_idx] += exit_sign;
+
+                // Snap to boundary
+                float boundary = float(octant[exit_axis_idx]) - float(exit_sign + 1) * 0.5;
+                current_origin[exit_axis_idx] = boundary;
+
+                // Update entry normal (opposite of exit direction)
+                if (exit_axis_idx == 0) {
+                    current_normal = exit_sign > 0 ? 4 : 1; // -X or +X
+                } else if (exit_axis_idx == 1) {
+                    current_normal = exit_sign > 0 ? 5 : 2; // -Y or +Y
+                } else {
+                    current_normal = exit_sign > 0 ? 6 : 3; // -Z or +Z
+                }
+            }
+            // Exited all octants, continue to next stack item
+            continue;
+        }
+
+        // Handle octa-pointers (lines 293-373)
+        if (node_type == NODE_TYPE_OCTA_POINTERS) {
+            ivec3 octant = computeOctant(local_origin, dir_sign);
+            vec3 current_origin = local_origin;
+            int current_normal = normal_axis;
+
+            // Collect children to visit in DDA order
+            struct ChildState {
+                uint offset;
+                vec3 origin;
+                int normal;
+            };
+            ChildState children_to_visit[8];
+            int children_count = 0;
+
+            // DDA loop to collect children (lines 304-349)
+            for (int step = 0; step < 8; step++) {
+                // Check bounds
+                if (octant.x < 0 || octant.x > 1 || octant.y < 0 || octant.y > 1 || octant.z < 0 || octant.z > 1) {
+                    break;
+                }
+
+                uint oct_idx = octantToIndex(octant);
+                uint child_offset = child_pointers[oct_idx];
+
+                if (child_offset > 0u) {
+                    // Non-empty child - transform ray to child's [-1,1]³ space (line 311)
+                    vec3 offset_vec = vec3(octant) * 2.0 - 1.0;
+                    vec3 child_origin = current_origin * 2.0 - offset_vec;
+
+                    // Record child for later processing
+                    children_to_visit[children_count].offset = child_offset;
+                    children_to_visit[children_count].origin = child_origin;
+                    children_to_visit[children_count].normal = current_normal;
+                    children_count++;
+                }
+
+                // DDA step to next octant (lines 323-343)
+                bvec3 far_side = greaterThanEqual(current_origin * dir_sign, vec3(0.0));
+                vec3 adjusted = mix(current_origin, current_origin - dir_sign, far_side);
+                vec3 dist = abs(adjusted);
+                vec3 time = dist / abs(ray_dir);
+
+                int exit_axis_idx = minTimeAxis(time);
+                float exit_time = time[exit_axis_idx];
+
+                // Advance ray
+                current_origin += ray_dir * exit_time;
+
+                // Step octant
+                int exit_sign = int(dir_sign[exit_axis_idx]);
+                octant[exit_axis_idx] += exit_sign;
+
+                // Snap to boundary
+                float boundary = float(octant[exit_axis_idx]) - float(exit_sign + 1) * 0.5;
+                current_origin[exit_axis_idx] = boundary;
+
+                // Update entry normal
+                if (exit_axis_idx == 0) {
+                    current_normal = exit_sign > 0 ? 4 : 1;
+                } else if (exit_axis_idx == 1) {
+                    current_normal = exit_sign > 0 ? 5 : 2;
+                } else {
+                    current_normal = exit_sign > 0 ? 6 : 3;
+                }
+            }
+
+            // Push all collected children to stack in REVERSE order (lines 351-373)
+            // This ensures they pop in DDA order (front-to-back)
+            for (int i = children_count - 1; i >= 0; i--) {
+                if (stack_ptr >= MAX_STACK_DEPTH) {
+                    // Stack overflow
+                    result.hit = true;
+                    result.point = local_origin;
+                    result.normal = decodeAxis(normal_axis);
+                    result.value = 4; // Error material 4 (stack errors)
+                    return result;
+                }
+
+                stack_offset[stack_ptr] = children_to_visit[i].offset;
+                stack_local_origin[stack_ptr] = children_to_visit[i].origin;
+                stack_ray_dir[stack_ptr] = ray_dir; // Same direction
+                stack_normal[stack_ptr] = children_to_visit[i].normal;
                 stack_ptr++;
-                stack_offset[stack_ptr] = child_offset;
-                stack_min[stack_ptr] = child_min;
-                stack_max[stack_ptr] = child_max;
-                stack_ray_pos[stack_ptr] = ray_pos;
-                stack_normal[stack_ptr] = current_normal; // Propagate normal
-                break; // Process child before continuing
             }
-
-            // Empty octant - step to next octant (DDA step from Rust lines 120-144)
-            // Calculate exit distance
-            bvec3 far_side = greaterThanEqual(local_pos * dir_sign, vec3(0.0));
-            vec3 adjusted = mix(local_pos, local_pos - dir_sign, far_side);
-            vec3 dist = abs(adjusted);
-            vec3 time = dist / abs(dir);
-
-            // Find exit axis
-            int exit_axis_idx = minTimeAxis(time);
-            float exit_time = time[exit_axis_idx];
-
-            // Advance ray to octant boundary
-            ray_pos += dir * exit_time;
-
-            // Step octant
-            int exit_sign = int(dir_sign[exit_axis_idx]);
-            octant[exit_axis_idx] += exit_sign;
-
-            // Snap to boundary
-            float boundary = float(octant[exit_axis_idx]) - float(exit_sign + 1) * 0.5;
-            ray_pos[exit_axis_idx] = box_center[exit_axis_idx] + boundary * box_size[exit_axis_idx] * 0.5;
-
-            // Update normal (entry normal is opposite of exit direction)
-            current_normal = vec3(0.0);
-            current_normal[exit_axis_idx] = -float(exit_sign);
-
-            // Check if exited parent cube
-            if (octant[exit_axis_idx] < 0 || octant[exit_axis_idx] > 1) {
-                break; // Exited this node
-            }
+            continue;
         }
     }
 
-    // Iteration timeout - treat as error hit
+    // Iteration timeout
     if (iter >= MAX_ITERATIONS) {
         result.hit = true;
-        result.value = 4; // Material 4 = stack/iteration errors
+        result.value = 4; // Error material 4 (iteration timeout)
     }
 
     return result;
