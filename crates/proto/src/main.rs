@@ -2,10 +2,9 @@ use bevy::prelude::*;
 use bevy::input::mouse::{MouseMotion, MouseWheel};
 use bevy::render::mesh::{Indices, PrimitiveTopology};
 use bevy_rapier3d::prelude::*;
-use crossworld_world::NativeWorldCube as WorldCube;
+use cube::{Cube, ColorMapper, DefaultMeshBuilder, generate_face_mesh};
 use serde::Deserialize;
 use std::path::Path;
-use std::rc::Rc;
 
 /// Configuration loaded from config.toml
 #[derive(Debug, Deserialize, Resource)]
@@ -88,6 +87,48 @@ impl Default for ProtoConfig {
 #[derive(Component)]
 struct WorldEntity;
 
+/// Color mapper for cube materials
+struct MaterialColorMapper;
+
+impl ColorMapper for MaterialColorMapper {
+    fn map(&self, index: u8) -> [f32; 3] {
+        let color = cube::material::get_material_color(index as i32);
+        [color.x, color.y, color.z]
+    }
+}
+
+/// Wrap a cube with border layers using the specified border materials
+///
+/// Each layer divides depth into 4 vertical levels (y=0,1,2,3):
+/// - border_materials[0] = bottom layer (y=0)
+/// - border_materials[1] = lower middle (y=1)
+/// - border_materials[2] = upper middle (y=2)
+/// - border_materials[3] = top layer (y=3)
+fn add_border_layers(world: Cube<u8>, layers: u32, border_materials: [u8; 4]) -> Cube<u8> {
+    use cube::glam::IVec3;
+
+    let mut result = world;
+
+    for _ in 0..layers {
+        // Create border structure with 4 vertical divisions (depth 2)
+        let level1 = Cube::tabulate_vector(|pos1| {
+            Cube::tabulate_vector(|pos2| {
+                // Calculate absolute Y position at depth 2 (0-3 range)
+                let y_pos = pos1.y * 2 + pos2.y;
+
+                // Assign materials based on Y level using border_materials config
+                let material = border_materials[y_pos.clamp(0, 3) as usize];
+                Cube::Solid(material)
+            })
+        });
+
+        // Place the world in the center (position 1,1,1 at depth 2)
+        result = level1.update_depth(2, IVec3::new(1, 1, 1), 1, result);
+    }
+
+    result
+}
+
 /// Camera controller resource for orbit camera
 #[derive(Resource)]
 struct CameraController {
@@ -164,62 +205,81 @@ fn setup(
 ) {
     info!("Setting up scene...");
 
-    // Create world cube from CSM
-    info!("Loading world from CSM: {} chars", config.world.root_cube.len());
+    // Parse CSM and create cube
+    info!("Loading cube from CSM: {} chars", config.world.root_cube.len());
 
-    // Parse CSM and create world with custom root
-    let mut world_cube = match cube::parse_csm(&config.world.root_cube) {
+    let cube = match cube::parse_csm(&config.world.root_cube) {
         Ok(octree) => {
-            info!("CSM parsed successfully, creating WorldCube");
-            let mut wc = WorldCube::new(
-                config.world.macro_depth,
-                config.world.micro_depth,
-                config.world.border_depth,
-                config.world.seed,
-            );
-            wc.set_root(octree.root);
-            wc
+            info!("CSM parsed successfully");
+            let mut cube = octree.root;
+
+            // Apply border layers if requested
+            if config.world.border_depth > 0 {
+                info!("Applying {} border layer(s)", config.world.border_depth);
+                cube = add_border_layers(cube, config.world.border_depth, config.world.border_materials);
+            }
+
+            cube
         }
         Err(e) => {
             panic!("Failed to parse CSM: {}. Check your root_cube in config.toml", e);
         }
     };
 
-    // Generate mesh
-    let geometry_data = world_cube.generate_mesh();
+    // Generate mesh from cube
+    let color_mapper = MaterialColorMapper;
+    let mut builder = DefaultMeshBuilder::new();
 
-    info!("World mesh generated: {} vertices, {} indices",
-        geometry_data.vertices().len() / 3,
-        geometry_data.indices().len());
+    // Calculate render depth from config
+    let render_depth = config.world.macro_depth + config.world.micro_depth + config.world.border_depth;
+    let base_depth = config.world.macro_depth + config.world.border_depth;
 
-    // Convert to Bevy mesh
-    let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, default());
+    generate_face_mesh(
+        &cube,
+        &mut builder,
+        |index| color_mapper.map(index),
+        render_depth,
+        config.world.border_materials,
+        base_depth,
+    );
 
-    // Positions (Vec3)
-    let positions: Vec<[f32; 3]> = geometry_data
-        .vertices()
+    info!("Mesh generated: {} vertices, {} indices",
+        builder.vertices.len() / 3,
+        builder.indices.len());
+
+    // Scale vertices to world coordinates
+    let world_size = (1 << (config.world.macro_depth + config.world.border_depth)) as f32;
+    let half_size = world_size / 2.0;
+
+    let positions: Vec<[f32; 3]> = builder
+        .vertices
+        .chunks(3)
+        .map(|chunk| {
+            let x = chunk[0] * world_size - half_size;
+            let y = chunk[1] * world_size - half_size;
+            let z = chunk[2] * world_size - half_size;
+            [x, y, z]
+        })
+        .collect();
+
+    let normals: Vec<[f32; 3]> = builder
+        .normals
         .chunks(3)
         .map(|chunk| [chunk[0], chunk[1], chunk[2]])
         .collect();
 
-    // Normals (Vec3)
-    let normals: Vec<[f32; 3]> = geometry_data
-        .normals()
-        .chunks(3)
-        .map(|chunk| [chunk[0], chunk[1], chunk[2]])
-        .collect();
-
-    // Colors (Vec4 - RGBA, add alpha = 1.0)
-    let colors: Vec<[f32; 4]> = geometry_data
-        .colors()
+    let colors: Vec<[f32; 4]> = builder
+        .colors
         .chunks(3)
         .map(|chunk| [chunk[0], chunk[1], chunk[2], 1.0])
         .collect();
 
+    // Convert to Bevy mesh
+    let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, default());
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
     mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, colors);
-    mesh.insert_indices(Indices::U32(geometry_data.indices()));
+    mesh.insert_indices(Indices::U32(builder.indices));
 
     // Spawn world entity with physics
     info!("Spawning world entity with collider...");
