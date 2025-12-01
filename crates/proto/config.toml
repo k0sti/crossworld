@@ -4,6 +4,22 @@ micro_depth = 4      # Detail/edit depth (0-7)
 border_depth = 1     # Blending layer depth
 seed = 12345         # Procedural generation seed
 
+# Border materials for each Y layer [y0, y1, y2, y3]
+# y0,y1 (bottom): solid materials, y2,y3 (top): air/empty
+border_materials = [32, 32, 0, 0]  # Bottom: bedrock (32), Top: air (0)
+
+# Optional: Define world using CSM (CubeScript Model) format
+# If provided, overrides procedural generation
+# This example creates a simple colored platform
+# root_cube = """
+# o[
+#   s5 s5 s0 s0
+#   s5 s5 s0 s0
+#   s0 s0 s0 s0
+#   s0 s0 s0 s0
+# ]
+# """
+
 [physics]
 gravity = -9.81      # Y-axis gravity (m/s²)
 timestep = 0.016666  # Physics timestep (1/60 second)
