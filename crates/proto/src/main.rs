@@ -5,6 +5,7 @@ use bevy_rapier3d::prelude::*;
 use crossworld_world::NativeWorldCube as WorldCube;
 use serde::Deserialize;
 use std::path::Path;
+use std::rc::Rc;
 
 /// Configuration loaded from config.toml
 #[derive(Debug, Deserialize, Resource)]
@@ -21,6 +22,13 @@ struct WorldConfig {
     micro_depth: u32,
     border_depth: u32,
     seed: u32,
+    #[serde(default = "default_border_materials")]
+    border_materials: [u8; 4],
+    root_cube: String,
+}
+
+fn default_border_materials() -> [u8; 4] {
+    [32, 32, 0, 0] // Bottom: bedrock, Top: air
 }
 
 #[derive(Debug, Deserialize)]
@@ -53,6 +61,8 @@ impl Default for ProtoConfig {
                 micro_depth: 4,
                 border_depth: 1,
                 seed: 12345,
+                border_materials: [32, 32, 0, 0],
+                root_cube: ">a [5 5 0 0 5 5 0 0]".to_string(),
             },
             physics: PhysicsConfig {
                 gravity: -9.81,
@@ -154,16 +164,26 @@ fn setup(
 ) {
     info!("Setting up scene...");
 
-    // Generate world from config
-    info!("Generating world: macro_depth={}, micro_depth={}, seed={}",
-        config.world.macro_depth, config.world.micro_depth, config.world.seed);
+    // Create world cube from CSM
+    info!("Loading world from CSM: {} chars", config.world.root_cube.len());
 
-    let world_cube = WorldCube::new(
-        config.world.macro_depth,
-        config.world.micro_depth,
-        config.world.border_depth,
-        config.world.seed,
-    );
+    // Parse CSM and create world with custom root
+    let mut world_cube = match cube::parse_csm(&config.world.root_cube) {
+        Ok(octree) => {
+            info!("CSM parsed successfully, creating WorldCube");
+            let mut wc = WorldCube::new(
+                config.world.macro_depth,
+                config.world.micro_depth,
+                config.world.border_depth,
+                config.world.seed,
+            );
+            wc.set_root(octree.root);
+            wc
+        }
+        Err(e) => {
+            panic!("Failed to parse CSM: {}. Check your root_cube in config.toml", e);
+        }
+    };
 
     // Generate mesh
     let geometry_data = world_cube.generate_mesh();

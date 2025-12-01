@@ -4,6 +4,27 @@ micro_depth = 4      # Detail/edit depth (0-7)
 border_depth = 1     # Blending layer depth
 seed = 12345         # Procedural generation seed
 
+# Border materials for each Y layer [y0, y1, y2, y3]
+# y0,y1 (bottom): solid materials, y2,y3 (top): air/empty
+border_materials = [32, 32, 0, 0]  # Bottom: bedrock (32), Top: air (0)
+
+# Define world using CSM (CubeScript Model) format
+# CSM uses path-based assignment with >path value syntax
+# Paths use octant chars a-h (for the 8 children of an octree node)
+# Values: numbers (0-255 = solid materials), [v1 v2 ... v8] = octree with 8 children
+#
+# Example 1: Simple 2x2 ground (half filled at depth 1)
+root_cube = ">a [5 5 0 0 5 5 0 0]"
+#
+# Example 2: Solid platform
+# root_cube = ">a 32"  # Material 32 = stone/bedrock
+#
+# Example 3: Larger world (depth 2)
+# root_cube = """
+# >a [32 32 32 32 32 32 32 32]
+# >b [32 32 32 32 32 32 32 32]
+# """
+
 [physics]
 gravity = -9.81      # Y-axis gravity (m/s²)
 timestep = 0.016666  # Physics timestep (1/60 second)
