@@ -61,7 +61,8 @@ pub fn handle_voxel_placement(
         for x in 0..size {
             for y in 0..size {
                 for z in 0..size {
-                    let voxel_pos = cursor_pos + IVec3::new(x - half_size, y - half_size, z - half_size);
+                    let voxel_pos =
+                        cursor_pos + IVec3::new(x - half_size, y - half_size, z - half_size);
 
                     // Create voxel with selected material
                     let voxel = Cube::Solid(state.selected_material);
@@ -131,7 +132,8 @@ pub fn handle_voxel_removal(
     for x in 0..size {
         for y in 0..size {
             for z in 0..size {
-                let voxel_pos = cursor_pos + IVec3::new(x - half_size, y - half_size, z - half_size);
+                let voxel_pos =
+                    cursor_pos + IVec3::new(x - half_size, y - half_size, z - half_size);
 
                 // Remove voxel (set to empty = 0)
                 let empty_voxel = Cube::Solid(0);

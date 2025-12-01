@@ -1,8 +1,8 @@
-use bevy::prelude::*;
+use crate::voxel_scene::VoxelScene;
 use bevy::asset::RenderAssetUsages;
+use bevy::prelude::*;
 use bevy_mesh::{Indices, PrimitiveTopology};
 use cube::{generate_face_mesh, DefaultMeshBuilder, VoxColorMapper, ColorMapper};
-use crate::voxel_scene::VoxelScene;
 use crate::config::EditorConfig;
 
 /// System that synchronizes Cube changes to Bevy mesh
@@ -77,12 +77,14 @@ pub fn sync_voxel_mesh(
         ..default()
     });
 
-    let entity = commands.spawn((
-        Mesh3d(mesh_handle),
-        MeshMaterial3d(material_handle),
-        Transform::from_xyz(0.0, 0.0, 0.0),
-        VoxelMeshMarker,
-    )).id();
+    let entity = commands
+        .spawn((
+            Mesh3d(mesh_handle),
+            MeshMaterial3d(material_handle),
+            Transform::from_xyz(0.0, 0.0, 0.0),
+            VoxelMeshMarker,
+        ))
+        .id();
 
     scene.mesh_entity = Some(entity);
     scene.clear_dirty();

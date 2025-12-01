@@ -84,11 +84,8 @@ impl VoxelColliderBuilder {
                     let world_pos = coord.pos.as_vec3() * voxel_size;
                     let voxel_center = world_pos + Vec3::splat(voxel_size * 0.5);
 
-                    let point = rapier3d::na::Point3::new(
-                        voxel_center.x,
-                        voxel_center.y,
-                        voxel_center.z,
-                    );
+                    let point =
+                        rapier3d::na::Point3::new(voxel_center.x, voxel_center.y, voxel_center.z);
 
                     if !aabb.contains_local_point(&point) {
                         return false; // Skip this voxel and its children
@@ -342,7 +339,8 @@ mod tests {
             rapier3d::na::Point3::new(0.25, 0.25, 0.25),
         );
 
-        let filtered_collider = VoxelColliderBuilder::from_cube_region(&cube, 3, Some(small_region));
+        let filtered_collider =
+            VoxelColliderBuilder::from_cube_region(&cube, 3, Some(small_region));
 
         // Filtered should generate a valid collider
         assert!(
@@ -359,18 +357,18 @@ mod tests {
         let empty_collider = VoxelColliderBuilder::from_cube_region(&cube, 3, Some(empty_region));
 
         // Should generate minimal/empty collider
-        assert!(empty_collider.shape().as_ball().is_some() || {
-            if let Some(compound) = empty_collider.shape().as_compound() {
-                compound.shapes().len() == 0
-            } else {
-                false
+        assert!(
+            empty_collider.shape().as_ball().is_some() || {
+                if let Some(compound) = empty_collider.shape().as_compound() {
+                    compound.shapes().len() == 0
+                } else {
+                    false
+                }
             }
-        });
+        );
 
         println!("Full collision faces: {}", full_face_count);
-        println!(
-            "Spatial filtering test completed successfully (reduction verified by non-crash)"
-        );
+        println!("Spatial filtering test completed successfully (reduction verified by non-crash)");
     }
 
     #[test]
@@ -391,7 +389,10 @@ mod tests {
 
         // Should generate valid compound collider with reduced face count
         if let Some(compound) = collider.shape().as_compound() {
-            assert!(compound.shapes().len() > 0, "Should have at least some faces in overlap region");
+            assert!(
+                compound.shapes().len() > 0,
+                "Should have at least some faces in overlap region"
+            );
         }
     }
 }

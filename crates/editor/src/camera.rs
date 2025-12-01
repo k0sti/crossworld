@@ -1,5 +1,5 @@
-use bevy::prelude::*;
 use bevy::input::mouse::{MouseMotion, MouseWheel};
+use bevy::prelude::*;
 
 /// Component for orbit camera behavior
 #[derive(Component)]
@@ -24,7 +24,7 @@ impl Default for OrbitCamera {
         Self {
             target: Vec3::ZERO,
             distance: 15.0,
-            azimuth: std::f32::consts::FRAC_PI_4, // 45 degrees
+            azimuth: std::f32::consts::FRAC_PI_4,   // 45 degrees
             elevation: std::f32::consts::FRAC_PI_6, // 30 degrees
             distance_min: 1.0,
             distance_max: 100.0,
@@ -81,7 +81,7 @@ pub fn orbit_camera_controller(
             // Clamp elevation to prevent flipping
             camera.elevation = camera.elevation.clamp(
                 -std::f32::consts::FRAC_PI_2 + 0.01,
-                std::f32::consts::FRAC_PI_2 - 0.01
+                std::f32::consts::FRAC_PI_2 - 0.01,
             );
         }
 
@@ -89,7 +89,8 @@ pub fn orbit_camera_controller(
         // NOTE: Panning is disabled to keep the cube centered at the origin.
         // If panning is needed in the future, it should move the camera position
         // while keeping the target fixed at Vec3::ZERO.
-        if false && mouse_buttons.pressed(MouseButton::Middle) && mouse_delta.length_squared() > 0.0 {
+        if false && mouse_buttons.pressed(MouseButton::Middle) && mouse_delta.length_squared() > 0.0
+        {
             let pan_speed = 0.01 * camera.distance;
 
             // Calculate right and up vectors in camera space
@@ -106,7 +107,9 @@ pub fn orbit_camera_controller(
         if scroll_delta.abs() > 0.01 {
             let zoom_speed = 0.1 * camera.distance;
             camera.distance -= scroll_delta * zoom_speed;
-            camera.distance = camera.distance.clamp(camera.distance_min, camera.distance_max);
+            camera.distance = camera
+                .distance
+                .clamp(camera.distance_min, camera.distance_max);
         }
 
         // Smooth camera movement
@@ -175,9 +178,6 @@ pub struct CameraPlugin;
 
 impl Plugin for CameraPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (
-            orbit_camera_controller,
-            camera_keyboard_shortcuts,
-        ));
+        app.add_systems(Update, (orbit_camera_controller, camera_keyboard_shortcuts));
     }
 }

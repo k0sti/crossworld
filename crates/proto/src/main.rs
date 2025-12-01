@@ -1,5 +1,5 @@
-use bevy::prelude::*;
 use bevy::input::mouse::{MouseMotion, MouseWheel};
+use bevy::prelude::*;
 use bevy::render::mesh::{Indices, PrimitiveTopology};
 use bevy_rapier3d::prelude::*;
 use cube::{Cube, ColorMapper, DefaultMeshBuilder, generate_face_mesh};
@@ -183,7 +183,10 @@ fn main() {
     let config = load_config();
 
     info!("=== Bevy Physics Prototype ===");
-    info!("World depth: macro={}, micro={}", config.world.macro_depth, config.world.micro_depth);
+    info!(
+        "World depth: macro={}, micro={}",
+        config.world.macro_depth, config.world.micro_depth
+    );
     info!("Spawn count: {}", config.spawning.spawn_count);
 
     App::new()
@@ -313,7 +316,10 @@ fn setup(
     ));
 
     info!("Scene setup complete");
-    info!("Configuration: gravity={}, timestep={}", config.physics.gravity, config.physics.timestep);
+    info!(
+        "Configuration: gravity={}, timestep={}",
+        config.physics.gravity, config.physics.timestep
+    );
 }
 
 /// Camera controls system - orbit camera with mouse

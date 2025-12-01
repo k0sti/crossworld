@@ -43,7 +43,8 @@ fn assert_canonical(cube: &Cube<u8>) {
 
     // Assert binary equality
     assert_eq!(
-        bytes1, bytes2,
+        bytes1,
+        bytes2,
         "Canonical encoding failed: re-serialization produced different bytes.\n\
          This means BCF allows multiple valid representations of the same structure.\n\
          Lengths: {} vs {} bytes",

@@ -78,7 +78,10 @@ impl GpuTracer {
     }
 
     /// Initialize OpenGL compute shader resources
-    /// Must be called with an active GL context that supports compute shaders (GL 4.3+)
+    ///
+    /// # Safety
+    /// Must be called with an active GL context that supports compute shaders (GL 4.3+).
+    /// GL context must remain valid for the lifetime of this object.
     pub unsafe fn init_gl(&mut self, gl: &Context) -> Result<(), String> {
         unsafe {
             println!("[GPU Tracer] Initializing...");
@@ -156,6 +159,9 @@ impl GpuTracer {
     }
 
     /// Render to OpenGL context using compute shader with time-based orbit camera
+    ///
+    /// # Safety
+    /// Must be called with an active GL context. GL resources must have been initialized via `init_gl()`.
     pub unsafe fn render_to_gl(&mut self, gl: &Context, width: i32, height: i32, time: f32) {
         let Some(gl_state) = &mut self.gl_state else {
             return;
@@ -228,6 +234,9 @@ impl GpuTracer {
     }
 
     /// Render to OpenGL context with explicit camera using compute shader
+    ///
+    /// # Safety
+    /// Must be called with an active GL context. GL resources must have been initialized via `init_gl()`.
     pub unsafe fn render_to_gl_with_camera(
         &mut self,
         gl: &Context,
@@ -359,6 +368,9 @@ impl GpuTracer {
     }
 
     /// Clean up GL resources
+    ///
+    /// # Safety
+    /// Must be called with an active GL context. Should only be called once at shutdown.
     pub unsafe fn destroy_gl(&mut self, gl: &Context) {
         if let Some(gl_state) = self.gl_state.take() {
             unsafe {

@@ -66,7 +66,7 @@ pub fn traverse_octree(grid: &NeighborGrid, visitor: TraversalVisitor, max_depth
         let grid_z = (octant_pos.z + 3) / 2;
         let grid_idx = NeighborGrid::xyz_to_index(grid_x, grid_y, grid_z);
 
-        let view = NeighborView::new(grid, grid_idx as usize);
+        let view = NeighborView::new(grid, grid_idx);
         let coord = CubeCoord::new(octant_pos, max_depth);
         traverse_recursive(view, coord, visitor, false);
     }
@@ -108,7 +108,7 @@ fn traverse_recursive(
                     let grid_z = (octant_pos.z + 3) / 2;
                     let child_grid_idx = NeighborGrid::xyz_to_index(grid_x, grid_y, grid_z);
 
-                    let child_view = NeighborView::new(&child_grid, child_grid_idx as usize);
+                    let child_view = NeighborView::new(&child_grid, child_grid_idx);
                     let child_coord = coord.child(octant_idx);
                     traverse_recursive(child_view, child_coord, visitor, true);
                 }
@@ -127,7 +127,7 @@ fn traverse_recursive(
                 let grid_z = (octant_pos.z + 3) / 2;
                 let child_grid_idx = NeighborGrid::xyz_to_index(grid_x, grid_y, grid_z);
 
-                let child_view = NeighborView::new(&child_grid, child_grid_idx as usize);
+                let child_view = NeighborView::new(&child_grid, child_grid_idx);
                 let child_coord = coord.child(octant_idx);
                 traverse_recursive(child_view, child_coord, visitor, false);
             }

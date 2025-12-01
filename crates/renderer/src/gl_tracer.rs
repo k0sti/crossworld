@@ -1,8 +1,33 @@
 //! WebGL 2.0 octree raytracer using fragment shaders
 //!
 //! This tracer uses OpenGL ES 3.0 (WebGL 2.0) fragment shaders to render octree voxel data.
-//! The octree is serialized to Binary Cube Format (BCF) and uploaded to GPU as a buffer,
+//! The octree is serialized to Binary Cube Format (BCF) and uploaded to GPU as a 1D-like 2D texture,
 //! then traversed using hierarchical DDA in the fragment shader.
+//!
+//! # BCF Serialization Approach
+//!
+//! The GL renderer uses Binary Cube Format (BCF) to represent the octree on the GPU:
+//! - **Compact representation**: BCF is 10-20x smaller than voxel grid sampling
+//! - **Preserves structure**: Maintains exact octree hierarchy (no loss of detail)
+//! - **GPU-friendly**: Simple byte buffer with bit operations for node parsing
+//! - **Center-based coordinates**: Uses octree's native [-1,1]³ coordinate system
+//!
+//! # GPU Upload Strategy
+//!
+//! BCF data is uploaded as a 1D-like 2D texture (width=data_size, height=1):
+//! - **Format**: R8UI (8-bit unsigned integer, single channel)
+//! - **Sampling**: NEAREST filtering, CLAMP_TO_EDGE wrapping
+//! - **Access**: `texelFetch(u_octree_data, ivec2(offset, 0), 0).r` in shader
+//!
+//! # Shader Traversal
+//!
+//! The fragment shader implements stack-based octree traversal:
+//! 1. Parse BCF node type byte (inline leaf, extended leaf, octa-leaves, octa-pointers)
+//! 2. Calculate child octant from ray-box intersection
+//! 3. Follow pointer chain through BCF buffer
+//! 4. Return material value when hitting solid leaf
+//!
+//! See `shaders/octree_raycast.frag` for full implementation details.
 
 use crate::renderer::*;
 use crate::shader_utils;
@@ -109,7 +134,10 @@ impl GlCubeTracer {
     }
 
     /// Initialize OpenGL resources for GPU raytracing
-    /// Must be called with an active GL context
+    ///
+    /// # Safety
+    /// Must be called with an active GL context. Caller must ensure the GL context
+    /// remains valid for the lifetime of this object.
     pub unsafe fn init_gl(&mut self, gl: &Context) -> Result<(), String> {
         unsafe {
             let gl_program = GlTracerGl::new(gl, &self.cube)?;
@@ -177,6 +205,9 @@ impl GlCubeTracer {
     }
 
     /// Render to OpenGL context
+    ///
+    /// # Safety
+    /// Must be called with an active GL context. GL resources must have been initialized via `init_gl()`.
     pub unsafe fn render_to_gl(&self, gl: &Context, width: i32, height: i32, time: f32) {
         unsafe {
             if let Some(gl_program) = &self.gl_program {
@@ -186,6 +217,9 @@ impl GlCubeTracer {
     }
 
     /// Render to OpenGL context with explicit camera
+    ///
+    /// # Safety
+    /// Must be called with an active GL context. GL resources must have been initialized via `init_gl()`.
     pub unsafe fn render_to_gl_with_camera(
         &self,
         gl: &Context,
@@ -208,6 +242,9 @@ impl GlCubeTracer {
     }
 
     /// Clean up GL resources
+    ///
+    /// # Safety
+    /// Must be called with an active GL context. Should only be called once at shutdown.
     pub unsafe fn destroy_gl(&mut self, gl: &Context) {
         unsafe {
             if let Some(gl_program) = self.gl_program.take() {
@@ -218,6 +255,10 @@ impl GlCubeTracer {
 }
 
 impl GlTracerGl {
+    /// Create a new GL tracer with BCF serialization
+    ///
+    /// # Safety
+    /// Must be called with an active GL context. GL context must remain valid for the lifetime of this object.
     pub unsafe fn new(gl: &Context, cube: &Cube<u8>) -> Result<Self, String> {
         unsafe {
             // Create shader program using shared utilities
@@ -232,6 +273,10 @@ impl GlTracerGl {
                 .map_err(|e| format!("Failed to create VAO: {}", e))?;
 
             // Serialize cube to BCF format
+            // BCF (Binary Cube Format) is a compact binary representation of the octree:
+            // - Header (12 bytes): magic, version, depth, root offset
+            // - Nodes: Type byte + payload (inline leaf, extended leaf, octa-leaves, octa-pointers)
+            // - Preserves exact octree structure with center-based coordinates
             println!("[GL Tracer] Serializing octree to BCF format...");
             let bcf_data = serialize_bcf(cube);
             println!("[GL Tracer] BCF data serialized: {} bytes", bcf_data.len());
@@ -243,6 +288,10 @@ impl GlTracerGl {
             println!("[GL Tracer] Using texture buffer for octree data");
 
             // Create 1D texture for BCF data (more compatible than texture buffer)
+            // We use TEXTURE_2D with height=1 as a 1D-like texture because:
+            // - WebGL 2.0 doesn't support TEXTURE_BUFFER
+            // - R8UI format provides direct byte access via texelFetch
+            // - NEAREST filtering ensures no interpolation
             let texture = gl
                 .create_texture()
                 .map_err(|e| format!("Failed to create texture: {}", e))?;
@@ -321,9 +370,6 @@ impl GlTracerGl {
         }
     }
 
-    /// Create a 3D texture from the octree data
-    /// For simplicity, we'll serialize the octree to a 3D grid
-
     /// Create a 1D texture for the material palette
     unsafe fn create_material_palette_texture(gl: &Context) -> Result<Texture, String> {
         unsafe {
@@ -365,6 +411,10 @@ impl GlTracerGl {
         }
     }
 
+    /// Render the octree to GL framebuffer
+    ///
+    /// # Safety
+    /// Must be called with an active GL context. Shader program and textures must be initialized.
     pub unsafe fn render_to_gl(
         &self,
         gl: &Context,
@@ -437,6 +487,10 @@ impl GlTracerGl {
         }
     }
 
+    /// Render the octree to GL framebuffer with explicit camera
+    ///
+    /// # Safety
+    /// Must be called with an active GL context. Shader program and textures must be initialized.
     pub unsafe fn render_to_gl_with_camera(
         &self,
         gl: &Context,
@@ -527,6 +581,10 @@ impl GlTracerGl {
         }
     }
 
+    /// Clean up all GL resources
+    ///
+    /// # Safety
+    /// Must be called with an active GL context. Should only be called once at shutdown.
     pub unsafe fn destroy(self, gl: &Context) {
         unsafe {
             gl.delete_program(self.program);
