@@ -58,35 +58,18 @@ impl IVec3Ext for IVec3 {
     }
 }
 
-/// 2D quadtree for plane subdivision
-#[derive(Debug, Clone, PartialEq)]
-pub enum Quad<T> {
-    Solid(T),
-    Quads(Box<[Rc<Quad<T>>; 4]>),
-}
-
-impl<T> Quad<T> {
-    pub fn solid(value: T) -> Self {
-        Quad::Solid(value)
-    }
-
-    pub fn quads(children: [Rc<Quad<T>>; 4]) -> Self {
-        Quad::Quads(Box::new(children))
-    }
-}
-
 /// 3D cube structure with multiple subdivision strategies
 #[derive(Debug, Clone, PartialEq)]
 pub enum Cube<T> {
     Solid(T),
     Cubes(Box<[Rc<Cube<T>>; 8]>),
-    Planes {
+    Quad {
         axis: Axis,
-        quad: Rc<Quad<T>>,
+        quads: [Rc<Cube<T>>; 4],
     },
-    Slices {
+    Layers {
         axis: Axis,
-        layers: Rc<Vec<Rc<Cube<T>>>>,
+        layers: [Rc<Cube<T>>; 2],
     },
 }
 
@@ -99,12 +82,12 @@ impl<T> Cube<T> {
         Cube::Cubes(Box::new(children))
     }
 
-    pub fn planes(axis: Axis, quad: Rc<Quad<T>>) -> Self {
-        Cube::Planes { axis, quad }
+    pub fn quad(axis: Axis, quads: [Rc<Cube<T>>; 4]) -> Self {
+        Cube::Quad { axis, quads }
     }
 
-    pub fn slices(axis: Axis, layers: Rc<Vec<Rc<Cube<T>>>>) -> Self {
-        Cube::Slices { axis, layers }
+    pub fn layers(axis: Axis, layers: [Rc<Cube<T>>; 2]) -> Self {
+        Cube::Layers { axis, layers }
     }
 
     /// Check if this cube is a leaf node (not subdivided into octants)
@@ -574,11 +557,11 @@ impl Cube<u8> {
 
                 Cube::cubes(new_children.try_into().unwrap())
             }
-            Cube::Planes { axis, quad } => Cube::Planes {
+            Cube::Quad { axis, quads } => Cube::Quad {
                 axis: *axis,
-                quad: quad.clone(),
+                quads: quads.clone(),
             },
-            Cube::Slices { axis, layers } => Cube::Slices {
+            Cube::Layers { axis, layers } => Cube::Layers {
                 axis: *axis,
                 layers: layers.clone(),
             },
@@ -623,11 +606,11 @@ impl Cube<u8> {
 
                 Cube::cubes(new_children.try_into().unwrap())
             }
-            Cube::Planes { axis, quad } => Cube::Planes {
+            Cube::Quad { axis, quads } => Cube::Quad {
                 axis: *axis,
-                quad: quad.clone(),
+                quads: quads.clone(),
             },
-            Cube::Slices { axis, layers } => Cube::Slices {
+            Cube::Layers { axis, layers } => Cube::Layers {
                 axis: *axis,
                 layers: layers.clone(),
             },

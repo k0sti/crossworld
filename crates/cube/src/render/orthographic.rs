@@ -276,8 +276,8 @@ fn render_cube_2d(cube: &Cube<u8>, params: RenderParams2D) {
             // Max depth reached, treat as solid
             // Use a default value or skip
         }
-        Cube::Planes { .. } | Cube::Slices { .. } => {
-            // TODO: Implement rendering for Planes and Slices
+        Cube::Quad { .. } | Cube::Layers { .. } => {
+            // TODO: Implement rendering for Quad and Layers
         }
     }
 }

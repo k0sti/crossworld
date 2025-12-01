@@ -47,19 +47,17 @@ The existing CSM (Cube Script Model) format is text-based, which is human-readab
         - `0xA2` = 4-byte pointers (33 bytes total)
         - `0xA3` = 8-byte pointers (65 bytes total)
 
-    - **Type 3** (`0xB0-0xBF`): Planes with Quad<T> (4 children + axis)
+    - **Type 3** (`0xB0-0xBF`): Quad with 4 Cube children (+ axis)
       - `1011AAAA` where AAAA encodes axis (0=X, 1=Y, 2=Z, rest reserved)
-      - Followed by Quad<T> encoding (recursive quadtree)
-      - Quad::Solid → single value byte
-      - Quad::Quads → 4 pointers (size determined by SSSS calculation)
-      - Total size: 1 + axis encoding + Quad data
+      - Followed by 4 pointers to Cube<T> children
+      - Pointer size determined by SSSS calculation (uniform for all 4)
+      - Total size: 1 + axis encoding + 4 * pointer_size
 
-    - **Type 4** (`0xC0-0xCF`): Slices with layers (2+ children + axis)
+    - **Type 4** (`0xC0-0xCF`): Layers with 2 Cube children (+ axis)
       - `1100AAAA` where AAAA encodes axis (0=X, 1=Y, 2=Z, rest reserved)
-      - Followed by layer count byte (N ∈ [2, 255])
-      - Followed by N pointers to Cube<T> children
-      - Pointer size determined by SSSS calculation
-      - Total size: 1 + 1 (count) + (N * pointer_size)
+      - Followed by 2 pointers to Cube<T> children
+      - Pointer size determined by SSSS calculation (uniform for both)
+      - Total size: 1 + axis encoding + 2 * pointer_size
 
     - **Types 5-7** (`0xD0-0xFF`): Reserved for future use
 
@@ -117,38 +115,37 @@ The existing CSM (Cube Script Model) format is text-based, which is human-readab
   - Add `pub mod bcf;` to io module
   - Make BCF format available alongside CSM
 
-### Phase 5: Planes (Quad) Node Type (NEW)
-- **`crates/cube/src/io/bcf/serializer.rs`** - Add Planes support
-  - Handle `Cube::Planes { axis, quad }` variant
+### Phase 5: Quad Node Type (NEW)
+- **`crates/cube/src/io/bcf/serializer.rs`** - Add Quad support
+  - Handle `Cube::Quad { axis, quads }` variant
   - Encode axis as 2 bits in type byte (X=0, Y=1, Z=2)
-  - Recursively serialize `Quad<T>` structure:
-    - `Quad::Solid(T)` → single value byte
-    - `Quad::Quads([Rc<Quad<T>>; 4])` → 4 pointers
-  - Calculate pointer size for 4 children
+  - Serialize 4 Cube<T> children via pointers
+  - Calculate pointer size for 4 children (using max offset)
   - Write type byte `0xB0 | (axis as u8)`
+  - Write 4 pointers (uniform size)
 
-- **`crates/cube/src/io/bcf/parser.rs`** - Parse Planes nodes
+- **`crates/cube/src/io/bcf/parser.rs`** - Parse Quad nodes
   - Detect type byte `0xB0-0xBF`
   - Extract axis from lower 4 bits
-  - Recursively parse Quad structure
-  - Reconstruct `Cube::Planes { axis, quad: Rc<Quad<T>> }`
+  - Read 4 pointers to child Cube nodes
+  - Recursively parse 4 child Cubes
+  - Reconstruct `Cube::Quad { axis, quads: [Rc<Cube<T>>; 4] }`
 
-### Phase 6: Slices (Layers) Node Type (NEW)
-- **`crates/cube/src/io/bcf/serializer.rs`** - Add Slices support
-  - Handle `Cube::Slices { axis, layers }` variant
+### Phase 6: Layers Node Type (NEW)
+- **`crates/cube/src/io/bcf/serializer.rs`** - Add Layers support
+  - Handle `Cube::Layers { axis, layers }` variant
   - Encode axis as 2 bits in type byte
-  - Write layer count (N ∈ [2, 255]) as 1 byte
-  - Calculate pointer size for N children
-  - Write N pointers to child Cube nodes
+  - Serialize 2 Cube<T> children via pointers (fixed count)
+  - Calculate pointer size for 2 children (using max offset)
   - Write type byte `0xC0 | (axis as u8)`
+  - Write 2 pointers (uniform size)
 
-- **`crates/cube/src/io/bcf/parser.rs`** - Parse Slices nodes
+- **`crates/cube/src/io/bcf/parser.rs`** - Parse Layers nodes
   - Detect type byte `0xC0-0xCF`
   - Extract axis from lower 4 bits
-  - Read layer count byte
-  - Read N pointers
-  - Recursively parse N child Cube nodes
-  - Reconstruct `Cube::Slices { axis, layers: Rc<Vec<Rc<Cube<T>>>> }`
+  - Read 2 pointers to child Cube nodes (fixed count)
+  - Recursively parse 2 child Cubes
+  - Reconstruct `Cube::Layers { axis, layers: [Rc<Cube<T>>; 2] }`
 
 ### Not Changed
 - CSM text format (remains available for human editing)
@@ -215,19 +212,19 @@ None - binary format is additive
 - 📋 BCF integration is a future enhancement
 
 ### Pending (Phases 5-6)
-- ⏳ Planes (Quad) node type support (Type 3, 0xB0-0xBF)
-  - Needs serialization of `Cube::Planes { axis, quad }`
-  - Needs recursive Quad encoding/decoding
-  - Requires tests for all axes and Quad depths
-- ⏳ Slices (Layers) node type support (Type 4, 0xC0-0xCF)
-  - Needs serialization of `Cube::Slices { axis, layers }`
-  - Needs variable-length layer encoding (2-255 layers)
-  - Requires tests for various layer counts and types
+- ⏳ Quad node type support (Type 3, 0xB0-0xBF)
+  - Needs serialization of `Cube::Quad { axis, quads }`
+  - Needs encoding of 4 Cube children with pointers
+  - Requires tests for all axes and mixed children types
+- ⏳ Layers node type support (Type 4, 0xC0-0xCF)
+  - Needs serialization of `Cube::Layers { axis, layers }`
+  - Needs fixed-length encoding of 2 Cube children
+  - Requires tests for various children types
 - ⏳ Extended testing for mixed node types
 - ⏳ Performance benchmarks (BCF vs CSM comparison)
 
 ### Current Limitation
-The serializer currently defaults Planes and Slices variants to `write_leaf(0)`
+The serializer currently defaults Quad and Layers variants to `write_leaf(0)`
 (see `serializer.rs:62`), meaning these node types are serialized as empty leaves
 and lose their structure. This must be fixed before BCF can fully support the
 complete Cube<T> enum.

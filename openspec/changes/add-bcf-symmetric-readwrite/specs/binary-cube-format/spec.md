@@ -153,7 +153,7 @@ The system SHALL provide comprehensive documentation for BCF serialization API w
 
 #### Scenario: Limitations documented
 - **WHEN** user reads BCF module documentation
-- **THEN** SHALL clearly state: "Planes and Slices variants serialize as Solid(0)"
+- **THEN** SHALL clearly state: "Quad and Layers variants serialize as Solid(0)"
 - **AND** SHALL explain this is temporary limitation
 - **AND** SHALL indicate when full support is planned
 

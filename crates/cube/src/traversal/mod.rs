@@ -17,7 +17,7 @@ pub use visit_faces::{visit_faces, FaceInfo};
 
 /// Visitor function type for octree traversal
 ///
-/// Called only for leaf nodes (Solid, Planes, Slices, or at depth==0).
+/// Called only for leaf nodes (Solid, Quad, Layers, or at depth==0).
 ///
 /// Arguments:
 /// - `view`: View of the current voxel and its neighbors
@@ -90,7 +90,7 @@ fn traverse_recursive(
     }
 
     match &**voxel {
-        Cube::Solid(_) | Cube::Planes { .. } | Cube::Slices { .. } => {
+        Cube::Solid(_) | Cube::Quad { .. } | Cube::Layers { .. } => {
             // Leaf node at depth > 0 - can be subdivided
             let should_subdivide = visitor(view, coord, subleaf); // subleaf = true
 
