@@ -20,8 +20,8 @@ default:
     @echo "  just raycast-report   - Generate comprehensive raycast test report for all tracers"
     @echo "  just raytrace-report  - Test rendering output (color accuracy, tracer consistency)"
     @echo "  just test-raytracing  - Run complete raytracing test suite (raycast + raytrace)"
-    @echo "  just planet           - Run native voxel editor (Bevy)"
-    @echo "  just planet-release   - Run native voxel editor (optimized build)"
+    @echo "  just editor           - Run native voxel editor (Bevy)"
+    @echo "  just editor-release   - Run native voxel editor (optimized build)"
     @echo "  just proto            - Run physics prototype (Bevy)"
     @echo ""
 
@@ -161,12 +161,12 @@ test-raytracing:
     just raytrace-report
 
 # Run native voxel editor (Bevy) in development mode
-planet:
-    cargo run --bin planet
+editor:
+    cargo run --bin editor
 
 # Run native voxel editor (Bevy) in release mode
-planet-release:
-    cargo run --release --bin planet
+editor-release:
+    cargo run --release --bin editor
 
 # Run physics prototype (Bevy)
 proto:
