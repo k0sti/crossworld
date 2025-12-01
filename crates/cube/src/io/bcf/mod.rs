@@ -58,8 +58,8 @@
 //! # Limitations
 //!
 //! ## Unsupported Cube Variants
-//! - **`Cube::Planes`**: Serializes as `Solid(0)` (empty cube)
-//! - **`Cube::Slices`**: Serializes as `Solid(0)` (empty cube)
+//! - **`Cube::Quad`**: Serializes as `Solid(0)` (empty cube)
+//! - **`Cube::Layers`**: Serializes as `Solid(0)` (empty cube)
 //!
 //! These variants are experimental and not yet stabilized. A warning is logged
 //! when serializing these types. Use `Cube::Cubes` (octree) for full support.

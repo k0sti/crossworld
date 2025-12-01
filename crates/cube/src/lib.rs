@@ -14,7 +14,7 @@ pub mod wasm;
 
 // Re-export main types from core
 pub use core::{
-    octant_char_to_index, octant_index_to_char, raycast, Cube, Hit, IVec3Ext, Octree, Quad,
+    octant_char_to_index, octant_index_to_char, raycast, Cube, Hit, IVec3Ext, Octree,
     RaycastDebugState, OCTANT_POSITIONS,
 };
 

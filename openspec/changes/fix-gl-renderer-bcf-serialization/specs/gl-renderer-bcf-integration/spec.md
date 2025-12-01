@@ -9,7 +9,7 @@ The GL renderer SHALL serialize Cube octree data to Binary Cube Format (BCF) ins
 - **AND** values are clamped to 0-255
 - **AND** R2G3B2 encoded colors (128-255) are preserved correctly
 - **AND** Cubes variant is recursively converted (all 8 children)
-- **AND** Planes and Slices variants return Solid(0) with warning log
+- **AND** Quad and Layers variants return Solid(0) with warning log
 - **AND** conversion handles only octree structures (not quad-trees or layer stacks)
 
 #### Scenario: BCF serialization

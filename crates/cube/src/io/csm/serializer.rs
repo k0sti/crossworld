@@ -32,8 +32,8 @@ fn serialize_cube(cube: &Cube<u8>, path: &[usize], output: &mut String) {
                 }
             }
         }
-        Cube::Planes { .. } | Cube::Slices { .. } => {
-            // For now, skip Planes and Slices variants
+        Cube::Quad { .. } | Cube::Layers { .. } => {
+            // For now, skip Quad and Layers variants
             // They are not commonly used in simple voxel models
         }
     }

@@ -57,7 +57,7 @@ Use the existing Binary Cube Format (BCF) which:
   - **SIMPLIFIED SCOPE**: Assumes input cubes already use u8 material indices
   - **RATIONALE**: BCF format requires Cube<u8>, so enforce this at API level
 
-**IMPORTANT NOTE**: This change does NOT require a fully working BCF serializer. The existing BCF implementation (phases 1-4 of `add-binary-cube-format`) already supports Solid and Cubes variants for Cube<u8>, which is sufficient for the current renderer usage. Full Planes/Slices support is deferred to future work.
+**IMPORTANT NOTE**: This change does NOT require a fully working BCF serializer. The existing BCF implementation (phases 1-4 of `add-binary-cube-format`) already supports Solid and Cubes variants for Cube<u8>, which is sufficient for the current renderer usage. Full Quad/Layers support is deferred to future work.
 
 ### Phase 3: BCF Serialization for GPU Upload
 - **`crates/renderer/Cargo.toml`**
@@ -135,10 +135,10 @@ Use the existing Binary Cube Format (BCF) which:
 - BCF format itself (already specified and tested)
 
 ### Explicitly Out of Scope (Future Work)
-- **Planes support**: Cube::Planes variant not implemented in this change
-- **Slices support**: Cube::Slices variant not implemented in this change
+- **Quad support**: Cube::Quad variant not implemented in this change
+- **Layers support**: Cube::Layers variant not implemented in this change
 - **Current limitation**: Only Solid and Cubes (octree) variants supported
-- **Workaround**: Planes/Slices convert to Solid(0) with warning log
+- **Workaround**: Quad/Layers convert to Solid(0) with warning log
 
 ## Impact
 
@@ -151,7 +151,7 @@ Use the existing Binary Cube Format (BCF) which:
   - `add-binary-cube-format` phases 1-4 already complete and tested
   - Provides all necessary serialization for current renderer usage
 - **Does NOT require**:
-  - Full BCF serializer with Planes/Slices support (phases 5-6 of `add-binary-cube-format`)
+  - Full BCF serializer with Quad/Layers support (phases 5-6 of `add-binary-cube-format`)
   - Completion of `reimplement-raycast` (CPU tracer already working)
   - Completion of `refactor-gl-hierarchical-traversal` (different approach)
 - **Current renderer scope**: Only uses `Cube<i32>` with Cubes variant (via `create_octa_cube()` helper)

@@ -104,46 +104,46 @@
 - [ ] 9.3 BCF format NOT yet used in renderer (only CSM format)
 - [ ] 9.4 Consider BCF integration for renderer (future enhancement)
 
-## 10. Planes (Quad) Node Type Support
+## 10. Quad Node Type Support
 - [ ] 10.1 Add TYPE_PLANES constant (0xB0-0xBF, type ID 3)
-- [ ] 10.2 Document Planes encoding format:
+- [ ] 10.2 Document Quad encoding format:
   - Type byte: `1011AAAA` where AAAA encodes axis (0=X, 1=Y, 2=Z, rest reserved)
   - Followed by Quad<T> structure (recursive)
-- [ ] 10.3 Update serializer to handle Cube::Planes variant
+- [ ] 10.3 Update serializer to handle Cube::Quad variant
 - [ ] 10.4 Serialize Quad recursively (Quad::Solid vs Quad::Quads)
 - [ ] 10.5 Determine pointer size for Quad children (4 pointers)
 - [ ] 10.6 Write Quad node: axis byte + pointer encoding
 - [ ] 10.7 Update parser to handle TYPE_PLANES (0xB0-0xBF)
 - [ ] 10.8 Parse axis from AAAA bits
 - [ ] 10.9 Parse Quad structure recursively
-- [ ] 10.10 Add tests for Planes round-trip encoding
+- [ ] 10.10 Add tests for Quad round-trip encoding
 - [ ] 10.11 Test various Quad depths (leaf, depth 1, depth 2+)
 - [ ] 10.12 Test all three axes (X, Y, Z)
 
-## 11. Slices (Layers) Node Type Support
+## 11. Layers Node Type Support
 - [ ] 11.1 Add TYPE_SLICES constant (0xC0-0xCF, type ID 4)
-- [ ] 11.2 Document Slices encoding format:
+- [ ] 11.2 Document Layers encoding format:
   - Type byte: `1100AAAA` where AAAA encodes axis (0=X, 1=Y, 2=Z, rest reserved)
   - Followed by layer count (1 byte, N ∈ [2, 255])
   - Followed by N pointers to child Cube nodes
-- [ ] 11.3 Update serializer to handle Cube::Slices variant
+- [ ] 11.3 Update serializer to handle Cube::Layers variant
 - [ ] 11.4 Serialize layer count + axis
 - [ ] 11.5 Determine pointer size for N children (variable count)
-- [ ] 11.6 Write Slices node: axis + count + N pointers
+- [ ] 11.6 Write Layers node: axis + count + N pointers
 - [ ] 11.7 Update parser to handle TYPE_SLICES (0xC0-0xCF)
 - [ ] 11.8 Parse axis from AAAA bits
 - [ ] 11.9 Parse layer count byte
 - [ ] 11.10 Parse N pointers and reconstruct Vec<Rc<Cube<T>>>
-- [ ] 11.11 Add tests for Slices round-trip encoding
+- [ ] 11.11 Add tests for Layers round-trip encoding
 - [ ] 11.12 Test various layer counts (2, 3, 8, 255)
 - [ ] 11.13 Test all three axes (X, Y, Z)
 - [ ] 11.14 Test mixed layer types (some Solid, some Cubes)
 
 ## 12. Extended Testing
-- [ ] 12.1 Test Cube with mixed node types (Cubes + Planes + Slices)
-- [ ] 12.2 Test deep nesting (Cubes containing Planes containing Cubes)
-- [ ] 12.3 Test edge case: Planes with all Quad::Solid children
-- [ ] 12.4 Test edge case: Slices with minimum 2 layers
-- [ ] 12.5 Test edge case: Slices with maximum 255 layers
-- [ ] 12.6 Verify pointer size selection works correctly for Quad/Slices
-- [ ] 12.7 Compare BCF sizes: Cubes vs Planes vs Slices for equivalent data
+- [ ] 12.1 Test Cube with mixed node types (Cubes + Quad + Layers)
+- [ ] 12.2 Test deep nesting (Cubes containing Quad containing Cubes)
+- [ ] 12.3 Test edge case: Quad with all Quad::Solid children
+- [ ] 12.4 Test edge case: Layers with minimum 2 layers
+- [ ] 12.5 Test edge case: Layers with maximum 255 layers
+- [ ] 12.6 Verify pointer size selection works correctly for Quad/Layers
+- [ ] 12.7 Compare BCF sizes: Cubes vs Quad vs Layers for equivalent data
