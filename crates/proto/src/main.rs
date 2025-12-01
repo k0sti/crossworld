@@ -5,6 +5,7 @@ use bevy_rapier3d::prelude::*;
 use crossworld_world::NativeWorldCube as WorldCube;
 use serde::Deserialize;
 use std::path::Path;
+use std::rc::Rc;
 
 /// Configuration loaded from config.toml
 #[derive(Debug, Deserialize, Resource)]
@@ -21,6 +22,10 @@ struct WorldConfig {
     micro_depth: u32,
     border_depth: u32,
     seed: u32,
+    #[serde(default)]
+    border_materials: Option<[u8; 4]>,
+    #[serde(default)]
+    root_cube: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -53,6 +58,8 @@ impl Default for ProtoConfig {
                 micro_depth: 4,
                 border_depth: 1,
                 seed: 12345,
+                border_materials: Some([32, 32, 0, 0]), // Bottom: bedrock, Top: air
+                root_cube: None,
             },
             physics: PhysicsConfig {
                 gravity: -9.81,
@@ -154,16 +161,44 @@ fn setup(
 ) {
     info!("Setting up scene...");
 
-    // Generate world from config
-    info!("Generating world: macro_depth={}, micro_depth={}, seed={}",
-        config.world.macro_depth, config.world.micro_depth, config.world.seed);
+    // Create world cube - either from CSM or procedurally generated
+    let mut world_cube = if let Some(ref csm) = config.world.root_cube {
+        info!("Loading world from CSM: {} chars", csm.len());
 
-    let world_cube = WorldCube::new(
-        config.world.macro_depth,
-        config.world.micro_depth,
-        config.world.border_depth,
-        config.world.seed,
-    );
+        // Parse CSM and create world with custom root
+        match cube::parse_csm(csm) {
+            Ok(octree) => {
+                info!("CSM parsed successfully, setting as root cube");
+                let mut wc = WorldCube::new(
+                    config.world.macro_depth,
+                    config.world.micro_depth,
+                    config.world.border_depth,
+                    config.world.seed,
+                );
+                wc.set_root(octree.root);
+                wc
+            }
+            Err(e) => {
+                warn!("Failed to parse CSM: {}, falling back to procedural generation", e);
+                WorldCube::new(
+                    config.world.macro_depth,
+                    config.world.micro_depth,
+                    config.world.border_depth,
+                    config.world.seed,
+                )
+            }
+        }
+    } else {
+        info!("Generating procedural world: macro_depth={}, micro_depth={}, seed={}",
+            config.world.macro_depth, config.world.micro_depth, config.world.seed);
+
+        WorldCube::new(
+            config.world.macro_depth,
+            config.world.micro_depth,
+            config.world.border_depth,
+            config.world.seed,
+        )
+    };
 
     // Generate mesh
     let geometry_data = world_cube.generate_mesh();
