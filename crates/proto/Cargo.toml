@@ -16,6 +16,7 @@ bevy = { version = "0.15.1", default-features = false, features = [
     "bevy_render",
     "bevy_scene",
     "bevy_gizmos",
+    "tonemapping_luts",
     "x11",
     "wayland",
     "multi_threaded",
