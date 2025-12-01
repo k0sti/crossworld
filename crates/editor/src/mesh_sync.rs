@@ -1,12 +1,14 @@
 use bevy::prelude::*;
 use bevy::asset::RenderAssetUsages;
 use bevy_mesh::{Indices, PrimitiveTopology};
-use crossworld_world::GeometryData;
+use cube::{generate_face_mesh, DefaultMeshBuilder, VoxColorMapper, ColorMapper};
 use crate::voxel_scene::VoxelScene;
+use crate::config::EditorConfig;
 
-/// System that synchronizes WorldCube changes to Bevy mesh
+/// System that synchronizes Cube changes to Bevy mesh
 pub fn sync_voxel_mesh(
     mut scene: ResMut<VoxelScene>,
+    config: Res<EditorConfig>,
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -19,29 +21,45 @@ pub fn sync_voxel_mesh(
 
     info!("Regenerating voxel mesh...");
 
-    // Generate mesh from WorldCube (acquire lock)
-    let geometry = scene.world.lock().generate_frame();
+    // Generate mesh from Cube (acquire and release lock)
+    let builder = {
+        let cube = scene.cube.lock();
+        let mut builder = DefaultMeshBuilder::new();
+        let color_mapper = VoxColorMapper::new();
+        let border_materials = [0, 0, 0, 0]; // All empty (no borders)
 
-    info!("WorldCube generated: {} vertex components, {} indices, {} normals, {} colors",
-          geometry.vertices().len(),
-          geometry.indices().len(),
-          geometry.normals().len(),
-          geometry.colors().len());
+        generate_face_mesh(
+            &cube,
+            &mut builder,
+            |v| color_mapper.map(v),
+            config.max_depth,
+            border_materials,
+            config.max_depth, // base_depth = max_depth for proper scaling
+        );
 
-    if geometry.vertices().is_empty() || geometry.indices().is_empty() {
+        builder
+    }; // Lock is released here
+
+    info!("Cube generated: {} vertex components, {} indices, {} normals, {} colors",
+          builder.vertices.len(),
+          builder.indices.len(),
+          builder.normals.len(),
+          builder.colors.len());
+
+    if builder.vertices.is_empty() || builder.indices.is_empty() {
         warn!("No geometry to render! vertices: {}, indices: {}",
-              geometry.vertices().len(),
-              geometry.indices().len());
+              builder.vertices.len(),
+              builder.indices.len());
         scene.clear_dirty();
         return;
     }
 
-    // Convert GeometryData to Bevy Mesh
-    let bevy_mesh = convert_geometry_to_mesh(&geometry);
+    // Convert mesh data to Bevy Mesh
+    let bevy_mesh = convert_mesh_to_bevy(&builder, config.max_depth);
 
     info!("Generated mesh: {} vertices, {} triangles",
-          geometry.vertices().len() / 3,
-          geometry.indices().len() / 3);
+          builder.vertices.len() / 3,
+          builder.indices.len() / 3);
 
     // Remove old mesh entity if it exists
     if let Some(entity) = scene.mesh_entity {
@@ -72,22 +90,25 @@ pub fn sync_voxel_mesh(
     info!("Voxel mesh updated successfully");
 }
 
-/// Convert GeometryData from world crate to Bevy Mesh
-pub fn convert_geometry_to_mesh(geometry: &GeometryData) -> Mesh {
-    // Convert vertices: Vec<f32> (flat array) to Vec<[f32; 3]>
-    let positions: Vec<[f32; 3]> = geometry.vertices()
+/// Convert mesh builder data to Bevy Mesh
+pub fn convert_mesh_to_bevy(builder: &DefaultMeshBuilder, max_depth: u32) -> Mesh {
+    // Scale factor from normalized [0,1] space to world space
+    let scale = (1 << max_depth) as f32;
+
+    // Convert vertices: Vec<f32> (flat array) to Vec<[f32; 3]>, scaled to world space
+    let positions: Vec<[f32; 3]> = builder.vertices
         .chunks_exact(3)
-        .map(|v| [v[0], v[1], v[2]])
+        .map(|v| [v[0] * scale, v[1] * scale, v[2] * scale])
         .collect();
 
     // Convert normals: Vec<f32> (flat array) to Vec<[f32; 3]>
-    let normals: Vec<[f32; 3]> = geometry.normals()
+    let normals: Vec<[f32; 3]> = builder.normals
         .chunks_exact(3)
         .map(|n| [n[0], n[1], n[2]])
         .collect();
 
     // Convert colors: Vec<f32> (RGB flat array) to Vec<[f32; 4]> (RGBA)
-    let colors: Vec<[f32; 4]> = geometry.colors()
+    let colors: Vec<[f32; 4]> = builder.colors
         .chunks_exact(3)
         .map(|c| [c[0], c[1], c[2], 1.0]) // Add alpha channel
         .collect();
@@ -101,7 +122,7 @@ pub fn convert_geometry_to_mesh(geometry: &GeometryData) -> Mesh {
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
     mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, colors);
-    mesh.insert_indices(Indices::U32(geometry.indices().to_vec()));
+    mesh.insert_indices(Indices::U32(builder.indices.clone()));
 
     mesh
 }

@@ -17,8 +17,7 @@
     /* Path mappings */
     "baseUrl": ".",
     "paths": {
-      "@workspace/wasm": ["../wasm-world/crossworld-world.d.ts"],
-      "@workspace/wasm-cube": ["../wasm-cube/cube.d.ts"]
+      "cube": ["../wasm-cube"]
     },
 
     /* Linting */

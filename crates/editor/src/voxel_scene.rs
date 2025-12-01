@@ -1,33 +1,35 @@
 use bevy::prelude::*;
-use crossworld_world::WorldCube;
+use cube::{Cube, CubeCoord};
+use glam::IVec3;
+use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
-/// Thread-safe wrapper around WorldCube
-pub struct ThreadSafeWorldCube {
-    inner: Arc<Mutex<WorldCube>>,
+/// Thread-safe wrapper around Cube
+pub struct ThreadSafeCube {
+    inner: Arc<Mutex<Rc<Cube<u8>>>>,
 }
 
-// SAFETY: WorldCube is only accessed through Mutex, which provides
+// SAFETY: Cube is only accessed through Mutex, which provides
 // interior mutability and ensures exclusive access. The Rc pointers
-// inside WorldCube are never shared across threads - they're only
+// inside Cube are never shared across threads - they're only
 // accessed within the locked scope.
-unsafe impl Send for ThreadSafeWorldCube {}
-unsafe impl Sync for ThreadSafeWorldCube {}
+unsafe impl Send for ThreadSafeCube {}
+unsafe impl Sync for ThreadSafeCube {}
 
-impl ThreadSafeWorldCube {
-    pub fn new(world: WorldCube) -> Self {
+impl ThreadSafeCube {
+    pub fn new(cube: Rc<Cube<u8>>) -> Self {
         Self {
-            inner: Arc::new(Mutex::new(world)),
+            inner: Arc::new(Mutex::new(cube)),
         }
     }
 
-    pub fn lock(&self) -> std::sync::MutexGuard<'_, WorldCube> {
+    pub fn lock(&self) -> std::sync::MutexGuard<'_, Rc<Cube<u8>>> {
         self.inner.lock().unwrap()
     }
 }
 
-// Manual implementation of Clone for ThreadSafeWorldCube
-impl Clone for ThreadSafeWorldCube {
+// Manual implementation of Clone for ThreadSafeCube
+impl Clone for ThreadSafeCube {
     fn clone(&self) -> Self {
         Self {
             inner: Arc::clone(&self.inner),
@@ -35,11 +37,38 @@ impl Clone for ThreadSafeWorldCube {
     }
 }
 
+/// Create a cube with random colored voxels (using 8-color palette)
+fn create_initial_cube() -> Cube<u8> {
+    let mut cube = Cube::Solid(0); // Start with empty
+
+    // Place random colored voxels in an 8-cube pattern (2x2x2)
+    // Using colors 1-8 (material indices for 8-color palette)
+    let positions = [
+        (0, 0, 0, 1u8), // Red
+        (1, 0, 0, 2u8), // Orange
+        (0, 1, 0, 3u8), // Yellow
+        (1, 1, 0, 4u8), // Green
+        (0, 0, 1, 5u8), // Cyan
+        (1, 0, 1, 6u8), // Blue
+        (0, 1, 1, 7u8), // Purple
+        (1, 1, 1, 8u8), // Magenta
+    ];
+
+    // Place voxels at depth 0 (creates a 2x2x2 cube)
+    for (x, y, z, color) in positions.iter() {
+        let coord = CubeCoord::new(IVec3::new(*x, *y, *z), 0);
+        let voxel = Cube::Solid(*color);
+        cube = cube.update(coord, voxel);
+    }
+
+    cube
+}
+
 /// Resource holding the current voxel scene state
 #[derive(Resource, Clone)]
 pub struct VoxelScene {
-    /// The world cube containing all voxel data (thread-safe)
-    pub world: ThreadSafeWorldCube,
+    /// The cube containing all voxel data (thread-safe)
+    pub cube: ThreadSafeCube,
     /// Flag indicating if the mesh needs to be regenerated
     pub mesh_dirty: bool,
     /// Handle to the mesh entity (if spawned)
@@ -48,12 +77,11 @@ pub struct VoxelScene {
 
 impl Default for VoxelScene {
     fn default() -> Self {
-        // Create a WorldCube with reasonable defaults
-        // macro_depth: 3, micro_depth: 5, border_depth: 1, seed: 12345
-        let world = WorldCube::new(3, 5, 1, 12345);
+        // Create a cube with initial colored voxels
+        let cube = Rc::new(create_initial_cube());
 
         Self {
-            world: ThreadSafeWorldCube::new(world),
+            cube: ThreadSafeCube::new(cube),
             mesh_dirty: true, // Mark as dirty initially to trigger first mesh generation
             mesh_entity: None,
         }
@@ -61,13 +89,10 @@ impl Default for VoxelScene {
 }
 
 impl VoxelScene {
-    /// Create a new VoxelScene with specified parameters
-    #[allow(dead_code)]
-    pub fn new(macro_depth: u32, micro_depth: u32, border_depth: u32, seed: u32) -> Self {
-        let world = WorldCube::new(macro_depth, micro_depth, border_depth, seed);
-
+    /// Create a new VoxelScene from a Cube
+    pub fn from_cube(cube: Rc<Cube<u8>>) -> Self {
         Self {
-            world: ThreadSafeWorldCube::new(world),
+            cube: ThreadSafeCube::new(cube),
             mesh_dirty: true,
             mesh_entity: None,
         }

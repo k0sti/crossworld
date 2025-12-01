@@ -63,14 +63,20 @@ fn handle_open_file(file_state: &mut FileState, scene: &mut VoxelScene) {
         }
     };
 
-    // Parse and load CSM into scene
-    {
-        let world = scene.world.lock();
-        if let Err(e) = world.set_root(&csm_code) {
+    // Parse CSM and create new cube
+    let new_cube = match cube::parse_csm(&csm_code) {
+        Ok(octree) => std::rc::Rc::new(octree.root),
+        Err(e) => {
             error!("Failed to parse CSM: {:?}", e);
             // TODO: Show error dialog to user
             return;
         }
+    };
+
+    // Replace the cube in the scene
+    {
+        let mut cube_lock = scene.cube.lock();
+        *cube_lock = new_cube;
     }
 
     // Mark mesh as dirty to trigger regeneration
@@ -111,8 +117,9 @@ fn save_to_path(path: std::path::PathBuf, file_state: &mut FileState, scene: &Vo
 
     // Export scene to CSM format
     let csm_code = {
-        let world = scene.world.lock();
-        world.export_to_csm()
+        let cube_lock = scene.cube.lock();
+        let octree = cube::Octree::new((**cube_lock).clone());
+        cube::serialize_csm(&octree)
     };
 
     // Write to file
