@@ -56,7 +56,7 @@ pub fn handle_voxel_placement(
                     let voxel_pos = cursor_pos + IVec3::new(x - half_size, y - half_size, z - half_size);
 
                     // Place voxel at micro depth (depth 5)
-                    let mut world_cube = scene.world.lock();
+                    let world_cube = scene.world.lock();
                     world_cube.set_voxel_at_depth(
                         voxel_pos.x,
                         voxel_pos.y,

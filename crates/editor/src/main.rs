@@ -7,6 +7,9 @@ mod mesh_sync;
 mod raycast;
 mod cursor;
 mod editing;
+mod file_io;
+mod file_ops;
+mod ui;
 
 use camera::{CameraPlugin, OrbitCamera};
 use voxel_scene::VoxelScenePlugin;
@@ -14,6 +17,9 @@ use mesh_sync::MeshSyncPlugin;
 use raycast::RaycastPlugin;
 use cursor::CursorPlugin;
 use editing::EditingPlugin;
+use file_io::FileIoPlugin;
+use file_ops::FileOpsPlugin;
+use ui::UiPlugin;
 
 fn main() {
     App::new()
@@ -32,6 +38,9 @@ fn main() {
         .add_plugins(RaycastPlugin)
         .add_plugins(CursorPlugin)
         .add_plugins(EditingPlugin)
+        .add_plugins(FileIoPlugin)
+        .add_plugins(FileOpsPlugin)
+        .add_plugins(UiPlugin)
         .add_plugins(EditorPlugin)
         .run();
 }
