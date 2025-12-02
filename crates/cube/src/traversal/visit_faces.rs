@@ -20,16 +20,10 @@ pub struct FaceInfo {
     pub viewer_coord: CubeCoord,
 }
 
-/// Visit all visible faces in the octree (OLD IMPLEMENTATION - BROKEN)
-///
-/// This is the original implementation that looks FROM empty voxels TOWARD solid voxels.
-/// This approach fails when the root is solid or mostly solid, because there are no
-/// empty voxels to traverse from.
-///
-/// Kept for reference. Use `visit_faces` instead.
-#[deprecated(note = "Use visit_faces instead - this implementation is broken")]
+/// Visit all visible faces in the octree
+/// Looks from empty voxels toward solid voxels.
 #[allow(dead_code)]
-pub fn visit_faces_old<F>(
+pub fn visit_faces_outside<F>(
     root: &Cube<u8>,
     mut visitor: F,
     max_depth: u32,
