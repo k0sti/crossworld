@@ -20,6 +20,7 @@ bevy = { version = "0.15.1", default-features = false, features = [
     "x11",
     "wayland",
     "multi_threaded",
+    "dynamic_linking",
 ] }
 bevy_rapier3d = "0.28.0"
 cube = { path = "../cube" }
