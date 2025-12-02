@@ -14,7 +14,7 @@ border_materials = [32, 32, 0, 0]  # Bottom: bedrock (32), Top: air (0)
 # Values: numbers (0-255 = solid materials), [v1 v2 ... v8] = octree with 8 children
 #
 # Example 1: Simple 2x2 ground (half filled at depth 1)
-root_cube = ">a [5 5 0 0 5 5 0 0]"
+root_cube = ">a [5 5 4 9 5 5 0 0]"
 #
 # Example 2: Solid platform
 # root_cube = ">a 32"  # Material 32 = stone/bedrock
