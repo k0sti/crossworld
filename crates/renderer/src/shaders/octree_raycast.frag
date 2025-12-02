@@ -406,7 +406,7 @@ HitInfo raycastBcfOctreeAxisAligned(vec3 pos, vec3 dir) {
     // Find entry point if outside [-1,1]³
     vec3 ray_origin = pos;
     vec3 entry_normal = vec3(0.0);
-    entry_normal[axis_idx] = -float(axis_sign);
+    entry_normal[axis_idx] = -float(axis_sign); // Surface normal (outward from entry face)
 
     if (max(abs(pos.x), max(abs(pos.y), abs(pos.z))) > 1.0) {
         vec3 t_entry = (-dir_sign - pos) / dir;
@@ -669,17 +669,17 @@ HitInfo raycastBcfOctree(vec3 pos, vec3 dir) {
 
         ray_origin = pos + dir * max(t_enter, 0.0);
 
-        // Calculate entry normal
+        // Calculate entry normal (surface normal pointing outward from hit face)
         vec3 entry_point = ray_origin;
         vec3 abs_entry = abs(entry_point);
         float max_entry = max(abs_entry.x, max(abs_entry.y, abs_entry.z));
         const float EPSILON = 0.001;
         if (abs(abs_entry.x - max_entry) < EPSILON) {
-            entry_normal_axis = entry_point.x > 0.0 ? 4 : 1; // -X or +X
+            entry_normal_axis = entry_point.x > 0.0 ? 1 : 4; // +X or -X (outward)
         } else if (abs(abs_entry.y - max_entry) < EPSILON) {
-            entry_normal_axis = entry_point.y > 0.0 ? 5 : 2; // -Y or +Y
+            entry_normal_axis = entry_point.y > 0.0 ? 2 : 5; // +Y or -Y (outward)
         } else {
-            entry_normal_axis = entry_point.z > 0.0 ? 6 : 3; // -Z or +Z
+            entry_normal_axis = entry_point.z > 0.0 ? 3 : 6; // +Z or -Z (outward)
         }
     }
 
@@ -858,13 +858,13 @@ HitInfo raycastBcfOctree(vec3 pos, vec3 dir) {
                 float boundary = float(octant[exit_axis_idx]) - float(exit_sign + 1) * 0.5;
                 current_origin[exit_axis_idx] = boundary;
 
-                // Update entry normal
+                // Update entry normal (opposite of exit direction)
                 if (exit_axis_idx == 0) {
-                    current_normal = exit_sign > 0 ? 4 : 1;
+                    current_normal = exit_sign > 0 ? 4 : 1; // -X or +X
                 } else if (exit_axis_idx == 1) {
-                    current_normal = exit_sign > 0 ? 5 : 2;
+                    current_normal = exit_sign > 0 ? 5 : 2; // -Y or +Y
                 } else {
-                    current_normal = exit_sign > 0 ? 6 : 3;
+                    current_normal = exit_sign > 0 ? 6 : 3; // -Z or +Z
                 }
             }
 
