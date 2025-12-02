@@ -7,6 +7,8 @@
 
 use cube::Cube;
 use cube::io::csm::parse_csm;
+use cube::io::vox::load_vox_to_cube;
+use glam::Vec3;
 use std::rc::Rc;
 
 // ============================================================================
@@ -281,6 +283,40 @@ pub fn create_generated_cube() -> Rc<Cube<u8>> {
 }
 
 // ============================================================================
+// VOX Models
+// ============================================================================
+
+/// Load a VOX model from embedded bytes
+///
+/// Loads the robot character from assets/models/vox/chr_robot.vox
+/// Centered alignment (0.5, 0.0, 0.5) for better viewing
+pub fn create_vox_robot() -> Rc<Cube<u8>> {
+    const VOX_BYTES: &[u8] = include_bytes!("../../../../assets/models/vox/chr_robot.vox");
+    let align = Vec3::new(0.5, 0.0, 0.5); // Center X/Z, bottom Y
+    Rc::new(load_vox_to_cube(VOX_BYTES, align).expect("Failed to load chr_robot.vox"))
+}
+
+/// Load alien bot VOX model
+///
+/// Loads the alien bot from assets/models/vox/alien_bot1.vox
+/// Centered alignment for better viewing
+pub fn create_vox_alien_bot() -> Rc<Cube<u8>> {
+    const VOX_BYTES: &[u8] = include_bytes!("../../../../assets/models/vox/alien_bot1.vox");
+    let align = Vec3::new(0.5, 0.0, 0.5); // Center X/Z, bottom Y
+    Rc::new(load_vox_to_cube(VOX_BYTES, align).expect("Failed to load alien_bot1.vox"))
+}
+
+/// Load eskimo character VOX model
+///
+/// Loads the eskimo character from assets/models/vox/chr_eskimo.vox
+/// Centered alignment for better viewing
+pub fn create_vox_eskimo() -> Rc<Cube<u8>> {
+    const VOX_BYTES: &[u8] = include_bytes!("../../../../assets/models/vox/chr_eskimo.vox");
+    let align = Vec3::new(0.5, 0.0, 0.5); // Center X/Z, bottom Y
+    Rc::new(load_vox_to_cube(VOX_BYTES, align).expect("Failed to load chr_eskimo.vox"))
+}
+
+// ============================================================================
 // Model Registry
 // ============================================================================
 
@@ -298,6 +334,11 @@ pub enum TestModel {
     LayerCube,
     SdfCube,
     GeneratedCube,
+
+    // VOX models
+    VoxRobot,
+    VoxAlienBot,
+    VoxEskimo,
 }
 
 impl TestModel {
@@ -312,6 +353,9 @@ impl TestModel {
             TestModel::LayerCube,
             TestModel::SdfCube,
             TestModel::GeneratedCube,
+            TestModel::VoxRobot,
+            TestModel::VoxAlienBot,
+            TestModel::VoxEskimo,
         ]
     }
 
@@ -326,6 +370,9 @@ impl TestModel {
             TestModel::LayerCube => 1,
             TestModel::SdfCube => 1,
             TestModel::GeneratedCube => 1,
+            TestModel::VoxRobot => 5,
+            TestModel::VoxAlienBot => 5,
+            TestModel::VoxEskimo => 5,
         }
     }
 
@@ -340,6 +387,9 @@ impl TestModel {
             TestModel::LayerCube => "Layer Cube (Slices)",
             TestModel::SdfCube => "SDF Cube (Corners)",
             TestModel::GeneratedCube => "Generated Cube (Checkerboard)",
+            TestModel::VoxRobot => "Robot Character (VOX)",
+            TestModel::VoxAlienBot => "Alien Bot (VOX)",
+            TestModel::VoxEskimo => "Eskimo Character (VOX)",
         }
     }
 
@@ -354,6 +404,9 @@ impl TestModel {
             TestModel::LayerCube => "layer",
             TestModel::SdfCube => "sdf",
             TestModel::GeneratedCube => "generated",
+            TestModel::VoxRobot => "vox_robot",
+            TestModel::VoxAlienBot => "vox_alien_bot",
+            TestModel::VoxEskimo => "vox_eskimo",
         }
     }
 
@@ -368,6 +421,9 @@ impl TestModel {
             TestModel::LayerCube => create_layer_cube(),
             TestModel::SdfCube => create_sdf_cube(),
             TestModel::GeneratedCube => create_generated_cube(),
+            TestModel::VoxRobot => create_vox_robot(),
+            TestModel::VoxAlienBot => create_vox_alien_bot(),
+            TestModel::VoxEskimo => create_vox_eskimo(),
         }
     }
 }
