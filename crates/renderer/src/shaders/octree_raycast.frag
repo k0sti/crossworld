@@ -363,7 +363,17 @@ vec3 sign3(vec3 v) {
 
 // Compute starting octant; at boundary (pos=0), use ray direction
 ivec3 computeOctant(vec3 pos, vec3 dir_sign) {
-    bvec3 positive = greaterThan(pos, vec3(0.0)) || (equal(pos, vec3(0.0)) && greaterThan(dir_sign, vec3(0.0)));
+    // Use component-wise logical operations for vectors
+    bvec3 is_greater = greaterThan(pos, vec3(0.0));
+    bvec3 is_equal = equal(pos, vec3(0.0));
+    bvec3 dir_positive = greaterThan(dir_sign, vec3(0.0));
+
+    // Combine: positive if pos > 0, or if pos == 0 and dir_sign > 0
+    bvec3 positive = bvec3(
+        is_greater.x || (is_equal.x && dir_positive.x),
+        is_greater.y || (is_equal.y && dir_positive.y),
+        is_greater.z || (is_equal.z && dir_positive.z)
+    );
     return ivec3(positive);
 }
 

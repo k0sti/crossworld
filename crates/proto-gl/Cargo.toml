@@ -1,0 +1,34 @@
+[package]
+name = "proto-gl"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "proto-gl"
+path = "src/main.rs"
+
+[dependencies]
+# GL rendering
+glow = "0.14"
+glutin = "0.32"
+glutin-winit = "0.5"
+winit = "0.30"
+raw-window-handle = "0.6"
+
+# egui integration
+egui = "0.29"
+egui_glow = "0.29"
+egui-winit = "0.29"
+
+# Math and utilities
+glam = "0.29"
+rand = "0.8"
+
+# Configuration
+toml = "0.8"
+serde = { version = "1.0", features = ["derive"] }
+
+# Crossworld crates
+cube = { path = "../cube" }
+crossworld-physics = { path = "../physics" }
+renderer = { path = "../renderer" }
