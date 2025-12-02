@@ -27,9 +27,9 @@ fn map_color_to_material(r: u8, g: u8, b: u8) -> u8 {
 ///   - 1.0: Model ends at maximum coordinate
 ///
 /// # Returns
-/// A Cube<i32> where material IDs (128-255) are stored as i32 values
+/// A Cube<u8> where material IDs (128-255) are stored as u8 values
 /// The cube depth is automatically calculated to fit the model dimensions
-pub fn load_vox_to_cube(bytes: &[u8], align: Vec3) -> Result<Cube<i32>, String> {
+pub fn load_vox_to_cube(bytes: &[u8], align: Vec3) -> Result<Cube<u8>, String> {
     let vox_data =
         dot_vox::load_bytes(bytes).map_err(|e| format!("Failed to parse .vox file: {}", e))?;
 
@@ -37,7 +37,7 @@ pub fn load_vox_to_cube(bytes: &[u8], align: Vec3) -> Result<Cube<i32>, String> 
 }
 
 /// Convert DotVoxData to a Cube structure with alignment
-fn convert_dotvox_to_cube(vox_data: &DotVoxData, align: Vec3) -> Result<Cube<i32>, String> {
+fn convert_dotvox_to_cube(vox_data: &DotVoxData, align: Vec3) -> Result<Cube<u8>, String> {
     if vox_data.models.is_empty() {
         return Err("No models found in .vox file".to_string());
     }
@@ -70,7 +70,7 @@ fn convert_dotvox_to_cube(vox_data: &DotVoxData, align: Vec3) -> Result<Cube<i32
     let offset_z = ((cube_size - model_depth) as f32 * align.z) as i32;
 
     // Create cube with empty material (0)
-    let mut cube = Cube::solid(0i32);
+    let mut cube = Cube::solid(0u8);
 
     // Convert voxels with coordinate transformation and alignment
     for voxel in &dot_vox_model.voxels {
@@ -97,7 +97,7 @@ fn convert_dotvox_to_cube(vox_data: &DotVoxData, align: Vec3) -> Result<Cube<i32
                 pos: IVec3 { x, y, z },
                 depth,
             },
-            Cube::solid(material as i32),
+            Cube::solid(material),
         );
     }
 

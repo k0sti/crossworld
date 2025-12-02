@@ -3,7 +3,7 @@ use cube::{Cube, glam::Vec3};
 /// Manages avatar loading from .vox files
 #[allow(dead_code)]
 pub struct AvatarManager {
-    base_model: Cube<i32>,
+    base_model: Cube<u8>,
 }
 
 #[allow(dead_code)]
@@ -11,7 +11,7 @@ impl AvatarManager {
     /// Create a new avatar manager with an empty cube
     pub fn new() -> Self {
         Self {
-            base_model: Cube::solid(0),
+            base_model: Cube::solid(0u8),
         }
     }
 
@@ -24,7 +24,7 @@ impl AvatarManager {
     }
 
     /// Get the base model
-    pub fn get_base_model(&self) -> &Cube<i32> {
+    pub fn get_base_model(&self) -> &Cube<u8> {
         &self.base_model
     }
 }
