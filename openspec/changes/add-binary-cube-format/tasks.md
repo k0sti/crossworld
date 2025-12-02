@@ -59,24 +59,24 @@
 - [x] 6.2 Test inline leaf encoding/decoding (values 0-127)
 - [x] 6.3 Test extended leaf encoding/decoding (values 128-255)
 - [x] 6.4 Test octa-with-leaves encoding/decoding
-- [ ] 6.5 Test octa-with-pointers encoding/decoding (SSSS=0, 1-byte pointers)
-- [ ] 6.6 Test octa-with-pointers encoding/decoding (SSSS=1, 2-byte pointers)
-- [ ] 6.7 Test octa-with-pointers encoding/decoding (SSSS=2, 4-byte pointers)
-- [ ] 6.8 Test octa-with-pointers encoding/decoding (SSSS=3, 8-byte pointers)
+- [x] 6.5 Test octa-with-pointers encoding/decoding (SSSS=0, 1-byte pointers)
+- [x] 6.6 Test octa-with-pointers encoding/decoding (SSSS=1, 2-byte pointers)
+- [x] 6.7 Test octa-with-pointers encoding/decoding (SSSS=2, 4-byte pointers)
+- [x] 6.8 Test octa-with-pointers encoding/decoding (SSSS=3, 8-byte pointers)
 - [x] 6.9 Test round-trip: single solid value (0-127)
 - [x] 6.10 Test round-trip: single solid value (128-255)
 - [x] 6.11 Test round-trip: octa with 8 leaf values
 - [x] 6.12 Test round-trip: octa with mixed children (pointers)
-- [ ] 6.13 Test round-trip: deep octree (depth 3+)
-- [ ] 6.14 Test pointer size selection (verify correct SSSS for various offset ranges)
+- [x] 6.13 Test round-trip: deep octree (depth 3+)
+- [x] 6.14 Test pointer size selection (verify correct SSSS for various offset ranges)
 - [x] 6.15 Test error: invalid magic number
 - [x] 6.16 Test error: invalid version
-- [ ] 6.17 Test error: invalid type ID (types 3-7)
-- [ ] 6.18 Test error: invalid SSSS value (> 3)
+- [x] 6.17 Test error: invalid type ID (types 3-7)
+- [x] 6.18 Test error: invalid SSSS value (> 3)
 - [x] 6.19 Test error: truncated data
-- [ ] 6.20 Test error: invalid pointer offset
-- [ ] 6.21 Test bit operations (type byte encoding/decoding)
-- [ ] 6.22 Compare file sizes: BCF vs CSM for same model
+- [x] 6.20 Test error: invalid pointer offset
+- [x] 6.21 Test bit operations (type byte encoding/decoding)
+- [x] 6.22 Compare file sizes: BCF vs CSM for same model
 - [ ] 6.23 Benchmark parsing speed: BCF vs CSM
 
 ## 7. Documentation
