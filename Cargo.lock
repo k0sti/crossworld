@@ -7322,6 +7322,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "proto-gl"
+version = "0.1.0"
+dependencies = [
+ "crossworld-physics",
+ "cube",
+ "egui 0.29.1",
+ "egui-winit",
+ "egui_glow",
+ "glam 0.29.3",
+ "glow 0.14.2",
+ "glutin",
+ "glutin-winit",
+ "rand 0.8.5",
+ "raw-window-handle",
+ "renderer",
+ "serde",
+ "toml",
+ "winit",
+]
+
+[[package]]
 name = "pxfm"
 version = "0.1.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
