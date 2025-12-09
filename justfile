@@ -171,3 +171,7 @@ editor-release:
 # Run physics prototype (Bevy)
 proto:
     cargo run --bin proto
+
+# Run proto-gl physics viewer (OpenGL, lightweight)
+proto-gl:
+    cargo run --bin proto-gl
