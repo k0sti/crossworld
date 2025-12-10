@@ -401,23 +401,6 @@ impl<T: Clone + PartialEq> Cube<T> {
     }
 }
 
-impl Cube<i32> {
-    /// Get ID value for this cube
-    #[inline]
-    pub fn id(&self) -> i32 {
-        match self {
-            Cube::Solid(v) => *v,
-            Cube::Cubes(children) => {
-                // Return most common ID among children (like Scala version)
-                let ids: Vec<i32> = children.iter().map(|c| c.id()).collect();
-                // Simple mode calculation - just return first for now
-                ids[0]
-            }
-            _ => 0,
-        }
-    }
-}
-
 impl Cube<u8> {
     /// Get ID value for this cube
     #[inline]

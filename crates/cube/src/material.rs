@@ -650,6 +650,27 @@ pub const MATERIAL_REGISTRY: [Material; 128] = [
     },
 ];
 
+// Commonly used material indices for terrain generation
+pub const HARD_GROUND: u8 = 16;
+pub const WATER: u8 = 17;
+pub const DIRT: u8 = 18;
+pub const GRASS: u8 = 19;
+pub const STONE: u8 = 20;
+pub const COBBLESTONE: u8 = 21;
+pub const SAND: u8 = 22;
+pub const SANDSTONE: u8 = 23;
+pub const GRAVEL: u8 = 24;
+pub const CLAY: u8 = 25;
+pub const SNOW: u8 = 26;
+pub const ICE_SOLID: u8 = 27;
+pub const NETHERRACK: u8 = 29;
+pub const GRANITE: u8 = 30;
+pub const ANDESITE: u8 = 32;
+pub const LIMESTONE: u8 = 34;
+pub const BASALT: u8 = 35;
+pub const COAL: u8 = 48;
+pub const IRON: u8 = 49;
+
 /// Get material color for a voxel value
 ///
 /// Supports both terrain materials (0-127) and R2G3B2 encoded colors (128-255).
