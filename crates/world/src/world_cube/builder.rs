@@ -1,27 +1,7 @@
 use cube::{Cube, IVec3Ext, glam::IVec3};
+use cube::material::*;
 use noise::{Fbm, NoiseFn, Perlin};
 use std::rc::Rc;
-
-// Material indices from materials.json
-const HARD_GROUND: u8 = 16; // Bedrock
-const STONE: u8 = 20; // Primary underground
-const DIRT: u8 = 18; // Underground and surface
-const GRASS: u8 = 19; // Surface vegetation
-const WATER: u8 = 17; // Water bodies
-const SAND: u8 = 22; // Beaches and deserts
-const SANDSTONE: u8 = 23; // Desert underground
-const GRAVEL: u8 = 24; // River beds
-const CLAY: u8 = 25; // Underground pockets
-const SNOW: u8 = 26; // Mountain peaks
-const ICE_SOLID: u8 = 27; // Frozen biomes
-const GRANITE: u8 = 30; // Mountain core
-const ANDESITE: u8 = 32; // Mountain variation
-const LIMESTONE: u8 = 34; // Underground caves
-const BASALT: u8 = 35; // Volcanic areas
-const COAL: u8 = 48; // Ore veins
-const IRON: u8 = 49; // Ore veins
-const NETHERRACK: u8 = 29; // Deep underground
-const COBBLESTONE: u8 = 21; // Stone variation
 
 /// Biome type determined by temperature and moisture
 #[derive(Debug, Clone, Copy, PartialEq)]
