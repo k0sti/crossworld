@@ -256,7 +256,7 @@ impl<T: Clone> Cube<T> {
         }
     }
 
-    /// Get default ID for non-Cubes variants (override in Cube<i32>)
+    /// Get default ID for non-Cubes variants
     fn id_default(&self) -> T {
         match self {
             Cube::Solid(v) => v.clone(),

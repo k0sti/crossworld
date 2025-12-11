@@ -36,7 +36,7 @@ fn main() {
     // Simulation parameters
     let dt = 1.0 / 60.0; // 60 FPS
     let total_time = 5.0; // 5 seconds
-    let steps = (total_time / dt) as usize;
+    let _steps = (total_time / dt) as usize;
 
     println!("Simulating {} seconds of physics...\n", total_time);
 

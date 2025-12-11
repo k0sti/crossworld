@@ -200,7 +200,7 @@ fn get_miss_test_cases() -> Vec<RaycastTestCase> {
 // Generic Test Runner
 // ============================================================================
 
-fn run_test_cases_on_cube(cube: &Cube<i32>, test_cases: Vec<RaycastTestCase>, tracer_name: &str) {
+fn run_test_cases_on_cube(cube: &Cube<u8>, test_cases: Vec<RaycastTestCase>, tracer_name: &str) {
     for test_case in test_cases {
         let mut debug = RaycastDebugState::default();
         let hit = cube::raycast(cube, test_case.pos, test_case.dir, Some(&mut debug));

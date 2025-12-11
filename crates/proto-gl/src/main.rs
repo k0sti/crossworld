@@ -716,51 +716,6 @@ fn calculate_cube_depth(cube: &Cube<u8>) -> u32 {
     depth_recursive(cube)
 }
 
-/// Convert Cube<i32> to Cube<u8> by mapping material IDs
-fn convert_cube_i32_to_u8(cube: &Cube<i32>) -> Cube<u8> {
-    match cube {
-        Cube::Solid(v) => {
-            let u8_val = if *v > 0 { (*v as u8).max(1) } else { 0 };
-            Cube::Solid(u8_val)
-        }
-        Cube::Cubes(children) => {
-            let converted_children: Box<[Rc<Cube<u8>>; 8]> = Box::new([
-                Rc::new(convert_cube_i32_to_u8(&children[0])),
-                Rc::new(convert_cube_i32_to_u8(&children[1])),
-                Rc::new(convert_cube_i32_to_u8(&children[2])),
-                Rc::new(convert_cube_i32_to_u8(&children[3])),
-                Rc::new(convert_cube_i32_to_u8(&children[4])),
-                Rc::new(convert_cube_i32_to_u8(&children[5])),
-                Rc::new(convert_cube_i32_to_u8(&children[6])),
-                Rc::new(convert_cube_i32_to_u8(&children[7])),
-            ]);
-            Cube::Cubes(converted_children)
-        }
-        Cube::Quad { axis, quads } => {
-            let converted_quads: [Rc<Cube<u8>>; 4] = [
-                Rc::new(convert_cube_i32_to_u8(&quads[0])),
-                Rc::new(convert_cube_i32_to_u8(&quads[1])),
-                Rc::new(convert_cube_i32_to_u8(&quads[2])),
-                Rc::new(convert_cube_i32_to_u8(&quads[3])),
-            ];
-            Cube::Quad {
-                axis: *axis,
-                quads: converted_quads,
-            }
-        }
-        Cube::Layers { axis, layers } => {
-            let converted_layers: [Rc<Cube<u8>>; 2] = [
-                Rc::new(convert_cube_i32_to_u8(&layers[0])),
-                Rc::new(convert_cube_i32_to_u8(&layers[1])),
-            ];
-            Cube::Layers {
-                axis: *axis,
-                layers: converted_layers,
-            }
-        }
-    }
-}
-
 /// Load .vox models from a directory
 fn load_vox_models(models_path: &str) -> Vec<VoxModel> {
     use std::fs;
@@ -811,7 +766,7 @@ fn load_vox_models(models_path: &str) -> Vec<VoxModel> {
                 // Load with center alignment
                 match load_vox_to_cube(&bytes, Vec3::splat(0.5)) {
                     Ok(cube_i32) => {
-                        // Convert Cube<i32> to Cube<u8>
+                        // Convert Cube<u8> to Cube<u8>
                         let cube = convert_cube_i32_to_u8(&cube_i32);
 
                         // Calculate depth from cube size

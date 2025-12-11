@@ -6,7 +6,7 @@ use crate::{
     generate_face_mesh,
     glam::{IVec3, Vec3},
     parse_csm, raycast, serialize_csm, ColorMapper, Cube, CubeCoord, DefaultMeshBuilder, Octree,
-    PaletteColorMapper, Quad, VoxColorMapper,
+    PaletteColorMapper, VoxColorMapper,
 };
 
 // ============================================================================
