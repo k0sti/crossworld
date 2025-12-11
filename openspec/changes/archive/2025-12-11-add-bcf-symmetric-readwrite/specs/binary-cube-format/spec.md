@@ -1,6 +1,6 @@
 # Binary Cube Format (BCF) Specification - Delta
 
-## MODIFIED Requirements
+## ADDED Requirements
 
 ### Requirement: BCF Round-Trip Serialization
 The system SHALL provide deterministic serialization and deserialization for Cube<u8> structures such that multiple serialize-deserialize cycles produce identical binary output.
@@ -45,8 +45,6 @@ The system SHALL ensure that logically equivalent Cube<u8> structures produce id
 - **THEN** serializer MAY optimize to octa-leaves encoding (9 bytes)
 - **AND** deserialization SHALL reconstruct equivalent Cube::Cubes structure
 - **AND** logical equality SHALL be preserved (original == deserialized)
-
-## ADDED Requirements
 
 ### Requirement: BCF Error Handling Validation
 The system SHALL reject invalid BCF binary data with descriptive error messages.
