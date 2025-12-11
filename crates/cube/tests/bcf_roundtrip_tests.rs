@@ -913,7 +913,6 @@ fn test_type_byte_bit_operations() {
 
 #[test]
 fn test_bcf_vs_csm_file_size() {
-    use cube::core::Octree;
     use cube::io::csm::serialize_csm;
 
     // Test various structures to compare BCF vs CSM sizes
@@ -921,7 +920,7 @@ fn test_bcf_vs_csm_file_size() {
     // 1. Single solid value
     let single = Cube::Solid(42u8);
     let bcf_single = serialize_bcf(&single);
-    let csm_single = serialize_csm(&Octree::new(single.clone()));
+    let csm_single = serialize_csm(&single.clone());
     println!(
         "Single solid: BCF={} bytes, CSM={} bytes",
         bcf_single.len(),
@@ -935,7 +934,7 @@ fn test_bcf_vs_csm_file_size() {
     // 2. Octa with 8 leaves
     let octa = create_octa_leaves([1, 2, 3, 4, 5, 6, 7, 8]);
     let bcf_octa = serialize_bcf(&octa);
-    let csm_octa = serialize_csm(&Octree::new(octa.clone()));
+    let csm_octa = serialize_csm(&octa.clone());
     println!(
         "Octa leaves: BCF={} bytes, CSM={} bytes",
         bcf_octa.len(),
@@ -959,7 +958,7 @@ fn test_bcf_vs_csm_file_size() {
         Rc::new(Cube::Solid(23)),
     ]));
     let bcf_deep = serialize_bcf(&deep);
-    let csm_deep = serialize_csm(&Octree::new(deep.clone()));
+    let csm_deep = serialize_csm(&deep.clone());
     println!(
         "Deep tree: BCF={} bytes, CSM={} bytes",
         bcf_deep.len(),

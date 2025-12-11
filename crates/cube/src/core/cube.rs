@@ -599,6 +599,30 @@ impl Cube<u8> {
             },
         }
     }
+
+    /// Create an empty cube (all air/zeros)
+    pub fn empty() -> Self {
+        Cube::Solid(0)
+    }
+
+    /// Set a voxel at the given position and depth
+    ///
+    /// # Arguments
+    /// * `x`, `y`, `z` - Voxel coordinates in range [0, 2^depth)
+    /// * `depth` - Tree depth (0 = single voxel, 4 = 16x16x16 grid)
+    /// * `value` - Value to set
+    ///
+    /// # Returns
+    /// A new Cube with the voxel set
+    pub fn set_voxel(&self, x: i32, y: i32, z: i32, depth: u32, value: u8) -> Self {
+        self.update(
+            CubeCoord {
+                pos: IVec3 { x, y, z },
+                depth,
+            },
+            Cube::solid(value),
+        )
+    }
 }
 
 /// Convert octant char (a-h) to index (0-7)
@@ -631,45 +655,6 @@ pub fn octant_index_to_char(index: usize) -> Option<char> {
     }
 }
 
-/// Main octree structure
-#[derive(Debug, Clone)]
-pub struct Octree {
-    pub root: Cube<u8>,
-}
-
-impl Octree {
-    pub fn new(root: Cube<u8>) -> Self {
-        Octree { root }
-    }
-
-    pub fn empty() -> Self {
-        Octree {
-            root: Cube::Solid(0),
-        }
-    }
-
-    /// Set a voxel at the given position and depth
-    ///
-    /// # Arguments
-    /// * `x`, `y`, `z` - Voxel coordinates in range [0, 2^depth)
-    /// * `depth` - Tree depth (0 = single voxel, 4 = 16x16x16 grid)
-    /// * `value` - Value to set
-    ///
-    /// # Returns
-    /// A new Octree with the voxel set
-    pub fn set_voxel(&self, x: i32, y: i32, z: i32, depth: u32, value: u8) -> Self {
-        Octree {
-            root: self.root.update(
-                CubeCoord {
-                    pos: IVec3 { x, y, z },
-                    depth,
-                },
-                Cube::solid(value),
-            ),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -685,18 +670,17 @@ mod tests {
 
     #[test]
     fn test_simple_cube() {
-        let tree = Octree::new(Cube::Solid(42));
+        let cube = Cube::Solid(42);
 
         // Use visitor pattern to count voxels
         let mut count = 0;
-        tree.root
-            .visit_leaves(0, IVec3::ZERO, &mut |cube, _depth, _pos| {
-                if let Cube::Solid(value) = cube {
-                    if *value > 0 {
-                        count += 1;
-                    }
+        cube.visit_leaves(0, IVec3::ZERO, &mut |cube, _depth, _pos| {
+            if let Cube::Solid(value) = cube {
+                if *value > 0 {
+                    count += 1;
                 }
-            });
+            }
+        });
 
         assert_eq!(count, 1);
     }

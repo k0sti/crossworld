@@ -106,8 +106,8 @@ impl WorldCube {
     #[wasm_bindgen(js_name = setRoot)]
     pub fn set_root(&self, csm_code: &str) -> Result<(), JsValue> {
         match cube::parse_csm(csm_code) {
-            Ok(octree) => {
-                self.inner.borrow_mut().set_root(octree.root);
+            Ok(cube) => {
+                self.inner.borrow_mut().set_root(cube);
                 Ok(())
             }
             Err(e) => Err(JsValue::from_str(&format!("Parse error: {}", e))),

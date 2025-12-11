@@ -1,5 +1,5 @@
 use crate::axis::Axis;
-use crate::core::{octant_char_to_index, Cube, Octree};
+use crate::core::{octant_char_to_index, Cube};
 use nom::{
     branch::alt,
     bytes::complete::take_while,
@@ -221,7 +221,7 @@ fn epoch<'a>(
 }
 
 // Full model parser
-fn parse_model(input: &str) -> IResult<&str, Octree> {
+fn parse_model(input: &str) -> IResult<&str, Cube<u8>> {
     let mut prev_epoch: Option<HashMap<Vec<usize>, Rc<Cube<u8>>>> = None;
     let mut current_epoch = HashMap::new();
     let mut remaining = input;
@@ -257,7 +257,7 @@ fn parse_model(input: &str) -> IResult<&str, Octree> {
         build_cube_from_assignments(&current_epoch, &[])
     };
 
-    Ok((remaining, Octree::new(root)))
+    Ok((remaining, root))
 }
 
 // Build cube from partial assignments
@@ -291,10 +291,10 @@ fn build_cube_from_assignments(
     Cube::cubes(children.try_into().unwrap())
 }
 
-/// Parse CSM text into an Octree
-pub fn parse_csm(input: &str) -> Result<Octree> {
+/// Parse CSM text into a Cube
+pub fn parse_csm(input: &str) -> Result<Cube<u8>> {
     match parse_model(input) {
-        Ok((_, tree)) => Ok(tree),
+        Ok((_, cube)) => Ok(cube),
         Err(e) => Err(CsmError::ParseError(format!("{:?}", e))),
     }
 }
@@ -306,16 +306,16 @@ mod tests {
     #[test]
     fn test_parse_simple_value() {
         let csm = ">a 42";
-        let tree = parse_csm(csm).unwrap();
+        let cube = parse_csm(csm).unwrap();
         // Just verify it parses without error - detailed mesh generation tested elsewhere
-        assert!(matches!(tree.root, crate::core::Cube::Cubes(_)));
+        assert!(matches!(cube, crate::core::Cube::Cubes(_)));
     }
 
     #[test]
     fn test_parse_array() {
         let csm = ">a [1 2 3 4 5 6 7 8]";
-        let tree = parse_csm(csm).unwrap();
-        assert!(matches!(tree.root, crate::core::Cube::Cubes(_)));
+        let cube = parse_csm(csm).unwrap();
+        assert!(matches!(cube, crate::core::Cube::Cubes(_)));
     }
 
     #[test]
@@ -324,8 +324,8 @@ mod tests {
             >a [1 2 3 4 5 6 7 8]
             >aa [10 11 12 13 14 15 16 17]
         "#;
-        let tree = parse_csm(csm).unwrap();
-        assert!(matches!(tree.root, crate::core::Cube::Cubes(_)));
+        let cube = parse_csm(csm).unwrap();
+        assert!(matches!(cube, crate::core::Cube::Cubes(_)));
     }
 
     #[test]
@@ -334,8 +334,8 @@ mod tests {
             >a 100
             | >b <a
         "#;
-        let tree = parse_csm(csm).unwrap();
-        assert!(matches!(tree.root, crate::core::Cube::Cubes(_)));
+        let cube = parse_csm(csm).unwrap();
+        assert!(matches!(cube, crate::core::Cube::Cubes(_)));
     }
 
     #[test]
@@ -343,8 +343,8 @@ mod tests {
         let csm = r#">a [1 2 3 4 5 6 7 8]
             | >b ^x <a
         "#;
-        let tree = parse_csm(csm).unwrap();
-        assert!(matches!(tree.root, crate::core::Cube::Cubes(_)));
+        let cube = parse_csm(csm).unwrap();
+        assert!(matches!(cube, crate::core::Cube::Cubes(_)));
     }
 
     #[test]
@@ -353,7 +353,7 @@ mod tests {
             >a [1 2 3 4 5 6 7 8]
             | >b /x <a
         "#;
-        let tree = parse_csm(csm).unwrap();
-        assert!(matches!(tree.root, crate::core::Cube::Cubes(_)));
+        let cube = parse_csm(csm).unwrap();
+        assert!(matches!(cube, crate::core::Cube::Cubes(_)));
     }
 }

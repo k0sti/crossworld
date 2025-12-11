@@ -216,9 +216,8 @@ fn setup(
     info!("Loading cube from CSM: {} chars", config.world.root_cube.len());
 
     let cube = match cube::parse_csm(&config.world.root_cube) {
-        Ok(octree) => {
+        Ok(mut cube) => {
             info!("CSM parsed successfully");
-            let mut cube = octree.root;
 
             // Apply border layers if requested
             if config.world.border_depth > 0 {

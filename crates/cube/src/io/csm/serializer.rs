@@ -1,10 +1,10 @@
-use crate::core::{octant_index_to_char, Cube, Octree};
+use crate::core::{octant_index_to_char, Cube};
 use std::fmt::Write as FmtWrite;
 
-/// Serialize an Octree to CSM text format
-pub fn serialize_csm(tree: &Octree) -> String {
+/// Serialize a Cube to CSM text format
+pub fn serialize_csm(cube: &Cube<u8>) -> String {
     let mut output = String::new();
-    serialize_cube(&tree.root, &[], &mut output);
+    serialize_cube(cube, &[], &mut output);
     output
 }
 
@@ -76,16 +76,16 @@ mod tests {
 
     #[test]
     fn test_serialize_simple_solid() {
-        let tree = Octree::new(Cube::Solid(42));
+        let cube = Cube::Solid(42);
         // Root solid with value should output nothing (or just the root)
-        let csm = serialize_csm(&tree);
+        let csm = serialize_csm(&cube);
         // Root solid values are typically not serialized unless at a path
         assert!(csm.is_empty() || csm.contains("42"));
     }
 
     #[test]
     fn test_serialize_array() {
-        let tree = Octree::new(Cube::cubes([
+        let cube = Cube::cubes([
             Rc::new(Cube::Solid(1)),
             Rc::new(Cube::Solid(2)),
             Rc::new(Cube::Solid(3)),
@@ -94,16 +94,16 @@ mod tests {
             Rc::new(Cube::Solid(6)),
             Rc::new(Cube::Solid(7)),
             Rc::new(Cube::Solid(8)),
-        ]));
+        ]);
 
-        let csm = serialize_csm(&tree);
+        let csm = serialize_csm(&cube);
         // Since root is Cubes with all Solid children, should output as array
         assert!(csm.contains("[1 2 3 4 5 6 7 8]"));
     }
 
     #[test]
     fn test_serialize_nested() {
-        let tree = Octree::new(Cube::cubes([
+        let cube = Cube::cubes([
             Rc::new(Cube::cubes([
                 Rc::new(Cube::Solid(10)),
                 Rc::new(Cube::Solid(11)),
@@ -121,9 +121,9 @@ mod tests {
             Rc::new(Cube::Solid(0)),
             Rc::new(Cube::Solid(0)),
             Rc::new(Cube::Solid(0)),
-        ]));
+        ]);
 
-        let csm = serialize_csm(&tree);
+        let csm = serialize_csm(&cube);
         // Should output nested structure at path 'a'
         assert!(csm.contains(">a"));
         assert!(csm.contains("[10 11 12 13 14 15 16 17]"));
@@ -132,7 +132,7 @@ mod tests {
     #[test]
     fn test_roundtrip() {
         // Create a simple structure
-        let original = Octree::new(Cube::cubes([
+        let original = Cube::cubes([
             Rc::new(Cube::Solid(1)),
             Rc::new(Cube::Solid(2)),
             Rc::new(Cube::Solid(3)),
@@ -141,7 +141,7 @@ mod tests {
             Rc::new(Cube::Solid(6)),
             Rc::new(Cube::Solid(7)),
             Rc::new(Cube::Solid(8)),
-        ]));
+        ]);
 
         // Serialize
         let csm = serialize_csm(&original);
@@ -150,7 +150,7 @@ mod tests {
         let parsed = parse_csm(&csm).unwrap();
 
         // Compare root structures (simplified comparison)
-        match (&original.root, &parsed.root) {
+        match (&original, &parsed) {
             (Cube::Cubes(orig_children), Cube::Cubes(parsed_children)) => {
                 for i in 0..8 {
                     assert_eq!(orig_children[i].id(), parsed_children[i].id());

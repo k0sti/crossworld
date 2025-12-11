@@ -9,9 +9,9 @@ use std::rc::Rc;
 
 /// Parse CSM string and return as Cube<u8>
 fn parse_test_csm(csm: &str) -> Rc<Cube<u8>> {
-    let octree = parse_csm(csm).expect("Failed to parse CSM");
-    // octree.root is already Cube<u8>, just wrap in Rc
-    Rc::new(octree.root)
+    let cube = parse_csm(csm).expect("Failed to parse CSM");
+    // parse_csm returns Cube<u8>, just wrap in Rc
+    Rc::new(cube)
 }
 
 // ============================================================================

@@ -1,11 +1,11 @@
 mod builder;
 
 use crate::GeometryData;
-use cube::{ColorMapper, Cube, CubeCoord, DefaultMeshBuilder, Octree, glam::IVec3, serialize_csm};
+use cube::{ColorMapper, Cube, CubeCoord, DefaultMeshBuilder, glam::IVec3, serialize_csm};
 use noise::{Fbm, Perlin};
 
 pub struct WorldCube {
-    octree: Octree,
+    cube: Cube<u8>,
     macro_depth: u32,  // World size = 2^macro_depth, terrain generation depth
     render_depth: u32, // Maximum traversal depth for mesh generation
     border_depth: u32, // Number of border cube layers
@@ -52,7 +52,7 @@ impl WorldCube {
         let render_depth = macro_depth + micro_depth + border_depth;
 
         Self {
-            octree: Octree::new(root_with_borders),
+            cube: root_with_borders,
             macro_depth,
             render_depth,
             border_depth,
@@ -125,9 +125,8 @@ impl WorldCube {
     /// The octree will automatically subdivide to support the requested depth
     pub fn set_voxel_at_depth(&mut self, x: i32, y: i32, z: i32, depth: u32, color_index: u8) {
         let pos = IVec3::new(x, y, z);
-        self.octree.root = self
-            .octree
-            .root
+        self.cube = self
+            .cube
             .update(CubeCoord::new(pos, depth), Cube::Solid(color_index))
             .simplified();
     }
@@ -139,13 +138,13 @@ impl WorldCube {
 
     /// Export the octree to CSM format
     pub fn export_to_csm(&self) -> String {
-        serialize_csm(&self.octree)
+        serialize_csm(&self.cube)
     }
 
     /// Get a reference to the octree root (for testing)
     #[cfg(test)]
     pub fn get_root(&self) -> &Cube<u8> {
-        &self.octree.root
+        &self.cube
     }
 
     pub fn generate_mesh(&self) -> GeometryData {
@@ -166,7 +165,7 @@ impl WorldCube {
         // Base depth is where voxels are 1 unit in size (macro_depth + border_depth)
         let base_depth = self.macro_depth + self.border_depth;
         cube::generate_face_mesh(
-            &self.octree.root,
+            &self.cube,
             &mut builder,
             |index| color_mapper.map(index),
             self.render_depth,
@@ -207,14 +206,14 @@ impl WorldCube {
     /// Get reference to the root cube
     #[allow(dead_code)]
     pub fn root(&self) -> &Cube<u8> {
-        &self.octree.root
+        &self.cube
     }
 
     /// Set a new root cube
     ///
     /// Replaces the entire octree root. The cube will be simplified automatically.
     pub fn set_root(&mut self, cube: Cube<u8>) {
-        self.octree.root = cube.simplified();
+        self.cube = cube.simplified();
     }
 }
 
