@@ -216,7 +216,7 @@ fn run_test_cases_on_cube(cube: &Cube<u8>, test_cases: Vec<RaycastTestCase>, tra
         if let Some(hit) = &hit {
             if let Some(expected_value) = test_case.expected_value {
                 assert_eq!(
-                    hit.value, expected_value,
+                    hit.value as i32, expected_value,
                     "{} ({}): value mismatch",
                     test_case.name, tracer_name
                 );
@@ -236,25 +236,25 @@ fn run_test_cases_on_cube(cube: &Cube<u8>, test_cases: Vec<RaycastTestCase>, tra
 
 #[test]
 fn test_cube_tracer_axis_aligned_rays() {
-    let cube = Cube::Solid(1i32);
+    let cube = Cube::Solid(1u8);
     run_test_cases_on_cube(&cube, get_axis_aligned_test_cases(), "Cube");
 }
 
 #[test]
 fn test_cube_tracer_diagonal_rays() {
-    let cube = Cube::Solid(1i32);
+    let cube = Cube::Solid(1u8);
     run_test_cases_on_cube(&cube, get_diagonal_test_cases(), "Cube");
 }
 
 #[test]
 fn test_cube_tracer_miss_cases() {
-    let cube = Cube::Solid(1i32);
+    let cube = Cube::Solid(1u8);
     run_test_cases_on_cube(&cube, get_miss_test_cases(), "Cube");
 }
 
 #[test]
 fn test_cube_tracer_immediate_hit() {
-    let cube = Cube::Solid(1i32);
+    let cube = Cube::Solid(1u8);
 
     // Test entering face voxel that has color
     let pos = Vec3::new(0.5, 0.5, 0.0);

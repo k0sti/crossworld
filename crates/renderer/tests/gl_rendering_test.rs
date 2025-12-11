@@ -46,16 +46,16 @@ fn test_octa_cube_structure() {
                 match child.as_ref() {
                     Cube::Solid(val) => println!("    Child {}: Solid({})", i, val),
                     Cube::Cubes(_) => println!("    Child {}: Cubes (subdivided)", i),
-                    Cube::Planes { .. } => println!("    Child {}: Planes", i),
-                    Cube::Slices { .. } => println!("    Child {}: Slices", i),
+                    Cube::Quad { .. } => println!("    Child {}: Quad", i),
+                    Cube::Layers { .. } => println!("    Child {}: Layers", i),
                 }
             }
         }
-        Cube::Planes { .. } => {
-            println!("  Cube is Planes variant");
+        Cube::Quad { .. } => {
+            println!("  Cube is Quad variant");
         }
-        Cube::Slices { .. } => {
-            println!("  Cube is Slices variant");
+        Cube::Layers { .. } => {
+            println!("  Cube is Layers variant");
         }
     }
 
