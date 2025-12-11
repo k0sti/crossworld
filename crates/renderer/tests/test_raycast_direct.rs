@@ -84,9 +84,6 @@ fn test_raycast_octa_cube_from_boundary() {
         None => {
             println!("✗ MISS - Expected to hit when starting inside solid!");
         }
-        _ => {
-            println!("⚠ Unexpected match arm");
-        }
     }
 
     // Test 3: Ray into empty octant (should miss)
@@ -109,9 +106,6 @@ fn test_raycast_octa_cube_from_boundary() {
         None => {
             println!("✓ MISS - Correctly missed empty octant 3");
         }
-        _ => {
-            println!("⚠ Unexpected match arm");
-        }
     }
 
     // Test 4: Ray that should traverse from octant 0 to octant 1
@@ -132,9 +126,6 @@ fn test_raycast_octa_cube_from_boundary() {
         }
         None => {
             println!("✗ MISS - Expected to hit solid voxel!");
-        }
-        _ => {
-            println!("⚠ Unexpected match arm");
         }
     }
 }
