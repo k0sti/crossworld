@@ -14,13 +14,12 @@ use std::rc::Rc;
 // ============================================================================
 // Helper Functions
 // ============================================================================
-
 /// Parse CSM string into Cube<u8>
 ///
-/// CSM parser now directly returns Cube<u8>
+/// CSM parser directly returns Cube<u8>
 fn parse_csm_u8(csm: &str) -> Rc<Cube<u8>> {
-    let octree = parse_csm(csm).expect("Failed to parse CSM");
-    Rc::new(octree.root.clone())
+    let cube = parse_csm(csm).expect("Failed to parse CSM");
+    Rc::new(cube)
 }
 
 // ============================================================================

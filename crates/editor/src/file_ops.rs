@@ -65,7 +65,7 @@ fn handle_open_file(file_state: &mut FileState, scene: &mut VoxelScene) {
 
     // Parse CSM and create new cube
     let new_cube = match cube::parse_csm(&csm_code) {
-        Ok(octree) => std::rc::Rc::new(octree.root),
+        Ok(cube) => std::rc::Rc::new(cube),
         Err(e) => {
             error!("Failed to parse CSM: {:?}", e);
             // TODO: Show error dialog to user
@@ -118,8 +118,7 @@ fn save_to_path(path: std::path::PathBuf, file_state: &mut FileState, scene: &Vo
     // Export scene to CSM format
     let csm_code = {
         let cube_lock = scene.cube.lock();
-        let octree = cube::Octree::new((**cube_lock).clone());
-        cube::serialize_csm(&octree)
+        cube::serialize_csm(&(**cube_lock))
     };
 
     // Write to file

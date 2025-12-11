@@ -7,7 +7,7 @@ pub fn generate_world(config: &WorldConfig) -> (Cube<u8>, u32) {
     // Parse CSM
     let parse_result = parse_csm(&config.root_cube);
     let mut cube = match parse_result {
-        Ok(result) => result.root,
+        Ok(result) => result,
         Err(e) => {
             eprintln!("Warning: Failed to parse CSM: {}", e);
             eprintln!("Using simple octree default");

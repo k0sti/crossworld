@@ -5,7 +5,7 @@ use wasm_bindgen::prelude::*;
 use crate::{
     generate_face_mesh,
     glam::{IVec3, Vec3},
-    parse_csm, raycast, serialize_csm, ColorMapper, Cube, CubeCoord, DefaultMeshBuilder, Octree,
+    parse_csm, raycast, serialize_csm, ColorMapper, Cube, CubeCoord, DefaultMeshBuilder,
     PaletteColorMapper, VoxColorMapper,
 };
 
@@ -221,7 +221,7 @@ impl WasmCube {
     /// MeshResult with vertices, indices, normals, colors or ParseError
     #[wasm_bindgen(js_name = generateMesh)]
     pub fn generate_mesh(&self, palette: JsValue, max_depth: u32) -> JsValue {
-        let octree = Octree::new((*self.inner).clone());
+        let cube = (*self.inner).clone();
         let mut builder = DefaultMeshBuilder::new();
 
         // Border materials for avatars: all empty (0)
@@ -232,7 +232,7 @@ impl WasmCube {
         if palette.is_null() || palette.is_undefined() {
             let mapper = VoxColorMapper::new();
             generate_face_mesh(
-                &octree.root,
+                &cube,
                 &mut builder,
                 |v| mapper.map(v),
                 max_depth,
@@ -247,7 +247,7 @@ impl WasmCube {
                         colors.iter().map(|c| [c.r, c.g, c.b]).collect();
                     let mapper = PaletteColorMapper::new(palette_colors);
                     generate_face_mesh(
-                        &octree.root,
+                        &cube,
                         &mut builder,
                         |v| mapper.map(v),
                         max_depth,
@@ -293,15 +293,15 @@ impl WasmCube {
     /// Cubescript format string
     #[wasm_bindgen(js_name = printScript)]
     pub fn print_script(&self, optimize: bool) -> String {
-        let octree = Octree::new((*self.inner).clone());
+        let cube = (*self.inner).clone();
 
         if optimize {
             // TODO: Implement optimization
             // For now, just serialize normally and add a comment
-            let script = serialize_csm(&octree);
+            let script = serialize_csm(&cube);
             format!("// Optimized serialization not yet implemented\n{}", script)
         } else {
-            serialize_csm(&octree)
+            serialize_csm(&cube)
         }
     }
 }
@@ -323,8 +323,8 @@ impl WasmCube {
 #[wasm_bindgen(js_name = loadCsm)]
 pub fn load_csm(cubescript: &str) -> Result<WasmCube, JsValue> {
     match parse_csm(cubescript) {
-        Ok(octree) => Ok(WasmCube {
-            inner: Rc::new(octree.root),
+        Ok(cube) => Ok(WasmCube {
+            inner: Rc::new(cube),
         }),
         Err(e) => {
             let error = ParseError {

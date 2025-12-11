@@ -1,4 +1,4 @@
-use crate::core::{Cube, Octree};
+use crate::core::Cube;
 use crate::mesh::ColorMapper;
 use glam::IVec3;
 
@@ -143,17 +143,17 @@ impl RenderedImage {
 /// This renders at pixel-level resolution where each voxel at max_depth corresponds to 1 pixel.
 /// For example, depth 5 produces a 32x32 image (2^5 = 32).
 pub fn render_orthographic(
-    octree: &Octree,
+    cube: &Cube<u8>,
     direction: ViewDirection,
     max_depth: Option<usize>,
     mapper: &dyn ColorMapper,
 ) -> RenderedImage {
-    render_orthographic_2d(octree, direction, max_depth, mapper)
+    render_orthographic_2d(cube, direction, max_depth, mapper)
 }
 
-/// Render octree to 2D image from specified view direction (2D rendering - pixel level)
+/// Render cube to 2D image from specified view direction (2D rendering - pixel level)
 pub fn render_orthographic_2d(
-    octree: &Octree,
+    cube: &Cube<u8>,
     direction: ViewDirection,
     max_depth: Option<usize>,
     mapper: &dyn ColorMapper,
@@ -165,9 +165,9 @@ pub fn render_orthographic_2d(
 
     let mut image = RenderedImage::new(size, size);
 
-    // Render the octree
+    // Render the cube
     render_cube_2d(
-        &octree.root,
+        cube,
         RenderParams2D {
             position: (0.0, 0.0, 0.0),
             size: 1.0,
@@ -191,16 +191,16 @@ pub fn render_orthographic_2d(
 /// - voxel_size_log2=2: Each voxel rendered as 4x4 pixels
 /// - voxel_size_log2=3: Each voxel rendered as 8x8 pixels
 ///
-/// The image size is determined by the octree structure and voxel size.
+/// The image size is determined by the cube structure and voxel size.
 pub fn render_orthographic_3d(
-    octree: &Octree,
+    cube: &Cube<u8>,
     direction: ViewDirection,
     voxel_size_log2: usize,
     mapper: &dyn ColorMapper,
 ) -> RenderedImage {
-    // Extract voxels directly from octree (no need to generate full mesh)
+    // Extract voxels directly from cube (no need to generate full mesh)
     // Use max depth of 16 to ensure we traverse entire octree structure
-    let voxels = extract_voxels_from_octree(octree, mapper, 16);
+    let voxels = extract_voxels_from_cube(cube, mapper, 16);
 
     if voxels.is_empty() {
         return RenderedImage::new(1 << voxel_size_log2, 1 << voxel_size_log2);
@@ -284,17 +284,16 @@ fn render_cube_2d(cube: &Cube<u8>, params: RenderParams2D) {
 
 /// Extract voxel information from mesh data
 /// Returns vec of (position, size, color_rgb_u8)
-/// Extract voxel data directly from octree
-fn extract_voxels_from_octree(
-    octree: &Octree,
+/// Extract voxel data directly from cube
+fn extract_voxels_from_cube(
+    cube: &Cube<u8>,
     mapper: &dyn ColorMapper,
     max_depth: u32,
 ) -> Vec<VoxelData> {
     let mut voxels = Vec::new();
 
-    // Use visitor pattern to traverse octree and extract voxel data
-    octree
-        .root
+    // Use visitor pattern to traverse cube and extract voxel data
+    cube
         .visit_leaves(max_depth, IVec3::ZERO, &mut |cube, depth, pos| {
             if let Cube::Solid(value) = cube {
                 if *value == 0 {
@@ -540,10 +539,10 @@ mod tests {
 
     #[test]
     fn test_render_simple_cube() {
-        let tree = Octree::new(Cube::Solid(42));
+        let cube = Cube::Solid(42);
         let mapper = HsvColorMapper::new();
 
-        let image = render_orthographic(&tree, ViewDirection::PosZ, Some(1), &mapper);
+        let image = render_orthographic(&cube, ViewDirection::PosZ, Some(1), &mapper);
 
         assert_eq!(image.width, 2);
         assert_eq!(image.height, 2);
@@ -560,10 +559,10 @@ mod tests {
         let csm = r#"
             >a [1 2 3 4 5 6 7 8]
         "#;
-        let tree = parse_csm(csm).unwrap();
+        let cube = parse_csm(csm).unwrap();
         let mapper = HsvColorMapper::new();
 
-        let image = render_orthographic(&tree, ViewDirection::PosZ, Some(2), &mapper);
+        let image = render_orthographic(&cube, ViewDirection::PosZ, Some(2), &mapper);
 
         assert_eq!(image.width, 4);
         assert_eq!(image.height, 4);
@@ -583,11 +582,11 @@ mod tests {
         let csm = r#"
             >a [1 0 0 0 0 0 0 0]
         "#;
-        let tree = parse_csm(csm).unwrap();
+        let cube = parse_csm(csm).unwrap();
         let mapper = HsvColorMapper::new();
 
         for direction in ViewDirection::all() {
-            let image = render_orthographic(&tree, direction, Some(2), &mapper);
+            let image = render_orthographic(&cube, direction, Some(2), &mapper);
             assert_eq!(image.width, 4);
             assert_eq!(image.height, 4);
 
@@ -616,10 +615,10 @@ mod tests {
             >a [1 2 3 4 5 6 7 8]
             >aa [10 11 12 13 14 15 16 17]
         "#;
-        let tree = parse_csm(csm).unwrap();
+        let cube = parse_csm(csm).unwrap();
         let mapper = HsvColorMapper::new();
 
-        let image = render_orthographic(&tree, ViewDirection::PosZ, Some(4), &mapper);
+        let image = render_orthographic(&cube, ViewDirection::PosZ, Some(4), &mapper);
         assert_eq!(image.width, 16);
         assert_eq!(image.height, 16);
 
@@ -651,11 +650,11 @@ mod tests {
             >a [1 2 3 4 5 6 7 8]
             >aa [10 11 12 13 14 15 16 17]
         "#;
-        let tree = parse_csm(csm).unwrap();
+        let cube = parse_csm(csm).unwrap();
         let mapper = HsvColorMapper::new();
 
         for direction in ViewDirection::all() {
-            let image = render_orthographic(&tree, direction, Some(5), &mapper);
+            let image = render_orthographic(&cube, direction, Some(5), &mapper);
 
             // Verify image properties
             assert_eq!(image.width, 32, "Direction {:?} has wrong width", direction);
@@ -694,10 +693,10 @@ mod tests {
         let csm = r#"
             >a [1 0 0 0 2 0 0 0]
         "#;
-        let tree = parse_csm(csm).unwrap();
+        let cube = parse_csm(csm).unwrap();
         let mapper = HsvColorMapper::new();
 
-        let image_orig = render_orthographic(&tree, ViewDirection::PosZ, Some(3), &mapper);
+        let image_orig = render_orthographic(&cube, ViewDirection::PosZ, Some(3), &mapper);
         image_orig
             .save_png("test_output/mirror/original.png")
             .unwrap();
@@ -707,8 +706,8 @@ mod tests {
             >a [1 0 0 0 2 0 0 0]
             | >b /x <a
         "#;
-        let tree_mx = parse_csm(csm_mirror_x).unwrap();
-        let image_mx = render_orthographic(&tree_mx, ViewDirection::PosZ, Some(3), &mapper);
+        let cube_mx = parse_csm(csm_mirror_x).unwrap();
+        let image_mx = render_orthographic(&cube_mx, ViewDirection::PosZ, Some(3), &mapper);
         image_mx
             .save_png("test_output/mirror/mirror_x.png")
             .unwrap();
@@ -718,8 +717,8 @@ mod tests {
             >a [1 0 0 0 2 0 0 0]
             | >b /y <a
         "#;
-        let tree_my = parse_csm(csm_mirror_y).unwrap();
-        let image_my = render_orthographic(&tree_my, ViewDirection::PosZ, Some(3), &mapper);
+        let cube_my = parse_csm(csm_mirror_y).unwrap();
+        let image_my = render_orthographic(&cube_my, ViewDirection::PosZ, Some(3), &mapper);
         image_my
             .save_png("test_output/mirror/mirror_y.png")
             .unwrap();
@@ -729,8 +728,8 @@ mod tests {
             >a [1 0 0 0 2 0 0 0]
             | >b /z <a
         "#;
-        let tree_mz = parse_csm(csm_mirror_z).unwrap();
-        let image_mz = render_orthographic(&tree_mz, ViewDirection::PosZ, Some(3), &mapper);
+        let cube_mz = parse_csm(csm_mirror_z).unwrap();
+        let image_mz = render_orthographic(&cube_mz, ViewDirection::PosZ, Some(3), &mapper);
         image_mz
             .save_png("test_output/mirror/mirror_z.png")
             .unwrap();
@@ -753,10 +752,10 @@ mod tests {
         let csm_base = r#"
             >a [1 0 0 0 [10 0 0 0 0 0 0 0] 0 0 0]
         "#;
-        let tree_base = parse_csm(csm_base).unwrap();
+        let cube_base = parse_csm(csm_base).unwrap();
         let mapper = HsvColorMapper::new();
 
-        let image_base = render_orthographic(&tree_base, ViewDirection::PosZ, Some(4), &mapper);
+        let image_base = render_orthographic(&cube_base, ViewDirection::PosZ, Some(4), &mapper);
         image_base
             .save_png("test_output/swap_vs_mirror/base.png")
             .unwrap();
@@ -766,8 +765,8 @@ mod tests {
             >a [1 0 0 0 [10 0 0 0 0 0 0 0] 0 0 0]
             | >b ^x <a
         "#;
-        let tree_swap = parse_csm(csm_swap).unwrap();
-        let image_swap = render_orthographic(&tree_swap, ViewDirection::PosZ, Some(4), &mapper);
+        let cube_swap = parse_csm(csm_swap).unwrap();
+        let image_swap = render_orthographic(&cube_swap, ViewDirection::PosZ, Some(4), &mapper);
         image_swap
             .save_png("test_output/swap_vs_mirror/swap_x.png")
             .unwrap();
@@ -777,8 +776,8 @@ mod tests {
             >a [1 0 0 0 [10 0 0 0 0 0 0 0] 0 0 0]
             | >b /x <a
         "#;
-        let tree_mirror = parse_csm(csm_mirror).unwrap();
-        let image_mirror = render_orthographic(&tree_mirror, ViewDirection::PosZ, Some(4), &mapper);
+        let cube_mirror = parse_csm(csm_mirror).unwrap();
+        let image_mirror = render_orthographic(&cube_mirror, ViewDirection::PosZ, Some(4), &mapper);
         image_mirror
             .save_png("test_output/swap_vs_mirror/mirror_x.png")
             .unwrap();
@@ -802,11 +801,11 @@ mod tests {
             >aa [10 11 12 13 14 15 16 17]
             >aaa [20 21 22 23 24 25 26 27]
         "#;
-        let tree = parse_csm(csm).unwrap();
+        let cube = parse_csm(csm).unwrap();
         let mapper = HsvColorMapper::new();
 
         for depth in [2, 3, 4, 5, 6] {
-            let image = render_orthographic(&tree, ViewDirection::PosZ, Some(depth), &mapper);
+            let image = render_orthographic(&cube, ViewDirection::PosZ, Some(depth), &mapper);
             let expected_size = 1 << depth;
 
             if image.width != expected_size {
@@ -844,7 +843,7 @@ mod tests {
             | >c /y <b
         "#;
 
-        let tree = parse_csm(csm).unwrap();
+        let cube = parse_csm(csm).unwrap();
         let mapper = HsvColorMapper::new();
 
         // Render from multiple angles
@@ -853,7 +852,7 @@ mod tests {
             ViewDirection::PosY,
             ViewDirection::PosZ,
         ] {
-            let image = render_orthographic(&tree, direction, Some(6), &mapper);
+            let image = render_orthographic(&cube, direction, Some(6), &mapper);
 
             // Check for reasonable color distribution
             let colored_count = image
@@ -912,12 +911,12 @@ mod tests {
             >aha [810 811 812 813 814 815 816 817]
         "#;
 
-        let tree = parse_csm(csm).unwrap();
+        let cube = parse_csm(csm).unwrap();
         let mapper = HsvColorMapper::new();
 
         // Render from all 6 directions at depth 5 (32x32 pixels)
         for direction in ViewDirection::all() {
-            let image = render_orthographic(&tree, direction, Some(5), &mapper);
+            let image = render_orthographic(&cube, direction, Some(5), &mapper);
 
             // Verify size
             assert_eq!(image.width, 32);
@@ -981,13 +980,13 @@ mod tests {
         }
 
         // Also render at higher resolution (depth 6 = 64x64) for better detail
-        let image_hires = render_orthographic(&tree, ViewDirection::PosZ, Some(6), &mapper);
+        let image_hires = render_orthographic(&cube, ViewDirection::PosZ, Some(6), &mapper);
         image_hires
             .save_png("test_output/deep_colorful/pos_z_hires_64x64.png")
             .expect("Failed to save high-res image");
 
         // And at depth 7 for maximum detail (128x128)
-        let image_ultra = render_orthographic(&tree, ViewDirection::PosZ, Some(7), &mapper);
+        let image_ultra = render_orthographic(&cube, ViewDirection::PosZ, Some(7), &mapper);
         image_ultra
             .save_png("test_output/deep_colorful/pos_z_ultra_128x128.png")
             .expect("Failed to save ultra-res image");
@@ -995,30 +994,30 @@ mod tests {
 
     #[test]
     fn test_depth_limits() {
-        let tree = Octree::new(Cube::Solid(1));
+        let cube = Cube::Solid(1);
 
         // Depth 1 = 2x2
-        let img1 = render_orthographic(&tree, ViewDirection::PosZ, Some(1), &HsvColorMapper::new());
+        let img1 = render_orthographic(&cube, ViewDirection::PosZ, Some(1), &HsvColorMapper::new());
         assert_eq!(img1.width, 2);
 
         // Depth 3 = 8x8
-        let img3 = render_orthographic(&tree, ViewDirection::PosZ, Some(3), &HsvColorMapper::new());
+        let img3 = render_orthographic(&cube, ViewDirection::PosZ, Some(3), &HsvColorMapper::new());
         assert_eq!(img3.width, 8);
 
         // Depth 5 = 32x32
-        let img5 = render_orthographic(&tree, ViewDirection::PosZ, Some(5), &HsvColorMapper::new());
+        let img5 = render_orthographic(&cube, ViewDirection::PosZ, Some(5), &HsvColorMapper::new());
         assert_eq!(img5.width, 32);
     }
 
     #[test]
     fn test_render_3d_basic() {
-        let tree = Octree::new(Cube::Solid(42));
+        let cube = Cube::Solid(42);
         let mapper = HsvColorMapper::new();
 
         // Render with voxel size 2^2 (4x4 pixels per voxel)
         // Single solid cube at position (0,0,0) with size 1.0
         // Should produce 4x4 image
-        let image = render_orthographic_3d(&tree, ViewDirection::PosZ, 2, &mapper);
+        let image = render_orthographic_3d(&cube, ViewDirection::PosZ, 2, &mapper);
 
         assert_eq!(image.width, 4);
         assert_eq!(image.height, 4);
@@ -1037,14 +1036,14 @@ mod tests {
         let csm = r#"
             >a [1 2 3 4 5 6 7 8]
         "#;
-        let tree = parse_csm(csm).unwrap();
+        let cube = parse_csm(csm).unwrap();
         let mapper = HsvColorMapper::new();
 
         // Test different voxel sizes
         // The mesh contains 8 voxels, each at positions that span [0, 1]
         for voxel_size_log2 in [1, 2, 3, 4] {
             let image =
-                render_orthographic_3d(&tree, ViewDirection::PosZ, voxel_size_log2, &mapper);
+                render_orthographic_3d(&cube, ViewDirection::PosZ, voxel_size_log2, &mapper);
 
             // Image size depends on voxel bounds from mesh
             // For subdivided octree [0,1] range: each half-cube gets drawn
@@ -1077,17 +1076,17 @@ mod tests {
             >a [1 2 3 4 5 6 7 8]
             >aa [10 11 12 13 14 15 16 17]
         "#;
-        let tree = parse_csm(csm).unwrap();
+        let cube = parse_csm(csm).unwrap();
         let mapper = HsvColorMapper::new();
 
         // Render with 2D at depth 5 (32x32)
-        let image_2d = render_orthographic_2d(&tree, ViewDirection::PosZ, Some(5), &mapper);
+        let image_2d = render_orthographic_2d(&cube, ViewDirection::PosZ, Some(5), &mapper);
         assert_eq!(image_2d.width, 32);
 
         // Render with 3D using mesh
         // Voxel size 2^5 means each mesh voxel becomes 32 pixels
         // The mesh spans [0,1], so image will be 32x32
-        let image_3d = render_orthographic_3d(&tree, ViewDirection::PosZ, 5, &mapper);
+        let image_3d = render_orthographic_3d(&cube, ViewDirection::PosZ, 5, &mapper);
 
         // Create side-by-side comparison
         let comparison = RenderedImage::side_by_side(&image_2d, &image_3d);
@@ -1122,16 +1121,16 @@ mod tests {
             >aa [10 11 12 13 14 15 16 17]
             >ab [20 21 22 23 24 25 26 27]
         "#;
-        let tree = parse_csm(csm).unwrap();
+        let cube = parse_csm(csm).unwrap();
         let mapper = HsvColorMapper::new();
 
         // Test all 6 directions
         for direction in ViewDirection::all() {
             // 2D render at depth 5 (32x32)
-            let image_2d = render_orthographic_2d(&tree, direction, Some(5), &mapper);
+            let image_2d = render_orthographic_2d(&cube, direction, Some(5), &mapper);
 
             // 3D render using mesh
-            let image_3d = render_orthographic_3d(&tree, direction, 5, &mapper);
+            let image_3d = render_orthographic_3d(&cube, direction, 5, &mapper);
 
             // Create comparison image (2D left, 3D right)
             let comparison = RenderedImage::side_by_side(&image_2d, &image_3d);
@@ -1166,11 +1165,11 @@ mod tests {
             >ab [21 22 23 24 25 26 27 28]
             >ac [31 32 33 34 35 36 37 38]
         "#;
-        let tree = parse_csm(csm).unwrap();
+        let cube = parse_csm(csm).unwrap();
         let mapper = HsvColorMapper::new();
 
         // Render with large voxels for visibility (8x8 pixels per voxel)
-        let image = render_orthographic_3d(&tree, ViewDirection::PosZ, 3, &mapper);
+        let image = render_orthographic_3d(&cube, ViewDirection::PosZ, 3, &mapper);
 
         // Verify we have colored pixels
         let colored_count = image
@@ -1197,7 +1196,7 @@ mod tests {
         );
 
         // Also test at higher resolution (16x16 pixels per voxel)
-        let image_hires = render_orthographic_3d(&tree, ViewDirection::PosZ, 4, &mapper);
+        let image_hires = render_orthographic_3d(&cube, ViewDirection::PosZ, 4, &mapper);
         image_hires
             .save_png("test_output/3d_render/large_voxels_128x128.png")
             .unwrap();
@@ -1215,14 +1214,14 @@ mod tests {
         let _ = fs::create_dir_all("test_output/side_by_side");
 
         // Create two different renders
-        let tree1 = Octree::new(Cube::Solid(10));
+        let cube1 = Cube::Solid(10);
         let mapper = HsvColorMapper::new();
 
-        let img1 = render_orthographic_2d(&tree1, ViewDirection::PosZ, Some(4), &mapper);
+        let img1 = render_orthographic_2d(&cube1, ViewDirection::PosZ, Some(4), &mapper);
 
         let csm2 = r#">a [1 2 3 4 5 6 7 8]"#;
-        let tree2 = parse_csm(csm2).unwrap();
-        let img2 = render_orthographic_2d(&tree2, ViewDirection::PosZ, Some(4), &mapper);
+        let cube2 = parse_csm(csm2).unwrap();
+        let img2 = render_orthographic_2d(&cube2, ViewDirection::PosZ, Some(4), &mapper);
 
         // Create side-by-side
         let combined = RenderedImage::side_by_side(&img1, &img2);
@@ -1262,13 +1261,13 @@ mod tests {
             >abb [220 221 222 223 224 225 226 227]
         "#;
 
-        let tree = parse_csm(csm).unwrap();
+        let cube = parse_csm(csm).unwrap();
         let mapper = HsvColorMapper::new();
 
         // Render from all 6 directions with voxel_size_log2=4 (16x16 pixels per voxel)
         // This should produce images that are at least 4x4 and show detail
         for direction in ViewDirection::all() {
-            let image_3d = render_orthographic_3d(&tree, direction, 4, &mapper);
+            let image_3d = render_orthographic_3d(&cube, direction, 4, &mapper);
 
             // Verify minimum size
             assert!(
@@ -1312,7 +1311,7 @@ mod tests {
         }
 
         // Also create high-resolution versions
-        let image_hires = render_orthographic_3d(&tree, ViewDirection::PosZ, 6, &mapper);
+        let image_hires = render_orthographic_3d(&cube, ViewDirection::PosZ, 6, &mapper);
         image_hires
             .save_png("test_output/3d_deep_directions/pos_z_hires.png")
             .unwrap();
@@ -1321,7 +1320,7 @@ mod tests {
             image_hires.width, image_hires.height
         );
 
-        let image_ultra = render_orthographic_3d(&tree, ViewDirection::PosZ, 7, &mapper);
+        let image_ultra = render_orthographic_3d(&cube, ViewDirection::PosZ, 7, &mapper);
         image_ultra
             .save_png("test_output/3d_deep_directions/pos_z_ultra.png")
             .unwrap();
@@ -1400,16 +1399,16 @@ mod tests {
         }
         csm.push_str("]\n");
 
-        let tree = parse_csm(&csm).expect("Failed to parse transparency test CSM");
+        let cube = parse_csm(&csm).expect("Failed to parse transparency test CSM");
         let mapper = HsvColorMapper::new();
 
         // Test all 6 directions
         for direction in ViewDirection::all() {
             // 2D render at depth 6 (64x64 pixels, one pixel per leaf voxel)
-            let image_2d = render_orthographic_2d(&tree, direction, Some(6), &mapper);
+            let image_2d = render_orthographic_2d(&cube, direction, Some(6), &mapper);
 
             // 3D render with 8 pixels per voxel for better visibility
-            let image_3d = render_orthographic_3d(&tree, direction, 3, &mapper);
+            let image_3d = render_orthographic_3d(&cube, direction, 3, &mapper);
 
             // Verify that we have black (transparent) pixels
             let black_2d = image_2d
@@ -1468,8 +1467,8 @@ mod tests {
         }
 
         // Also save a high-resolution version for detailed inspection
-        let image_2d_hires = render_orthographic_2d(&tree, ViewDirection::PosZ, Some(8), &mapper);
-        let image_3d_hires = render_orthographic_3d(&tree, ViewDirection::PosZ, 5, &mapper);
+        let image_2d_hires = render_orthographic_2d(&cube, ViewDirection::PosZ, Some(8), &mapper);
+        let image_3d_hires = render_orthographic_3d(&cube, ViewDirection::PosZ, 5, &mapper);
 
         let comparison_hires = RenderedImage::side_by_side(&image_2d_hires, &image_3d_hires);
         comparison_hires
