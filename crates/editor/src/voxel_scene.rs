@@ -90,6 +90,7 @@ impl Default for VoxelScene {
 
 impl VoxelScene {
     /// Create a new VoxelScene from a Cube
+    #[allow(dead_code)]
     pub fn from_cube(cube: Rc<Cube<u8>>) -> Self {
         Self {
             cube: ThreadSafeCube::new(cube),

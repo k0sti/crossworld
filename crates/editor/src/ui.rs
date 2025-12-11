@@ -5,7 +5,7 @@ use crate::file_io::FileState;
 
 /// Resource to track frames elapsed (for skipping initial frames)
 #[derive(Resource, Default)]
-struct UiFrameCounter(u32);
+pub(crate) struct UiFrameCounter(u32);
 
 /// System that renders the UI panels
 pub fn render_ui(

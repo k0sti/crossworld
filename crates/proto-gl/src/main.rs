@@ -120,6 +120,7 @@ impl OrbitCamera {
         }
     }
 
+    #[allow(dead_code)]
     fn view_matrix(&self) -> Mat4 {
         let x = self.distance * self.pitch.cos() * self.yaw.sin();
         let y = self.distance * self.pitch.sin();
@@ -168,6 +169,7 @@ struct VoxModel {
 }
 
 /// A dynamic cube object in the physics simulation
+#[allow(dead_code)]
 struct CubeObject {
     /// Voxel data
     cube: Rc<Cube<u8>>,
@@ -765,10 +767,7 @@ fn load_vox_models(models_path: &str) -> Vec<VoxModel> {
 
                 // Load with center alignment
                 match load_vox_to_cube(&bytes, Vec3::splat(0.5)) {
-                    Ok(cube_i32) => {
-                        // Convert Cube<u8> to Cube<u8>
-                        let cube = convert_cube_i32_to_u8(&cube_i32);
-
+                    Ok(cube) => {
                         // Calculate depth from cube size
                         let depth = calculate_cube_depth(&cube);
                         let name = file_path
