@@ -92,6 +92,7 @@ impl GameServer {
     }
 
     /// Validate position update for anti-cheat
+    #[allow(dead_code)]
     pub fn validate_position(&self, hex_id: &str, new_pos: Vec3) -> bool {
         if !self.config.position_validation {
             return true;
@@ -137,6 +138,7 @@ impl GameServer {
     }
 
     /// Handle position violation
+    #[allow(dead_code)]
     pub fn handle_position_violation(&self, hex_id: &str) {
         if let Some(mut player) = self.players.get_mut(hex_id) {
             player.violation_count += 1;
@@ -153,6 +155,7 @@ impl GameServer {
     }
 
     /// Get players within radius of a position
+    #[allow(dead_code)]
     pub fn get_players_in_radius(&self, center: Vec3, radius: f32) -> Vec<String> {
         let radius_sq = radius * radius;
         self.players
@@ -183,6 +186,7 @@ pub struct Player {
 
 /// Server configuration
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct ServerConfig {
     // Network
     pub bind_address: String,

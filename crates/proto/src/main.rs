@@ -8,6 +8,7 @@ use std::path::Path;
 
 /// Configuration loaded from config.toml
 #[derive(Debug, Deserialize, Resource)]
+#[allow(dead_code)]
 struct ProtoConfig {
     world: WorldConfig,
     physics: PhysicsConfig,
@@ -16,6 +17,7 @@ struct ProtoConfig {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct WorldConfig {
     macro_depth: u32,
     micro_depth: u32,
@@ -37,6 +39,7 @@ struct PhysicsConfig {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct SpawningConfig {
     spawn_count: u32,
     models_path: String,
@@ -46,6 +49,7 @@ struct SpawningConfig {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct PlayerConfig {
     move_speed: f32,
     jump_force: f32,

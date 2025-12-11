@@ -18,6 +18,7 @@ impl Default for EditorConfig {
 
 impl EditorConfig {
     /// Get the cube size (2^max_depth)
+    #[allow(dead_code)]
     pub fn cube_size(&self) -> u32 {
         1 << self.max_depth
     }
