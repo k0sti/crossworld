@@ -4,7 +4,7 @@
 //! mesh generation, face culling, and rendering correctness.
 
 use cube::io::csm::parse_csm;
-use cube::{Cube, Quad};
+use cube::Cube;
 use std::rc::Rc;
 
 /// Parse CSM string and return as Cube<u8>

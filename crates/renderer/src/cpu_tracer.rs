@@ -1,6 +1,6 @@
 use crate::renderer::*;
 use crate::scenes::create_octa_cube;
-use cube::{Cube, parse_csm};
+use cube::Cube;
 use image::{ImageBuffer, Rgb};
 use std::rc::Rc;
 
@@ -30,34 +30,6 @@ impl CpuCubeTracer {
             cube,
             image_buffer: None,
             disable_lighting: false,
-        }
-    }
-
-    #[allow(dead_code)]
-    pub fn new_with_cubscript(cubscript: &str) -> Self {
-        let cube = Self::parse_cube(cubscript);
-        Self {
-            cube,
-            image_buffer: None,
-            disable_lighting: false,
-        }
-    }
-
-    /// Parse cubscript code and return a Cube instance
-    /// Note: parse_csm returns Cube<i32>, but we need Cube<u8>, so this is a placeholder
-    fn parse_cube(cubscript: &str) -> Rc<Cube<u8>> {
-        match parse_csm(cubscript) {
-            Ok(_octree) => {
-                // TODO: Implement Cube<i32> to Cube<u8> conversion
-                eprintln!("Warning: CSM parsing returns Cube<i32>, but renderer needs Cube<u8>");
-                eprintln!("Using default solid cube instead");
-                Rc::new(Cube::Solid(1))
-            }
-            Err(e) => {
-                eprintln!("Failed to parse cubscript: {}", e);
-                eprintln!("Using default solid cube");
-                Rc::new(Cube::Solid(1))
-            }
         }
     }
 

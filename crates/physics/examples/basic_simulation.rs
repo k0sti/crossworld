@@ -1,5 +1,5 @@
 use crossworld_physics::{
-    create_box_collider, glam::Vec3, rapier3d::prelude::*, CubeObject, PhysicsWorld,
+    create_box_collider, glam::Vec3, CubeObject, PhysicsWorld,
 };
 
 fn main() {

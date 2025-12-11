@@ -15,7 +15,7 @@ pub struct CubeObject {
     pub(crate) body_handle: RigidBodyHandle,
     pub(crate) collider_handle: Option<ColliderHandle>,
     /// The voxel cube used for collision geometry (optional)
-    pub cube: Option<Rc<Cube<i32>>>,
+    pub cube: Option<Rc<Cube<u8>>>,
 }
 
 impl CubeObject {
@@ -103,12 +103,12 @@ impl CubeObject {
     ///
     /// # Arguments
     /// * `cube` - Reference to the voxel cube used for collision
-    pub fn set_cube(&mut self, cube: Rc<Cube<i32>>) {
+    pub fn set_cube(&mut self, cube: Rc<Cube<u8>>) {
         self.cube = Some(cube);
     }
 
     /// Get the cube reference if it exists
-    pub fn cube(&self) -> Option<&Rc<Cube<i32>>> {
+    pub fn cube(&self) -> Option<&Rc<Cube<u8>>> {
         self.cube.as_ref()
     }
 
