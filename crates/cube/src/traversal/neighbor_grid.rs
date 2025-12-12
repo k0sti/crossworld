@@ -55,7 +55,10 @@ impl NeighborGrid {
         // Center coordinates: x=[1,2], y=[1,2], z=[1,2]
         // Map octant index (0-7) to grid position
         for octant_idx in 0..8 {
-            let octant_pos = IVec3::from_octant_index(octant_idx);
+            // from_octant_index now returns 0/1 coords, convert to center-based -1/+1
+            let octant_pos_01 = IVec3::from_octant_index(octant_idx);
+            let octant_pos = octant_pos_01 * 2 - IVec3::ONE;
+
             // Convert center-based {-1,+1} to grid coordinates [1,2]
             // Formula: grid = (center_based + 3) / 2, where -1 → 1, +1 → 2
             let grid_x = (octant_pos.x + 3) / 2;
@@ -197,8 +200,9 @@ impl<'a> NeighborView<'a> {
             let parent_idx = parent_idx.clamp(0, 63);
             let parent = &self.grid.voxels[parent_idx as usize];
 
-            // Calculate child octant index using dot product with (4, 2, 1)
-            let child_octant = child_pos.dot(IVec3::new(4, 2, 1)) as usize;
+            // Calculate child octant index using bit manipulation
+            // child_pos components are 0 or 1, index = x + y*2 + z*4
+            let child_octant = (child_pos.x | (child_pos.y << 1) | (child_pos.z << 2)) as usize;
 
             // Extract child or replicate if solid
             match &**parent {
@@ -235,7 +239,9 @@ impl CubeCoord {
     /// Create child coordinate for octant
     /// Child position = parent_pos * 2 + offset where offset ∈ {-1,+1}³
     pub fn child(&self, octant_idx: usize) -> Self {
-        let offset = IVec3::from_octant_index(octant_idx);
+        // from_octant_index now returns 0/1 coords, convert to center-based -1/+1
+        let offset_01 = IVec3::from_octant_index(octant_idx);
+        let offset = offset_01 * 2 - IVec3::ONE;
         Self {
             pos: self.pos * 2 + offset,
             depth: self.depth + 1,
@@ -291,7 +297,9 @@ mod tests {
 
         // Check center voxels are from root
         for octant_idx in 0..8 {
-            let pos = IVec3::from_octant_index(octant_idx);
+            // from_octant_index now returns 0/1 coords, convert to center-based -1/+1
+            let pos_01 = IVec3::from_octant_index(octant_idx);
+            let pos = pos_01 * 2 - IVec3::ONE;
             // Convert center-based {-1,+1} to grid coordinates [1,2]
             let idx = NeighborGrid::xyz_to_index((pos.x + 3) / 2, (pos.y + 3) / 2, (pos.z + 3) / 2);
             assert_eq!(grid.voxels[idx].id(), 42);
@@ -315,15 +323,15 @@ mod tests {
         let center_idx = NeighborGrid::xyz_to_index(1, 1, 1);
         let view = NeighborView::new(&grid, center_idx);
 
-        assert_eq!(view.center().id(), 0); // Octant 0
+        assert_eq!(view.center().id(), 0); // Octant 0: (0,0,0) → index 0
 
-        // Right neighbor should be octant 4 (x+1)
-        assert_eq!(view.get(OFFSET_RIGHT).unwrap().id(), 4);
+        // Right neighbor: (1,0,0) → index 1 (x+1)
+        assert_eq!(view.get(OFFSET_RIGHT).unwrap().id(), 1);
 
-        // Up neighbor should be octant 2 (y+1)
+        // Up neighbor: (0,1,0) → index 2 (y+1)
         assert_eq!(view.get(OFFSET_UP).unwrap().id(), 2);
 
-        // Front neighbor should be octant 1 (z+1)
-        assert_eq!(view.get(OFFSET_FRONT).unwrap().id(), 1);
+        // Front neighbor: (0,0,1) → index 4 (z+1)
+        assert_eq!(view.get(OFFSET_FRONT).unwrap().id(), 4);
     }
 }

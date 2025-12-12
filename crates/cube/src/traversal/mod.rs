@@ -57,7 +57,9 @@ pub type TraversalVisitor<'a> = &'a mut dyn FnMut(NeighborView, CubeCoord, bool)
 pub fn traverse_octree(grid: &NeighborGrid, visitor: TraversalVisitor, max_depth: u32) {
     // Traverse the center 2x2x2 octants
     for octant_idx in 0..8 {
-        let octant_pos = IVec3::from_octant_index(octant_idx);
+        // from_octant_index now returns 0/1 coords, convert to center-based -1/+1
+        let octant_pos_01 = IVec3::from_octant_index(octant_idx);
+        let octant_pos = octant_pos_01 * 2 - IVec3::ONE;
 
         // Convert center-based {-1,+1} to grid coordinates [1,2]
         // Formula: grid = (center_based + 3) / 2, where -1 → 1, +1 → 2
@@ -100,7 +102,9 @@ fn traverse_recursive(
                 let child_grid = view.create_child_grid();
 
                 for octant_idx in 0..8 {
-                    let octant_pos = IVec3::from_octant_index(octant_idx);
+                    // from_octant_index now returns 0/1 coords, convert to center-based -1/+1
+                    let octant_pos_01 = IVec3::from_octant_index(octant_idx);
+                    let octant_pos = octant_pos_01 * 2 - IVec3::ONE;
 
                     // Convert center-based {-1,+1} to grid coordinates [1,2]
                     let grid_x = (octant_pos.x + 3) / 2;
@@ -119,7 +123,9 @@ fn traverse_recursive(
             let child_grid = view.create_child_grid();
 
             for octant_idx in 0..8 {
-                let octant_pos = IVec3::from_octant_index(octant_idx);
+                // from_octant_index now returns 0/1 coords, convert to center-based -1/+1
+                let octant_pos_01 = IVec3::from_octant_index(octant_idx);
+                let octant_pos = octant_pos_01 * 2 - IVec3::ONE;
 
                 // Convert center-based {-1,+1} to grid coordinates [1,2]
                 let grid_x = (octant_pos.x + 3) / 2;
