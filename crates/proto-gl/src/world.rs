@@ -1,6 +1,6 @@
-use std::rc::Rc;
 use cube::{Cube, parse_csm};
 use crate::config::WorldConfig;
+use std::rc::Rc;
 
 /// Generate world cube from configuration
 pub fn generate_world(config: &WorldConfig) -> (Cube<u8>, u32) {
@@ -30,28 +30,8 @@ pub fn generate_world(config: &WorldConfig) -> (Cube<u8>, u32) {
 
     // Apply border layers if needed
     if config.border_depth > 0 {
-        cube = add_border_layers(cube, config.border_depth, config.border_materials);
+        cube = Cube::expand(&cube, config.border_materials, config.border_depth as i32);
     }
-    // cube = Cube::solid(32);
 
     (cube, total_depth)
-}
-
-/// Add border layers to cube (copied pattern from proto)
-pub fn add_border_layers(cube: Cube<u8>, border_depth: u32, materials: [u8; 4]) -> Cube<u8> {
-    let mut result = cube;
-    for _ in 0..border_depth {
-        let child = Rc::new(result.clone());
-        result = Cube::cubes([
-            Rc::new(Cube::solid(materials[0])), // Bottom layer
-            child.clone(),
-            child.clone(),
-            child.clone(),
-            child.clone(),
-            child.clone(),
-            child.clone(),
-            Rc::new(Cube::solid(materials[1])), // Top layer
-        ]);
-    }
-    result
 }

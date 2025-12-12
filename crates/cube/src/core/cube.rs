@@ -656,12 +656,42 @@ impl Cube<u8> {
         )
     }
 
-    /// Expand a cube by wrapping it with border layers
+    /// Expand a cube once by wrapping it with border layers
+    ///
+    /// Creates a 4x4x4 grid (depth 2) where:
+    /// - Center 2x2x2 region contains the original cube
+    /// - Border voxels are filled with materials based on Y level
+    ///
+    /// # Arguments
+    /// * `root` - The cube to expand
+    /// * `border_materials` - Array of 4 material IDs for border voxels at each Y layer [y0, y1, y2, y3]
+    ///
+    /// # Returns
+    /// The expanded cube (one layer added)
+    pub fn expand_once(root: &Cube<u8>, border_materials: [u8; 4]) -> Self {
+        // Create two-level octree using direct octant index iteration
+        Cube::tabulate(|i1| {
+            Cube::tabulate(|i2| {
+                // Check if we're in the center region using XOR condition
+                // i1 ^ i2 ^ 0x7 == 0 means i1 and i2 are bitwise complements
+                // This identifies the center 2x2x2 region in the 4x4x4 grid
+                if i1 ^ i2 ^ 0x7 == 0 {
+                    root.get_child_or_self(i2).clone()
+                } else {
+                    // In border region - use border material based on Y level
+                    // Extract Y bit from each index: bit 1 is Y coordinate
+                    let y_pos = ((i1 >> 1) & 1) * 2 + ((i2 >> 1) & 1);
+                    Cube::Solid(border_materials[y_pos])
+                }
+            })
+        })
+    }
+    /// Expand a cube by wrapping it with border layers multiple times
     ///
     /// Each expansion layer doubles the cube's size by surrounding it with border materials.
-    /// The expansion creates a 4x4x4 grid (depth 2) where:
+    /// The expansion creates nested 4x4x4 grids where:
     /// - Border voxels are filled with materials based on Y level
-    /// - The original cube is placed in the center 2x2x2 region
+    /// - The original cube is placed in progressively larger center regions
     ///
     /// # Arguments
     /// * `root` - The cube to expand
@@ -675,44 +705,18 @@ impl Cube<u8> {
     ///
     /// # Example
     /// ```
-    /// use cube::{Cube, glam::IVec3};
+    /// use cube::Cube;
     ///
     /// let original = Cube::Solid(5);
     /// let border_materials = [16, 17, 0, 0]; // bedrock, water, air, air
-    /// let expanded = Cube::expand(&original, border_materials, 1);
-    /// // expanded is now a 4x4x4 cube with the original in the center
+    /// let expanded = Cube::expand(&original, border_materials, 2);
+    /// // After 2 expansions, the original is wrapped twice
     /// ```
     pub fn expand(root: &Cube<u8>, border_materials: [u8; 4], depth: i32) -> Self {
-        if depth <= 0 {
-            return root.clone();
-        }
-
         let mut result = root.clone();
-
         for _ in 0..depth {
-            // Create border structure with 4 vertical divisions (depth 2 = 4x4x4 grid)
-            // First level: create 8 octants
-            // Note: tabulate_vector now passes center-based coords (-1/+1) to the closure
-            let level1 = Cube::tabulate_vector(|pos1| {
-                // Second level: subdivide each octant into 8 more
-                Cube::tabulate_vector(|pos2| {
-                    // Calculate absolute Y position at depth 2 (0-3 range)
-                    // pos1.y and pos2.y are in {-1, +1} range (center-based)
-                    // Map {-1, +1} to {0, 1}: (pos + 1) / 2
-                    let y_level1 = ((pos1.y + 1) / 2) as usize; // 0 or 1
-                    let y_level2 = ((pos2.y + 1) / 2) as usize; // 0 or 1
-                    let y_pos = y_level1 * 2 + y_level2; // 0, 1, 2, or 3
-
-                    // Assign materials based on Y level
-                    Cube::Solid(border_materials[y_pos])
-                })
-            });
-
-            // Place the previous result in the center (position 1,1,1 at depth 2)
-            // This means the result occupies a 2x2x2 region in the middle of the 4x4x4 grid
-            result = level1.update_depth(2, IVec3::new(1, 1, 1), 1, result);
+            result = Self::expand_once(&result, border_materials);
         }
-
         result
     }
 }
