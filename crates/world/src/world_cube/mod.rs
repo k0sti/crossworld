@@ -80,34 +80,10 @@ impl WorldCube {
         const WATER: u8 = 17;
         const AIR: u8 = 0;
 
-        let mut result = world;
+        // Border materials for each Y level [y0, y1, y2, y3]
+        let border_materials = [HARD_GROUND, WATER, AIR, AIR];
 
-        for _ in 0..layers {
-            // Create border structure with 4 vertical divisions (depth 2)
-            // First level: create 8 octants
-            let level1 = Cube::tabulate_vector(|pos1| {
-                // Second level: subdivide each octant
-                Cube::tabulate_vector(|pos2| {
-                    // Calculate absolute Y position at depth 2 (0-3 range)
-                    let y_pos = pos1.y * 2 + pos2.y;
-
-                    // Assign materials based on Y level
-                    match y_pos {
-                        0 => Cube::Solid(HARD_GROUND), // Bottom: hard ground
-                        1 => Cube::Solid(WATER),       // Lower middle: water
-                        2 => Cube::Solid(AIR),         // Upper middle: air
-                        3 => Cube::Solid(AIR),         // Top: air
-                        _ => Cube::Solid(AIR),
-                    }
-                })
-            });
-
-            // Place the world in the center (position 1,1,1 at depth 2)
-            // This means the world occupies a 2x2x2 region in the middle of the 4x4x4 grid
-            result = level1.update_depth(2, IVec3::new(1, 1, 1), 1, result);
-        }
-
-        result
+        Cube::expand(&world, border_materials, layers as i32)
     }
 
     /// Set a voxel at octree coordinates

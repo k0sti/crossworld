@@ -40,6 +40,9 @@ impl NeighborGrid {
     /// * `border_materials` - Array of 4 material IDs for border voxels at each Y layer [y0, y1, y2, y3]
     ///   - For world: [hard_rock, water, air, air] or similar
     ///   - For avatars: [0, 0, 0, 0] for empty borders
+    ///
+    /// Note: Uses similar logic to `Cube::expand_once` but with different output structure
+    /// (flat array vs hierarchical octree) for efficient neighbor lookups during traversal.
     pub fn new(root: &Cube<u8>, border_materials: [u8; 4]) -> Self {
         let mut voxels: [Rc<Cube<u8>>; 64] = std::array::from_fn(|i| {
             let (_x, y, _z) = Self::index_to_xyz(i);
@@ -55,15 +58,13 @@ impl NeighborGrid {
         // Center coordinates: x=[1,2], y=[1,2], z=[1,2]
         // Map octant index (0-7) to grid position
         for octant_idx in 0..8 {
-            // from_octant_index now returns 0/1 coords, convert to center-based -1/+1
+            // from_octant_index returns binary coords 0/1
             let octant_pos_01 = IVec3::from_octant_index(octant_idx);
-            let octant_pos = octant_pos_01 * 2 - IVec3::ONE;
 
-            // Convert center-based {-1,+1} to grid coordinates [1,2]
-            // Formula: grid = (center_based + 3) / 2, where -1 → 1, +1 → 2
-            let grid_x = (octant_pos.x + 3) / 2;
-            let grid_y = (octant_pos.y + 3) / 2;
-            let grid_z = (octant_pos.z + 3) / 2;
+            // Convert binary {0,1} to grid coordinates {1,2}
+            let grid_x = octant_pos_01.x + 1;
+            let grid_y = octant_pos_01.y + 1;
+            let grid_z = octant_pos_01.z + 1;
             let grid_idx = Self::xyz_to_index(grid_x, grid_y, grid_z);
 
             // Get octant from root, or use solid if root is not branching
