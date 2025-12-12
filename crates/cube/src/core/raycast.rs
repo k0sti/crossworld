@@ -10,7 +10,9 @@ fn sign(v: Vec3) -> Vec3 {
 
 #[inline]
 fn octant_to_index(o: IVec3) -> usize {
-    (o.x + o.y * 2 + o.z * 4) as usize
+    // Octant coordinates are 0 or 1, convert to index using bit manipulation
+    // index = x + y*2 + z*4
+    (o.x | (o.y << 1) | (o.z << 2)) as usize
 }
 
 /// Find axis with minimum time value, using dir_sign for Axis direction
@@ -98,9 +100,11 @@ impl<T: Copy + Default + PartialEq> Cube<T> {
                     let child = &children[octant_to_index(octant)];
 
                     // Transform to child's [-1,1]³ space
+                    // octant is 0/1, convert to center-based (-1/+1) for offset
                     let offset = octant.as_vec3() * 2.0 - 1.0;
                     let child_origin = ray_origin * 2.0 - offset;
 
+                    // octant is 0/1, use directly as grid-based offset
                     let child_coord = CubeCoord {
                         pos: coord.pos * 2 + octant,
                         depth: coord.depth + 1,
