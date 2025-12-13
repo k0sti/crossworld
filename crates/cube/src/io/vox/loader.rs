@@ -45,11 +45,15 @@ fn convert_dotvox_to_cube(vox_data: &DotVoxData, align: Vec3) -> Result<Cube<u8>
     // Use the first model
     let dot_vox_model = &vox_data.models[0];
 
+    eprintln!("[VOX Loading] Number of voxels in file: {}", dot_vox_model.voxels.len());
+
     // Get model size (MagicaVoxel coordinates)
     let vox_size = dot_vox_model.size;
     let model_width = vox_size.x;
     let model_height = vox_size.z; // MagicaVoxel's Z becomes our Y (height)
     let model_depth = vox_size.y; // MagicaVoxel's Y becomes our Z (depth)
+
+    eprintln!("[VOX Loading] Model dimensions: {}x{}x{} (width x height x depth)", model_width, model_height, model_depth);
 
     // Calculate required depth from model dimensions
     let max_model_size = model_width.max(model_height).max(model_depth);
@@ -61,6 +65,8 @@ fn convert_dotvox_to_cube(vox_data: &DotVoxData, align: Vec3) -> Result<Cube<u8>
     };
     let cube_size = 1 << depth;
 
+    eprintln!("[VOX Loading] Calculated depth: {}, cube size: {}^3", depth, cube_size);
+
     // Clamp alignment to valid range
     let align = align.clamp(Vec3::ZERO, Vec3::ONE);
 
@@ -69,11 +75,17 @@ fn convert_dotvox_to_cube(vox_data: &DotVoxData, align: Vec3) -> Result<Cube<u8>
     let offset_y = ((cube_size - model_height) as f32 * align.y) as i32;
     let offset_z = ((cube_size - model_depth) as f32 * align.z) as i32;
 
+    eprintln!("[VOX Loading] Offsets: x={}, y={}, z={}", offset_x, offset_y, offset_z);
+
     // Create cube with empty material (0)
     let mut cube = Cube::solid(0u8);
 
+    // Track materials for debugging
+    let mut materials_used = std::collections::HashSet::new();
+    let mut sample_voxels = Vec::new();
+
     // Convert voxels with coordinate transformation and alignment
-    for voxel in &dot_vox_model.voxels {
+    for (idx, voxel) in dot_vox_model.voxels.iter().enumerate() {
         // MagicaVoxel uses 1-based indexing for colors, we use 0-based
         let palette_index = if voxel.i > 0 { voxel.i - 1 } else { 0 };
 
@@ -82,6 +94,7 @@ fn convert_dotvox_to_cube(vox_data: &DotVoxData, align: Vec3) -> Result<Cube<u8>
 
         // Map vox palette color to material index using bit operations
         let material = map_color_to_material(color.r, color.g, color.b);
+        materials_used.insert(material);
 
         // Transform coordinates:
         // MagicaVoxel (x, y, z) -> Our system (x, z, y) with Y-up
@@ -89,6 +102,11 @@ fn convert_dotvox_to_cube(vox_data: &DotVoxData, align: Vec3) -> Result<Cube<u8>
         let x = voxel.x as i32 + offset_x;
         let y = voxel.z as i32 + offset_y; // MagicaVoxel's Z becomes our Y (up)
         let z = voxel.y as i32 + offset_z; // MagicaVoxel's Y becomes our Z (depth)
+
+        // Collect first few samples for debugging
+        if sample_voxels.len() < 5 {
+            sample_voxels.push((idx, x, y, z, material, color.r, color.g, color.b));
+        }
 
         // Set voxel in cube using immutable set_voxel
         let depth = depth as u32;
@@ -99,6 +117,12 @@ fn convert_dotvox_to_cube(vox_data: &DotVoxData, align: Vec3) -> Result<Cube<u8>
             },
             Cube::solid(material),
         );
+    }
+
+    eprintln!("[VOX Loading] Materials used during loading: {} unique", materials_used.len());
+    eprintln!("[VOX Loading] Sample voxels:");
+    for (idx, x, y, z, mat, r, g, b) in sample_voxels {
+        eprintln!("  Voxel {}: pos=({},{},{}), material={}, RGB=({},{},{})", idx, x, y, z, mat, r, g, b);
     }
 
     Ok(cube)

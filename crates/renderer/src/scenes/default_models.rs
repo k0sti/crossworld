@@ -281,6 +281,25 @@ pub fn create_generated_cube() -> Rc<Cube<u8>> {
     parse_csm_u8(CSM)
 }
 
+/// Test cube with specific expansion pattern (Depth 2)
+///
+/// Structure:
+/// - Root: `[255 255 0 0 32 255 0 0]`
+/// - Octant 4 (originally value 32) expanded to: `[32 65 0 0 0 0 0 0]`
+///
+/// This creates a depth 2 structure where:
+/// - Octants 0, 1: White (255)
+/// - Octants 2, 3: Empty (0)
+/// - Octant 4: Subdivided octree with values 32 and 65 in first two positions
+/// - Octant 5: White (255)
+/// - Octants 6, 7: Empty (0)
+///
+/// CSM: `> [255 255 0 0 [32 65 0 0 0 0 0 0] 255 0 0]`
+pub fn create_test_expansion_cube() -> Rc<Cube<u8>> {
+    const CSM: &str = "> [255 255 0 0 [32 65 0 0 0 0 0 0] 255 0 0]";
+    parse_csm_u8(CSM)
+}
+
 // ============================================================================
 // VOX Models
 // ============================================================================
@@ -292,7 +311,9 @@ pub fn create_generated_cube() -> Rc<Cube<u8>> {
 pub fn create_vox_robot() -> Rc<Cube<u8>> {
     const VOX_BYTES: &[u8] = include_bytes!("../../../../assets/models/vox/chr_robot.vox");
     let align = Vec3::new(0.5, 0.0, 0.5); // Center X/Z, bottom Y
-    Rc::new(load_vox_to_cube(VOX_BYTES, align).expect("Failed to load chr_robot.vox"))
+    let cube = Rc::new(load_vox_to_cube(VOX_BYTES, align).expect("Failed to load chr_robot.vox"));
+    cube.print_debug_stats("VOX Robot (chr_robot.vox)");
+    cube
 }
 
 /// Load alien bot VOX model
@@ -302,7 +323,9 @@ pub fn create_vox_robot() -> Rc<Cube<u8>> {
 pub fn create_vox_alien_bot() -> Rc<Cube<u8>> {
     const VOX_BYTES: &[u8] = include_bytes!("../../../../assets/models/vox/alien_bot1.vox");
     let align = Vec3::new(0.5, 0.0, 0.5); // Center X/Z, bottom Y
-    Rc::new(load_vox_to_cube(VOX_BYTES, align).expect("Failed to load alien_bot1.vox"))
+    let cube = Rc::new(load_vox_to_cube(VOX_BYTES, align).expect("Failed to load alien_bot1.vox"));
+    cube.print_debug_stats("VOX Alien Bot (alien_bot1.vox)");
+    cube
 }
 
 /// Load eskimo character VOX model
@@ -312,7 +335,9 @@ pub fn create_vox_alien_bot() -> Rc<Cube<u8>> {
 pub fn create_vox_eskimo() -> Rc<Cube<u8>> {
     const VOX_BYTES: &[u8] = include_bytes!("../../../../assets/models/vox/chr_eskimo.vox");
     let align = Vec3::new(0.5, 0.0, 0.5); // Center X/Z, bottom Y
-    Rc::new(load_vox_to_cube(VOX_BYTES, align).expect("Failed to load chr_eskimo.vox"))
+    let cube = Rc::new(load_vox_to_cube(VOX_BYTES, align).expect("Failed to load chr_eskimo.vox"));
+    cube.print_debug_stats("VOX Eskimo (chr_eskimo.vox)");
+    cube
 }
 
 // ============================================================================
@@ -334,6 +359,9 @@ pub enum TestModel {
     SdfCube,
     GeneratedCube,
 
+    // Test models
+    TestExpansionCube, // Depth 2, specific expansion pattern
+
     // VOX models
     VoxRobot,
     VoxAlienBot,
@@ -352,6 +380,7 @@ impl TestModel {
             TestModel::LayerCube,
             TestModel::SdfCube,
             TestModel::GeneratedCube,
+            TestModel::TestExpansionCube,
             TestModel::VoxRobot,
             TestModel::VoxAlienBot,
             TestModel::VoxEskimo,
@@ -369,6 +398,7 @@ impl TestModel {
             TestModel::LayerCube => 1,
             TestModel::SdfCube => 1,
             TestModel::GeneratedCube => 1,
+            TestModel::TestExpansionCube => 2,
             TestModel::VoxRobot => 5,
             TestModel::VoxAlienBot => 5,
             TestModel::VoxEskimo => 5,
@@ -386,6 +416,7 @@ impl TestModel {
             TestModel::LayerCube => "Layer Cube (Slices)",
             TestModel::SdfCube => "SDF Cube (Corners)",
             TestModel::GeneratedCube => "Generated Cube (Checkerboard)",
+            TestModel::TestExpansionCube => "Test Expansion Cube (Depth 2)",
             TestModel::VoxRobot => "Robot Character (VOX)",
             TestModel::VoxAlienBot => "Alien Bot (VOX)",
             TestModel::VoxEskimo => "Eskimo Character (VOX)",
@@ -403,6 +434,7 @@ impl TestModel {
             TestModel::LayerCube => "layer",
             TestModel::SdfCube => "sdf",
             TestModel::GeneratedCube => "generated",
+            TestModel::TestExpansionCube => "test_expansion",
             TestModel::VoxRobot => "vox_robot",
             TestModel::VoxAlienBot => "vox_alien_bot",
             TestModel::VoxEskimo => "vox_eskimo",
@@ -420,6 +452,7 @@ impl TestModel {
             TestModel::LayerCube => create_layer_cube(),
             TestModel::SdfCube => create_sdf_cube(),
             TestModel::GeneratedCube => create_generated_cube(),
+            TestModel::TestExpansionCube => create_test_expansion_cube(),
             TestModel::VoxRobot => create_vox_robot(),
             TestModel::VoxAlienBot => create_vox_alien_bot(),
             TestModel::VoxEskimo => create_vox_eskimo(),
