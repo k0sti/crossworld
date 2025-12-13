@@ -679,7 +679,9 @@ impl Cube<u8> {
                 // i1 ^ i2 ^ 0x7 == 0 means i1 and i2 are bitwise complements
                 // This identifies the center 2x2x2 region in the 4x4x4 grid
                 if i1 ^ i2 ^ 0x7 == 0 {
-                    root.get_child_or_self(i2).clone()
+                    // Use i1 as the root octant index
+                    // Global position = i1*2 + i2, center offset = global - 1 = i1
+                    root.get_child_or_self(i1).clone()
                 } else {
                     // In border region - use border material based on Y level
                     // Extract Y bit from each index: bit 1 is Y coordinate
