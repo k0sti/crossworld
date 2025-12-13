@@ -130,10 +130,13 @@ impl<T> Cube<T> {
 
     /// Calculate octant index at given depth for position
     /// Returns which octant (0-7) the position falls into at this depth level
-    /// For center-based coordinates: extracts sign at depth level and converts to octant
+    /// Extracts the bit at the given depth level for each axis to determine octant
     #[inline]
     pub fn index(depth: u32, pos: IVec3) -> usize {
-        let p = (pos >> depth).step0(); // Get 0 or 1 at this depth level (step0 converts signs to binary)
+        // Extract the bit at this depth level for each axis
+        // This works for both positive corner-based coordinates (0..2^n)
+        // and center-based coordinates (sign indicates octant)
+        let p = (pos >> depth) & 1; // Extract bit at depth level (0 or 1)
         p.to_octant_index()
     }
 
@@ -718,6 +721,99 @@ impl Cube<u8> {
             result = Self::expand_once(&result, border_materials);
         }
         result
+    }
+
+    /// Calculate the maximum depth of the octree
+    pub fn max_depth(&self) -> usize {
+        match self {
+            Cube::Solid(_) => 0,
+            Cube::Cubes(children) => {
+                1 + children
+                    .iter()
+                    .map(|c| c.max_depth())
+                    .max()
+                    .unwrap_or(0)
+            }
+            _ => 0,
+        }
+    }
+
+    /// Count nodes at each depth level
+    /// Returns a Vec where index i contains the count of nodes at depth i
+    pub fn count_nodes_by_depth(&self) -> Vec<usize> {
+        let max_depth = self.max_depth();
+        let mut counts = vec![0; max_depth + 1];
+        self.count_nodes_by_depth_internal(0, &mut counts);
+        counts
+    }
+
+    fn count_nodes_by_depth_internal(&self, current_depth: usize, counts: &mut Vec<usize>) {
+        counts[current_depth] += 1;
+        if let Cube::Cubes(children) = self {
+            for child in children.iter() {
+                child.count_nodes_by_depth_internal(current_depth + 1, counts);
+            }
+        }
+    }
+
+    /// Collect all unique materials used in the cube
+    pub fn collect_materials(&self) -> std::collections::HashSet<u8> {
+        let mut materials = std::collections::HashSet::new();
+        self.collect_materials_internal(&mut materials);
+        materials
+    }
+
+    fn collect_materials_internal(&self, materials: &mut std::collections::HashSet<u8>) {
+        match self {
+            Cube::Solid(val) => {
+                materials.insert(*val);
+            }
+            Cube::Cubes(children) => {
+                for child in children.iter() {
+                    child.collect_materials_internal(materials);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Print debug statistics about the cube structure
+    pub fn print_debug_stats(&self, name: &str) {
+        eprintln!("\n=== Cube Debug Stats: {} ===", name);
+
+        // Max depth
+        let max_depth = self.max_depth();
+        eprintln!("Max depth: {}", max_depth);
+        eprintln!("Cube size: {}^3", 1 << max_depth);
+
+        // Nodes per depth
+        let nodes_by_depth = self.count_nodes_by_depth();
+        eprintln!("Nodes by depth:");
+        for (depth, count) in nodes_by_depth.iter().enumerate() {
+            if *count > 0 {
+                eprintln!("  Depth {}: {} nodes", depth, count);
+            }
+        }
+
+        // Total nodes
+        let total_nodes: usize = nodes_by_depth.iter().sum();
+        eprintln!("Total nodes: {}", total_nodes);
+
+        // Materials
+        let materials = self.collect_materials();
+        let mut materials_vec: Vec<u8> = materials.iter().copied().collect();
+        materials_vec.sort();
+        eprintln!("Unique materials: {} - {:?}", materials.len(), materials_vec);
+
+        // Root type
+        match self {
+            Cube::Solid(val) => eprintln!("Root: Solid({})", val),
+            Cube::Cubes(_) => eprintln!("Root: Cubes (octree)"),
+            Cube::Quad { .. } => eprintln!("Root: Quad"),
+            Cube::Layers { .. } => eprintln!("Root: Layers"),
+        }
+
+        eprintln!("=========================\n");
     }
 }
 

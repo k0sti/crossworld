@@ -609,3 +609,51 @@ fn test_bcf_vs_pure_rust_depth_3() {
         difference_percent
     );
 }
+
+/// Test: BCF tracer handles test expansion cube
+#[test]
+fn test_bcf_tracer_test_expansion_cube() {
+    use renderer::scenes::create_test_expansion_cube;
+
+    let cube = create_test_expansion_cube();
+    let mut tracer = BcfCpuTracer::new_from_cube(cube);
+
+    // Render a 128x128 image
+    tracer.render(128, 128, 0.0);
+
+    let image = tracer.image_buffer().expect("Image buffer should exist");
+
+    // Basic sanity check
+    assert_eq!(image.width(), 128);
+    assert_eq!(image.height(), 128);
+
+    // Check for non-background pixels
+    let mut colored_pixels = 0;
+    for pixel in image.pixels() {
+        // Any pixel that's not close to background color (RGB(168, 186, 202))
+        let is_colored = pixel[0] < 160
+            || pixel[0] > 176
+            || pixel[1] < 178
+            || pixel[1] > 194
+            || pixel[2] < 194
+            || pixel[2] > 210;
+        if is_colored {
+            colored_pixels += 1;
+        }
+    }
+
+    // Test expansion cube should have visible pixels
+    // We expect at least 10% of pixels to show the cube
+    assert!(
+        colored_pixels > 128 * 128 / 10,
+        "Expected at least {} colored pixels in test expansion cube, got {}",
+        128 * 128 / 10,
+        colored_pixels
+    );
+
+    eprintln!(
+        "Test expansion cube rendered with {} colored pixels ({:.1}%)",
+        colored_pixels,
+        (colored_pixels as f32 / (128.0 * 128.0)) * 100.0
+    );
+}
