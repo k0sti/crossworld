@@ -121,7 +121,8 @@ impl BcfWriterV2 {
 
         for child in children.iter() {
             // Calculate where THIS child will be in the final buffer
-            let child_base_offset = children_start + temp_children.len();
+            // Must include self.base_offset for nested nodes!
+            let child_base_offset = self.base_offset + children_start + temp_children.len();
 
             // Create child writer with correct base offset
             let mut child_writer = BcfWriterV2::with_base_offset(child_base_offset);
