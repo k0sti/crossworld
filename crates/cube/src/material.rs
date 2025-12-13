@@ -704,29 +704,32 @@ fn decode_r2g3b2(value: u8) -> Vec3 {
     let b_bits = bits & 0b11;
 
     // Convert to normalized RGB values
+    // 2-bit expansion: value * 255 / 3, then normalize to [0.0, 1.0]
     let r = match r_bits {
         0 => 0.0,
-        1 => 0.286, // 0x49/255
-        2 => 0.573, // 0x92/255
-        3 => 0.859, // 0xDB/255
+        1 => 0.333, // 0x55/255 = 85/255
+        2 => 0.667, // 0xAA/255 = 170/255
+        3 => 1.0,   // 0xFF/255 = 255/255
         _ => 0.0,
     };
+    // 3-bit expansion: value * 255 / 7, then normalize to [0.0, 1.0]
     let g = match g_bits {
         0 => 0.0,
-        1 => 0.141, // 0x24/255
-        2 => 0.286, // 0x49/255
-        3 => 0.427, // 0x6D/255
-        4 => 0.573, // 0x92/255
-        5 => 0.714, // 0xB6/255
-        6 => 0.859, // 0xDB/255
-        7 => 1.0,   // 0xFF/255
+        1 => 0.141, // 0x24/255 ≈ 36/255
+        2 => 0.286, // 0x49/255 ≈ 73/255
+        3 => 0.427, // 0x6D/255 ≈ 109/255
+        4 => 0.573, // 0x92/255 ≈ 146/255
+        5 => 0.714, // 0xB6/255 ≈ 182/255
+        6 => 0.859, // 0xDB/255 ≈ 219/255
+        7 => 1.0,   // 0xFF/255 = 255/255
         _ => 0.0,
     };
+    // 2-bit expansion: value * 255 / 3, then normalize to [0.0, 1.0]
     let b = match b_bits {
         0 => 0.0,
-        1 => 0.286, // 0x49/255
-        2 => 0.573, // 0x92/255
-        3 => 0.859, // 0xDB/255
+        1 => 0.333, // 0x55/255 = 85/255
+        2 => 0.667, // 0xAA/255 = 170/255
+        3 => 1.0,   // 0xFF/255 = 255/255
         _ => 0.0,
     };
 
@@ -752,5 +755,37 @@ mod tests {
         assert!(red.x > 0.8);
         assert!(red.y < 0.1);
         assert!(red.z < 0.1);
+    }
+
+    #[test]
+    fn test_r2g3b2_decoding_correctness() {
+        // Test that R2G3B2 decoding uses correct bit expansion
+
+        // Black (all zeros): material 128
+        let black = get_material_color(128);
+        assert_eq!(black, Vec3::new(0.0, 0.0, 0.0));
+
+        // White (all ones): r=3, g=7, b=3 => material 255
+        let white = get_material_color(255);
+        assert_eq!(white, Vec3::new(1.0, 1.0, 1.0));
+
+        // Pure red: r=3, g=0, b=0 => material 224
+        let red = get_material_color(224);
+        assert_eq!(red, Vec3::new(1.0, 0.0, 0.0));
+
+        // Pure green: r=0, g=7, b=0 => material 156
+        let green = get_material_color(156);
+        assert_eq!(green, Vec3::new(0.0, 1.0, 0.0));
+
+        // Pure blue: r=0, g=0, b=3 => material 131
+        let blue = get_material_color(131);
+        assert_eq!(blue, Vec3::new(0.0, 0.0, 1.0));
+
+        // Mid-gray: r=2, g=4, b=2 => material 210
+        // Should be (170/255, 146/255, 170/255) ≈ (0.667, 0.573, 0.667)
+        let gray = get_material_color(210);
+        assert!((gray.x - 0.667).abs() < 0.001);
+        assert!((gray.y - 0.573).abs() < 0.001);
+        assert!((gray.z - 0.667).abs() < 0.001);
     }
 }
