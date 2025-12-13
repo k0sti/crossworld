@@ -140,8 +140,39 @@ pub fn bcf_raycast(bcf_data: &[u8], ray_origin: Vec3, ray_dir: Vec3) -> Option<H
         return bcf_raycast_axis(bcf_data, ray_origin, axis);
     }
 
+    // Calculate entry normal (same logic as cube::raycast)
+    // This determines which face the ray entered from
+    let entry_normal;
+
+    // Check if we are on a boundary (within epsilon)
+    let abs_origin = ray_origin.abs();
+    let max_origin_comp = abs_origin.max_element();
+
+    if (max_origin_comp - 1.0).abs() < 1e-5 {
+        // On boundary: determine which face we are on
+        if (abs_origin.x - 1.0).abs() < 1e-5 {
+            entry_normal = Axis::from_index_sign(0, ray_origin.x.signum() as i32);
+        } else if (abs_origin.y - 1.0).abs() < 1e-5 {
+            entry_normal = Axis::from_index_sign(1, ray_origin.y.signum() as i32);
+        } else {
+            entry_normal = Axis::from_index_sign(2, ray_origin.z.signum() as i32);
+        }
+    } else {
+        // Inside: pick axis most opposed to ray direction
+        // This is a heuristic for "which face would we have entered from"
+        let i = if abs_dir.x >= abs_dir.y && abs_dir.x >= abs_dir.z {
+            0
+        } else if abs_dir.y >= abs_dir.z {
+            1
+        } else {
+            2
+        };
+        // Use negative direction sign (opposing face)
+        entry_normal = Axis::from_index_sign(i, -dir_sign[i] as i32);
+    }
+
     // General raycast with DDA traversal
-    bcf_raycast_impl(&reader, header.root_offset, ray_origin, ray_dir)
+    bcf_raycast_impl(&reader, header.root_offset, ray_origin, ray_dir, entry_normal)
 }
 
 /// Axis-aligned raycast (optimized path)
@@ -167,11 +198,19 @@ pub fn bcf_raycast_axis(bcf_data: &[u8], ray_origin: Vec3, ray_axis: Axis) -> Op
 ///
 /// Converts the recursive cube::raycast algorithm to iterative with explicit stack.
 /// This is GPU-compatible (fixed-size stack, no recursion).
+///
+/// # Parameters
+/// - `reader`: BCF data reader
+/// - `root_offset`: Offset of root node in BCF data
+/// - `ray_origin`: Ray origin (already adjusted to entry point)
+/// - `ray_dir`: Ray direction
+/// - `entry_normal`: Normal of the face the ray entered from
 fn bcf_raycast_impl(
     reader: &BcfReader,
     root_offset: usize,
     ray_origin: Vec3,
     ray_dir: Vec3,
+    entry_normal: Axis,
 ) -> Option<Hit<u8>> {
     let mut stack: [TraversalState; MAX_TRAVERSAL_DEPTH] = [TraversalState {
         offset: 0,
@@ -183,38 +222,6 @@ fn bcf_raycast_impl(
             depth: 0,
         },
     }; MAX_TRAVERSAL_DEPTH];
-
-    // Calculate entry normal (same logic as cube::raycast)
-    let entry_normal;
-    let dir_sign = sign(ray_dir);
-
-    // Check if we are on a boundary (within epsilon)
-    let abs_origin = ray_origin.abs();
-    let max_comp = abs_origin.max_element();
-
-    if (max_comp - 1.0).abs() < 1e-5 {
-        // On boundary: determine which face we are on
-        if (abs_origin.x - 1.0).abs() < 1e-5 {
-            entry_normal = Axis::from_index_sign(0, ray_origin.x.signum() as i32);
-        } else if (abs_origin.y - 1.0).abs() < 1e-5 {
-            entry_normal = Axis::from_index_sign(1, ray_origin.y.signum() as i32);
-        } else {
-            entry_normal = Axis::from_index_sign(2, ray_origin.z.signum() as i32);
-        }
-    } else {
-        // Inside: pick axis most opposed to ray direction
-        // This is a heuristic for "which face would we have entered from"
-        let abs_dir = ray_dir.abs();
-        let i = if abs_dir.x >= abs_dir.y && abs_dir.x >= abs_dir.z {
-            0
-        } else if abs_dir.y >= abs_dir.z {
-            1
-        } else {
-            2
-        };
-        // Use negative direction sign (opposing face)
-        entry_normal = Axis::from_index_sign(i, -dir_sign[i] as i32);
-    }
 
     // Initialize with root node
     stack[0] = TraversalState {
