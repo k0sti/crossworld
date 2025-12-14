@@ -60,11 +60,11 @@ impl ApplicationHandler for App {
         }
 
         // Calculate window size based on content
-        // 2x2 grid: each cell is 400x300 render + ~80px for text/controls per cell
+        // 3x2 grid: each cell is 400x300 render + ~80px for text/controls per cell
         // Grid spacing: 10px between cells
         // Top panel: ~50px
         // Side padding: ~20px per side
-        let content_width = 400 * 2 + 10 + 40; // 2 renders + spacing + padding
+        let content_width = 400 * 3 + 10 * 2 + 40; // 3 renders + spacing + padding
         let content_height = (300 + 80) * 2 + 10 + 50 + 20; // 2 rows + spacing + top panel + padding
 
         let window_attributes = Window::default_attributes()

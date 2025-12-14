@@ -17,7 +17,7 @@ use winit::window::{Window, WindowId};
 
 use cube::Cube;
 use crossworld_physics::{rapier3d::prelude::*, PhysicsWorld, VoxelColliderBuilder};
-use renderer::{CameraConfig, GlCubeTracer};
+use renderer::{CameraConfig, GlCubeTracer, MeshRenderer};
 
 use crate::camera::OrbitCamera;
 use crate::config::{load_config, ProtoGlConfig};
@@ -40,6 +40,8 @@ pub struct ProtoGlApp {
 
     // Rendering state
     gl_tracer: Option<GlCubeTracer>,
+    mesh_renderer: Option<MeshRenderer>,
+    object_mesh_indices: Vec<usize>,
     camera: OrbitCamera,
 
     // World state
@@ -85,6 +87,8 @@ impl Default for ProtoGlApp {
             egui_state: None,
             painter: None,
             gl_tracer: None,
+            mesh_renderer: None,
+            object_mesh_indices: Vec::new(),
             camera,
             world_cube: None,
             world_depth: 0,
@@ -209,6 +213,15 @@ impl ApplicationHandler for ProtoGlApp {
             Cube::Layers { .. } => "Layers(...)".to_string(),
         });
 
+        // Initialize mesh renderer
+        let mut mesh_renderer = MeshRenderer::new();
+        unsafe {
+            if let Err(e) = mesh_renderer.init_gl(&gl) {
+                eprintln!("Failed to initialize mesh renderer: {}", e);
+                return;
+            }
+        }
+
         // Initialize physics world
         let gravity = glam::Vec3::new(0.0, self.config.physics.gravity, 0.0);
         let mut physics_world = PhysicsWorld::new(gravity);
@@ -223,12 +236,30 @@ impl ApplicationHandler for ProtoGlApp {
         let models = load_vox_models(&self.config.spawning.models_path);
         let objects = spawn_cube_objects(&self.config.spawning, &models, &mut physics_world);
 
+        // Upload meshes for each spawned object
+        let mut object_mesh_indices = Vec::new();
+        for obj in &objects {
+            unsafe {
+                match mesh_renderer.upload_mesh(&gl, &obj.cube, obj.depth) {
+                    Ok(mesh_idx) => {
+                        object_mesh_indices.push(mesh_idx);
+                        println!("  Uploaded mesh for {} (index: {})", obj.model_name, mesh_idx);
+                    }
+                    Err(e) => {
+                        eprintln!("  Warning: Failed to upload mesh for {}: {}", obj.model_name, e);
+                        object_mesh_indices.push(0); // Use fallback
+                    }
+                }
+            }
+        }
+
         println!("Proto-GL Physics Viewer initialized!");
         println!("  World depth: {}", world_depth);
         println!("  Camera distance: {:.1}", self.camera.distance);
         println!("  Gravity: {:.2}", self.config.physics.gravity);
         println!("  Physics timestep: {:.4}", self.config.physics.timestep);
         println!("  Spawned objects: {}", objects.len());
+        println!("  Uploaded meshes: {}", object_mesh_indices.len());
 
         self.window = Some(window);
         self.gl_context = Some(gl_context);
@@ -238,6 +269,8 @@ impl ApplicationHandler for ProtoGlApp {
         self.egui_state = Some(egui_state);
         self.painter = Some(painter);
         self.gl_tracer = Some(gl_tracer);
+        self.mesh_renderer = Some(mesh_renderer);
+        self.object_mesh_indices = object_mesh_indices;
         self.world_cube = Some(world_cube);
         self.world_depth = world_depth;
         self.physics_world = Some(physics_world);
@@ -373,7 +406,40 @@ impl ProtoGlApp {
             }
         }
 
-        // TODO: Render dynamic objects here (if render_objects is true)
+        // Render dynamic objects (if enabled)
+        if self.render_objects {
+            if let (Some(mesh_renderer), Some(physics_world)) =
+                (self.mesh_renderer.as_ref(), self.physics_world.as_ref())
+            {
+                for (i, obj) in self.objects.iter().enumerate() {
+                    if i >= self.object_mesh_indices.len() {
+                        continue;
+                    }
+
+                    // Get physics position and rotation
+                    let Some(body) = physics_world.get_rigid_body(obj.body_handle) else {
+                        continue;
+                    };
+                    let position = body.translation();
+                    let rotation = body.rotation();
+
+                    let position = glam::Vec3::new(position.x, position.y, position.z);
+                    let rotation = glam::Quat::from_xyzw(rotation.i, rotation.j, rotation.k, rotation.w);
+
+                    unsafe {
+                        mesh_renderer.render_mesh(
+                            gl,
+                            self.object_mesh_indices[i],
+                            position,
+                            rotation,
+                            &camera,
+                            size.width as i32,
+                            size.height as i32,
+                        );
+                    }
+                }
+            }
+        }
 
         // Capture UI state before egui run
         let mut ui_state = UiState {
