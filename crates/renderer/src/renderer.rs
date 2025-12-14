@@ -27,27 +27,126 @@ pub const DIFFUSE_STRENGTH: f32 = 0.7;
 /// Bluish-gray color rendered when rays miss all voxels.
 pub const BACKGROUND_COLOR: Vec3 = Vec3::new(0.4, 0.5, 0.6);
 
-/// Camera configuration for rendering
+/// Entity trait for objects in 3D space
+///
+/// Represents any object with position and rotation in the scene
+pub trait Entity {
+    /// Get the entity's position in world space
+    fn position(&self) -> glam::Vec3;
+
+    /// Get the entity's rotation as a quaternion
+    fn rotation(&self) -> glam::Quat;
+
+    /// Set the entity's position
+    fn set_position(&mut self, position: glam::Vec3);
+
+    /// Set the entity's rotation
+    fn set_rotation(&mut self, rotation: glam::Quat);
+
+    /// Create a camera looking at this entity
+    fn make_camera(&self, offset: glam::Vec3, up: glam::Vec3) -> CameraConfig {
+        let camera_position = self.position() + offset;
+        CameraConfig::look_at(camera_position, self.position(), up)
+    }
+}
+
+/// A simple cube object that can be positioned and rotated in space
 #[derive(Debug, Clone, Copy)]
+pub struct CubeObject {
+    /// Position in world space
+    pub position: glam::Vec3,
+    /// Rotation as quaternion
+    pub rotation: glam::Quat,
+}
+
+impl CubeObject {
+    /// Create a new cube object at the origin with no rotation
+    pub fn new() -> Self {
+        Self {
+            position: glam::Vec3::ZERO,
+            rotation: glam::Quat::IDENTITY,
+        }
+    }
+
+    /// Create a new cube object at a specific position
+    pub fn at_position(position: glam::Vec3) -> Self {
+        Self {
+            position,
+            rotation: glam::Quat::IDENTITY,
+        }
+    }
+
+    /// Create a new cube object with position and rotation
+    pub fn with_transform(position: glam::Vec3, rotation: glam::Quat) -> Self {
+        Self { position, rotation }
+    }
+}
+
+impl Default for CubeObject {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Entity for CubeObject {
+    fn position(&self) -> glam::Vec3 {
+        self.position
+    }
+
+    fn rotation(&self) -> glam::Quat {
+        self.rotation
+    }
+
+    fn set_position(&mut self, position: glam::Vec3) {
+        self.position = position;
+    }
+
+    fn set_rotation(&mut self, rotation: glam::Quat) {
+        self.rotation = rotation;
+    }
+}
+
+/// Camera configuration for rendering
+#[derive(Debug, Clone)]
 pub struct CameraConfig {
     /// Camera position in world space
     pub position: glam::Vec3,
     /// Camera rotation (orientation)
     pub rotation: glam::Quat,
     /// Vertical field of view in radians
-    #[allow(dead_code)]
     pub vfov: f32,
+    /// Pitch angle in radians (rotation around X axis)
+    pub pitch: f32,
+    /// Yaw angle in radians (rotation around Y axis)
+    pub yaw: f32,
+    /// Optional target position for look-at cameras
+    pub target_position: Option<glam::Vec3>,
 }
 
 impl Default for CameraConfig {
     fn default() -> Self {
+        let position = glam::Vec3::new(3.0, 2.0, 3.0);
+        let target = glam::Vec3::ZERO;
+        let forward = (target - position).normalize();
+
+        // Calculate pitch and yaw from forward vector
+        let yaw = forward.z.atan2(forward.x);
+        let pitch = forward.y.asin();
+
+        let rotation = glam::Quat::from_rotation_arc(glam::Vec3::NEG_Z, forward);
+
         Self {
-            position: glam::Vec3::new(3.0, 2.0, 3.0),
-            rotation: glam::Quat::IDENTITY,
+            position,
+            rotation,
             vfov: 60.0_f32.to_radians(),
+            pitch,
+            yaw,
+            target_position: Some(target),
         }
     }
 }
+
+impl Copy for CameraConfig {}
 
 impl CameraConfig {
     /// Create camera configuration with position looking at target
@@ -55,11 +154,50 @@ impl CameraConfig {
         let forward = (target - position).normalize();
         let rotation = glam::Quat::from_rotation_arc(glam::Vec3::NEG_Z, forward);
 
+        // Calculate pitch and yaw from forward vector
+        let yaw = forward.z.atan2(forward.x);
+        let pitch = forward.y.asin();
+
         Self {
             position,
             rotation,
             vfov: 60.0_f32.to_radians(),
+            pitch,
+            yaw,
+            target_position: Some(target),
         }
+    }
+
+    /// Set the camera to look at a specific target position
+    pub fn set_look_at(&mut self, target: glam::Vec3) {
+        let forward = (target - self.position).normalize();
+        self.rotation = glam::Quat::from_rotation_arc(glam::Vec3::NEG_Z, forward);
+
+        // Update pitch and yaw
+        self.yaw = forward.z.atan2(forward.x);
+        self.pitch = forward.y.asin();
+        self.target_position = Some(target);
+    }
+
+    /// Create camera from pitch and yaw angles
+    pub fn from_pitch_yaw(position: glam::Vec3, pitch: f32, yaw: f32) -> Self {
+        let rotation = glam::Quat::from_euler(glam::EulerRot::YXZ, yaw, pitch, 0.0);
+
+        Self {
+            position,
+            rotation,
+            vfov: 60.0_f32.to_radians(),
+            pitch,
+            yaw,
+            target_position: None,
+        }
+    }
+
+    /// Update camera rotation from pitch and yaw
+    pub fn update_from_pitch_yaw(&mut self) {
+        self.rotation = glam::Quat::from_euler(glam::EulerRot::YXZ, self.yaw, self.pitch, 0.0);
+        // Clear target when manually rotating
+        self.target_position = None;
     }
 
     /// Get the forward direction vector
@@ -86,14 +224,16 @@ impl CameraConfig {
     /// This rotates the camera in place (first-person style)
     #[allow(dead_code)]
     pub fn rotate(&mut self, yaw_delta: f32, pitch_delta: f32) {
-        // Apply yaw rotation (around world Y axis)
-        let yaw_rotation = glam::Quat::from_axis_angle(glam::Vec3::Y, yaw_delta);
+        // Update pitch and yaw
+        self.yaw += yaw_delta;
+        self.pitch += pitch_delta;
 
-        // Apply pitch rotation (around local right axis)
-        let pitch_rotation = glam::Quat::from_axis_angle(self.right(), pitch_delta);
+        // Clamp pitch to prevent gimbal lock
+        const MAX_PITCH: f32 = 89.0 * std::f32::consts::PI / 180.0;
+        self.pitch = self.pitch.clamp(-MAX_PITCH, MAX_PITCH);
 
-        self.rotation = yaw_rotation * pitch_rotation * self.rotation;
-        self.rotation = self.rotation.normalize();
+        // Update rotation from pitch and yaw
+        self.update_from_pitch_yaw();
     }
 
     /// Orbit camera around a target point
@@ -149,6 +289,11 @@ impl CameraConfig {
         // Update rotation to look at target
         let forward = (target - self.position).normalize();
         self.rotation = glam::Quat::from_rotation_arc(glam::Vec3::NEG_Z, forward);
+
+        // Update pitch and yaw from the new rotation
+        self.yaw = forward.z.atan2(forward.x);
+        self.pitch = forward.y.asin();
+        self.target_position = Some(target);
     }
 
     /// Move camera relative to its current orientation

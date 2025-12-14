@@ -8,7 +8,7 @@ use cube::Cube;
 use glow::*;
 use std::rc::Rc;
 
-use crate::renderer::{CameraConfig, LIGHT_DIR, AMBIENT, DIFFUSE_STRENGTH};
+use crate::renderer::{CameraConfig, Entity, LIGHT_DIR, AMBIENT, DIFFUSE_STRENGTH};
 use crate::shader_utils::create_program;
 
 /// Compiled mesh ready for GL rendering
@@ -174,6 +174,32 @@ impl MeshRenderer {
         viewport_height: i32,
     ) {
         unsafe {
+            self.render_mesh_with_depth(
+                gl,
+                mesh_index,
+                position,
+                rotation,
+                camera,
+                viewport_width,
+                viewport_height,
+                1, // Default depth
+            )
+        }
+    }
+
+    /// Render a mesh at given position with specified depth for scaling
+    pub unsafe fn render_mesh_with_depth(
+        &self,
+        gl: &Context,
+        mesh_index: usize,
+        position: glam::Vec3,
+        rotation: glam::Quat,
+        camera: &CameraConfig,
+        viewport_width: i32,
+        viewport_height: i32,
+        depth: u32,
+    ) {
+        unsafe {
             let Some(program) = self.program else { return };
             if mesh_index >= self.meshes.len() {
                 return;
@@ -189,12 +215,24 @@ impl MeshRenderer {
             let aspect = viewport_width as f32 / viewport_height as f32;
             let projection = glam::Mat4::perspective_rh(camera.vfov, aspect, 0.1, 1000.0);
 
-            let view = glam::Mat4::from_rotation_translation(
-                camera.rotation.conjugate(),
-                -camera.position,
-            );
+            // Correct view matrix: apply translation first, then rotation
+            // This is equivalent to look_at but uses the camera's quaternion directly
+            let view = glam::Mat4::from_quat(camera.rotation.conjugate())
+                * glam::Mat4::from_translation(-camera.position);
 
-            let model = glam::Mat4::from_rotation_translation(rotation, position);
+            // Calculate scale to transform mesh coordinates to [-1, 1] space
+            // Mesh vertices are in [0, 2^depth] space, raytracers expect [-1, 1]
+            // Transform: position_world = (position_mesh / 2^depth) * 2 - 1
+            //          = position_mesh * (2 / 2^depth) - 1
+            let grid_size = (1 << depth) as f32; // 2^depth
+            let mesh_scale = 2.0 / grid_size;
+            let mesh_offset = glam::Vec3::splat(-1.0);
+
+            // Model matrix: scale, rotate, translate
+            let model = glam::Mat4::from_translation(position)
+                * glam::Mat4::from_quat(rotation)
+                * glam::Mat4::from_translation(mesh_offset)
+                * glam::Mat4::from_scale(glam::Vec3::splat(mesh_scale));
 
             // Upload uniforms
             let mvp = projection * view * model;
@@ -219,6 +257,54 @@ impl MeshRenderer {
             gl.bind_vertex_array(None);
 
             gl.disable(DEPTH_TEST);
+        }
+    }
+
+    /// Render a mesh for a given entity
+    pub unsafe fn render_entity(
+        &self,
+        gl: &Context,
+        mesh_index: usize,
+        entity: &dyn Entity,
+        camera: &CameraConfig,
+        viewport_width: i32,
+        viewport_height: i32,
+    ) {
+        unsafe {
+            self.render_mesh(
+                gl,
+                mesh_index,
+                entity.position(),
+                entity.rotation(),
+                camera,
+                viewport_width,
+                viewport_height,
+            )
+        }
+    }
+
+    /// Render a mesh for a given entity with specified depth
+    pub unsafe fn render_entity_with_depth(
+        &self,
+        gl: &Context,
+        mesh_index: usize,
+        entity: &dyn Entity,
+        camera: &CameraConfig,
+        viewport_width: i32,
+        viewport_height: i32,
+        depth: u32,
+    ) {
+        unsafe {
+            self.render_mesh_with_depth(
+                gl,
+                mesh_index,
+                entity.position(),
+                entity.rotation(),
+                camera,
+                viewport_width,
+                viewport_height,
+                depth,
+            )
         }
     }
 
