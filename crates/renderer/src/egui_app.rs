@@ -30,6 +30,8 @@ enum DiffSource {
     Cpu,
     Gl,
     BcfCpu,
+    Gpu,
+    Mesh,
 }
 
 impl DiffSource {
@@ -38,6 +40,8 @@ impl DiffSource {
             DiffSource::Cpu => "CPU",
             DiffSource::Gl => "GL (WebGL 2.0)",
             DiffSource::BcfCpu => "BCF CPU",
+            DiffSource::Gpu => "GPU (Compute)",
+            DiffSource::Mesh => "Mesh",
         }
     }
 }
@@ -256,8 +260,8 @@ impl DualRendererApp {
             bcf_cpu_latest_frame: None,
             gpu_latest_frame: None,
             mesh_latest_frame: None,
-            diff_left: DiffSource::Cpu,
-            diff_right: DiffSource::Gl,
+            diff_left: DiffSource::Mesh,
+            diff_right: DiffSource::Cpu,
         })
     }
 
@@ -465,7 +469,8 @@ impl DualRendererApp {
                     glam::Quat::IDENTITY
                 };
 
-                self.mesh_renderer.render_mesh(
+                let depth = 1; // Match the depth used in upload_mesh
+                self.mesh_renderer.render_mesh_with_depth(
                     gl,
                     0,
                     position,
@@ -473,6 +478,7 @@ impl DualRendererApp {
                     &self.camera,
                     width as i32,
                     height as i32,
+                    depth,
                 );
             }
 
@@ -660,6 +666,8 @@ impl DualRendererApp {
             DiffSource::Cpu => self.cpu_latest_frame.as_ref(),
             DiffSource::Gl => self.gl_latest_frame.as_ref(),
             DiffSource::BcfCpu => self.bcf_cpu_latest_frame.as_ref(),
+            DiffSource::Gpu => self.gpu_latest_frame.as_ref(),
+            DiffSource::Mesh => self.mesh_latest_frame.as_ref(),
         }
     }
 
@@ -1031,6 +1039,16 @@ impl DualRendererApp {
                             DiffSource::BcfCpu,
                             DiffSource::BcfCpu.name(),
                         );
+                        ui.selectable_value(
+                            &mut self.diff_left,
+                            DiffSource::Gpu,
+                            DiffSource::Gpu.name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.diff_left,
+                            DiffSource::Mesh,
+                            DiffSource::Mesh.name(),
+                        );
                     });
 
                 ui.label("vs");
@@ -1052,6 +1070,16 @@ impl DualRendererApp {
                             &mut self.diff_right,
                             DiffSource::BcfCpu,
                             DiffSource::BcfCpu.name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.diff_right,
+                            DiffSource::Gpu,
+                            DiffSource::Gpu.name(),
+                        );
+                        ui.selectable_value(
+                            &mut self.diff_right,
+                            DiffSource::Mesh,
+                            DiffSource::Mesh.name(),
                         );
                     });
             });

@@ -25,6 +25,7 @@ pub use gpu_tracer::GpuTracer;
 pub use mesh_renderer::MeshRenderer;
 
 pub use renderer::{
-    AMBIENT, BACKGROUND_COLOR, CameraConfig, DIFFUSE_STRENGTH, LIGHT_DIR, Renderer,
+    AMBIENT, BACKGROUND_COLOR, CameraConfig, CubeObject, DIFFUSE_STRENGTH, Entity, LIGHT_DIR,
+    Renderer,
 };
 pub use scenes::create_octa_cube;
