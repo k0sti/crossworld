@@ -11,6 +11,7 @@ pub mod bcf_raycast;
 pub mod cpu_tracer;
 pub mod gl_tracer;
 pub mod gpu_tracer;
+pub mod mesh_renderer;
 
 pub mod renderer;
 pub mod scenes;
@@ -21,6 +22,7 @@ pub use bcf_cpu_tracer::BcfCpuTracer;
 pub use cpu_tracer::CpuCubeTracer;
 pub use gl_tracer::GlCubeTracer;
 pub use gpu_tracer::GpuTracer;
+pub use mesh_renderer::MeshRenderer;
 
 pub use renderer::{
     AMBIENT, BACKGROUND_COLOR, CameraConfig, DIFFUSE_STRENGTH, LIGHT_DIR, Renderer,
