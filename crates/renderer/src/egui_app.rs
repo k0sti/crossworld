@@ -6,7 +6,7 @@
 
 use egui::{ColorImage, TextureHandle, TextureOptions};
 use glow::*;
-use renderer::scenes::TestModel;
+use renderer::scenes::{create_cube_from_id, get_model, get_model_ids};
 use renderer::{
     BcfTracer, CameraConfig, ComputeTracer, CpuTracer, GlTracer, MeshRenderer, Renderer,
 };
@@ -21,7 +21,7 @@ struct RenderRequest {
     time: f32,
     camera: Option<CameraConfig>,
     disable_lighting: bool,
-    model: TestModel,
+    model_id: String,
 }
 
 // Response from CPU renderer thread
@@ -48,6 +48,17 @@ impl DiffSource {
             DiffSource::BcfCpu => "BCF CPU",
             DiffSource::Gpu => "GPU (Compute)",
             DiffSource::Mesh => "Mesh",
+        }
+    }
+
+    fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "cpu" => Some(DiffSource::Cpu),
+            "gl" => Some(DiffSource::Gl),
+            "bcf" => Some(DiffSource::BcfCpu),
+            "compute" | "gpu" => Some(DiffSource::Gpu),
+            "mesh" => Some(DiffSource::Mesh),
+            _ => None,
         }
     }
 }
@@ -116,7 +127,7 @@ pub struct CubeRendererApp {
     // Rendering settings
     disable_lighting: bool,
     show_gl_errors: bool,
-    current_model: TestModel,
+    current_model_id: String,
     single_voxel_material: u8, // Material value for SingleRedVoxel model (0-255)
 
     // Mesh caching settings
@@ -141,13 +152,16 @@ pub struct CubeRendererApp {
 impl CubeRendererApp {
     #[allow(dead_code)]
     pub unsafe fn new(gl: &Arc<Context>) -> Result<Self, String> {
-        unsafe { Self::new_with_sync(gl, false) }
+        unsafe { Self::new_with_sync(gl, false, None) }
     }
 
-    pub unsafe fn new_with_sync(gl: &Arc<Context>, sync_mode: bool) -> Result<Self, String> {
-        // Create default scene (Octa Cube - Depth 1 for debugging)
-        let default_model = TestModel::OctaCube;
-        let cube = default_model.create();
+    pub unsafe fn new_with_sync(gl: &Arc<Context>, sync_mode: bool, model_name: Option<&str>) -> Result<Self, String> {
+        // Create default scene (Octa Cube - Depth 1 for debugging, or user-specified model)
+        let default_model_id = model_name.unwrap_or("octa");
+        let cube = create_cube_from_id(default_model_id).or_else(|e| {
+            eprintln!("Warning: {}, falling back to 'octa'", e);
+            create_cube_from_id("octa")
+        })?;
 
         // Initialize GL renderer (WebGL 2.0 fragment shader)
         let mut gl_renderer = GlTracer::new(cube.clone());
@@ -190,10 +204,11 @@ impl CubeRendererApp {
         let request_clone = Arc::clone(&cpu_sync_request);
         let response_clone = Arc::clone(&cpu_sync_response);
 
+        let thread_model_id = default_model_id.to_string();
         thread::spawn(move || {
-            let initial_cube = default_model.create();
+            let initial_cube = create_cube_from_id(&thread_model_id).unwrap();
             let mut cpu_renderer = CpuTracer::new_with_cube(initial_cube);
-            let mut current_model = default_model;
+            let mut current_model_id = thread_model_id;
 
             loop {
                 let request: Option<RenderRequest> = {
@@ -205,9 +220,9 @@ impl CubeRendererApp {
                     let start = std::time::Instant::now();
 
                     // Recreate renderer if model changed
-                    if request.model != current_model {
-                        current_model = request.model;
-                        let new_cube = current_model.create();
+                    if request.model_id != current_model_id {
+                        current_model_id = request.model_id;
+                        let new_cube = create_cube_from_id(&current_model_id).unwrap();
                         cpu_renderer = CpuTracer::new_with_cube(new_cube);
                     }
 
@@ -276,7 +291,7 @@ impl CubeRendererApp {
             zoom_sensitivity: 0.5,
             disable_lighting: false,
             show_gl_errors: false,
-            current_model: default_model,
+            current_model_id: default_model_id.to_string(),
             single_voxel_material: 224, // Default: red (R2G3B2 encoded)
             mesh_cache_enabled: true,
             mesh_needs_regeneration: true, // Start with regeneration needed
@@ -291,6 +306,78 @@ impl CubeRendererApp {
             diff_left: DiffSource::Mesh,
             diff_right: DiffSource::Cpu,
         })
+    }
+
+    /// Set the diff sources from CLI argument strings
+    pub fn set_diff_sources(&mut self, left: &str, right: &str) {
+        if let Some(l) = DiffSource::from_str(left) {
+            self.diff_left = l;
+        }
+        if let Some(r) = DiffSource::from_str(right) {
+            self.diff_right = r;
+        }
+    }
+
+    /// Get the diff source names for output file naming
+    pub fn get_diff_source_names(&self) -> (&'static str, &'static str) {
+        let left = match self.diff_left {
+            DiffSource::Cpu => "cpu",
+            DiffSource::Gl => "gl",
+            DiffSource::BcfCpu => "bcf",
+            DiffSource::Gpu => "gpu",
+            DiffSource::Mesh => "mesh",
+        };
+        let right = match self.diff_right {
+            DiffSource::Cpu => "cpu",
+            DiffSource::Gl => "gl",
+            DiffSource::BcfCpu => "bcf",
+            DiffSource::Gpu => "gpu",
+            DiffSource::Mesh => "mesh",
+        };
+        (left, right)
+    }
+
+    /// Save the diff image to a file. Returns the path if successful.
+    pub fn save_diff_image(&self, output_dir: &str) -> Result<String, String> {
+        // Get the frames for diffing
+        let left_frame = self.get_frame(self.diff_left);
+        let right_frame = self.get_frame(self.diff_right);
+
+        match (left_frame, right_frame) {
+            (Some(left_img), Some(right_img)) => {
+                let diff_image = self.compute_difference_image(left_img, right_img);
+                let (left_name, right_name) = self.get_diff_source_names();
+                let filename = format!("{}/diff_{}-{}.png", output_dir, left_name, right_name);
+
+                // Convert ColorImage to image crate format and save
+                let width = diff_image.size[0] as u32;
+                let height = diff_image.size[1] as u32;
+                let mut rgba_data = Vec::with_capacity((width * height * 4) as usize);
+                for pixel in &diff_image.pixels {
+                    rgba_data.push(pixel.r());
+                    rgba_data.push(pixel.g());
+                    rgba_data.push(pixel.b());
+                    rgba_data.push(pixel.a());
+                }
+
+                let img: image::ImageBuffer<image::Rgba<u8>, Vec<u8>> =
+                    image::ImageBuffer::from_raw(width, height, rgba_data)
+                        .ok_or_else(|| "Failed to create image buffer".to_string())?;
+
+                img.save(&filename)
+                    .map_err(|e| format!("Failed to save image: {}", e))?;
+
+                Ok(filename)
+            }
+            (None, _) => Err(format!(
+                "Left frame ({:?}) not available",
+                self.diff_left
+            )),
+            (_, None) => Err(format!(
+                "Right frame ({:?}) not available",
+                self.diff_right
+            )),
+        }
     }
 
     unsafe fn ensure_framebuffer(&mut self, gl: &Arc<Context>, width: i32, height: i32) {
@@ -513,7 +600,12 @@ impl CubeRendererApp {
             // Render mesh
             gl.bind_framebuffer(FRAMEBUFFER, self.mesh_framebuffer);
             gl.viewport(0, 0, width as i32, height as i32);
-            gl.clear_color(0.4, 0.5, 0.6, 1.0);
+            // Background color with gamma correction to match CPU tracer
+            // BACKGROUND_COLOR is (0.4, 0.5, 0.6), gamma corrected: pow(x, 1/2.2)
+            let bg_r = 0.4_f32.powf(1.0 / 2.2);
+            let bg_g = 0.5_f32.powf(1.0 / 2.2);
+            let bg_b = 0.6_f32.powf(1.0 / 2.2);
+            gl.clear_color(bg_r, bg_g, bg_b, 1.0);
             gl.clear(COLOR_BUFFER_BIT | DEPTH_BUFFER_BIT);
 
             let render_start = std::time::Instant::now();
@@ -538,7 +630,7 @@ impl CubeRendererApp {
             // Upload mesh if needed
             if needs_upload {
                 let upload_start = std::time::Instant::now();
-                let depth = self.current_model.depth();
+                let depth = self.current_cube.max_depth() as u32;
                 match self
                     .mesh_renderer
                     .upload_mesh(gl, &self.current_cube, depth)
@@ -583,7 +675,7 @@ impl CubeRendererApp {
                     CameraConfig::look_at(camera_pos, target, glam::Vec3::Y)
                 };
 
-                let depth = self.current_model.depth();
+                let depth = self.current_cube.max_depth() as u32;
                 self.mesh_renderer.render_mesh_with_depth(
                     gl,
                     0,
@@ -662,7 +754,7 @@ impl CubeRendererApp {
             time,
             camera,
             disable_lighting: self.disable_lighting,
-            model: self.current_model,
+            model_id: self.current_model_id.clone(),
         };
 
         *self.cpu_sync_request.lock().unwrap() = Some(request);
@@ -833,12 +925,16 @@ impl CubeRendererApp {
                 // Model selector
                 ui.label("Test Model:");
                 let mut model_changed = false;
+                let current_model_name = get_model(&self.current_model_id)
+                    .map(|m| m.name.as_str())
+                    .unwrap_or("Unknown");
                 egui::ComboBox::from_label("")
-                    .selected_text(self.current_model.name())
+                    .selected_text(current_model_name)
                     .show_ui(ui, |ui| {
-                        for model in TestModel::all() {
+                        for model_id in get_model_ids() {
+                            let model_entry = get_model(model_id).unwrap();
                             if ui
-                                .selectable_value(&mut self.current_model, *model, model.name())
+                                .selectable_value(&mut self.current_model_id, model_id.to_string(), &model_entry.name)
                                 .clicked()
                             {
                                 model_changed = true;
@@ -848,7 +944,7 @@ impl CubeRendererApp {
 
                 // Reload scene if model changed
                 if model_changed {
-                    let new_cube = self.current_model.create();
+                    let new_cube = create_cube_from_id(&self.current_model_id).unwrap();
                     self.current_cube = new_cube.clone();
                     self.mesh_needs_regeneration = true; // Mark mesh for regeneration
 
@@ -873,7 +969,7 @@ impl CubeRendererApp {
                 }
 
                 // Material selector for Single Red Voxel (depth 0) model
-                if self.current_model == TestModel::SingleRedVoxel {
+                if self.current_model_id == "single" {
                     ui.separator();
                     ui.label("Material:");
                     let mut material_changed = false;

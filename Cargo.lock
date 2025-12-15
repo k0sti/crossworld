@@ -7777,6 +7777,8 @@ dependencies = [
  "glutin-winit",
  "image",
  "raw-window-handle",
+ "ron 0.8.1",
+ "serde",
  "winit",
 ]
 
