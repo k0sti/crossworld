@@ -136,7 +136,6 @@ pub fn generate_face_mesh<B, F>(
     root: &Cube<u8>,
     builder: &mut B,
     color_fn: F,
-    _max_depth: u32,
     border_materials: [u8; 4],
     base_depth: u32,
 ) where
