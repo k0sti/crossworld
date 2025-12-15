@@ -238,15 +238,13 @@ fn setup(
 
     // Calculate render depth from config
     let render_depth = config.world.macro_depth + config.world.micro_depth + config.world.border_depth;
-    let base_depth = config.world.macro_depth + config.world.border_depth;
 
     generate_face_mesh(
         &cube,
         &mut builder,
         |index| color_mapper.map(index),
-        render_depth,
         config.world.border_materials,
-        base_depth,
+        render_depth,
     );
 
     info!("Mesh generated: {} vertices, {} indices",

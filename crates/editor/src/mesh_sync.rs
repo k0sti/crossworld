@@ -32,9 +32,8 @@ pub fn sync_voxel_mesh(
             &cube,
             &mut builder,
             |v| color_mapper.map(v),
-            config.max_depth,
             border_materials,
-            config.max_depth, // base_depth = max_depth for proper scaling
+            config.max_depth,
         );
 
         builder
