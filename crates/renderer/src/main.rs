@@ -36,14 +36,14 @@ struct App {
     egui_state: Option<egui_winit::State>,
     painter: Option<egui_glow::Painter>,
     dual_renderer: Option<DualRendererApp>,
-    single_frame: bool,
+    single_frame_mode: bool,
     sync_mode: bool,
     frame_rendered: bool,
 }
 
 impl App {
-    fn with_single_frame(mut self, single_frame: bool) -> Self {
-        self.single_frame = single_frame;
+    fn with_single_frame_mode(mut self, single_frame_mode: bool) -> Self {
+        self.single_frame_mode = single_frame_mode;
         self
     }
 
@@ -236,7 +236,7 @@ impl ApplicationHandler for App {
                     gl_surface.swap_buffers(gl_context).unwrap();
 
                     // Check if single frame mode
-                    if self.single_frame {
+                    if self.single_frame_mode {
                         if !self.frame_rendered {
                             self.frame_rendered = true;
                             println!("\n=== Single frame rendered, exiting ===");
@@ -252,7 +252,7 @@ impl ApplicationHandler for App {
     }
 
     fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
-        if !self.single_frame
+        if !self.single_frame_mode
             && let Some(window) = self.window.as_ref()
         {
             window.request_redraw();
@@ -278,53 +278,66 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Parse command line arguments
     let mut console_mode = false;
-    let mut single_frame = false;
     let mut sync_mode = false;
     let mut single_mode = false;
     let mut force_headless = false;
+    let mut diff_mode = String::from("cpu-gl"); // Default diff comparison
 
-    for arg in args.iter().skip(1) {
-        match arg.as_str() {
+    let mut i = 1;
+    while i < args.len() {
+        match args[i].as_str() {
             "--console" => console_mode = true,
-            "--single-frame" => single_frame = true,
             "--sync" => sync_mode = true,
             "--single" => {
                 sync_mode = true;
                 single_mode = true;
             }
             "--headless" => force_headless = true,
+            "--diff" => {
+                if i + 1 < args.len() {
+                    diff_mode = args[i + 1].clone();
+                    i += 1; // Skip next arg as it's the value
+
+                    // Validate diff mode
+                    let valid_modes = ["cpu-gl", "cpu-gpu", "gl-gpu", "all"];
+                    if !valid_modes.contains(&diff_mode.as_str()) {
+                        eprintln!("Error: Invalid --diff value '{}'", diff_mode);
+                        eprintln!("Valid values: cpu-gl, cpu-gpu, gl-gpu, all");
+                        return Ok(());
+                    }
+                } else {
+                    eprintln!("Error: --diff requires a value (cpu-gl, cpu-gpu, gl-gpu, or all)");
+                    return Ok(());
+                }
+            }
             "--cpu" => {
                 eprintln!("Note: --cpu is deprecated, use --console instead");
                 console_mode = true;
             }
             _ => {
-                eprintln!("Unknown argument: {}", arg);
+                eprintln!("Unknown argument: {}", args[i]);
                 eprintln!("Usage: renderer [OPTIONS]");
                 eprintln!();
                 eprintln!("Options:");
-                eprintln!("  --console      Run in console mode (no GUI, batch CPU rendering)");
-                eprintln!("  --single-frame Render one frame in GUI and exit (for debugging)");
-                eprintln!(
-                    "  --sync         GUI with synchronized rendering (all tracers use same time/camera)"
-                );
-                eprintln!(
-                    "  --single       Render once and exit. Uses GUI if available, headless if not."
-                );
-                eprintln!(
-                    "  --headless     Force headless mode (combine with --single for batch processing)"
-                );
+                eprintln!("  --console       Run in console mode (no GUI, batch CPU rendering)");
+                eprintln!("  --sync          GUI with synchronized rendering (all tracers use same time/camera)");
+                eprintln!("  --single        Render once and exit. Uses GUI if available, headless if not.");
+                eprintln!("  --headless      Force headless mode (combine with --single for batch processing)");
+                eprintln!("  --diff <MODE>   Diff comparison mode for --single --headless (default: cpu-gl)");
+                eprintln!("                  Valid modes: cpu-gl, cpu-gpu, gl-gpu, all");
                 eprintln!();
                 eprintln!("Default: Opens GUI with triple renderer (CPU + GL + GPU side-by-side)");
                 eprintln!();
                 eprintln!("Examples:");
-                eprintln!("  renderer --single           # GUI: render one frame, save, exit");
-                eprintln!(
-                    "  renderer --single --headless # Headless: render, save diffs, stats, exit"
-                );
-                eprintln!("  renderer --sync             # GUI: synchronized continuous rendering");
+                eprintln!("  renderer --single                      # GUI: render one frame and exit");
+                eprintln!("  renderer --single --headless           # Headless: render, save cpu-gl diff, exit");
+                eprintln!("  renderer --single --headless --diff cpu-gpu # Headless: render, save cpu-gpu diff");
+                eprintln!("  renderer --single --headless --diff all     # Headless: render, save all diffs");
+                eprintln!("  renderer --sync                        # GUI: synchronized continuous rendering");
                 return Ok(());
             }
         }
+        i += 1;
     }
 
     if console_mode {
@@ -332,16 +345,16 @@ fn main() -> Result<(), Box<dyn Error>> {
     } else if single_mode {
         if force_headless {
             // --single --headless: batch mode with stats and diffs
-            run_sync_renderer_headless()?;
+            run_sync_renderer_headless(&diff_mode)?;
         } else {
             // --single: GUI mode, render once and exit
             run_dual_renderer_sync(true)?;
         }
     } else if sync_mode {
         // --sync: GUI mode with synchronized rendering
-        run_dual_renderer_sync(single_frame)?;
+        run_dual_renderer_sync(false)?;
     } else {
-        run_dual_renderer(single_frame)?;
+        run_dual_renderer()?;
     }
 
     Ok(())
@@ -380,13 +393,14 @@ fn run_console_renderer() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn run_sync_renderer_headless() -> Result<(), Box<dyn Error>> {
+fn run_sync_renderer_headless(diff_mode: &str) -> Result<(), Box<dyn Error>> {
     use GlCubeTracer;
     use GpuTracer;
     use renderer::CameraConfig;
 
     println!("Running synchronized single-shot renderer...");
     println!("All tracers use same timestamp and camera configuration");
+    println!("Diff mode: {}", diff_mode);
 
     // Create camera configuration
     let camera = CameraConfig::look_at(
@@ -666,48 +680,45 @@ fn run_sync_renderer_headless() -> Result<(), Box<dyn Error>> {
             // === Diff Image Calculation ===
             println!("[Diff] Calculating difference images...");
 
-            // CPU vs GL
             if let Some(cpu_buf) = cpu_renderer.image_buffer() {
-                let diff_cpu_gl = compute_diff_image(cpu_buf, &gl_image);
-                diff_cpu_gl.save("output/diff_cpu_gl.png")?;
-                let (max_diff, avg_diff, pixel_diff_count) = analyze_diff(cpu_buf, &gl_image);
-                println!("  CPU vs GL:");
-                println!("    Max difference: {} (out of 255)", max_diff);
-                println!("    Avg difference: {:.2}", avg_diff);
-                println!(
-                    "    Differing pixels: {} ({:.2}%)",
-                    pixel_diff_count,
-                    (pixel_diff_count as f32 / (width * height) as f32) * 100.0
-                );
-                println!("    Saved: output/diff_cpu_gl.png");
+                // Helper to generate and save a single diff
+                let generate_diff = |name: &str, img1: &image::ImageBuffer<image::Rgb<u8>, Vec<u8>>, img2: &image::ImageBuffer<image::Rgb<u8>, Vec<u8>>| -> Result<(), Box<dyn Error>> {
+                    let diff_img = compute_diff_image(img1, img2);
+                    let filename = format!("output/diff_{}.png", name);
+                    diff_img.save(&filename)?;
+                    let (max_diff, avg_diff, pixel_diff_count) = analyze_diff(img1, img2);
+                    println!("  {}:", name.to_uppercase().replace('-', " vs "));
+                    println!("    Max difference: {} (out of 255)", max_diff);
+                    println!("    Avg difference: {:.2}", avg_diff);
+                    println!(
+                        "    Differing pixels: {} ({:.2}%)",
+                        pixel_diff_count,
+                        (pixel_diff_count as f32 / (width * height) as f32) * 100.0
+                    );
+                    println!("    Saved: {}", filename);
+                    Ok(())
+                };
 
-                // CPU vs GPU
-                let diff_cpu_gpu = compute_diff_image(cpu_buf, &gpu_image);
-                diff_cpu_gpu.save("output/diff_cpu_gpu.png")?;
-                let (max_diff, avg_diff, pixel_diff_count) = analyze_diff(cpu_buf, &gpu_image);
-                println!("  CPU vs GPU:");
-                println!("    Max difference: {} (out of 255)", max_diff);
-                println!("    Avg difference: {:.2}", avg_diff);
-                println!(
-                    "    Differing pixels: {} ({:.2}%)",
-                    pixel_diff_count,
-                    (pixel_diff_count as f32 / (width * height) as f32) * 100.0
-                );
-                println!("    Saved: output/diff_cpu_gpu.png");
-
-                // GL vs GPU
-                let diff_gl_gpu = compute_diff_image(&gl_image, &gpu_image);
-                diff_gl_gpu.save("output/diff_gl_gpu.png")?;
-                let (max_diff, avg_diff, pixel_diff_count) = analyze_diff(&gl_image, &gpu_image);
-                println!("  GL vs GPU:");
-                println!("    Max difference: {} (out of 255)", max_diff);
-                println!("    Avg difference: {:.2}", avg_diff);
-                println!(
-                    "    Differing pixels: {} ({:.2}%)",
-                    pixel_diff_count,
-                    (pixel_diff_count as f32 / (width * height) as f32) * 100.0
-                );
-                println!("    Saved: output/diff_gl_gpu.png");
+                // Generate requested diffs
+                match diff_mode {
+                    "cpu-gl" => {
+                        generate_diff("cpu-gl", cpu_buf, &gl_image)?;
+                    }
+                    "cpu-gpu" => {
+                        generate_diff("cpu-gpu", cpu_buf, &gpu_image)?;
+                    }
+                    "gl-gpu" => {
+                        generate_diff("gl-gpu", &gl_image, &gpu_image)?;
+                    }
+                    "all" => {
+                        generate_diff("cpu-gl", cpu_buf, &gl_image)?;
+                        generate_diff("cpu-gpu", cpu_buf, &gpu_image)?;
+                        generate_diff("gl-gpu", &gl_image, &gpu_image)?;
+                    }
+                    _ => {
+                        eprintln!("Warning: Unknown diff mode '{}'", diff_mode);
+                    }
+                }
             }
             println!();
 
@@ -804,18 +815,18 @@ fn analyze_diff(
     (max_diff, avg_diff, pixel_diff_count)
 }
 
-fn run_dual_renderer_sync(single_frame: bool) -> Result<(), Box<dyn Error>> {
-    if single_frame {
+fn run_dual_renderer_sync(single_frame_mode: bool) -> Result<(), Box<dyn Error>> {
+    if single_frame_mode {
         println!("Running synchronized raytracer (single frame mode)...");
     } else {
         println!("Running synchronized raytracer (all tracers use same timestamp/camera)...");
         println!("CPU renderer will block until complete each frame for true synchronization.");
     }
 
-    run_dual_renderer_with_mode(single_frame, true)
+    run_dual_renderer_with_mode(single_frame_mode, true)
 }
 
-fn run_dual_renderer_with_mode(single_frame: bool, sync_mode: bool) -> Result<(), Box<dyn Error>> {
+fn run_dual_renderer_with_mode(single_frame_mode: bool, sync_mode: bool) -> Result<(), Box<dyn Error>> {
     #[cfg(target_os = "linux")]
     let event_loop = {
         let mut builder = EventLoop::builder();
@@ -831,19 +842,14 @@ fn run_dual_renderer_with_mode(single_frame: bool, sync_mode: bool) -> Result<()
     event_loop.set_control_flow(ControlFlow::Poll);
 
     let mut app = App::default()
-        .with_single_frame(single_frame)
+        .with_single_frame_mode(single_frame_mode)
         .with_sync_mode(sync_mode);
     event_loop.run_app(&mut app)?;
 
     Ok(())
 }
 
-fn run_dual_renderer(single_frame: bool) -> Result<(), Box<dyn Error>> {
-    if single_frame {
-        println!("Running dual raytracer (single frame mode for debugging)...");
-    } else {
-        println!("Running dual raytracer (GPU + CPU side-by-side)...");
-    }
-
-    run_dual_renderer_with_mode(single_frame, false)
+fn run_dual_renderer() -> Result<(), Box<dyn Error>> {
+    println!("Running dual raytracer (GPU + CPU side-by-side)...");
+    run_dual_renderer_with_mode(false, false)
 }
