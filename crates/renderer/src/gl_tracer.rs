@@ -42,7 +42,7 @@ const VERTEX_SHADER_SOURCE: &str = include_str!("shaders/octree_raycast.vert");
 const FRAGMENT_SHADER_SOURCE: &str = include_str!("shaders/octree_raycast.frag");
 
 /// WebGL 2.0 fragment shader raytracer with octree support
-pub struct GlCubeTracer {
+pub struct GlTracer {
     cube: Rc<Cube<u8>>,
     bounds: CubeBounds,
     // GL resources (Option for cases where GL context isn't available)
@@ -122,7 +122,7 @@ impl RaycastHit {
     }
 }
 
-impl GlCubeTracer {
+impl GlTracer {
     pub fn new(cube: Rc<Cube<u8>>) -> Self {
         Self {
             cube,
@@ -599,7 +599,7 @@ impl GlTracerGl {
     }
 }
 
-impl Renderer for GlCubeTracer {
+impl Renderer for GlTracer {
     fn render(&mut self, _width: u32, _height: u32, _time: f32) {
         // Note: GL rendering is handled by render_to_gl in the app loop
         // This is here to satisfy the trait, but actual rendering needs GL context
@@ -611,6 +611,6 @@ impl Renderer for GlCubeTracer {
     }
 
     fn name(&self) -> &str {
-        "GlCubeTracer (WebGL 2.0 Fragment Shader)"
+        "GlTracer (WebGL 2.0 Fragment Shader)"
     }
 }

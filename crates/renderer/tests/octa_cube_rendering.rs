@@ -1,6 +1,6 @@
 //! Octa cube rendering test - validates CPU raytracer with sparse octrees
 
-use renderer::{CameraConfig, CpuCubeTracer, Renderer, create_octa_cube};
+use renderer::{CameraConfig, CpuTracer, Renderer, create_octa_cube};
 use std::path::PathBuf;
 
 /// Test output directory
@@ -18,7 +18,7 @@ fn test_octa_cube_cpu_rendering() {
     let cube = create_octa_cube();
 
     // Create CPU raytracer
-    let mut tracer = CpuCubeTracer::new_with_cube(cube);
+    let mut tracer = CpuTracer::new_with_cube(cube);
 
     // Setup camera to view the octree
     // Position camera to see the two empty corners (octants 3 and 7)
@@ -97,7 +97,7 @@ fn test_octa_cube_multiple_angles() {
     let height = 256;
 
     for (name, position) in camera_positions {
-        let mut tracer = CpuCubeTracer::new_with_cube(cube.clone());
+        let mut tracer = CpuTracer::new_with_cube(cube.clone());
 
         let camera = CameraConfig::look_at(
             position,

@@ -29,9 +29,9 @@ fn test_examine_octa_cube_structure() {
         }
     }
 
-    // Also check what the default CpuCubeTracer gets
-    use renderer::cpu_tracer::CpuCubeTracer;
-    let _tracer = CpuCubeTracer::new();
+    // Also check what the default CpuTracer gets
+    use renderer::cpu_tracer::CpuTracer;
+    let _tracer = CpuTracer::new();
 
     // Can't directly access the cube, but we can create one with the known scene
     println!("\n Default tracer should use octa cube (created via new())");

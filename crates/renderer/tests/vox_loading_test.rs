@@ -1,7 +1,7 @@
 //! Test VOX model loading
 
 use renderer::scenes::{create_vox_robot, create_vox_alien_bot, create_vox_eskimo};
-use renderer::{BcfCpuTracer, Renderer};
+use renderer::{BcfTracer, Renderer};
 use cube::Cube;
 
 #[test]
@@ -71,7 +71,7 @@ fn test_vox_eskimo_loading() {
 #[test]
 fn test_vox_robot_rendering() {
     let cube = create_vox_robot();
-    let mut tracer = BcfCpuTracer::new_from_cube(cube);
+    let mut tracer = BcfTracer::new_from_cube(cube);
 
     // Render a 128x128 image
     tracer.render(128, 128, 0.0);
