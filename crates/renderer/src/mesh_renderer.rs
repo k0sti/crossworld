@@ -65,7 +65,7 @@ impl MeshRenderer {
             // No border materials for now
             let border_materials = [0, 0, 0, 0];
 
-            generate_face_mesh(cube, &mut builder, color_fn, depth, border_materials, depth);
+            generate_face_mesh(cube, &mut builder, color_fn, border_materials, depth);
 
             if builder.indices.is_empty() {
                 return Err("Generated mesh has no faces".to_string());

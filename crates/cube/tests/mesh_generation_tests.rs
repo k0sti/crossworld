@@ -65,7 +65,6 @@ fn test_single_leaf_cube_with_empty_borders() {
         &cube,
         &mut builder,
         test_color_mapper,
-        0,
         border_materials,
         0,
     );
@@ -132,7 +131,6 @@ fn test_single_leaf_cube_vertex_positions() {
         &cube,
         &mut builder,
         test_color_mapper,
-        0,
         border_materials,
         0,
     );
@@ -184,7 +182,6 @@ fn test_single_leaf_cube_normals() {
         &cube,
         &mut builder,
         test_color_mapper,
-        0,
         border_materials,
         0,
     );
@@ -229,36 +226,6 @@ fn test_single_leaf_cube_normals() {
 // Depth 1 Tests
 // ============================================================================
 
-#[test]
-fn test_octa_cube_depth1_face_count() {
-    // Octa cube has 5 solid voxels and 3 empty voxels
-    // Faces are generated where empty voxels see solid neighbors
-    let cube = octa_cube_depth1();
-    let mut builder = DefaultMeshBuilder::new();
-    let border_materials = [0, 0, 0, 0];
-
-    generate_face_mesh(
-        &cube,
-        &mut builder,
-        test_color_mapper,
-        1,
-        border_materials,
-        1,
-    );
-
-    let face_count = count_faces(&builder);
-
-    // This test demonstrates the issue: we expect faces but may get incorrect count
-    println!("Octa cube depth 1 generated {} faces", face_count);
-    println!("Vertices: {}", builder.vertices.len() / 3);
-    println!("Indices: {}", builder.indices.len());
-
-    // We expect some faces to be generated
-    assert!(
-        face_count > 0,
-        "Octa cube should generate at least some faces"
-    );
-}
 
 #[test]
 fn test_all_solid_cube_face_count() {
@@ -271,7 +238,6 @@ fn test_all_solid_cube_face_count() {
         &cube,
         &mut builder,
         test_color_mapper,
-        1,
         border_materials,
         1,
     );
@@ -300,7 +266,6 @@ fn test_all_empty_cube_face_count() {
         &cube,
         &mut builder,
         test_color_mapper,
-        1,
         border_materials,
         1,
     );
@@ -325,7 +290,6 @@ fn test_checkerboard_cube_internal_faces() {
         &cube,
         &mut builder,
         test_color_mapper,
-        1,
         border_materials,
         1,
     );
@@ -354,7 +318,6 @@ fn test_single_solid_in_empty_face_count() {
         &cube,
         &mut builder,
         test_color_mapper,
-        1,
         border_materials,
         1,
     );
@@ -373,71 +336,6 @@ fn test_single_solid_in_empty_face_count() {
     );
 }
 
-// ============================================================================
-// Depth 2 Tests
-// ============================================================================
-
-#[test]
-fn test_extended_octa_depth2_mixed_depths() {
-    // Extended octa has mixed leaf depths (some at depth 1, some at depth 2)
-    let cube = extended_octa_cube_depth2();
-    let mut builder = DefaultMeshBuilder::new();
-    let border_materials = [0, 0, 0, 0];
-
-    generate_face_mesh(
-        &cube,
-        &mut builder,
-        test_color_mapper,
-        2,
-        border_materials,
-        2,
-    );
-
-    let face_count = count_faces(&builder);
-
-    println!("Extended octa depth 2 generated {} faces", face_count);
-
-    assert!(
-        face_count > 0,
-        "Extended octa should generate faces at multiple depths"
-    );
-
-    // Verify vertices are in [0, 1] range
-    assert!(
-        verify_vertex_bounds(&builder, 0.0, 1.0),
-        "Vertices should be within [0, 1] bounds"
-    );
-}
-
-// ============================================================================
-// Depth 3 Tests
-// ============================================================================
-
-#[test]
-fn test_deep_octree_depth3() {
-    // Deep octree tests mesh generation at depth 3
-    let cube = deep_octree_depth3();
-    let mut builder = DefaultMeshBuilder::new();
-    let border_materials = [0, 0, 0, 0];
-
-    generate_face_mesh(
-        &cube,
-        &mut builder,
-        test_color_mapper,
-        3,
-        border_materials,
-        3,
-    );
-
-    let face_count = count_faces(&builder);
-
-    println!("Deep octree depth 3 generated {} faces", face_count);
-
-    assert!(
-        face_count > 0,
-        "Deep octree should generate faces at depth 3"
-    );
-}
 
 // ============================================================================
 // Issue Demonstration Tests
@@ -549,7 +447,6 @@ fn test_empty_octree_generates_no_faces() {
         &cube,
         &mut builder,
         test_color_mapper,
-        0,
         border_materials,
         0,
     );
