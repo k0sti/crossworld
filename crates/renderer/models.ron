@@ -75,19 +75,19 @@
         (
             id: "vox_robot",
             name: "Robot Character",
-            vox_path: Some("assets/avatars/robot.vox"),
+            vox_path: Some("robot.vox"),
         ),
 
         (
             id: "vox_alien_bot",
             name: "Alien Bot",
-            vox_path: Some("assets/avatars/alien_bot.vox"),
+            vox_path: Some("alien_bot.vox"),
         ),
 
         (
             id: "vox_eskimo",
             name: "Eskimo Character",
-            vox_path: Some("assets/avatars/eskimo.vox"),
+            vox_path: Some("eskimo.vox"),
         ),
     ]
 )

@@ -367,7 +367,6 @@ fn test_demonstrate_mesh_generation_issues() {
             &cube,
             &mut builder,
             test_color_mapper,
-            max_depth,
             border_materials,
             max_depth,
         );
