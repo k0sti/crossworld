@@ -339,9 +339,9 @@ fn test_bcf_vs_cpu_tracer_comparison() {
 /// Test: BCF tracer handles depth 2 extended octa cube
 #[test]
 fn test_bcf_tracer_depth_2_extended_octa() {
-    use renderer::scenes::create_extended_octa_cube;
+    use renderer::scenes::create_cube_from_id;
 
-    let cube = create_extended_octa_cube();
+    let cube = create_cube_from_id("extended").expect("Failed to load extended model");
     let mut tracer = BcfTracer::new_from_cube(cube);
 
     // Render a 128x128 image
@@ -454,9 +454,9 @@ fn bench_bcf_tracer_render_time() {
 /// Test: BCF tracer handles depth 3 cube with random subdivisions
 #[test]
 fn test_bcf_tracer_depth_3_cube() {
-    use renderer::scenes::create_depth_3_cube;
+    use renderer::scenes::create_cube_from_id;
 
-    let cube = create_depth_3_cube();
+    let cube = create_cube_from_id("depth3").expect("Failed to load depth3 model");
     let mut tracer = BcfTracer::new_from_cube(cube);
 
     // Render a 128x128 image
@@ -502,9 +502,9 @@ fn test_bcf_tracer_depth_3_cube() {
 /// Test: Debug BCF serialization for depth 3 cube
 #[test]
 fn test_bcf_depth_3_serialization() {
-    use renderer::scenes::create_depth_3_cube;
+    use renderer::scenes::create_cube_from_id;
 
-    let cube = create_depth_3_cube();
+    let cube = create_cube_from_id("depth3").expect("Failed to load depth3 model");
 
     // Serialize to BCF
     let bcf_data = serialize_bcf(&cube);
@@ -528,9 +528,9 @@ fn test_bcf_depth_3_serialization() {
 /// Test: Compare BCF tracer with Pure Rust tracer for depth 3 cube
 #[test]
 fn test_bcf_vs_pure_rust_depth_3() {
-    use renderer::scenes::create_depth_3_cube;
+    use renderer::scenes::create_cube_from_id;
 
-    let cube = create_depth_3_cube();
+    let cube = create_cube_from_id("depth3").expect("Failed to load depth3 model");
 
     // Create BCF tracer
     let mut bcf_tracer = BcfTracer::new_from_cube(cube.clone());
@@ -613,9 +613,9 @@ fn test_bcf_vs_pure_rust_depth_3() {
 /// Test: BCF tracer handles test expansion cube
 #[test]
 fn test_bcf_tracer_test_expansion_cube() {
-    use renderer::scenes::create_test_expansion_cube;
+    use renderer::scenes::create_cube_from_id;
 
-    let cube = create_test_expansion_cube();
+    let cube = create_cube_from_id("test_expansion").expect("Failed to load test_expansion model");
     let mut tracer = BcfTracer::new_from_cube(cube);
 
     // Render a 128x128 image

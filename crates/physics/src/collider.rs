@@ -64,7 +64,7 @@ impl VoxelColliderBuilder {
     #[cfg(not(target_arch = "wasm32"))]
     pub fn from_cube_region(
         cube: &Rc<Cube<u8>>,
-        max_depth: u32,
+        _max_depth: u32,
         region: Option<rapier3d::parry::bounding_volume::Aabb>,
     ) -> Collider {
         let mut builder = Self::new();
@@ -95,7 +95,6 @@ impl VoxelColliderBuilder {
                 builder.process_voxel(view, coord);
                 false // Don't subdivide further
             },
-            max_depth,
         );
 
         builder.build_compound_collider()
@@ -329,7 +328,6 @@ mod tests {
                 builder_full.process_voxel(view, coord);
                 false
             },
-            3,
         );
         let full_face_count = builder_full.face_count();
 

@@ -22,63 +22,63 @@ pub struct FaceInfo {
 
 /// Visit all visible faces in the octree
 /// Looks from empty voxels toward solid voxels.
-#[allow(dead_code)]
-pub fn visit_faces_outside<F>(
-    root: &Cube<u8>,
-    mut visitor: F,
-    max_depth: u32,
-    border_materials: [u8; 4],
-) where
-    F: FnMut(&FaceInfo),
-{
-    let grid = NeighborGrid::new(root, border_materials);
+// #[allow(dead_code)]
+// pub fn visit_faces_outside<F>(
+//     root: &Cube<u8>,
+//     mut visitor: F,
+//     max_depth: u32,
+//     border_materials: [u8; 4],
+// ) where
+//     F: FnMut(&FaceInfo),
+// {
+//     let grid = NeighborGrid::new(root, border_materials);
 
-    traverse_octree(
-        &grid,
-        &mut |view, coord, _subleaf| {
-            // Only process empty voxels - THIS IS THE PROBLEM
-            if (**view.center()).id() != 0 {
-                return false;
-            }
+//     traverse_octree(
+//         &grid,
+//         &mut |view, coord, _subleaf| {
+//             // Only process empty voxels - THIS IS THE PROBLEM
+//             if (**view.center()).id() != 0 {
+//                 return false;
+//             }
 
-            // Clamp depth to max_depth to avoid underflow
-            let depth = coord.depth.min(max_depth);
-            let voxel_size = 1.0 / (1 << (max_depth - depth + 1)) as f32;
-            let base_pos = coord.pos.as_vec3() * voxel_size;
+//             // Clamp depth to max_depth to avoid underflow
+//             let depth = coord.depth.min(max_depth);
+//             let voxel_size = 1.0 / (1 << (max_depth - depth + 1)) as f32;
+//             let base_pos = coord.pos.as_vec3() * voxel_size;
 
-            let mut should_subdivide = false;
+//             let mut should_subdivide = false;
 
-            // Check all 6 directions using Face::DIRECTIONS
-            for (face, dir_offset, offset_vec) in Face::DIRECTIONS {
-                if let Some(neighbor_cube) = view.get(dir_offset) {
-                    // Check if neighbor is subdivided
-                    if !(**neighbor_cube).is_leaf() {
-                        should_subdivide = true;
-                        continue;
-                    }
+//             // Check all 6 directions using Face::DIRECTIONS
+//             for (face, dir_offset, offset_vec) in Face::DIRECTIONS {
+//                 if let Some(neighbor_cube) = view.get(dir_offset) {
+//                     // Check if neighbor is subdivided
+//                     if !(**neighbor_cube).is_leaf() {
+//                         should_subdivide = true;
+//                         continue;
+//                     }
 
-                    let neighbor_id = (**neighbor_cube).id();
-                    if neighbor_id == 0 {
-                        continue; // Skip empty neighbors
-                    }
+//                     let neighbor_id = (**neighbor_cube).id();
+//                     if neighbor_id == 0 {
+//                         continue; // Skip empty neighbors
+//                     }
 
-                    // Found a visible face!
-                    let face_position = base_pos + offset_vec * voxel_size;
-                    visitor(&FaceInfo {
-                        face,
-                        position: face_position,
-                        size: voxel_size,
-                        material_id: neighbor_id,
-                        viewer_coord: coord,
-                    });
-                }
-            }
+//                     // Found a visible face!
+//                     let face_position = base_pos + offset_vec * voxel_size;
+//                     visitor(&FaceInfo {
+//                         face,
+//                         position: face_position,
+//                         size: voxel_size,
+//                         material_id: neighbor_id,
+//                         viewer_coord: coord,
+//                     });
+//                 }
+//             }
 
-            should_subdivide
-        },
-        max_depth,
-    );
-}
+//             should_subdivide
+//         },
+//         max_depth,
+//     );
+// }
 
 /// Visit all visible faces in the octree
 ///
@@ -198,6 +198,5 @@ where
 
             should_subdivide
         },
-        0,
     );
 }

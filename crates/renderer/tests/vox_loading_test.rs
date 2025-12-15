@@ -1,12 +1,12 @@
 //! Test VOX model loading
 
 use cube::Cube;
-use renderer::scenes::{create_vox_alien_bot, create_vox_eskimo, create_vox_robot};
+use renderer::scenes::create_cube_from_id;
 use renderer::{BcfTracer, Renderer};
 
 #[test]
 fn test_vox_robot_loading() {
-    let cube = create_vox_robot();
+    let cube = create_cube_from_id("vox_robot").expect("Failed to load vox_robot model");
 
     // Check that cube is not just a solid
     match cube.as_ref() {
@@ -28,7 +28,7 @@ fn test_vox_robot_loading() {
 
 #[test]
 fn test_vox_alien_bot_loading() {
-    let cube = create_vox_alien_bot();
+    let cube = create_cube_from_id("vox_alien_bot").expect("Failed to load vox_alien_bot model");
 
     // Check that cube is not just a solid
     match cube.as_ref() {
@@ -49,7 +49,7 @@ fn test_vox_alien_bot_loading() {
 
 #[test]
 fn test_vox_eskimo_loading() {
-    let cube = create_vox_eskimo();
+    let cube = create_cube_from_id("vox_eskimo").expect("Failed to load vox_eskimo model");
 
     // Check that cube is not just a solid
     match cube.as_ref() {
@@ -70,7 +70,7 @@ fn test_vox_eskimo_loading() {
 
 #[test]
 fn test_vox_robot_rendering() {
-    let cube = create_vox_robot();
+    let cube = create_cube_from_id("vox_robot").expect("Failed to load vox_robot model");
     let mut tracer = BcfTracer::new_from_cube(cube);
 
     // Render a 128x128 image

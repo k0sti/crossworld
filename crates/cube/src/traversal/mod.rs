@@ -54,7 +54,7 @@ pub type TraversalVisitor<'a> = &'a mut dyn FnMut(NeighborView, CubeCoord, bool)
 ///     subleaf  // Subdivide if this is a subleaf, otherwise false
 /// }, 3);
 /// ```
-pub fn traverse_octree(grid: &NeighborGrid, visitor: TraversalVisitor, max_depth: u32) {
+pub fn traverse_octree(grid: &NeighborGrid, visitor: TraversalVisitor) {
     // Traverse the center 2x2x2 octants
     for octant_idx in 0..8 {
         // from_octant_index now returns 0/1 coords, convert to center-based -1/+1
@@ -69,7 +69,7 @@ pub fn traverse_octree(grid: &NeighborGrid, visitor: TraversalVisitor, max_depth
         let grid_idx = NeighborGrid::xyz_to_index(grid_x, grid_y, grid_z);
 
         let view = NeighborView::new(grid, grid_idx);
-        let coord = CubeCoord::new(octant_pos, max_depth);
+        let coord = CubeCoord::new(octant_pos, 1);
         traverse_recursive(view, coord, visitor, false);
     }
 }
@@ -84,12 +84,6 @@ fn traverse_recursive(
     use crate::Cube;
 
     let voxel = view.center();
-
-    // At maximum depth, this is a final leaf - cannot subdivide further
-    if coord.depth == 0 {
-        visitor(view, coord, subleaf);
-        return;
-    }
 
     match &**voxel {
         Cube::Solid(_) | Cube::Quad { .. } | Cube::Layers { .. } => {
