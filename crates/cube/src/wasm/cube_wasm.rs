@@ -235,7 +235,6 @@ impl WasmCube {
                 &cube,
                 &mut builder,
                 |v| mapper.map(v),
-                max_depth,
                 border_materials,
                 max_depth, // base_depth = max_depth for avatars
             );
@@ -250,7 +249,6 @@ impl WasmCube {
                         &cube,
                         &mut builder,
                         |v| mapper.map(v),
-                        max_depth,
                         border_materials,
                         max_depth, // base_depth = max_depth for avatars
                     );
