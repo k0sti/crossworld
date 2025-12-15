@@ -1,9 +1,15 @@
-//! Egui application for comparing three raytracer implementations side-by-side
+//! Egui application for comparing multiple raytracer implementations side-by-side
+//!
+//! This module provides `CubeRendererApp`, an egui application that displays
+//! five different cube renderers (CPU, GL, BCF CPU, GPU Compute, and Mesh)
+//! with diff comparison capabilities.
 
 use egui::{ColorImage, TextureHandle, TextureOptions};
 use glow::*;
 use renderer::scenes::TestModel;
-use renderer::{BcfTracer, CameraConfig, ComputeTracer, CpuTracer, GlTracer, MeshRenderer, Renderer};
+use renderer::{
+    BcfTracer, CameraConfig, ComputeTracer, CpuTracer, GlTracer, MeshRenderer, Renderer,
+};
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -46,7 +52,15 @@ impl DiffSource {
     }
 }
 
-pub struct DualRendererApp {
+/// Multi-renderer comparison application
+///
+/// Displays five different cube renderers side-by-side:
+/// - CPU: Pure Rust raytracer
+/// - GL: WebGL 2.0 fragment shader raytracer
+/// - BCF CPU: Binary Cube Format traversal raytracer
+/// - GPU: Compute shader raytracer
+/// - Mesh: Triangle mesh rasterizer
+pub struct CubeRendererApp {
     // Five renderers
     cpu_sync_request: Arc<Mutex<Option<RenderRequest>>>,
     cpu_sync_response: Arc<Mutex<Option<RenderResponse>>>,
@@ -62,6 +76,7 @@ pub struct DualRendererApp {
     gpu_texture: Option<Texture>,
     mesh_framebuffer: Option<Framebuffer>,
     mesh_texture: Option<Texture>,
+    mesh_depth_rb: Option<Renderbuffer>,
     framebuffer_size: (i32, i32),
 
     // Mesh state
@@ -104,6 +119,13 @@ pub struct DualRendererApp {
     current_model: TestModel,
     single_voxel_material: u8, // Material value for SingleRedVoxel model (0-255)
 
+    // Mesh caching settings
+    mesh_cache_enabled: bool,
+    mesh_needs_regeneration: bool,
+    mesh_upload_time_ms: f32,
+    mesh_vertex_count: usize,
+    mesh_face_count: usize,
+
     // Current display frames
     cpu_latest_frame: Option<ColorImage>,
     gl_latest_frame: Option<ColorImage>,
@@ -116,7 +138,7 @@ pub struct DualRendererApp {
     diff_right: DiffSource,
 }
 
-impl DualRendererApp {
+impl CubeRendererApp {
     #[allow(dead_code)]
     pub unsafe fn new(gl: &Arc<Context>) -> Result<Self, String> {
         unsafe { Self::new_with_sync(gl, false) }
@@ -226,6 +248,7 @@ impl DualRendererApp {
             gpu_texture: None,
             mesh_framebuffer: None,
             mesh_texture: None,
+            mesh_depth_rb: None,
             framebuffer_size: (0, 0),
             current_cube: cube.clone(),
             mesh_indices: Vec::new(),
@@ -255,6 +278,11 @@ impl DualRendererApp {
             show_gl_errors: false,
             current_model: default_model,
             single_voxel_material: 224, // Default: red (R2G3B2 encoded)
+            mesh_cache_enabled: true,
+            mesh_needs_regeneration: true, // Start with regeneration needed
+            mesh_upload_time_ms: 0.0,
+            mesh_vertex_count: 0,
+            mesh_face_count: 0,
             cpu_latest_frame: None,
             gl_latest_frame: None,
             bcf_cpu_latest_frame: None,
@@ -287,8 +315,11 @@ impl DualRendererApp {
                 if let Some(tex) = self.mesh_texture {
                     gl.delete_texture(tex);
                 }
+                if let Some(rb) = self.mesh_depth_rb {
+                    gl.delete_renderbuffer(rb);
+                }
 
-                // Helper to create framebuffer + texture
+                // Helper to create framebuffer + texture (color only)
                 let create_fb_tex = |gl: &Context| -> (Framebuffer, Texture) {
                     let texture = gl.create_texture().unwrap();
                     gl.bind_texture(TEXTURE_2D, Some(texture));
@@ -319,10 +350,53 @@ impl DualRendererApp {
                     (framebuffer, texture)
                 };
 
+                // Helper to create framebuffer + texture + depth buffer (for mesh rendering)
+                let create_fb_tex_depth =
+                    |gl: &Context| -> (Framebuffer, Texture, Renderbuffer) {
+                        let texture = gl.create_texture().unwrap();
+                        gl.bind_texture(TEXTURE_2D, Some(texture));
+                        gl.tex_image_2d(
+                            TEXTURE_2D,
+                            0,
+                            RGBA as i32,
+                            width,
+                            height,
+                            0,
+                            RGBA,
+                            UNSIGNED_BYTE,
+                            None,
+                        );
+                        gl.tex_parameter_i32(TEXTURE_2D, TEXTURE_MIN_FILTER, LINEAR as i32);
+                        gl.tex_parameter_i32(TEXTURE_2D, TEXTURE_MAG_FILTER, LINEAR as i32);
+
+                        // Create depth renderbuffer
+                        let depth_rb = gl.create_renderbuffer().unwrap();
+                        gl.bind_renderbuffer(RENDERBUFFER, Some(depth_rb));
+                        gl.renderbuffer_storage(RENDERBUFFER, DEPTH_COMPONENT16, width, height);
+
+                        let framebuffer = gl.create_framebuffer().unwrap();
+                        gl.bind_framebuffer(FRAMEBUFFER, Some(framebuffer));
+                        gl.framebuffer_texture_2d(
+                            FRAMEBUFFER,
+                            COLOR_ATTACHMENT0,
+                            TEXTURE_2D,
+                            Some(texture),
+                            0,
+                        );
+                        gl.framebuffer_renderbuffer(
+                            FRAMEBUFFER,
+                            DEPTH_ATTACHMENT,
+                            RENDERBUFFER,
+                            Some(depth_rb),
+                        );
+
+                        (framebuffer, texture, depth_rb)
+                    };
+
                 // Create all framebuffers
                 let (gl_framebuffer, gl_texture) = create_fb_tex(gl);
                 let (gpu_framebuffer, gpu_texture) = create_fb_tex(gl);
-                let (mesh_framebuffer, mesh_texture) = create_fb_tex(gl);
+                let (mesh_framebuffer, mesh_texture, mesh_depth_rb) = create_fb_tex_depth(gl);
 
                 gl.bind_framebuffer(FRAMEBUFFER, None);
 
@@ -331,6 +405,7 @@ impl DualRendererApp {
                 self.gpu_texture = Some(gpu_texture);
                 self.gpu_framebuffer = Some(gpu_framebuffer);
                 self.mesh_texture = Some(mesh_texture);
+                self.mesh_depth_rb = Some(mesh_depth_rb);
                 self.mesh_framebuffer = Some(mesh_framebuffer);
                 self.framebuffer_size = (width, height);
             }
@@ -441,14 +516,43 @@ impl DualRendererApp {
             gl.clear_color(0.4, 0.5, 0.6, 1.0);
             gl.clear(COLOR_BUFFER_BIT | DEPTH_BUFFER_BIT);
 
-            let start = std::time::Instant::now();
+            let render_start = std::time::Instant::now();
 
-            // Upload mesh if not already done
-            if self.mesh_indices.is_empty() {
-                let depth = 1; // Match OctaCube depth
-                match self.mesh_renderer.upload_mesh(gl, &self.current_cube, depth) {
+            // Determine if we need to upload the mesh
+            let needs_upload = if !self.mesh_cache_enabled {
+                // Caching disabled: always regenerate (clear old mesh first)
+                if !self.mesh_indices.is_empty() {
+                    self.mesh_indices.clear();
+                }
+                true
+            } else if self.mesh_needs_regeneration || self.mesh_indices.is_empty() {
+                // Caching enabled but mesh needs regeneration
+                if !self.mesh_indices.is_empty() {
+                    self.mesh_indices.clear();
+                }
+                true
+            } else {
+                false
+            };
+
+            // Upload mesh if needed
+            if needs_upload {
+                let upload_start = std::time::Instant::now();
+                let depth = self.current_model.depth();
+                match self
+                    .mesh_renderer
+                    .upload_mesh(gl, &self.current_cube, depth)
+                {
                     Ok(idx) => {
                         self.mesh_indices.push(idx);
+                        self.mesh_upload_time_ms = upload_start.elapsed().as_secs_f32() * 1000.0;
+                        self.mesh_needs_regeneration = false;
+
+                        // Update mesh statistics (estimate from cube depth)
+                        // For now, use a rough estimate - actual counts would require mesh builder access
+                        let grid_size = 1 << depth;
+                        self.mesh_vertex_count = grid_size * grid_size * grid_size * 8; // Max vertices
+                        self.mesh_face_count = grid_size * grid_size * grid_size * 6; // Max faces
                     }
                     Err(e) => {
                         eprintln!("Failed to upload mesh: {}", e);
@@ -462,20 +566,30 @@ impl DualRendererApp {
             // Render mesh at center
             if !self.mesh_indices.is_empty() {
                 let position = glam::Vec3::ZERO;
-                let rotation = if !self.use_manual_camera {
-                    // Auto-rotate
-                    glam::Quat::from_rotation_y(time * 0.5)
+                let rotation = glam::Quat::IDENTITY; // Mesh is never rotated
+
+                // Use time-based camera when not in manual camera mode
+                // This matches the raytracer's camera orbit behavior
+                let camera = if self.use_manual_camera {
+                    self.camera
                 } else {
-                    glam::Quat::IDENTITY
+                    // Match CPU tracer camera orbit: position orbits at time * 0.3
+                    let camera_pos = glam::Vec3::new(
+                        3.0 * (time * 0.3).cos(),
+                        2.0,
+                        3.0 * (time * 0.3).sin(),
+                    );
+                    let target = glam::Vec3::ZERO;
+                    CameraConfig::look_at(camera_pos, target, glam::Vec3::Y)
                 };
 
-                let depth = 1; // Match the depth used in upload_mesh
+                let depth = self.current_model.depth();
                 self.mesh_renderer.render_mesh_with_depth(
                     gl,
                     0,
                     position,
                     rotation,
-                    &self.camera,
+                    &camera,
                     width as i32,
                     height as i32,
                     depth,
@@ -483,7 +597,7 @@ impl DualRendererApp {
             }
 
             gl.finish();
-            self.mesh_render_time_ms = start.elapsed().as_secs_f32() * 1000.0;
+            self.mesh_render_time_ms = render_start.elapsed().as_secs_f32() * 1000.0;
 
             gl.bind_framebuffer(FRAMEBUFFER, None);
         }
@@ -688,7 +802,7 @@ impl DualRendererApp {
         // Top panel
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             ui.horizontal(|ui| {
-                ui.heading("Triple Cube Raytracer");
+                ui.heading("Cube Renderer");
                 ui.separator();
                 ui.label(format!("FPS: {:.1}", self.fps));
                 ui.separator();
@@ -709,6 +823,11 @@ impl DualRendererApp {
                 ui.checkbox(&mut self.disable_lighting, "Disable Lighting");
                 ui.separator();
                 ui.checkbox(&mut self.show_gl_errors, "Show GL Errors");
+                ui.separator();
+                ui.checkbox(&mut self.mesh_cache_enabled, "Cache Mesh");
+                if ui.button("Regen Mesh").clicked() {
+                    self.mesh_needs_regeneration = true;
+                }
                 ui.separator();
 
                 // Model selector
@@ -731,7 +850,7 @@ impl DualRendererApp {
                 if model_changed {
                     let new_cube = self.current_model.create();
                     self.current_cube = new_cube.clone();
-                    self.mesh_indices.clear(); // Force re-upload of mesh
+                    self.mesh_needs_regeneration = true; // Mark mesh for regeneration
 
                     self.gl_renderer = GlTracer::new(new_cube.clone());
                     unsafe {
@@ -804,7 +923,7 @@ impl DualRendererApp {
                         use cube::Cube;
                         let new_cube = Rc::new(Cube::Solid(self.single_voxel_material));
                         self.current_cube = new_cube.clone();
-                        self.mesh_indices.clear(); // Force re-upload
+                        self.mesh_needs_regeneration = true; // Mark mesh for regeneration
 
                         self.gl_renderer = GlTracer::new(new_cube.clone());
                         unsafe {
@@ -836,11 +955,13 @@ impl DualRendererApp {
             {
                 self.gl_latest_frame = Some(gl_img);
             }
-            if let Some(gpu_img) = unsafe { self.read_framebuffer_to_image(gl, self.gpu_framebuffer) }
+            if let Some(gpu_img) =
+                unsafe { self.read_framebuffer_to_image(gl, self.gpu_framebuffer) }
             {
                 self.gpu_latest_frame = Some(gpu_img);
             }
-            if let Some(mesh_img) = unsafe { self.read_framebuffer_to_image(gl, self.mesh_framebuffer) }
+            if let Some(mesh_img) =
+                unsafe { self.read_framebuffer_to_image(gl, self.mesh_framebuffer) }
             {
                 self.mesh_latest_frame = Some(mesh_img);
             }
@@ -886,18 +1007,12 @@ impl DualRendererApp {
                 ));
             }
             if let Some(ref gpu_img) = self.gpu_latest_frame {
-                self.gpu_egui_texture = Some(ctx.load_texture(
-                    "gpu_render",
-                    gpu_img.clone(),
-                    TextureOptions::LINEAR,
-                ));
+                self.gpu_egui_texture =
+                    Some(ctx.load_texture("gpu_render", gpu_img.clone(), TextureOptions::LINEAR));
             }
             if let Some(ref mesh_img) = self.mesh_latest_frame {
-                self.mesh_egui_texture = Some(ctx.load_texture(
-                    "mesh_render",
-                    mesh_img.clone(),
-                    TextureOptions::LINEAR,
-                ));
+                self.mesh_egui_texture =
+                    Some(ctx.load_texture("mesh_render", mesh_img.clone(), TextureOptions::LINEAR));
             }
 
             // 3x2 Grid layout
@@ -956,14 +1071,7 @@ impl DualRendererApp {
                         responses.push(r);
                     }
 
-                    let mesh_response = Self::render_view_static(
-                        ui,
-                        "Mesh",
-                        "Triangle Renderer",
-                        self.mesh_render_time_ms,
-                        &self.mesh_egui_texture,
-                        self.render_size,
-                    );
+                    let mesh_response = self.render_mesh_view(ui);
                     if let Some(r) = mesh_response {
                         responses.push(r);
                     }
@@ -1004,6 +1112,48 @@ impl DualRendererApp {
                     egui::Image::from_texture(egui::load::SizedTexture {
                         id: tex.id(),
                         size: [render_size.0 as f32, render_size.1 as f32].into(),
+                    })
+                    .sense(egui::Sense::click_and_drag()),
+                );
+                image_response = Some(response);
+            } else {
+                ui.label("N/A");
+            }
+        });
+        image_response
+    }
+
+    fn render_mesh_view(&self, ui: &mut egui::Ui) -> Option<egui::Response> {
+        let mut image_response = None;
+        ui.vertical(|ui| {
+            ui.heading("Mesh");
+            ui.label("Triangle Renderer");
+            if self.mesh_render_time_ms >= 0.0 {
+                ui.label(format!("Render: {:.2}ms", self.mesh_render_time_ms));
+            } else {
+                ui.label("Not Available");
+            }
+
+            // Cache status
+            let cache_status = if !self.mesh_cache_enabled {
+                "Cache: Disabled"
+            } else if self.mesh_needs_regeneration {
+                "Cache: Pending"
+            } else {
+                "Cache: Active"
+            };
+            ui.label(cache_status);
+
+            // Upload time (only show if meaningful)
+            if self.mesh_upload_time_ms > 0.0 {
+                ui.label(format!("Upload: {:.2}ms", self.mesh_upload_time_ms));
+            }
+
+            if let Some(tex) = &self.mesh_egui_texture {
+                let response = ui.add(
+                    egui::Image::from_texture(egui::load::SizedTexture {
+                        id: tex.id(),
+                        size: [self.render_size.0 as f32, self.render_size.1 as f32].into(),
                     })
                     .sense(egui::Sense::click_and_drag()),
                 );
@@ -1138,6 +1288,9 @@ impl DualRendererApp {
             }
             if let Some(tex) = self.mesh_texture {
                 gl.delete_texture(tex);
+            }
+            if let Some(rb) = self.mesh_depth_rb {
+                gl.delete_renderbuffer(rb);
             }
             self.gl_renderer.destroy_gl(gl);
             self.gpu_renderer.destroy_gl(gl);
