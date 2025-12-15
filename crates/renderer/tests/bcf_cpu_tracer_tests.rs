@@ -4,13 +4,13 @@
 //! and matches the behavior of the existing CPU tracer.
 
 use cube::{Cube, io::bcf::serialize_bcf};
-use renderer::{BcfCpuTracer, CameraConfig, CpuCubeTracer, Renderer};
+use renderer::{BcfTracer, CameraConfig, CpuTracer, Renderer};
 use std::rc::Rc;
 
 /// Test: BCF tracer can render a simple solid cube
 #[test]
 fn test_bcf_tracer_renders_solid_cube() {
-    let mut tracer = BcfCpuTracer::new();
+    let mut tracer = BcfTracer::new();
 
     // Render a 64x64 image
     tracer.render(64, 64, 0.0);
@@ -50,7 +50,7 @@ fn test_bcf_tracer_renders_solid_cube() {
 #[test]
 fn test_bcf_tracer_octa_cube() {
     let cube = renderer::create_octa_cube();
-    let mut tracer = BcfCpuTracer::new_from_cube(cube);
+    let mut tracer = BcfTracer::new_from_cube(cube);
 
     // Render a 128x128 image
     tracer.render(128, 128, 0.0);
@@ -87,7 +87,7 @@ fn test_bcf_tracer_octa_cube() {
 /// Test: BCF tracer with static camera produces consistent output
 #[test]
 fn test_bcf_tracer_static_camera() {
-    let mut tracer = BcfCpuTracer::new();
+    let mut tracer = BcfTracer::new();
 
     // Fixed camera position
     let camera = CameraConfig::default();
@@ -109,7 +109,7 @@ fn test_bcf_tracer_static_camera() {
 #[test]
 fn test_bcf_tracer_empty_cube() {
     let empty_cube = Rc::new(Cube::Solid(0u8));
-    let mut tracer = BcfCpuTracer::new_from_cube(empty_cube);
+    let mut tracer = BcfTracer::new_from_cube(empty_cube);
 
     // Render
     tracer.render(64, 64, 0.0);
@@ -159,7 +159,7 @@ fn test_bcf_tracer_empty_cube() {
 #[test]
 fn test_bcf_tracer_max_value() {
     let max_cube = Rc::new(Cube::Solid(255u8));
-    let mut tracer = BcfCpuTracer::new_from_cube(max_cube);
+    let mut tracer = BcfTracer::new_from_cube(max_cube);
 
     // Render
     tracer.render(64, 64, 0.0);
@@ -216,7 +216,7 @@ fn test_bcf_format_roundtrip() {
     let parsed_cube = cube::io::bcf::parse_bcf(&bcf_data).expect("Should parse BCF");
 
     // Create tracer from parsed cube
-    let mut tracer = BcfCpuTracer::new_from_cube(Rc::new(parsed_cube));
+    let mut tracer = BcfTracer::new_from_cube(Rc::new(parsed_cube));
 
     // Should still render correctly
     tracer.render(64, 64, 0.0);
@@ -246,7 +246,7 @@ fn test_bcf_format_roundtrip() {
 #[test]
 fn test_bcf_tracer_lighting_disable() {
     let cube = Rc::new(Cube::Solid(100u8)); // Mid-value material
-    let mut tracer = BcfCpuTracer::new_from_cube(cube);
+    let mut tracer = BcfTracer::new_from_cube(cube);
 
     // Render with lighting enabled
     tracer.set_disable_lighting(false);
@@ -284,8 +284,8 @@ fn test_bcf_vs_cpu_tracer_comparison() {
     let cube = renderer::create_octa_cube();
 
     // Create both tracers
-    let mut bcf_tracer = BcfCpuTracer::new_from_cube(cube.clone());
-    let mut cpu_tracer = CpuCubeTracer::new_with_cube(cube);
+    let mut bcf_tracer = BcfTracer::new_from_cube(cube.clone());
+    let mut cpu_tracer = CpuTracer::new_with_cube(cube);
 
     // Fixed camera for consistency
     let camera = CameraConfig::default();
@@ -342,7 +342,7 @@ fn test_bcf_tracer_depth_2_extended_octa() {
     use renderer::scenes::create_extended_octa_cube;
 
     let cube = create_extended_octa_cube();
-    let mut tracer = BcfCpuTracer::new_from_cube(cube);
+    let mut tracer = BcfTracer::new_from_cube(cube);
 
     // Render a 128x128 image
     tracer.render(128, 128, 0.0);
@@ -390,7 +390,7 @@ fn test_bcf_tracer_error_materials() {
     // Create a cube with error material values (1-7)
     // Material 1 should render as hot pink, not black
     let error_cube = Rc::new(Cube::Solid(1u8)); // Error material 1
-    let mut tracer = BcfCpuTracer::new_from_cube(error_cube);
+    let mut tracer = BcfTracer::new_from_cube(error_cube);
 
     // Render
     tracer.render(64, 64, 0.0);
@@ -435,7 +435,7 @@ fn test_bcf_tracer_error_materials() {
 fn bench_bcf_tracer_render_time() {
     use std::time::Instant;
 
-    let mut tracer = BcfCpuTracer::new();
+    let mut tracer = BcfTracer::new();
 
     // Warmup
     tracer.render(256, 256, 0.0);
@@ -457,7 +457,7 @@ fn test_bcf_tracer_depth_3_cube() {
     use renderer::scenes::create_depth_3_cube;
 
     let cube = create_depth_3_cube();
-    let mut tracer = BcfCpuTracer::new_from_cube(cube);
+    let mut tracer = BcfTracer::new_from_cube(cube);
 
     // Render a 128x128 image
     tracer.render(128, 128, 0.0);
@@ -533,11 +533,11 @@ fn test_bcf_vs_pure_rust_depth_3() {
     let cube = create_depth_3_cube();
 
     // Create BCF tracer
-    let mut bcf_tracer = BcfCpuTracer::new_from_cube(cube.clone());
+    let mut bcf_tracer = BcfTracer::new_from_cube(cube.clone());
     bcf_tracer.set_disable_lighting(true); // Disable lighting for exact color comparison
 
     // Create Pure Rust tracer
-    let mut rust_tracer = CpuCubeTracer::new_with_cube(cube.clone());
+    let mut rust_tracer = CpuTracer::new_with_cube(cube.clone());
     rust_tracer.set_disable_lighting(true); // Disable lighting for exact color comparison
 
     // Render with both tracers
@@ -616,7 +616,7 @@ fn test_bcf_tracer_test_expansion_cube() {
     use renderer::scenes::create_test_expansion_cube;
 
     let cube = create_test_expansion_cube();
-    let mut tracer = BcfCpuTracer::new_from_cube(cube);
+    let mut tracer = BcfTracer::new_from_cube(cube);
 
     // Render a 128x128 image
     tracer.render(128, 128, 0.0);

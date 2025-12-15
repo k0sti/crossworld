@@ -3,12 +3,13 @@
 //! Renders triangle meshes generated from voxel octrees using standard
 //! OpenGL vertex buffers and simple phong shading.
 
-use cube::{generate_face_mesh, DefaultMeshBuilder};
 use cube::Cube;
+use cube::material::get_material_color;
+use cube::{DefaultMeshBuilder, generate_face_mesh};
 use glow::*;
 use std::rc::Rc;
 
-use crate::renderer::{CameraConfig, Entity, LIGHT_DIR, AMBIENT, DIFFUSE_STRENGTH};
+use crate::renderer::{AMBIENT, CameraConfig, DIFFUSE_STRENGTH, Entity, LIGHT_DIR};
 use crate::shader_utils::create_program;
 
 /// Compiled mesh ready for GL rendering
@@ -55,11 +56,10 @@ impl MeshRenderer {
             // Generate mesh from cube
             let mut builder = DefaultMeshBuilder::new();
 
-            // Simple color mapper: voxel id to RGB
+            // Use the same material palette as the raytracers
             let color_fn = |material_id: u8| -> [f32; 3] {
-                // Use a simple HSV-based color mapping
-                let hue = (material_id as f32 / 255.0) * 360.0;
-                hsv_to_rgb(hue, 0.7, 0.9)
+                let color = get_material_color(material_id as i32);
+                [color.x, color.y, color.z]
             };
 
             // No border materials for now
@@ -72,12 +72,14 @@ impl MeshRenderer {
             }
 
             // Create VAO
-            let vao = gl.create_vertex_array()
+            let vao = gl
+                .create_vertex_array()
                 .map_err(|e| format!("Failed to create VAO: {}", e))?;
             gl.bind_vertex_array(Some(vao));
 
             // Create and upload VBO
-            let vbo = gl.create_buffer()
+            let vbo = gl
+                .create_buffer()
                 .map_err(|e| format!("Failed to create VBO: {}", e))?;
             gl.bind_buffer(ARRAY_BUFFER, Some(vbo));
 
@@ -139,7 +141,8 @@ impl MeshRenderer {
             );
 
             // Create and upload EBO
-            let ebo = gl.create_buffer()
+            let ebo = gl
+                .create_buffer()
                 .map_err(|e| format!("Failed to create EBO: {}", e))?;
             gl.bind_buffer(ELEMENT_ARRAY_BUFFER, Some(ebo));
             gl.buffer_data_u8_slice(
@@ -197,7 +200,7 @@ impl MeshRenderer {
         camera: &CameraConfig,
         viewport_width: i32,
         viewport_height: i32,
-        depth: u32,
+        _depth: u32,
     ) {
         unsafe {
             let Some(program) = self.program else { return };
@@ -211,24 +214,36 @@ impl MeshRenderer {
             gl.enable(DEPTH_TEST);
             gl.depth_func(LESS);
 
+            // Enable backface culling for proper rendering
+            // Voxel faces should be counter-clockwise when viewed from outside
+            gl.enable(CULL_FACE);
+            gl.cull_face(BACK);
+            gl.front_face(CCW);
+
             // Calculate matrices
             let aspect = viewport_width as f32 / viewport_height as f32;
             let projection = glam::Mat4::perspective_rh(camera.vfov, aspect, 0.1, 1000.0);
 
-            // Correct view matrix: apply translation first, then rotation
-            // This is equivalent to look_at but uses the camera's quaternion directly
-            let view = glam::Mat4::from_quat(camera.rotation.conjugate())
-                * glam::Mat4::from_translation(-camera.position);
+            // View matrix construction to match raytracer's camera
+            // The raytracer uses: forward = quat_rotate(camera_rot, -Z), up = quat_rotate(camera_rot, Y)
+            // Build view matrix using look_to_rh which expects forward direction and up vector
+            let forward = camera.rotation * glam::Vec3::NEG_Z;
+            let up = camera.rotation * glam::Vec3::Y;
+            let view = glam::Mat4::look_to_rh(camera.position, forward, up);
 
             // Calculate scale to transform mesh coordinates to [-1, 1] space
-            // Mesh vertices are in [0, 2^depth] space, raytracers expect [-1, 1]
-            // Transform: position_world = (position_mesh / 2^depth) * 2 - 1
-            //          = position_mesh * (2 / 2^depth) - 1
-            let grid_size = (1 << depth) as f32; // 2^depth
-            let mesh_scale = 2.0 / grid_size;
+            // Mesh vertices are in [0, 1] space (visit_faces outputs normalized positions)
+            // Transform: position_world = mesh_pos * 2 - 1
+            // This maps [0, 1] -> [-1, 1]
+            let mesh_scale = 2.0;
             let mesh_offset = glam::Vec3::splat(-1.0);
 
-            // Model matrix: scale, rotate, translate
+            // Model matrix: translate to position, rotate, then scale mesh from [0,1] to [-1,1]
+            // Order of operations (right to left):
+            // 1. Scale by 2.0: [0,1] -> [0,2]
+            // 2. Translate by -1.0: [0,2] -> [-1,1]
+            // 3. Apply rotation (if any)
+            // 4. Translate to world position
             let model = glam::Mat4::from_translation(position)
                 * glam::Mat4::from_quat(rotation)
                 * glam::Mat4::from_translation(mesh_offset)
@@ -243,7 +258,12 @@ impl MeshRenderer {
             gl.uniform_matrix_4_f32_slice(model_loc.as_ref(), false, model.as_ref());
 
             let light_dir_loc = gl.get_uniform_location(program, "uLightDir");
-            gl.uniform_3_f32(light_dir_loc.as_ref(), LIGHT_DIR.x, LIGHT_DIR.y, LIGHT_DIR.z);
+            gl.uniform_3_f32(
+                light_dir_loc.as_ref(),
+                LIGHT_DIR.x,
+                LIGHT_DIR.y,
+                LIGHT_DIR.z,
+            );
 
             let ambient_loc = gl.get_uniform_location(program, "uAmbient");
             gl.uniform_1_f32(ambient_loc.as_ref(), AMBIENT);
@@ -256,7 +276,9 @@ impl MeshRenderer {
             gl.draw_elements(TRIANGLES, mesh.index_count, UNSIGNED_INT, 0);
             gl.bind_vertex_array(None);
 
+            // Restore GL state
             gl.disable(DEPTH_TEST);
+            gl.disable(CULL_FACE);
         }
     }
 
@@ -323,24 +345,6 @@ impl MeshRenderer {
             }
         }
     }
-}
-
-/// Convert HSV to RGB color
-fn hsv_to_rgb(h: f32, s: f32, v: f32) -> [f32; 3] {
-    let c = v * s;
-    let x = c * (1.0 - ((h / 60.0) % 2.0 - 1.0).abs());
-    let m = v - c;
-
-    let (r, g, b) = match h as i32 {
-        0..=59 => (c, x, 0.0),
-        60..=119 => (x, c, 0.0),
-        120..=179 => (0.0, c, x),
-        180..=239 => (0.0, x, c),
-        240..=299 => (x, 0.0, c),
-        _ => (c, 0.0, x),
-    };
-
-    [r + m, g + m, b + m]
 }
 
 const VERTEX_SHADER: &str = r#"#version 300 es
