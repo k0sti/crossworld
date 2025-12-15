@@ -1,8 +1,8 @@
 //! Test GL and GPU tracer rendering to diagnose shader issues
 
 use cube::Cube;
-use renderer::gl_tracer::GlCubeTracer;
-use renderer::gpu_tracer::GpuTracer;
+use renderer::gl_tracer::GlTracer;
+use renderer::gpu_tracer::ComputeTracer;
 use renderer::scenes::create_octa_cube;
 
 /// Test that checks if GL tracer can be initialized
@@ -11,7 +11,7 @@ fn test_gl_tracer_initialization() {
     println!("Testing GL tracer initialization...");
 
     let cube = create_octa_cube();
-    let gl_tracer = GlCubeTracer::new(cube);
+    let gl_tracer = GlTracer::new(cube);
 
     println!("✓ GL tracer created successfully");
     assert!(gl_tracer.cube().as_ref() as *const _ != std::ptr::null());
@@ -23,7 +23,7 @@ fn test_gpu_tracer_initialization() {
     println!("Testing GPU tracer initialization...");
 
     let cube = create_octa_cube();
-    let gpu_tracer = GpuTracer::new(cube);
+    let gpu_tracer = ComputeTracer::new(cube);
 
     println!("✓ GPU tracer created successfully");
     assert!(gpu_tracer.cube().as_ref() as *const _ != std::ptr::null());

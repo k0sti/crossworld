@@ -3,7 +3,7 @@
 use egui::{ColorImage, TextureHandle, TextureOptions};
 use glow::*;
 use renderer::scenes::TestModel;
-use renderer::{BcfCpuTracer, CameraConfig, CpuCubeTracer, GlCubeTracer, GpuTracer, MeshRenderer, Renderer};
+use renderer::{BcfTracer, CameraConfig, ComputeTracer, CpuTracer, GlTracer, MeshRenderer, Renderer};
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -50,9 +50,9 @@ pub struct DualRendererApp {
     // Five renderers
     cpu_sync_request: Arc<Mutex<Option<RenderRequest>>>,
     cpu_sync_response: Arc<Mutex<Option<RenderResponse>>>,
-    gl_renderer: GlCubeTracer,
-    bcf_cpu_renderer: BcfCpuTracer,
-    gpu_renderer: GpuTracer,
+    gl_renderer: GlTracer,
+    bcf_cpu_renderer: BcfTracer,
+    gpu_renderer: ComputeTracer,
     mesh_renderer: MeshRenderer,
 
     // GL framebuffers
@@ -128,16 +128,16 @@ impl DualRendererApp {
         let cube = default_model.create();
 
         // Initialize GL renderer (WebGL 2.0 fragment shader)
-        let mut gl_renderer = GlCubeTracer::new(cube.clone());
+        let mut gl_renderer = GlTracer::new(cube.clone());
         unsafe {
             gl_renderer.init_gl(gl)?;
         }
 
         // Initialize BCF CPU renderer
-        let bcf_cpu_renderer = BcfCpuTracer::new_from_cube(cube.clone());
+        let bcf_cpu_renderer = BcfTracer::new_from_cube(cube.clone());
 
         // Initialize GPU renderer (compute shader)
-        let mut gpu_renderer = GpuTracer::new(cube.clone());
+        let mut gpu_renderer = ComputeTracer::new(cube.clone());
         let gpu_available = unsafe {
             match gpu_renderer.init_gl(gl) {
                 Ok(_) => true,
@@ -170,7 +170,7 @@ impl DualRendererApp {
 
         thread::spawn(move || {
             let initial_cube = default_model.create();
-            let mut cpu_renderer = CpuCubeTracer::new_with_cube(initial_cube);
+            let mut cpu_renderer = CpuTracer::new_with_cube(initial_cube);
             let mut current_model = default_model;
 
             loop {
@@ -186,7 +186,7 @@ impl DualRendererApp {
                     if request.model != current_model {
                         current_model = request.model;
                         let new_cube = current_model.create();
-                        cpu_renderer = CpuCubeTracer::new_with_cube(new_cube);
+                        cpu_renderer = CpuTracer::new_with_cube(new_cube);
                     }
 
                     // Set lighting mode
@@ -733,16 +733,16 @@ impl DualRendererApp {
                     self.current_cube = new_cube.clone();
                     self.mesh_indices.clear(); // Force re-upload of mesh
 
-                    self.gl_renderer = GlCubeTracer::new(new_cube.clone());
+                    self.gl_renderer = GlTracer::new(new_cube.clone());
                     unsafe {
                         if let Err(e) = self.gl_renderer.init_gl(gl) {
                             eprintln!("Failed to reinitialize GL renderer: {}", e);
                         }
                     }
 
-                    self.bcf_cpu_renderer = BcfCpuTracer::new_from_cube(new_cube.clone());
+                    self.bcf_cpu_renderer = BcfTracer::new_from_cube(new_cube.clone());
 
-                    self.gpu_renderer = GpuTracer::new(new_cube.clone());
+                    self.gpu_renderer = ComputeTracer::new(new_cube.clone());
                     unsafe {
                         if let Err(e) = self.gpu_renderer.init_gl(gl) {
                             eprintln!("Failed to reinitialize GPU renderer: {}", e);
@@ -806,16 +806,16 @@ impl DualRendererApp {
                         self.current_cube = new_cube.clone();
                         self.mesh_indices.clear(); // Force re-upload
 
-                        self.gl_renderer = GlCubeTracer::new(new_cube.clone());
+                        self.gl_renderer = GlTracer::new(new_cube.clone());
                         unsafe {
                             if let Err(e) = self.gl_renderer.init_gl(gl) {
                                 eprintln!("Failed to reinitialize GL renderer: {}", e);
                             }
                         }
 
-                        self.bcf_cpu_renderer = BcfCpuTracer::new_from_cube(new_cube.clone());
+                        self.bcf_cpu_renderer = BcfTracer::new_from_cube(new_cube.clone());
 
-                        self.gpu_renderer = GpuTracer::new(new_cube.clone());
+                        self.gpu_renderer = ComputeTracer::new(new_cube.clone());
                         unsafe {
                             if let Err(e) = self.gpu_renderer.init_gl(gl) {
                                 eprintln!("Failed to reinitialize GPU renderer: {}", e);

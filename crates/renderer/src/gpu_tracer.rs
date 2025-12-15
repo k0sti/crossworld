@@ -45,15 +45,15 @@ void main() {
 "#;
 
 /// Compute shader raytracer
-pub struct GpuTracer {
+pub struct ComputeTracer {
     cube: Rc<Cube<u8>>,
     #[allow(dead_code)]
     bounds: CubeBounds,
-    gl_state: Option<GpuTracerGl>,
+    gl_state: Option<ComputeTracerGl>,
 }
 
 /// OpenGL resources for compute shader raytracing
-struct GpuTracerGl {
+struct ComputeTracerGl {
     compute_program: Program,
     blit_program: Program,
     blit_vao: VertexArray,
@@ -68,7 +68,7 @@ struct GpuTracerGl {
     blit_uniform_texture: Option<UniformLocation>,
 }
 
-impl GpuTracer {
+impl ComputeTracer {
     pub fn new(cube: Rc<Cube<u8>>) -> Self {
         Self {
             cube,
@@ -122,7 +122,7 @@ impl GpuTracer {
                 .create_texture()
                 .map_err(|e| format!("Failed to create output texture: {}", e))?;
 
-            self.gl_state = Some(GpuTracerGl {
+            self.gl_state = Some(ComputeTracerGl {
                 compute_program,
                 blit_program,
                 blit_vao,
@@ -383,7 +383,7 @@ impl GpuTracer {
     }
 }
 
-impl Renderer for GpuTracer {
+impl Renderer for ComputeTracer {
     fn render(&mut self, _width: u32, _height: u32, _time: f32) {
         // Note: Compute shader rendering requires GL context
         // Use render_to_gl() method instead
@@ -395,6 +395,6 @@ impl Renderer for GpuTracer {
     }
 
     fn name(&self) -> &str {
-        "GpuTracer (Compute Shader - Phase 1: Ray-Cube Intersection)"
+        "ComputeTracer (Compute Shader - Phase 1: Ray-Cube Intersection)"
     }
 }

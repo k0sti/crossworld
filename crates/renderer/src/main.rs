@@ -1,5 +1,5 @@
 // Import from the renderer library crate
-use renderer::{CpuCubeTracer, GlCubeTracer, GpuTracer, Renderer, create_octa_cube};
+use renderer::{ComputeTracer, CpuTracer, GlTracer, Renderer, create_octa_cube};
 
 // Bin-specific modules
 mod egui_app;
@@ -142,8 +142,8 @@ impl ApplicationHandler for App {
         let dual_renderer = unsafe { DualRendererApp::new_with_sync(&gl, self.sync_mode).unwrap() };
 
         println!("Dual renderer initialized!");
-        println!("  - GPU: GlCubeTracer");
-        println!("  - CPU: CpuCubeTracer");
+        println!("  - GPU: GlTracer");
+        println!("  - CPU: CpuTracer");
         if self.sync_mode {
             println!("  - Sync mode: Enabled (CPU blocks until complete each frame)");
         }
@@ -273,6 +273,21 @@ impl Drop for App {
     }
 }
 
+/// Valid renderer names for diff comparison
+const VALID_RENDERERS: [&str; 5] = ["cpu", "gl", "bcf", "compute", "mesh"];
+
+/// Parse a renderer name from command line argument
+fn parse_renderer_name(name: &str) -> Result<&'static str, String> {
+    match name.to_lowercase().as_str() {
+        "cpu" => Ok("cpu"),
+        "gl" => Ok("gl"),
+        "bcf" => Ok("bcf"),
+        "compute" | "gpu" => Ok("compute"), // Allow "gpu" as alias for compute
+        "mesh" => Ok("mesh"),
+        _ => Err(format!("Unknown renderer: '{}'. Valid: cpu, gl, bcf, compute, mesh", name)),
+    }
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = std::env::args().collect();
 
@@ -281,7 +296,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut sync_mode = false;
     let mut single_mode = false;
     let mut force_headless = false;
-    let mut diff_mode = String::from("cpu-gl"); // Default diff comparison
+    let mut diff_left = String::from("cpu");
+    let mut diff_right = String::from("gl");
 
     let mut i = 1;
     while i < args.len() {
@@ -294,20 +310,53 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
             "--headless" => force_headless = true,
             "--diff" => {
-                if i + 1 < args.len() {
-                    diff_mode = args[i + 1].clone();
-                    i += 1; // Skip next arg as it's the value
+                // Parse diff arguments: --diff <left> <right> OR --diff all
+                if i + 1 >= args.len() {
+                    eprintln!("Error: --diff requires arguments");
+                    eprintln!("Usage: --diff <left> <right>  (e.g., --diff cpu gl)");
+                    eprintln!("       --diff all             (compare all pairs)");
+                    eprintln!("Valid renderers: {}", VALID_RENDERERS.join(", "));
+                    return Ok(());
+                }
 
-                    // Validate diff mode
-                    let valid_modes = ["cpu-gl", "cpu-gpu", "gl-gpu", "all"];
-                    if !valid_modes.contains(&diff_mode.as_str()) {
-                        eprintln!("Error: Invalid --diff value '{}'", diff_mode);
-                        eprintln!("Valid values: cpu-gl, cpu-gpu, gl-gpu, all");
+                let first_arg = &args[i + 1];
+
+                if first_arg == "all" {
+                    diff_left = "all".to_string();
+                    diff_right = "all".to_string();
+                    i += 1;
+                } else {
+                    // Parse as <left> <right>
+                    match parse_renderer_name(first_arg) {
+                        Ok(left) => diff_left = left.to_string(),
+                        Err(e) => {
+                            eprintln!("Error: {}", e);
+                            return Ok(());
+                        }
+                    }
+
+                    if i + 2 >= args.len() {
+                        eprintln!("Error: --diff requires two renderer names");
+                        eprintln!("Usage: --diff <left> <right>  (e.g., --diff cpu gl)");
+                        eprintln!("Valid renderers: {}", VALID_RENDERERS.join(", "));
                         return Ok(());
                     }
-                } else {
-                    eprintln!("Error: --diff requires a value (cpu-gl, cpu-gpu, gl-gpu, or all)");
-                    return Ok(());
+
+                    let second_arg = &args[i + 2];
+                    match parse_renderer_name(second_arg) {
+                        Ok(right) => diff_right = right.to_string(),
+                        Err(e) => {
+                            eprintln!("Error: {}", e);
+                            return Ok(());
+                        }
+                    }
+
+                    if diff_left == diff_right {
+                        eprintln!("Error: Cannot diff a renderer with itself");
+                        return Ok(());
+                    }
+
+                    i += 2;
                 }
             }
             "--cpu" => {
@@ -319,21 +368,23 @@ fn main() -> Result<(), Box<dyn Error>> {
                 eprintln!("Usage: renderer [OPTIONS]");
                 eprintln!();
                 eprintln!("Options:");
-                eprintln!("  --console       Run in console mode (no GUI, batch CPU rendering)");
-                eprintln!("  --sync          GUI with synchronized rendering (all tracers use same time/camera)");
-                eprintln!("  --single        Render once and exit. Uses GUI if available, headless if not.");
-                eprintln!("  --headless      Force headless mode (combine with --single for batch processing)");
-                eprintln!("  --diff <MODE>   Diff comparison mode for --single --headless (default: cpu-gl)");
-                eprintln!("                  Valid modes: cpu-gl, cpu-gpu, gl-gpu, all");
+                eprintln!("  --console          Run in console mode (no GUI, batch CPU rendering)");
+                eprintln!("  --sync             GUI with synchronized rendering (all tracers use same time/camera)");
+                eprintln!("  --single           Render once and exit. Uses GUI if available, headless if not.");
+                eprintln!("  --headless         Force headless mode (combine with --single for batch processing)");
+                eprintln!("  --diff <L> <R>     Diff comparison between two renderers (default: cpu gl)");
+                eprintln!("  --diff all         Compare all renderer pairs");
                 eprintln!();
-                eprintln!("Default: Opens GUI with triple renderer (CPU + GL + GPU side-by-side)");
+                eprintln!("Renderers: cpu, gl, bcf, compute (or gpu), mesh");
+                eprintln!();
+                eprintln!("Default: Opens GUI with triple renderer (CPU + GL + Compute side-by-side)");
                 eprintln!();
                 eprintln!("Examples:");
-                eprintln!("  renderer --single                      # GUI: render one frame and exit");
-                eprintln!("  renderer --single --headless           # Headless: render, save cpu-gl diff, exit");
-                eprintln!("  renderer --single --headless --diff cpu-gpu # Headless: render, save cpu-gpu diff");
-                eprintln!("  renderer --single --headless --diff all     # Headless: render, save all diffs");
-                eprintln!("  renderer --sync                        # GUI: synchronized continuous rendering");
+                eprintln!("  renderer --single                         # GUI: render one frame and exit");
+                eprintln!("  renderer --single --headless              # Headless: render, save cpu-gl diff, exit");
+                eprintln!("  renderer --single --headless --diff cpu compute  # Headless: render cpu vs compute diff");
+                eprintln!("  renderer --single --headless --diff all   # Headless: render all diff pairs");
+                eprintln!("  renderer --sync                           # GUI: synchronized continuous rendering");
                 return Ok(());
             }
         }
@@ -345,7 +396,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     } else if single_mode {
         if force_headless {
             // --single --headless: batch mode with stats and diffs
-            run_sync_renderer_headless(&diff_mode)?;
+            run_sync_renderer_headless(&diff_left, &diff_right)?;
         } else {
             // --single: GUI mode, render once and exit
             run_dual_renderer_sync(true)?;
@@ -364,7 +415,7 @@ fn run_console_renderer() -> Result<(), Box<dyn Error>> {
     println!("Running console renderer (headless, no GUI)...");
     println!("Single-threaded CPU raytracer with synchronized timestamps");
 
-    let mut cpu_renderer = CpuCubeTracer::new();
+    let mut cpu_renderer = CpuTracer::new();
     println!("Renderer: {}", cpu_renderer.name());
 
     let width = 800;
@@ -393,14 +444,19 @@ fn run_console_renderer() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn run_sync_renderer_headless(diff_mode: &str) -> Result<(), Box<dyn Error>> {
-    use GlCubeTracer;
-    use GpuTracer;
+fn run_sync_renderer_headless(diff_left: &str, diff_right: &str) -> Result<(), Box<dyn Error>> {
+    use ComputeTracer;
+    use GlTracer;
     use renderer::CameraConfig;
+    // Note: BcfTracer, MeshRenderer not yet supported in headless diff mode
 
     println!("Running synchronized single-shot renderer...");
     println!("All tracers use same timestamp and camera configuration");
-    println!("Diff mode: {}", diff_mode);
+    if diff_left == "all" {
+        println!("Diff mode: all pairs");
+    } else {
+        println!("Diff mode: {} vs {}", diff_left, diff_right);
+    }
 
     // Create camera configuration
     let camera = CameraConfig::look_at(
@@ -423,7 +479,7 @@ fn run_sync_renderer_headless(diff_mode: &str) -> Result<(), Box<dyn Error>> {
 
     // === CPU Renderer ===
     println!("[1/3] CPU Tracer (Pure Rust)");
-    let mut cpu_renderer = CpuCubeTracer::new();
+    let mut cpu_renderer = CpuTracer::new();
     let cpu_start = std::time::Instant::now();
     cpu_renderer.render_with_camera(width, height, &camera);
     let cpu_time = cpu_start.elapsed();
@@ -508,7 +564,7 @@ fn run_sync_renderer_headless(diff_mode: &str) -> Result<(), Box<dyn Error>> {
 
         // === GL Renderer ===
         println!("[2/3] GL Tracer (WebGL 2.0 Fragment Shader)");
-        let mut gl_renderer = GlCubeTracer::new(create_octa_cube());
+        let mut gl_renderer = GlTracer::new(create_octa_cube());
         unsafe {
             gl_renderer.init_gl(&gl)?;
         }
@@ -588,8 +644,8 @@ fn run_sync_renderer_headless(diff_mode: &str) -> Result<(), Box<dyn Error>> {
         println!();
 
         // === GPU Renderer ===
-        println!("[3/3] GPU Tracer (Compute Shader)");
-        let mut gpu_renderer = GpuTracer::new(create_octa_cube());
+        println!("[3/3] Compute Tracer (Compute Shader)");
+        let mut gpu_renderer = ComputeTracer::new(create_octa_cube());
         let mut gpu_time = std::time::Duration::ZERO;
         let gpu_available = unsafe {
             match gpu_renderer.init_gl(&gl) {
@@ -699,24 +755,38 @@ fn run_sync_renderer_headless(diff_mode: &str) -> Result<(), Box<dyn Error>> {
                     Ok(())
                 };
 
+                // Helper to get image by renderer name
+                let get_image = |name: &str| -> Option<&image::ImageBuffer<image::Rgb<u8>, Vec<u8>>> {
+                    match name {
+                        "cpu" => Some(cpu_buf),
+                        "gl" => Some(&gl_image),
+                        "compute" => Some(&gpu_image),
+                        _ => None,
+                    }
+                };
+
                 // Generate requested diffs
-                match diff_mode {
-                    "cpu-gl" => {
-                        generate_diff("cpu-gl", cpu_buf, &gl_image)?;
-                    }
-                    "cpu-gpu" => {
-                        generate_diff("cpu-gpu", cpu_buf, &gpu_image)?;
-                    }
-                    "gl-gpu" => {
-                        generate_diff("gl-gpu", &gl_image, &gpu_image)?;
-                    }
-                    "all" => {
-                        generate_diff("cpu-gl", cpu_buf, &gl_image)?;
-                        generate_diff("cpu-gpu", cpu_buf, &gpu_image)?;
-                        generate_diff("gl-gpu", &gl_image, &gpu_image)?;
-                    }
-                    _ => {
-                        eprintln!("Warning: Unknown diff mode '{}'", diff_mode);
+                if diff_left == "all" {
+                    // Generate all pairs
+                    generate_diff("cpu-gl", cpu_buf, &gl_image)?;
+                    generate_diff("cpu-compute", cpu_buf, &gpu_image)?;
+                    generate_diff("gl-compute", &gl_image, &gpu_image)?;
+                } else {
+                    // Generate single diff
+                    let left_img = get_image(diff_left);
+                    let right_img = get_image(diff_right);
+
+                    match (left_img, right_img) {
+                        (Some(l), Some(r)) => {
+                            let name = format!("{}-{}", diff_left, diff_right);
+                            generate_diff(&name, l, r)?;
+                        }
+                        (None, _) => {
+                            eprintln!("Warning: Renderer '{}' not available for diff", diff_left);
+                        }
+                        (_, None) => {
+                            eprintln!("Warning: Renderer '{}' not available for diff", diff_right);
+                        }
                     }
                 }
             }
@@ -739,12 +809,12 @@ fn run_sync_renderer_headless(diff_mode: &str) -> Result<(), Box<dyn Error>> {
 
         // === Statistics Summary ===
         println!("=== Performance Summary ===");
-        println!("CPU Tracer:  {:.2}ms", cpu_time.as_secs_f32() * 1000.0);
-        println!("GL Tracer:   {:.2}ms", gl_time.as_secs_f32() * 1000.0);
+        println!("CPU Tracer:     {:.2}ms", cpu_time.as_secs_f32() * 1000.0);
+        println!("GL Tracer:      {:.2}ms", gl_time.as_secs_f32() * 1000.0);
         if gpu_available {
-            println!("GPU Tracer:  {:.2}ms", gpu_time.as_secs_f32() * 1000.0);
+            println!("Compute Tracer: {:.2}ms", gpu_time.as_secs_f32() * 1000.0);
         } else {
-            println!("GPU Tracer:  N/A");
+            println!("Compute Tracer: N/A");
         }
         println!();
         println!("All outputs saved to output/ directory");

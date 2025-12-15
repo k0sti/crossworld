@@ -1,6 +1,6 @@
 //! Validation tests to ensure renderers actually produce visible output
 
-use renderer::cpu_tracer::CpuCubeTracer;
+use renderer::cpu_tracer::CpuTracer;
 use renderer::renderer::{CameraConfig, Renderer};
 use renderer::scenes::create_octa_cube;
 
@@ -8,7 +8,7 @@ use renderer::scenes::create_octa_cube;
 fn test_cpu_renderer_produces_visible_output() {
     // Create octa cube
     let cube = create_octa_cube();
-    let mut tracer = CpuCubeTracer::new_with_cube(cube);
+    let mut tracer = CpuTracer::new_with_cube(cube);
 
     // Setup camera
     let camera = CameraConfig::look_at(
@@ -99,7 +99,7 @@ fn test_cpu_renderer_produces_visible_output() {
 #[test]
 fn test_default_cpu_renderer_produces_output() {
     // Test that the default constructor also works
-    let mut tracer = CpuCubeTracer::new();
+    let mut tracer = CpuTracer::new();
 
     // Use default camera settings
     let camera = CameraConfig::look_at(
