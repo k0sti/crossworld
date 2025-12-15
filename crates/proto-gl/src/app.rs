@@ -17,7 +17,7 @@ use winit::window::{Window, WindowId};
 
 use cube::Cube;
 use crossworld_physics::{rapier3d::prelude::*, PhysicsWorld, VoxelColliderBuilder};
-use renderer::{CameraConfig, GlCubeTracer, MeshRenderer};
+use renderer::{CameraConfig, GlTracer, MeshRenderer};
 
 use crate::camera::OrbitCamera;
 use crate::config::{load_config, ProtoGlConfig};
@@ -39,7 +39,7 @@ pub struct ProtoGlApp {
     painter: Option<egui_glow::Painter>,
 
     // Rendering state
-    gl_tracer: Option<GlCubeTracer>,
+    gl_tracer: Option<GlTracer>,
     mesh_renderer: Option<MeshRenderer>,
     object_mesh_indices: Vec<usize>,
     camera: OrbitCamera,
@@ -191,7 +191,7 @@ impl ApplicationHandler for ProtoGlApp {
 
         // Initialize GL tracer with world cube
         let world_cube_rc = Rc::new(world_cube.clone());
-        let mut gl_tracer = GlCubeTracer::new(world_cube_rc.clone());
+        let mut gl_tracer = GlTracer::new(world_cube_rc.clone());
 
         // Initialize GL resources
         unsafe {
@@ -392,9 +392,12 @@ impl ProtoGlApp {
             position: self.camera.position(),
             rotation: self.camera.rotation(),
             vfov: 60.0_f32.to_radians(),
+            pitch: self.camera.pitch,
+            yaw: self.camera.yaw,
+            target_position: Some(self.camera.focus),
         };
 
-        // Render world using GlCubeTracer (if enabled)
+        // Render world using GlTracer (if enabled)
         if self.render_world {
             unsafe {
                 gl_tracer.render_to_gl_with_camera(

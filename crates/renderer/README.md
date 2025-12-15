@@ -1,202 +1,174 @@
 # Renderer
 
-Dual-implementation cube raytracer with both GPU (WebGL2/OpenGL) and CPU (pure Rust) backends.
+Multi-implementation cube raytracer with five rendering backends for testing and comparison.
 
 ## Features
 
-### Common
-- **Shared Renderer Trait**: Common interface for both implementations
+### Renderers
+
+The renderer includes five different implementations:
+
+1. **CpuTracer** - Pure Rust software raytracer
+   - No GPU required
+   - Image file output (PNG)
+   - Batch rendering support
+   - Portable across all platforms
+
+2. **GlTracer** - WebGL 2.0 fragment shader raytracer
+   - Real-time rendering (60+ FPS)
+   - OpenGL ES 3.0 compatible
+   - X11/Wayland support
+
+3. **BcfTracer** - Binary Cube Format traversal raytracer
+   - BCF (Binary Cube Format) data structure
+   - Optimized octree traversal
+   - CPU-based rendering
+
+4. **ComputeTracer** - GPU compute shader raytracer
+   - OpenGL compute shader pipeline
+   - Parallel pixel processing
+   - High performance on modern GPUs
+
+5. **MeshRenderer** - Triangle mesh rasterizer
+   - Traditional vertex/index buffer rendering
+   - Phong shading model
+   - Mesh caching for performance
+
+### Common Features
+
+- **Shared Renderer Trait**: Common interface for all implementations
 - **Identical Algorithms**: Same raytracing, lighting, and camera code
-- **Material System**: 128-color palette with standardized voxel materials
-- **Directional Lighting**: Simplified diffuse + ambient lighting model
+- **Material System**: R2G3B2 color encoding with palette support
+- **Directional Lighting**: Diffuse + ambient lighting model
 - **Animated Camera**: Rotating camera orbiting the cube
-- **Debug Mode**: Optional lighting toggle for pure material color output
+- **Debug Mode**: Optional lighting toggle for pure material colors
+- **Diff Comparison**: Side-by-side output comparison with amplified differences
 
-### GlCubeTracer (GPU Implementation)
-- **WebGL2/OpenGL ES 3.0**: Fragment shader-based raytracing
-- **Real-time Rendering**: 60+ FPS interactive display
-- **X11/Wayland Support**: Cross-platform window management
+## GUI Application
 
-### CpuCubeTracer (Pure Rust Implementation)
-- **No GPU Required**: Software raytracing on CPU
-- **Image Output**: Renders to PNG files
-- **Batch Rendering**: Generate animation frames
-- **Portable**: Works on any platform with Rust
+The `CubeRendererApp` provides an egui-based GUI for comparing all five renderers:
+
+```bash
+# Default: Run GUI with all renderers
+cargo run -p renderer
+
+# Synchronized mode: All tracers use same timestamp/camera
+cargo run -p renderer -- --sync
+
+# Single frame mode: Render once and exit
+cargo run -p renderer -- --single
+
+# Headless diff comparison
+cargo run -p renderer -- --single --headless --diff cpu gl
+```
+
+### UI Features
+
+- **3x2 Grid Layout**: All five renderers displayed simultaneously
+- **Diff Comparison Panel**: Select any two renderers to compare
+- **Manual Camera Control**: Drag to orbit, scroll to zoom
+- **Model Selector**: Switch between test models (octa cube, VOX models, etc.)
+- **Mesh Caching**: Enable/disable mesh caching with regeneration button
+- **Lighting Toggle**: Disable lighting for pure material color output
 
 ## Material System
 
-The renderer uses a standardized material palette system for voxel colors:
+The renderer uses a standardized material palette system:
 
-### Material Palette
+### R2G3B2 Color Encoding
 
-- **Total materials**: 128 (indices 0-127)
-- **Index 0**: Reserved for empty/transparent voxels
-- **Indices 1-127**: Solid voxel materials with distinct colors
+For material indices 128-255, colors are encoded as R2G3B2:
+- Bits 7-6: Red (2 bits, 0-3)
+- Bits 5-3: Green (3 bits, 0-7)
+- Bits 2-0: Blue (2 bits, 0-3)
 
-### Test Palette
+Common colors:
+| Value | Color | R2G3B2 |
+|-------|-------|--------|
+| 224 | Red | (3,0,0) |
+| 252 | Yellow | (3,7,0) |
+| 156 | Green | (0,7,0) |
+| 131 | Blue | (0,0,3) |
+| 255 | White | (3,7,3) |
 
-For renderer testing, a minimal 7-color palette is defined in `src/materials.rs`:
+### Palette Colors (0-127)
 
-| Index | Name | Color (RGB) | Hex | Usage |
-|-------|------|-------------|-----|-------|
-| 0 | Empty | (0.0, 0.0, 0.0) | #000000 | Transparent/Air |
-| 1 | Red | (1.0, 0.0, 0.0) | #FF0000 | Solid voxel |
-| 2 | Green | (0.0, 1.0, 0.0) | #00FF00 | Solid voxel |
-| 3 | Blue | (0.0, 0.0, 1.0) | #0000FF | Solid voxel |
-| 4 | Yellow | (1.0, 1.0, 0.0) | #FFFF00 | Solid voxel |
-| 5 | White | (1.0, 1.0, 1.0) | #FFFFFF | Solid voxel |
-| 6 | Black | (0.0, 0.0, 0.0) | #000000 | Solid voxel |
-
-### Usage in Code
-
-```rust
-use renderer::materials::get_material_color;
-
-// Get material color for a voxel value
-let color = get_material_color(cube_hit.value);
-// Returns Vec3 with RGB values in range [0.0, 1.0]
-```
-
-### Lighting Toggle
-
-Both CPU and GL tracers support disabling lighting for debugging:
-
-```rust
-let mut tracer = CpuCubeTracer::new();
-
-// Render with lighting (default)
-tracer.set_disable_lighting(false);
-tracer.render_with_camera(width, height, &camera);
-
-// Render pure material colors (no lighting)
-tracer.set_disable_lighting(true);
-tracer.render_with_camera(width, height, &camera);
-```
-
-This is useful for:
-- Verifying exact material colors in tests
-- Debugging material palette issues
-- Creating color-accurate texture atlases
+Indices 0-127 use a predefined palette where:
+- Index 0: Empty/transparent
+- Indices 1-7: Reserved for error indicators
+- Indices 8+: Application-defined colors
 
 ## Lighting Model
 
-The renderer uses a simplified physically-based lighting model:
-
-### Constants
-
 ```rust
-// Light direction (normalized)
-pub const LIGHT_DIR: Vec3 = Vec3::new(0.431934, 0.863868, 0.259161);
-
-// Lighting coefficients
-pub const AMBIENT: f32 = 0.3;           // Base ambient light
-pub const DIFFUSE_STRENGTH: f32 = 0.7;  // Diffuse multiplier
-
-// Background color
-pub const BACKGROUND_COLOR: Vec3 = Vec3::new(0.4, 0.5, 0.6); // Bluish gray
-```
-
-### Formula
-
-```
 finalColor = materialColor * (AMBIENT + diffuse * DIFFUSE_STRENGTH)
 
 where:
-  diffuse = max(dot(normal, LIGHT_DIR), 0.0)  // Lambert's cosine law
-  materialColor = palette lookup from voxel value
+  diffuse = max(dot(normal, LIGHT_DIR), 0.0)
+  AMBIENT = 0.3
+  DIFFUSE_STRENGTH = 0.7
+  LIGHT_DIR = normalize(0.5, 1.0, 0.3)
 ```
 
-### Gamma Correction
+Gamma correction (γ = 2.2) is applied for proper sRGB display.
 
-All rendered output applies gamma correction (γ = 2.2) for proper sRGB display:
+## Test Models
 
-```rust
-color = color.powf(1.0 / 2.2);  // Linear to sRGB
+Available test models:
+
+| Model | Depth | Description |
+|-------|-------|-------------|
+| SingleRedVoxel | 0 | Single solid voxel |
+| OctaCube | 1 | 2x2x2 octree with 6 colored voxels |
+| ExtendedOctaCube | 2 | Depth 2 with sparse/packed subdivisions |
+| Depth3Cube | 3 | Complex structure with random subdivisions |
+| VoxRobot | 5 | MagicaVoxel robot character |
+| VoxAlienBot | 5 | MagicaVoxel alien bot |
+| VoxEskimo | 5 | MagicaVoxel eskimo character |
+
+## Mesh Caching
+
+The mesh renderer supports caching to avoid regenerating the mesh every frame:
+
+- **Cache Enabled**: Mesh is uploaded once and reused
+- **Cache Disabled**: Mesh regenerated every frame (for debugging)
+- **Manual Regeneration**: "Regen Mesh" button forces cache invalidation
+- **Automatic Invalidation**: Cache cleared when model changes
+
+## Code Structure
+
 ```
-
-This means:
-- **Background color**: RGB(0.4, 0.5, 0.6) in linear space → RGB(170, 186, 201) after gamma
-- **Material colors**: Scaled by lighting, then gamma corrected
-
-## Implementation Details
-
-### Shaders
-
-#### Vertex Shader
-- Simple fullscreen triangle approach (no vertex buffers needed)
-- Uses gl_VertexID to generate positions
-
-#### Fragment Shader
-- Ray-box intersection algorithm for cube rendering
-- Octree traversal with DDA algorithm for voxel raycasting
-- Material palette lookup from voxel values
-- Accurate surface normal calculation from octree hit
-- Directional light with fixed direction
-- Simplified ambient + diffuse lighting model (no fresnel)
-- Gamma correction for proper sRGB color output
-- Optional lighting disable via uniform flag
-
-### Rendering Pipeline
-
-1. Initialize OpenGL ES 3.0 context via glutin
-2. Compile and link vertex/fragment shaders
-3. Create VAO (Vertex Array Object)
-4. Each frame:
-   - Clear screen
-   - Update uniforms (resolution, time)
-   - Draw fullscreen triangle
-   - Fragment shader performs raytracing per pixel
-
-### Current Implementation
-
-The renderer displays an octree-based voxel cube (2×2×2 "octa cube" test scene):
-- **6 solid voxels**: Red, Green, Blue, Yellow, White (×2)
-- **2 empty spaces**: Transparent octants for depth testing
-- Rotating camera orbits around the cube
-- Material-based colors (no normal-based variation)
-- Directional lighting from direction (0.431934, 0.863868, 0.259161)
+src/
+├── main.rs              # Entry point, CLI argument parsing
+├── lib.rs               # Library exports
+├── renderer.rs          # Common Renderer trait and utilities
+├── cpu_tracer.rs        # CpuTracer implementation
+├── gl_tracer.rs         # GlTracer implementation
+├── bcf_cpu_tracer.rs    # BcfTracer implementation
+├── gpu_tracer.rs        # ComputeTracer implementation
+├── mesh_renderer.rs     # MeshRenderer implementation
+├── egui_app.rs          # CubeRendererApp GUI
+├── shader_utils.rs      # OpenGL shader compilation
+└── scenes/
+    └── default_models.rs # Test model definitions
+```
 
 ## Building and Running
 
-### On NixOS or with Nix
-
-The project includes Nix flake and shell configurations for managing dependencies. The renderer uses X11 backend by default (with Wayland fallback support):
+### With Nix
 
 ```bash
-# Option 1: Using the provided run script (recommended)
-./run.sh
-
-# Option 2: Using nix-shell directly
-nix-shell shell.nix --run 'DISPLAY=:0 cargo run --release'
-
-# Option 3: Using nix develop (from flake)
+# Using nix develop
 nix develop
-DISPLAY=:0 cargo run -p renderer
+cargo run -p renderer
 
-# Option 4: Using direnv (if installed)
-direnv allow
-DISPLAY=:0 cargo run -p renderer
+# Using nix-shell
+nix-shell shell.nix --run 'DISPLAY=:0 cargo run -p renderer'
 ```
 
-**Note:** The GL renderer requires an X11 display server. Make sure `DISPLAY` is set correctly (typically `:0` or `:1`).
+### On Linux
 
-### Running the CPU Renderer
-
-The CPU renderer doesn't require a display server and outputs PNG files:
-
-```bash
-# Run CPU renderer (outputs 10 frames)
-cargo run --release -- --cpu
-
-# Or with nix-shell
-nix-shell shell.nix --run 'cargo run --release -- --cpu'
-```
-
-Output: `output_frame_000.png` through `output_frame_009.png`
-
-### On other Linux systems
-
-Ensure you have the required libraries installed:
+Ensure required libraries are installed:
 
 **Debian/Ubuntu:**
 ```bash
@@ -211,31 +183,25 @@ sudo pacman -S wayland libxkbcommon mesa libx11 libxcursor libxi libxrandr
 cargo run -p renderer
 ```
 
-**Fedora:**
-```bash
-sudo dnf install wayland-devel libxkbcommon-devel mesa-libGL-devel \
-  libX11-devel libXcursor-devel libXi-devel libXrandr-devel
-cargo run -p renderer
-```
-
-## Code Structure
+## CLI Options
 
 ```
-src/
-├── main.rs          # Entry point, dual-mode runner
-├── renderer.rs      # Common Renderer trait and shared code
-├── gl_tracer.rs     # GlCubeTracer (GPU implementation)
-└── cpu_tracer.rs    # CpuCubeTracer (CPU implementation)
+Usage: renderer [OPTIONS]
+
+Options:
+  --console          Run in console mode (no GUI, batch CPU rendering)
+  --sync             GUI with synchronized rendering
+  --single           Render once and exit
+  --headless         Force headless mode (with --single)
+  --diff <L> <R>     Diff comparison between renderers (cpu, gl, bcf, compute, mesh)
+  --diff all         Compare all renderer pairs
+
+Examples:
+  renderer --single                    # GUI: render one frame and exit
+  renderer --single --headless         # Headless: render and save diff
+  renderer --diff cpu compute          # Compare CPU vs Compute
+  renderer --sync                      # Synchronized continuous rendering
 ```
-
-### Shared Code (renderer.rs)
-
-- `Renderer` trait - Common interface
-- `intersect_box()` - Ray-box intersection algorithm
-- `create_camera_ray()` - Camera ray generation
-- `calculate_lighting()` - Lighting calculations
-
-Both implementations use identical algorithms, just in different languages (GLSL vs Rust).
 
 ## Dependencies
 
@@ -243,37 +209,21 @@ Both implementations use identical algorithms, just in different languages (GLSL
 - `glutin`: OpenGL context creation
 - `glutin-winit`: Glutin-winit integration
 - `winit`: Window creation and event handling
-- `raw-window-handle`: Window handle abstractions
+- `egui`: Immediate mode GUI
+- `egui-glow`: egui OpenGL backend
 - `glam`: Vector math library
 - `image`: PNG encoding/decoding
+- `cube`: Voxel octree data structure
 
 ## Testing
 
-The renderer includes comprehensive test coverage:
-
-### Color Verification Tests (`tests/color_verification.rs`)
-- **Material color tests**: Verify CPU tracer renders distinct palette colors
-- **Background color test**: Verify bluish-gray background (gamma-corrected)
-- **Lighting toggle test**: Verify `disable_lighting` produces pure colors
-- **Material palette test**: Verify all 7 test colors are accessible
-- **Lighting constants test**: Verify light direction normalization and ranges
-
-Run tests:
 ```bash
+# Run all tests
+cargo test --package renderer
+
+# Color verification tests
 cargo test --package renderer --test color_verification
+
+# Render validation tests
+cargo test --package renderer --test render_validation
 ```
-
-### Integration Tests
-- **Octa cube rendering** (`tests/octa_cube_rendering.rs`): Multi-angle rendering validation
-- **Render validation** (`tests/render_validation.rs`): Visible output verification
-- **Combined tracer test** (`tests/combined_render_test.rs`): CPU/GL/GPU parity testing
-
-## Future Extensions
-
-Potential improvements and extensions:
-- Expand material palette to full 128 entries with texture properties
-- Add level-of-detail (LOD) support for large octrees
-- Implement deeper octree traversal (currently depth 1)
-- Add texture mapping and UV coordinates
-- Implement shadows and reflections
-- Optimized sparse voxel octree (SVO) rendering for massive scenes

@@ -1,0 +1,93 @@
+// Model definitions for cube renderer
+//
+// Each model is defined with:
+// - id: short identifier for CLI (e.g., "octa")
+// - name: display name for UI
+// - csm: CubeScript Model format string (or omit if using vox_path)
+// - vox_path: Path to .vox file (or omit if using csm)
+
+(
+    models: [
+        // Single solid voxel
+        (
+            id: "single",
+            name: "Single Red Voxel",
+            csm: Some("> 224"),
+        ),
+
+        // Octa Cube (2x2x2 octree)
+        (
+            id: "octa",
+            name: "Octa Cube",
+            csm: Some("> [224 252 156 0 131 255 0 0]"),
+        ),
+
+        // Extended Octa Cube
+        (
+            id: "extended",
+            name: "Extended Octa Cube",
+            csm: Some("> [224 s[0 0 0 0 0 0 159 0] 156 0 131 s[224 248 252 156 159 131 227 255] 0 0]"),
+        ),
+
+        // Random Cubes
+        (
+            id: "depth3",
+            name: "Depth 3 Cube",
+            csm: Some("> [s[224 252 156 131 255 0 0 0] s[252 224 131 156 255 0 0 0] s[156 131 224 252 255 0 0 0] s[131 156 252 224 255 0 0 0] s[255 224 252 156 131 0 0 0] 0 0 0]"),
+        ),
+
+        // Four vertical planes
+        (
+            id: "quad",
+            name: "Quad Cube",
+            csm: Some("> [224 252 156 131 0 0 0 0]"),
+        ),
+
+        // Horizontal slices
+        (
+            id: "layer",
+            name: "Layer Cube",
+            csm: Some("> [224 224 224 224 252 252 252 252]"),
+        ),
+
+        // Corners only
+        (
+            id: "sdf",
+            name: "SDF Cube",
+            csm: Some("> [224 0 0 252 0 156 131 0]"),
+        ),
+
+        // Checkerboard pattern
+        (
+            id: "generated",
+            name: "Generated Cube",
+            csm: Some("> [224 252 224 252 224 252 224 252]"),
+        ),
+
+        // Test Expansion Cube
+        (
+            id: "test_expansion",
+            name: "Test Expansion Cube",
+            csm: Some("> [s[224 0 0 0 0 0 0 0] 0 0 0 0 0 0 0]"),
+        ),
+
+        // VOX models (loaded from files)
+        (
+            id: "vox_robot",
+            name: "Robot Character",
+            vox_path: Some("assets/avatars/robot.vox"),
+        ),
+
+        (
+            id: "vox_alien_bot",
+            name: "Alien Bot",
+            vox_path: Some("assets/avatars/alien_bot.vox"),
+        ),
+
+        (
+            id: "vox_eskimo",
+            name: "Eskimo Character",
+            vox_path: Some("assets/avatars/eskimo.vox"),
+        ),
+    ]
+)
