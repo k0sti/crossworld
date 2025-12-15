@@ -385,6 +385,10 @@ void main() {
     vec3 normal = normalize(vNormal);
     float diffuse = max(dot(normal, uLightDir), 0.0);
     vec3 lighting = vColor * (uAmbient + diffuse * uDiffuseStrength);
-    FragColor = vec4(lighting, 1.0);
+
+    // Gamma correction to match CPU tracer output
+    vec3 gammaCorrected = pow(lighting, vec3(1.0 / 2.2));
+
+    FragColor = vec4(gammaCorrected, 1.0);
 }
 "#;

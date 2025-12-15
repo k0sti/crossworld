@@ -1,8 +1,8 @@
 //! Test VOX model loading
 
-use renderer::scenes::{create_vox_robot, create_vox_alien_bot, create_vox_eskimo};
-use renderer::{BcfTracer, Renderer};
 use cube::Cube;
+use renderer::scenes::{create_vox_alien_bot, create_vox_eskimo, create_vox_robot};
+use renderer::{BcfTracer, Renderer};
 
 #[test]
 fn test_vox_robot_loading() {
@@ -105,7 +105,11 @@ fn test_vox_robot_rendering() {
 
     println!("VOX robot rendering stats:");
     println!("  Total pixels: {}", 128 * 128);
-    println!("  Colored pixels: {} ({:.1}%)", colored_pixels, (colored_pixels as f32 / (128.0 * 128.0)) * 100.0);
+    println!(
+        "  Colored pixels: {} ({:.1}%)",
+        colored_pixels,
+        (colored_pixels as f32 / (128.0 * 128.0)) * 100.0
+    );
     println!("  Unique colors: {}", color_histogram.len());
     println!("  Color histogram (top 10):");
     let mut color_vec: Vec<_> = color_histogram.iter().collect();
