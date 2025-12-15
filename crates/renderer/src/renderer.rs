@@ -138,7 +138,7 @@ impl Default for CameraConfig {
         Self {
             position,
             rotation,
-            vfov: 60.0_f32.to_radians(),
+            vfov: 2.0 * 0.5_f32.atan(), // ~53.13 degrees - matches raytracer's implicit FOV
             pitch,
             yaw,
             target_position: Some(target),
@@ -150,9 +150,16 @@ impl Copy for CameraConfig {}
 
 impl CameraConfig {
     /// Create camera configuration with position looking at target
-    pub fn look_at(position: glam::Vec3, target: glam::Vec3, _up: glam::Vec3) -> Self {
+    pub fn look_at(position: glam::Vec3, target: glam::Vec3, up: glam::Vec3) -> Self {
+        // Build camera basis the same way as the raytracer does
         let forward = (target - position).normalize();
-        let rotation = glam::Quat::from_rotation_arc(glam::Vec3::NEG_Z, forward);
+        let right = forward.cross(up).normalize();
+        let cam_up = right.cross(forward);
+
+        // Build rotation matrix from basis vectors and convert to quaternion
+        // In camera space: right=+X, up=+Y, forward=-Z (OpenGL convention)
+        let rotation_matrix = glam::Mat3::from_cols(right, cam_up, -forward);
+        let rotation = glam::Quat::from_mat3(&rotation_matrix);
 
         // Calculate pitch and yaw from forward vector
         let yaw = forward.z.atan2(forward.x);
@@ -161,7 +168,7 @@ impl CameraConfig {
         Self {
             position,
             rotation,
-            vfov: 60.0_f32.to_radians(),
+            vfov: 2.0 * 0.5_f32.atan(), // ~53.13 degrees - matches raytracer's implicit FOV
             pitch,
             yaw,
             target_position: Some(target),
@@ -170,8 +177,15 @@ impl CameraConfig {
 
     /// Set the camera to look at a specific target position
     pub fn set_look_at(&mut self, target: glam::Vec3) {
+        // Build camera basis the same way as the raytracer does
+        let up = glam::Vec3::Y; // Use world up
         let forward = (target - self.position).normalize();
-        self.rotation = glam::Quat::from_rotation_arc(glam::Vec3::NEG_Z, forward);
+        let right = forward.cross(up).normalize();
+        let cam_up = right.cross(forward);
+
+        // Build rotation matrix from basis vectors and convert to quaternion
+        let rotation_matrix = glam::Mat3::from_cols(right, cam_up, -forward);
+        self.rotation = glam::Quat::from_mat3(&rotation_matrix);
 
         // Update pitch and yaw
         self.yaw = forward.z.atan2(forward.x);
@@ -186,7 +200,7 @@ impl CameraConfig {
         Self {
             position,
             rotation,
-            vfov: 60.0_f32.to_radians(),
+            vfov: 2.0 * 0.5_f32.atan(), // ~53.13 degrees - matches raytracer's implicit FOV
             pitch,
             yaw,
             target_position: None,
