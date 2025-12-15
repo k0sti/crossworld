@@ -1,7 +1,7 @@
 //! Test scenes for rendering
 
-pub mod default_models;
+pub mod model_config;
 pub mod octa_cube;
 
-pub use default_models::*;
+pub use model_config::*;
 pub use octa_cube::create_octa_cube;

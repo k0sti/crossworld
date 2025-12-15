@@ -172,7 +172,13 @@ pub fn bcf_raycast(bcf_data: &[u8], ray_origin: Vec3, ray_dir: Vec3) -> Option<H
     }
 
     // General raycast with DDA traversal
-    bcf_raycast_impl(&reader, header.root_offset, ray_origin, ray_dir, entry_normal)
+    bcf_raycast_impl(
+        &reader,
+        header.root_offset,
+        ray_origin,
+        ray_dir,
+        entry_normal,
+    )
 }
 
 /// Axis-aligned raycast (optimized path)
