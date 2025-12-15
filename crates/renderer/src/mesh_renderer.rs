@@ -224,12 +224,13 @@ impl MeshRenderer {
             let aspect = viewport_width as f32 / viewport_height as f32;
             let projection = glam::Mat4::perspective_rh(camera.vfov, aspect, 0.1, 1000.0);
 
-            // View matrix construction to match raytracer's camera
-            // The raytracer uses: forward = quat_rotate(camera_rot, -Z), up = quat_rotate(camera_rot, Y)
-            // Build view matrix using look_to_rh which expects forward direction and up vector
+            // View matrix construction to match raytracer's camera EXACTLY
+            // The raytracer rotates basis vectors: forward = rotate(-Z), up = rotate(+Y)
+            // Use look_at_rh with a target point in the forward direction
             let forward = camera.rotation * glam::Vec3::NEG_Z;
             let up = camera.rotation * glam::Vec3::Y;
-            let view = glam::Mat4::look_to_rh(camera.position, forward, up);
+            let target = camera.position + forward;
+            let view = glam::Mat4::look_at_rh(camera.position, target, up);
 
             // Calculate scale to transform mesh coordinates to [-1, 1] space
             // Mesh vertices are in [0, 1] space (visit_faces outputs normalized positions)
