@@ -140,24 +140,27 @@ vec3 decodeR2G3B2(int value) {
 
     // Convert to normalized RGB values
     // Using same mapping as Rust implementation
+    // 2-bit expansion for R and B: value * 255 / 3, then normalize
     float r = 0.0;
-    if (r_bits == 1) r = 0.286;
-    else if (r_bits == 2) r = 0.573;
-    else if (r_bits == 3) r = 0.859;
+    if (r_bits == 1) r = 0.333;  // 0x55/255 = 85/255
+    else if (r_bits == 2) r = 0.667;  // 0xAA/255 = 170/255
+    else if (r_bits == 3) r = 1.0;    // 0xFF/255 = 255/255
 
+    // 3-bit expansion for G: value * 255 / 7, then normalize
     float g = 0.0;
-    if (g_bits == 1) g = 0.141;
-    else if (g_bits == 2) g = 0.286;
-    else if (g_bits == 3) g = 0.427;
-    else if (g_bits == 4) g = 0.573;
-    else if (g_bits == 5) g = 0.714;
-    else if (g_bits == 6) g = 0.859;
-    else if (g_bits == 7) g = 1.0;
+    if (g_bits == 1) g = 0.141;  // 0x24/255 ≈ 36/255
+    else if (g_bits == 2) g = 0.286;  // 0x49/255 ≈ 73/255
+    else if (g_bits == 3) g = 0.427;  // 0x6D/255 ≈ 109/255
+    else if (g_bits == 4) g = 0.573;  // 0x92/255 ≈ 146/255
+    else if (g_bits == 5) g = 0.714;  // 0xB6/255 ≈ 182/255
+    else if (g_bits == 6) g = 0.859;  // 0xDB/255 ≈ 219/255
+    else if (g_bits == 7) g = 1.0;    // 0xFF/255 = 255/255
 
+    // 2-bit expansion for B (same as R)
     float b = 0.0;
-    if (b_bits == 1) b = 0.286;
-    else if (b_bits == 2) b = 0.573;
-    else if (b_bits == 3) b = 0.859;
+    if (b_bits == 1) b = 0.333;  // 0x55/255 = 85/255
+    else if (b_bits == 2) b = 0.667;  // 0xAA/255 = 170/255
+    else if (b_bits == 3) b = 1.0;    // 0xFF/255 = 255/255
 
     return vec3(r, g, b);
 }
