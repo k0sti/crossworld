@@ -12,7 +12,7 @@
 //! - Background: Bluish-gray (102, 128, 153)
 
 use glam::Vec3;
-use renderer::{CameraConfig, CpuCubeTracer, Renderer};
+use renderer::{CameraConfig, CpuTracer, Renderer};
 
 /// Color tolerance for comparisons (±5 RGB units on 0-255 scale)
 const COLOR_TOLERANCE: u8 = 5;
@@ -53,7 +53,7 @@ fn sample_pixel(
 fn test_cpu_tracer_material_colors() {
     println!("\n=== Testing CPU Tracer Material Colors ===");
 
-    let mut tracer = CpuCubeTracer::new();
+    let mut tracer = CpuTracer::new();
 
     // Fixed camera looking at the cube center
     let camera = CameraConfig::look_at(
@@ -156,7 +156,7 @@ fn test_cpu_tracer_material_colors() {
 fn test_cpu_tracer_background_color() {
     println!("\n=== Testing CPU Tracer Background Color ===");
 
-    let mut tracer = CpuCubeTracer::new();
+    let mut tracer = CpuTracer::new();
 
     // Camera looking away from cube (should see background)
     let camera = CameraConfig::look_at(
@@ -193,7 +193,7 @@ fn test_cpu_tracer_background_color() {
 fn test_cpu_tracer_renders_without_crash() {
     println!("\n=== Testing CPU Tracer Basic Rendering ===");
 
-    let mut tracer = CpuCubeTracer::new();
+    let mut tracer = CpuTracer::new();
 
     // Simple time-based render
     tracer.render(128, 128, 0.0);
@@ -285,7 +285,7 @@ fn test_lighting_constants() {
 fn test_lighting_toggle() {
     println!("\n=== Testing Lighting Toggle ===");
 
-    let mut tracer = CpuCubeTracer::new();
+    let mut tracer = CpuTracer::new();
 
     // Fixed camera looking at the cube center
     let camera = CameraConfig::look_at(

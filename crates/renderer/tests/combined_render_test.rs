@@ -11,8 +11,8 @@ use glutin::prelude::*;
 use glutin::surface::{Surface, SurfaceAttributesBuilder, WindowSurface};
 use glutin_winit::DisplayBuilder;
 use raw_window_handle::HasWindowHandle;
-use renderer::gl_tracer::GlCubeTracer;
-use renderer::gpu_tracer::GpuTracer;
+use renderer::gl_tracer::GlTracer;
+use renderer::gpu_tracer::ComputeTracer;
 use renderer::renderer::CameraConfig;
 use renderer::scenes::create_octa_cube;
 use std::num::NonZeroU32;
@@ -211,7 +211,7 @@ fn test_both_tracers() {
     // TEST 1: GL Tracer
     println!("=== TEST 1: GL TRACER (Fragment Shader) ===\n");
 
-    let mut gl_tracer = GlCubeTracer::new(cube.clone());
+    let mut gl_tracer = GlTracer::new(cube.clone());
 
     unsafe {
         gl_tracer
@@ -278,7 +278,7 @@ fn test_both_tracers() {
     // TEST 2: GPU Tracer
     println!("=== TEST 2: GPU TRACER (Compute Shader) ===\n");
 
-    let mut gpu_tracer = GpuTracer::new(cube);
+    let mut gpu_tracer = ComputeTracer::new(cube);
     let init_result = unsafe { gpu_tracer.init_gl(&gl) };
 
     match init_result {

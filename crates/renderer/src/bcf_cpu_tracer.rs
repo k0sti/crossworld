@@ -704,14 +704,14 @@ fn trace_ray(bcf_data: &[u8], ray: &Ray, root_offset: usize) -> Option<BcfHit> {
 ///
 /// This tracer reads BCF binary data directly and performs iterative octree traversal.
 /// All operations are designed to map 1:1 to GLSL for GPU translation.
-pub struct BcfCpuTracer {
+pub struct BcfTracer {
     bcf_data: Vec<u8>,
     root_offset: usize,
     image_buffer: Option<ImageBuffer<Rgb<u8>, Vec<u8>>>,
     disable_lighting: bool,
 }
 
-impl BcfCpuTracer {
+impl BcfTracer {
     /// Create tracer from cube by serializing to BCF
     pub fn new_from_cube(cube: Rc<Cube<u8>>) -> Self {
         let bcf_data = serialize_bcf(&cube);
@@ -849,7 +849,7 @@ impl BcfCpuTracer {
     }
 }
 
-impl Default for BcfCpuTracer {
+impl Default for BcfTracer {
     fn default() -> Self {
         Self::new()
     }
@@ -903,7 +903,7 @@ mod tests {
     }
 }
 
-impl Renderer for BcfCpuTracer {
+impl Renderer for BcfTracer {
     fn render(&mut self, width: u32, height: u32, time: f32) {
         // Create image buffer
         let buffer = ImageBuffer::from_fn(width, height, |x, y| {
@@ -937,6 +937,6 @@ impl Renderer for BcfCpuTracer {
     }
 
     fn name(&self) -> &str {
-        "BCF CPU Tracer"
+        "BcfTracer"
     }
 }

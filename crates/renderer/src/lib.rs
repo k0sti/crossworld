@@ -18,10 +18,10 @@ pub mod scenes;
 pub mod shader_utils;
 
 // Re-export commonly used types
-pub use bcf_cpu_tracer::BcfCpuTracer;
-pub use cpu_tracer::CpuCubeTracer;
-pub use gl_tracer::GlCubeTracer;
-pub use gpu_tracer::GpuTracer;
+pub use bcf_cpu_tracer::BcfTracer;
+pub use cpu_tracer::CpuTracer;
+pub use gl_tracer::GlTracer;
+pub use gpu_tracer::ComputeTracer;
 pub use mesh_renderer::MeshRenderer;
 
 pub use renderer::{

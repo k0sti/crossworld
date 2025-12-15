@@ -5,14 +5,14 @@ use image::{ImageBuffer, Rgb};
 use std::rc::Rc;
 
 /// Pure Rust CPU raytracer that renders to an image buffer
-pub struct CpuCubeTracer {
+pub struct CpuTracer {
     cube: Rc<Cube<u8>>,
     image_buffer: Option<ImageBuffer<Rgb<u8>, Vec<u8>>>,
     /// If true, disable lighting and output pure material colors
     disable_lighting: bool,
 }
 
-impl CpuCubeTracer {
+impl CpuTracer {
     pub fn new() -> Self {
         // Use octa cube scene (2x2x2 octree with 6 solid voxels and 2 empty spaces)
         let cube = create_octa_cube();
@@ -196,13 +196,13 @@ impl CpuCubeTracer {
     }
 }
 
-impl Default for CpuCubeTracer {
+impl Default for CpuTracer {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Renderer for CpuCubeTracer {
+impl Renderer for CpuTracer {
     fn render(&mut self, width: u32, height: u32, time: f32) {
         // Create or resize image buffer
         let buffer = ImageBuffer::from_fn(width, height, |x, y| {
@@ -236,6 +236,6 @@ impl Renderer for CpuCubeTracer {
     }
 
     fn name(&self) -> &str {
-        "CpuCubeTracer"
+        "CpuTracer"
     }
 }
