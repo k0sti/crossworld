@@ -124,8 +124,9 @@ where
             }
 
             // Calculate voxel size from coord.depth
-            // voxel_size = 1.0 / 2^(coord.depth + 1)
-            let voxel_size = 1.0 / (2 << coord.depth) as f32;
+            // voxel_size = 1.0 / 2^coord.depth
+            // At depth 1: size = 0.5, at depth 2: size = 0.25, etc.
+            let voxel_size = 1.0 / (1 << coord.depth) as f32;
 
             // Convert from center-based coordinates to [0,1] world space
             // Center-based coords are in {-1, +1} steps, so we scale by half size
