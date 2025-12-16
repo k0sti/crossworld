@@ -1,31 +1,10 @@
+//! Renderer trait and helper types for voxel rendering
+
 use glam::Vec3;
 
-/// Lighting constants for standardized rendering across all tracers
-///
-/// These constants define a simple directional lighting model with ambient
-/// and diffuse components. All tracers (CPU, GL, GPU) use these same values
-/// to ensure consistent visual output.
-/// Directional light direction (normalized)
-///
-/// Light comes from upper-right-front direction.
-/// Pre-normalized: normalize(0.5, 1.0, 0.3) = (0.431934, 0.863868, 0.259161)
-pub const LIGHT_DIR: Vec3 = Vec3::new(0.431934, 0.863868, 0.259161);
-
-/// Ambient lighting term (0.0-1.0)
-///
-/// 30% ambient illumination ensures all surfaces are visible even when
-/// facing away from the light.
-pub const AMBIENT: f32 = 0.3;
-
-/// Diffuse lighting strength multiplier
-///
-/// Applied to the diffuse term before adding to ambient.
-pub const DIFFUSE_STRENGTH: f32 = 0.7;
-
-/// Background color for empty space
-///
-/// Bluish-gray color rendered when rays miss all voxels.
-pub const BACKGROUND_COLOR: Vec3 = Vec3::new(0.4, 0.5, 0.6);
+// Re-export for use within this module and for backward compatibility
+pub use crate::camera::CameraConfig;
+pub use crate::lighting::{AMBIENT, BACKGROUND_COLOR, DIFFUSE_STRENGTH, LIGHT_DIR};
 
 /// Entity trait for objects in 3D space
 ///
@@ -106,236 +85,177 @@ impl Entity for CubeObject {
     }
 }
 
-/// Camera configuration for rendering
-#[derive(Debug, Clone)]
-pub struct CameraConfig {
-    /// Camera position in world space
-    pub position: glam::Vec3,
-    /// Camera rotation (orientation)
-    pub rotation: glam::Quat,
-    /// Vertical field of view in radians
-    pub vfov: f32,
-    /// Pitch angle in radians (rotation around X axis)
-    pub pitch: f32,
-    /// Yaw angle in radians (rotation around Y axis)
-    pub yaw: f32,
-    /// Optional target position for look-at cameras
-    pub target_position: Option<glam::Vec3>,
-}
-
-impl Default for CameraConfig {
-    fn default() -> Self {
-        let position = glam::Vec3::new(3.0, 2.0, 3.0);
-        let target = glam::Vec3::ZERO;
-        let forward = (target - position).normalize();
-
-        // Calculate pitch and yaw from forward vector
-        let yaw = forward.z.atan2(forward.x);
-        let pitch = forward.y.asin();
-
-        let rotation = glam::Quat::from_rotation_arc(glam::Vec3::NEG_Z, forward);
-
-        Self {
-            position,
-            rotation,
-            vfov: 2.0 * 0.5_f32.atan(), // ~53.13 degrees - matches raytracer's implicit FOV
-            pitch,
-            yaw,
-            target_position: Some(target),
-        }
-    }
-}
-
-impl Copy for CameraConfig {}
-
-impl CameraConfig {
-    /// Create camera configuration with position looking at target
-    pub fn look_at(position: glam::Vec3, target: glam::Vec3, up: glam::Vec3) -> Self {
-        // Build camera basis the same way as the raytracer does
-        let forward = (target - position).normalize();
-        let right = forward.cross(up).normalize();
-        let cam_up = right.cross(forward);
-
-        // Build rotation matrix from basis vectors and convert to quaternion
-        // In camera space: right=+X, up=+Y, forward=-Z (OpenGL convention)
-        let rotation_matrix = glam::Mat3::from_cols(right, cam_up, -forward);
-        let rotation = glam::Quat::from_mat3(&rotation_matrix);
-
-        // Calculate pitch and yaw from forward vector
-        let yaw = forward.z.atan2(forward.x);
-        let pitch = forward.y.asin();
-
-        Self {
-            position,
-            rotation,
-            vfov: 2.0 * 0.5_f32.atan(), // ~53.13 degrees - matches raytracer's implicit FOV
-            pitch,
-            yaw,
-            target_position: Some(target),
-        }
-    }
-
-    /// Set the camera to look at a specific target position
-    pub fn set_look_at(&mut self, target: glam::Vec3) {
-        // Build camera basis the same way as the raytracer does
-        let up = glam::Vec3::Y; // Use world up
-        let forward = (target - self.position).normalize();
-        let right = forward.cross(up).normalize();
-        let cam_up = right.cross(forward);
-
-        // Build rotation matrix from basis vectors and convert to quaternion
-        let rotation_matrix = glam::Mat3::from_cols(right, cam_up, -forward);
-        self.rotation = glam::Quat::from_mat3(&rotation_matrix);
-
-        // Update pitch and yaw
-        self.yaw = forward.z.atan2(forward.x);
-        self.pitch = forward.y.asin();
-        self.target_position = Some(target);
-    }
-
-    /// Create camera from pitch and yaw angles
-    pub fn from_pitch_yaw(position: glam::Vec3, pitch: f32, yaw: f32) -> Self {
-        let rotation = glam::Quat::from_euler(glam::EulerRot::YXZ, yaw, pitch, 0.0);
-
-        Self {
-            position,
-            rotation,
-            vfov: 2.0 * 0.5_f32.atan(), // ~53.13 degrees - matches raytracer's implicit FOV
-            pitch,
-            yaw,
-            target_position: None,
-        }
-    }
-
-    /// Update camera rotation from pitch and yaw
-    pub fn update_from_pitch_yaw(&mut self) {
-        self.rotation = glam::Quat::from_euler(glam::EulerRot::YXZ, self.yaw, self.pitch, 0.0);
-        // Clear target when manually rotating
-        self.target_position = None;
-    }
-
-    /// Get the forward direction vector
-    pub fn forward(&self) -> glam::Vec3 {
-        self.rotation * glam::Vec3::NEG_Z
-    }
-
-    /// Get the right direction vector
-    pub fn right(&self) -> glam::Vec3 {
-        self.rotation * glam::Vec3::X
-    }
-
-    /// Get the up direction vector
-    pub fn up(&self) -> glam::Vec3 {
-        self.rotation * glam::Vec3::Y
-    }
-
-    /// Get the target point the camera is looking at (1 unit forward)
-    pub fn target(&self) -> glam::Vec3 {
-        self.position + self.forward()
-    }
-
-    /// Rotate camera by yaw (around Y axis) and pitch (around local X axis)
-    /// This rotates the camera in place (first-person style)
-    #[allow(dead_code)]
-    pub fn rotate(&mut self, yaw_delta: f32, pitch_delta: f32) {
-        // Update pitch and yaw
-        self.yaw += yaw_delta;
-        self.pitch += pitch_delta;
-
-        // Clamp pitch to prevent gimbal lock
-        const MAX_PITCH: f32 = 89.0 * std::f32::consts::PI / 180.0;
-        self.pitch = self.pitch.clamp(-MAX_PITCH, MAX_PITCH);
-
-        // Update rotation from pitch and yaw
-        self.update_from_pitch_yaw();
-    }
-
-    /// Orbit camera around a target point
-    /// yaw_delta: rotation around world Y-axis (horizontal mouse movement)
-    /// pitch_delta: rotation around camera's local right axis (vertical mouse movement)
-    pub fn orbit(&mut self, target: glam::Vec3, yaw_delta: f32, pitch_delta: f32) {
-        // Calculate vector from target to camera
-        let mut offset = self.position - target;
-        let distance = offset.length();
-
-        // Step 1: Apply pitch rotation around camera's CURRENT local right axis (vertical angle)
-        // This must happen FIRST, using the original camera orientation
-        if pitch_delta.abs() > 0.0001 {
-            // Get the current right vector (perpendicular to both up and forward)
-            let forward = -offset.normalize();
-            let right = forward.cross(glam::Vec3::Y).normalize();
-
-            // Only apply pitch if right vector is valid (not looking straight up/down)
-            if right.length_squared() > 0.0001 {
-                let pitch_rotation = glam::Quat::from_axis_angle(right, pitch_delta);
-                offset = pitch_rotation * offset;
-
-                // Clamp to prevent flipping over the poles
-                let new_y = offset.y;
-                let xz_length = (offset.x * offset.x + offset.z * offset.z).sqrt();
-                let angle_from_horizontal = new_y.atan2(xz_length);
-
-                // Clamp angle to [-85°, 85°] to prevent gimbal lock
-                const MAX_ANGLE: f32 = 85.0 * std::f32::consts::PI / 180.0;
-                if angle_from_horizontal.abs() > MAX_ANGLE {
-                    let clamped_angle = angle_from_horizontal.clamp(-MAX_ANGLE, MAX_ANGLE);
-                    let new_y = distance * clamped_angle.sin();
-                    let new_xz = distance * clamped_angle.cos();
-                    let xz_ratio = new_xz / xz_length;
-                    offset = glam::Vec3::new(offset.x * xz_ratio, new_y, offset.z * xz_ratio);
-                }
-            }
-        }
-
-        // Step 2: Apply yaw rotation around world Y-axis (horizontal orbit)
-        // This happens AFTER pitch, so horizontal orbit is always around world Y
-        if yaw_delta.abs() > 0.0001 {
-            let yaw_rotation = glam::Quat::from_axis_angle(glam::Vec3::Y, yaw_delta);
-            offset = yaw_rotation * offset;
-        }
-
-        // Ensure we maintain the same distance
-        offset = offset.normalize() * distance;
-
-        // Update position
-        self.position = target + offset;
-
-        // Update rotation to look at target
-        let forward = (target - self.position).normalize();
-        self.rotation = glam::Quat::from_rotation_arc(glam::Vec3::NEG_Z, forward);
-
-        // Update pitch and yaw from the new rotation
-        self.yaw = forward.z.atan2(forward.x);
-        self.pitch = forward.y.asin();
-        self.target_position = Some(target);
-    }
-
-    /// Move camera relative to its current orientation
-    #[allow(dead_code)]
-    pub fn translate_local(&mut self, offset: glam::Vec3) {
-        self.position += self.right() * offset.x;
-        self.position += self.up() * offset.y;
-        self.position += self.forward() * offset.z;
-    }
-
-    /// Zoom by moving camera forward/backward along view direction
-    /// Note: For orbit cameras, consider zooming toward/away from target instead
-    #[allow(dead_code)]
-    pub fn zoom(&mut self, delta: f32) {
-        self.position += self.forward() * delta;
-    }
-}
 
 /// Common renderer trait for cube raytracers
+///
+/// This trait provides a unified interface for all renderer implementations,
+/// supporting both software renderers (CPU-based) and GL-based renderers.
+///
+/// # Capability Queries
+///
+/// Use `supports_gl()` and `supports_image_output()` to check renderer capabilities.
+///
+/// # Software Renderers
+///
+/// Software renderers (CpuTracer, BcfTracer) render to an internal image buffer:
+/// - Call `render()` or `render_with_camera()` to render a frame
+/// - Access the image buffer with `image_buffer()`
+/// - Save to file with `save_to_file()`
+///
+/// # GL-Based Renderers
+///
+/// GL renderers (GlTracer, ComputeTracer, MeshRenderer) require an OpenGL context:
+/// - Call `init_gl(&Context)` to initialize GL resources
+/// - Call `render_to_framebuffer(&Context, ...)` to render to the bound framebuffer
+/// - Call `save_framebuffer_to_file(&Context, ...)` to save framebuffer to file
+/// - Call `destroy_gl(&Context)` to clean up GL resources
 pub trait Renderer {
     /// Render a single frame at the given time
+    ///
+    /// For software renderers, this renders to an internal image buffer.
+    /// For GL renderers, this may panic - use `render_to_framebuffer()` instead.
     fn render(&mut self, width: u32, height: u32, time: f32);
 
     /// Render with explicit camera configuration
+    ///
+    /// For software renderers, this renders to an internal image buffer.
+    /// For GL renderers, this may panic - use `render_to_framebuffer()` instead.
     fn render_with_camera(&mut self, width: u32, height: u32, camera: &CameraConfig);
 
     /// Get the name of the renderer
     fn name(&self) -> &str;
+
+    // Capability queries
+
+    /// Returns true if this renderer supports GL rendering
+    ///
+    /// If true, the renderer requires an OpenGL context and implements
+    /// `init_gl()`, `destroy_gl()`, and `render_to_framebuffer()`.
+    fn supports_gl(&self) -> bool {
+        false
+    }
+
+    /// Returns true if this renderer outputs to an image buffer
+    ///
+    /// If true, the renderer provides an image buffer accessible via `image_buffer()`.
+    fn supports_image_output(&self) -> bool {
+        false
+    }
+
+    // GL lifecycle methods
+
+    /// Initialize GL resources (shaders, buffers, textures)
+    ///
+    /// Must be called with an active GL context before rendering.
+    /// Returns an error if initialization fails or if the renderer doesn't support GL.
+    ///
+    /// # Safety
+    ///
+    /// Requires a valid GL context to be current on the calling thread.
+    fn init_gl(&mut self, gl: &glow::Context) -> Result<(), String> {
+        let _ = gl;
+        Err(format!("{} does not support GL rendering", self.name()))
+    }
+
+    /// Clean up GL resources (delete shaders, buffers, textures)
+    ///
+    /// Should be called before the GL context is destroyed.
+    /// Safe to call multiple times (idempotent).
+    ///
+    /// # Safety
+    ///
+    /// Requires a valid GL context to be current on the calling thread.
+    fn destroy_gl(&mut self, gl: &glow::Context) {
+        let _ = gl;
+        // No-op for renderers without GL support
+    }
+
+    /// Render to the currently bound framebuffer
+    ///
+    /// Renders using the provided camera configuration or time parameter.
+    /// The framebuffer must be bound before calling this method.
+    ///
+    /// # Arguments
+    ///
+    /// * `gl` - OpenGL context
+    /// * `width` - Framebuffer width in pixels
+    /// * `height` - Framebuffer height in pixels
+    /// * `camera` - Optional camera configuration (overrides time-based camera)
+    /// * `time` - Optional time parameter for animated camera (ignored if camera is provided)
+    ///
+    /// # Safety
+    ///
+    /// Requires a valid GL context to be current on the calling thread.
+    fn render_to_framebuffer(
+        &mut self,
+        gl: &glow::Context,
+        width: u32,
+        height: u32,
+        camera: Option<&CameraConfig>,
+        time: Option<f32>,
+    ) -> Result<(), String> {
+        let _ = (gl, width, height, camera, time);
+        Err(format!(
+            "{} does not support framebuffer rendering",
+            self.name()
+        ))
+    }
+
+    // Image buffer access
+
+    /// Get the internal image buffer (for software renderers)
+    ///
+    /// Returns `Some` if the renderer outputs to an image buffer, `None` otherwise.
+    /// Use `supports_image_output()` to check availability.
+    fn image_buffer(&self) -> Option<&image::ImageBuffer<image::Rgb<u8>, Vec<u8>>> {
+        None
+    }
+
+    // File output
+
+    /// Save rendered image to file (for software renderers)
+    ///
+    /// Saves the internal image buffer to the specified file path.
+    /// Supports common image formats (PNG, JPEG, etc.) based on file extension.
+    ///
+    /// Returns an error if the renderer doesn't have an image buffer or if saving fails.
+    fn save_to_file(&self, path: &str) -> Result<(), String> {
+        if let Some(buffer) = self.image_buffer() {
+            buffer.save(path).map_err(|e| e.to_string())
+        } else {
+            Err(format!("{} does not have an image buffer", self.name()))
+        }
+    }
+
+    /// Save framebuffer to file (for GL renderers)
+    ///
+    /// Reads pixels from the currently bound framebuffer and saves to the specified file path.
+    /// Handles color space conversion and coordinate system flipping (GL origin is bottom-left,
+    /// image origin is top-left).
+    ///
+    /// # Arguments
+    ///
+    /// * `gl` - OpenGL context
+    /// * `width` - Framebuffer width in pixels
+    /// * `height` - Framebuffer height in pixels
+    /// * `path` - Output file path (format determined by extension)
+    ///
+    /// # Safety
+    ///
+    /// Requires a valid GL context to be current on the calling thread.
+    fn save_framebuffer_to_file(
+        &self,
+        gl: &glow::Context,
+        width: u32,
+        height: u32,
+        path: &str,
+    ) -> Result<(), String> {
+        let _ = (gl, width, height, path);
+        Err(format!(
+            "{} does not support framebuffer readback",
+            self.name()
+        ))
+    }
 }
 
 /// Cube bounds for raytracing
