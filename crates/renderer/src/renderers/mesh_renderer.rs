@@ -331,8 +331,8 @@ impl MeshRenderer {
         }
     }
 
-    /// Cleanup GL resources
-    pub unsafe fn destroy_gl(&mut self, gl: &Context) {
+    /// Clear all uploaded meshes (keeps shader program)
+    pub unsafe fn clear_meshes(&mut self, gl: &Context) {
         unsafe {
             for mesh in &self.meshes {
                 gl.delete_vertex_array(mesh.vao);
@@ -340,6 +340,13 @@ impl MeshRenderer {
                 gl.delete_buffer(mesh.ebo);
             }
             self.meshes.clear();
+        }
+    }
+
+    /// Cleanup GL resources
+    pub unsafe fn destroy_gl(&mut self, gl: &Context) {
+        unsafe {
+            self.clear_meshes(gl);
 
             if let Some(program) = self.program.take() {
                 gl.delete_program(program);

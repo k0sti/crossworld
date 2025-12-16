@@ -22,6 +22,9 @@ pub struct ModelEntry {
     pub vox_path: Option<String>,
 }
 
+/// Base path for VOX model files (relative to workspace root)
+const VOX_MODELS_BASE_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets/models/vox/");
+
 impl ModelEntry {
     /// Create a cube from this model entry
     pub fn create_cube(&self) -> Result<Rc<Cube<u8>>, String> {
@@ -31,9 +34,10 @@ impl ModelEntry {
                 .map(Rc::new)
                 .map_err(|e| format!("Failed to parse CSM: {}", e))
         } else if let Some(vox_path) = &self.vox_path {
-            // Load VOX file
-            let bytes = fs::read(vox_path)
-                .map_err(|e| format!("Failed to read VOX file '{}': {}", vox_path, e))?;
+            // Load VOX file from assets/models/vox/ directory
+            let full_path = format!("{}{}", VOX_MODELS_BASE_PATH, vox_path);
+            let bytes = fs::read(&full_path)
+                .map_err(|e| format!("Failed to read VOX file '{}': {}", full_path, e))?;
             cube::load_vox_to_cube(&bytes, cube::glam::Vec3::ZERO)
                 .map(Rc::new)
                 .map_err(|e| format!("Failed to load VOX: {}", e))

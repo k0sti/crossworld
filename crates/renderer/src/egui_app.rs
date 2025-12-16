@@ -614,12 +614,14 @@ impl CubeRendererApp {
             let needs_upload = if !self.mesh_cache_enabled {
                 // Caching disabled: always regenerate (clear old mesh first)
                 if !self.mesh_indices.is_empty() {
+                    self.mesh_renderer.clear_meshes(gl);
                     self.mesh_indices.clear();
                 }
                 true
             } else if self.mesh_needs_regeneration || self.mesh_indices.is_empty() {
                 // Caching enabled but mesh needs regeneration
                 if !self.mesh_indices.is_empty() {
+                    self.mesh_renderer.clear_meshes(gl);
                     self.mesh_indices.clear();
                 }
                 true
