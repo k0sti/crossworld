@@ -179,7 +179,7 @@ impl MeshRenderer {
         }
     }
 
-    /// Render a mesh at given position
+    /// Render a mesh at given position with default scale of 1.0
     ///
     /// # Safety
     ///
@@ -196,35 +196,35 @@ impl MeshRenderer {
         viewport_height: i32,
     ) {
         unsafe {
-            self.render_mesh_with_depth(
+            self.render_mesh_with_scale(
                 gl,
                 mesh_index,
                 position,
                 rotation,
+                1.0, // Default scale
                 camera,
                 viewport_width,
                 viewport_height,
-                1, // Default depth
             )
         }
     }
 
-    /// Render a mesh at given position with specified depth for scaling
+    /// Render a mesh at given position with specified scale
     ///
     /// # Safety
     ///
     /// Must be called with an active GL context on the current thread.
     #[allow(clippy::too_many_arguments)]
-    pub unsafe fn render_mesh_with_depth(
+    pub unsafe fn render_mesh_with_scale(
         &self,
         gl: &Context,
         mesh_index: usize,
         position: glam::Vec3,
         rotation: glam::Quat,
+        scale: f32,
         camera: &Camera,
         viewport_width: i32,
         viewport_height: i32,
-        _depth: u32,
     ) {
         unsafe {
             let Some(program) = self.program else { return };
@@ -256,23 +256,21 @@ impl MeshRenderer {
             let target = camera.position + forward;
             let view = glam::Mat4::look_at_rh(camera.position, target, up);
 
-            // Calculate scale to transform mesh coordinates to [-1, 1] space
             // Mesh vertices are in [0, 1] space (visit_faces outputs normalized positions)
-            // Transform: position_world = mesh_pos * 2 - 1
-            // This maps [0, 1] -> [-1, 1]
-            let mesh_scale = 2.0;
-            let mesh_offset = glam::Vec3::splat(-1.0);
+            // Transform to [-0.5, 0.5] centered, then scale by the object size
+            // mesh_offset centers the mesh at origin
+            let mesh_offset = glam::Vec3::splat(-0.5);
 
-            // Model matrix: translate to position, rotate, then scale mesh from [0,1] to [-1,1]
+            // Model matrix: translate to position, rotate, then scale mesh
             // Order of operations (right to left):
-            // 1. Scale by 2.0: [0,1] -> [0,2]
-            // 2. Translate by -1.0: [0,2] -> [-1,1]
+            // 1. Offset by -0.5: [0,1] -> [-0.5, 0.5] (centered)
+            // 2. Scale by object scale
             // 3. Apply rotation (if any)
             // 4. Translate to world position
             let model = glam::Mat4::from_translation(position)
                 * glam::Mat4::from_quat(rotation)
-                * glam::Mat4::from_translation(mesh_offset)
-                * glam::Mat4::from_scale(glam::Vec3::splat(mesh_scale));
+                * glam::Mat4::from_scale(glam::Vec3::splat(scale))
+                * glam::Mat4::from_translation(mesh_offset);
 
             // Upload uniforms
             let mvp = projection * view * model;
@@ -334,32 +332,32 @@ impl MeshRenderer {
         }
     }
 
-    /// Render a mesh for a given object with specified depth
+    /// Render a mesh for a given object with specified scale
     ///
     /// # Safety
     ///
     /// Must be called with an active GL context on the current thread.
     #[allow(clippy::too_many_arguments)]
-    pub unsafe fn render_object_with_depth(
+    pub unsafe fn render_object_with_scale(
         &self,
         gl: &Context,
         mesh_index: usize,
         object: &dyn Object,
+        scale: f32,
         camera: &Camera,
         viewport_width: i32,
         viewport_height: i32,
-        depth: u32,
     ) {
         unsafe {
-            self.render_mesh_with_depth(
+            self.render_mesh_with_scale(
                 gl,
                 mesh_index,
                 object.position(),
                 object.rotation(),
+                scale,
                 camera,
                 viewport_width,
                 viewport_height,
-                depth,
             )
         }
     }
@@ -475,7 +473,7 @@ impl crate::renderer::Renderer for MeshRenderer {
         _camera: Option<&crate::renderer::Camera>,
         _time: Option<f32>,
     ) -> Result<(), String> {
-        Err("MeshRenderer requires explicit mesh index, position, and rotation. Use render_mesh() or render_mesh_with_depth() instead.".to_string())
+        Err("MeshRenderer requires explicit mesh index, position, and rotation. Use render_mesh() or render_mesh_with_scale() instead.".to_string())
     }
 
     fn save_framebuffer_to_file(

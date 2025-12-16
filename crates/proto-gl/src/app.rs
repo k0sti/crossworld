@@ -448,12 +448,16 @@ impl ProtoGlApp {
                     let position = glam::Vec3::new(position.x, position.y, position.z);
                     let rotation = glam::Quat::from_xyzw(rotation.i, rotation.j, rotation.k, rotation.w);
 
+                    // Mesh is in [0,1] space, centered to [-0.5, 0.5] by renderer
+                    // object_size is the desired edge length in normalized world units
+                    let scale = self.config.spawning.object_size;
                     unsafe {
-                        mesh_renderer.render_mesh(
+                        mesh_renderer.render_mesh_with_scale(
                             gl,
                             self.object_mesh_indices[i],
                             position,
                             rotation,
+                            scale,
                             &camera,
                             size.width as i32,
                             size.height as i32,

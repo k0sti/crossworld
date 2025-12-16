@@ -37,6 +37,12 @@ pub struct SpawningConfig {
     pub min_height: f32,
     pub max_height: f32,
     pub spawn_radius: f32,
+    #[serde(default = "default_object_size")]
+    pub object_size: f32,
+}
+
+fn default_object_size() -> f32 {
+    0.5
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -66,6 +72,7 @@ impl Default for ProtoGlConfig {
                 min_height: 10.0,
                 max_height: 30.0,
                 spawn_radius: 20.0,
+                object_size: 0.05,
             },
             rendering: RenderConfig {
                 viewport_width: 800,
