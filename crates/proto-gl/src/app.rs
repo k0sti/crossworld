@@ -65,10 +65,20 @@ pub struct ProtoGlApp {
     render_world: bool,
     render_objects: bool,
     show_debug_info: bool,
+
+    // Debug mode (single frame)
+    debug_mode: bool,
+    frame_count: u32,
 }
 
 impl Default for ProtoGlApp {
     fn default() -> Self {
+        Self::new(false)
+    }
+}
+
+impl ProtoGlApp {
+    pub fn new(debug_mode: bool) -> Self {
         // Load config from file or use defaults
         let config = load_config().unwrap_or_else(|e| {
             eprintln!("Warning: Failed to load config.toml: {}", e);
@@ -77,6 +87,10 @@ impl Default for ProtoGlApp {
         });
 
         let camera = OrbitCamera::new(config.rendering.camera_distance);
+
+        if debug_mode {
+            println!("[DEBUG] Running in debug mode - will exit after single frame");
+        }
 
         Self {
             window: None,
@@ -102,6 +116,8 @@ impl Default for ProtoGlApp {
             render_world: true,
             render_objects: true,
             show_debug_info: true,
+            debug_mode,
+            frame_count: 0,
         }
     }
 }
@@ -289,6 +305,7 @@ impl ApplicationHandler for ProtoGlApp {
 
         match event {
             WindowEvent::CloseRequested => {
+                self.cleanup();
                 event_loop.exit();
             }
             WindowEvent::Resized(size) => {
@@ -339,7 +356,7 @@ impl ApplicationHandler for ProtoGlApp {
                 }
             }
             WindowEvent::RedrawRequested => {
-                self.render();
+                self.render(event_loop);
             }
             _ => {}
         }
@@ -347,10 +364,12 @@ impl ApplicationHandler for ProtoGlApp {
 }
 
 impl ProtoGlApp {
-    fn render(&mut self) {
+    fn render(&mut self, event_loop: &ActiveEventLoop) {
         if self.window.is_none() {
             return;
         }
+
+        self.frame_count += 1;
 
         // Update timing
         let now = Instant::now();
@@ -488,6 +507,65 @@ impl ProtoGlApp {
 
         gl_surface.swap_buffers(gl_context).unwrap();
 
+        // In debug mode, exit after single frame
+        if self.debug_mode {
+            println!("[DEBUG] Frame {} rendered, exiting", self.frame_count);
+            self.cleanup();
+            event_loop.exit();
+            return;
+        }
+
         window.request_redraw();
+    }
+
+    fn cleanup(&mut self) {
+        println!("[DEBUG] Cleaning up resources...");
+
+        // Destroy egui painter first (it holds GL resources)
+        if let Some(mut painter) = self.painter.take() {
+            if self.gl.is_some() {
+                painter.destroy();
+            }
+        }
+
+        // Clear egui state
+        self.egui_state = None;
+        self.egui_ctx = None;
+
+        // Destroy GL tracer
+        if let Some(mut gl_tracer) = self.gl_tracer.take() {
+            if let Some(gl) = &self.gl {
+                unsafe {
+                    gl_tracer.destroy_gl(gl);
+                }
+            }
+        }
+
+        // Destroy mesh renderer
+        if let Some(mut mesh_renderer) = self.mesh_renderer.take() {
+            if let Some(gl) = &self.gl {
+                unsafe {
+                    mesh_renderer.destroy_gl(gl);
+                }
+            }
+        }
+
+        // Clear physics
+        self.physics_world = None;
+        self.objects.clear();
+        self.object_mesh_indices.clear();
+
+        // Clear world
+        self.world_cube = None;
+
+        // Clear GL context - important: surface must be released before context
+        self.gl = None;
+        self.gl_surface = None;
+        self.gl_context = None;
+
+        // Clear window last
+        self.window = None;
+
+        println!("[DEBUG] Cleanup complete");
     }
 }
