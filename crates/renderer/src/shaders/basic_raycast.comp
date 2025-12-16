@@ -1,18 +1,13 @@
-#version 310 es
+#version 430
 
-// OpenGL ES 3.1 compute shader for GPU raytracing
-// Phase 1: Basic ray-cube bounding box intersection
-
-// Precision qualifiers (required for OpenGL ES)
-precision highp float;
-precision highp int;
-precision highp image2D;
+// OpenGL 4.3 compute shader for GPU raytracing with full BCF octree traversal
+// This implementation matches the GL tracer's fragment shader algorithm
 
 // Work group size (8x8 threads per work group)
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
 // Output image (writeonly for compute shader)
-layout(rgba8) uniform highp writeonly image2D outputImage;
+layout(rgba8) uniform writeonly image2D outputImage;
 
 // Uniforms
 uniform vec2 uResolution;      // Screen resolution
@@ -20,6 +15,17 @@ uniform float uTime;           // Time for orbit camera
 uniform vec3 uCameraPos;       // Explicit camera position
 uniform vec4 uCameraRot;       // Explicit camera rotation (quaternion)
 uniform int uUseCamera;        // 0 = orbit camera, 1 = explicit camera
+
+// BCF octree data as SSBO (more efficient than texture for random access)
+layout(std430, binding = 0) readonly buffer OctreeData {
+    uint bcfData[];  // BCF bytes packed as uint32 (4 bytes per uint)
+};
+uniform uint uOctreeDataSize;  // Size of BCF data in bytes
+
+// Material palette as SSBO (128 RGB entries, 3 floats each)
+layout(std430, binding = 1) readonly buffer MaterialPalette {
+    vec4 materials[128];  // RGB + padding for alignment
+};
 
 // Cube bounds (centered at origin, matching CubeBounds::default())
 const float CUBE_SIZE = 2.0;
@@ -31,6 +37,478 @@ const vec3 LIGHT_DIR = vec3(0.431934, 0.863868, 0.259161);  // Pre-normalized
 const float AMBIENT = 0.3;
 const float DIFFUSE_STRENGTH = 0.7;
 
+// Background color (matches BACKGROUND_COLOR in Rust)
+const vec3 BACKGROUND_COLOR = vec3(0.4, 0.5, 0.6);
+
+// BCF constants
+const uint BCF_HEADER_SIZE = 12u;
+
+// BCF Node Type Constants
+const uint NODE_TYPE_INLINE_LEAF = 0u;
+const uint NODE_TYPE_EXTENDED_LEAF = 1u;
+const uint NODE_TYPE_OCTA_LEAVES = 2u;
+const uint NODE_TYPE_OCTA_POINTERS = 3u;
+
+// Stack depth and iteration limits
+const int MAX_STACK_DEPTH = 16;
+const int MAX_ITERATIONS = 256;
+
+// Hit information structure
+struct HitInfo {
+    bool hit;
+    float t;
+    vec3 point;
+    vec3 normal;
+    int value;  // Material value (1-7 = error conditions, 8+ = normal materials)
+};
+
+// ============================================================================
+// BCF Reading Functions
+// ============================================================================
+
+// Read a single byte from BCF data at given offset (bounds checked)
+// BCF data is packed as uint32 (4 bytes per element), extract the right byte
+uint readU8(uint offset, inout uint error_material) {
+    if (offset >= uOctreeDataSize) {
+        error_material = 2u; // Material 2 = bounds/pointer errors
+        return 0u;
+    }
+    uint word_index = offset >> 2u;      // offset / 4
+    uint byte_index = offset & 3u;       // offset % 4
+    uint word = bcfData[word_index];
+    return (word >> (byte_index * 8u)) & 0xFFu;
+}
+
+// Read multi-byte pointer (little-endian)
+uint readPointer(uint offset, uint ssss, inout uint error_material) {
+    uint ptr = 0u;
+    if (ssss == 0u) {
+        ptr = readU8(offset, error_material);
+    } else if (ssss == 1u) {
+        ptr = readU8(offset, error_material) | (readU8(offset + 1u, error_material) << 8);
+        if (error_material == 2u) {
+            error_material = 6u; // Material 6 = data truncation
+        }
+    } else if (ssss == 2u) {
+        ptr = readU8(offset, error_material)
+             | (readU8(offset + 1u, error_material) << 8)
+             | (readU8(offset + 2u, error_material) << 16)
+             | (readU8(offset + 3u, error_material) << 24);
+        if (error_material == 2u) {
+            error_material = 6u; // Material 6 = data truncation
+        }
+    } else {
+        // 8-byte pointers not supported
+        return 0u;
+    }
+
+    // Validate pointer points within bounds
+    if (error_material == 0u && ptr >= uOctreeDataSize) {
+        error_material = 2u; // Material 2 = invalid pointer
+        return 0u;
+    }
+
+    return ptr;
+}
+
+// Read BCF node type and extract values/pointers
+void readBcfNode(uint offset, out uint node_type, out uint value, out uint values[8], out uint pointers[8], out uint ssss, inout uint error_material) {
+    uint type_byte = readU8(offset, error_material);
+    if (error_material != 0u) {
+        node_type = NODE_TYPE_INLINE_LEAF;
+        value = error_material;
+        return;
+    }
+
+    // Inline leaf (0x00-0x7F)
+    if (type_byte <= 0x7Fu) {
+        node_type = NODE_TYPE_INLINE_LEAF;
+        value = type_byte & 0x7Fu;
+        return;
+    }
+
+    uint msb_type = (type_byte >> 4u) & 0x3u;
+
+    // Extended leaf (0x80-0x8F)
+    if (msb_type == 0u) {
+        node_type = NODE_TYPE_EXTENDED_LEAF;
+        value = readU8(offset + 1u, error_material);
+        if (error_material != 0u) value = error_material;
+        return;
+    }
+
+    // Octa-leaves (0x90-0x9F)
+    if (msb_type == 1u) {
+        node_type = NODE_TYPE_OCTA_LEAVES;
+        for (int i = 0; i < 8; i++) {
+            values[i] = readU8(offset + 1u + uint(i), error_material);
+            if (error_material != 0u) {
+                values[i] = error_material;
+                return;
+            }
+        }
+        return;
+    }
+
+    // Octa-pointers (0xA0-0xAF)
+    if (msb_type == 2u) {
+        node_type = NODE_TYPE_OCTA_POINTERS;
+        ssss = type_byte & 0x0Fu;
+        uint ptr_offset = offset + 1u;
+        uint ptr_size = 1u << ssss;
+        for (int i = 0; i < 8; i++) {
+            pointers[i] = readPointer(ptr_offset, ssss, error_material);
+            if (error_material != 0u) {
+                pointers[i] = 0u;
+                return;
+            }
+            ptr_offset += ptr_size;
+        }
+        return;
+    }
+
+    // Invalid type
+    node_type = NODE_TYPE_INLINE_LEAF;
+    value = 3u; // Error material 3 (type validation error)
+    error_material = 3u;
+}
+
+// ============================================================================
+// Material Color Functions
+// ============================================================================
+
+// Decode R2G3B2 color encoding to RGB
+vec3 decodeR2G3B2(int value) {
+    int bits = value - 128;
+    int r_bits = (bits >> 5) & 3;
+    int g_bits = (bits >> 2) & 7;
+    int b_bits = bits & 3;
+
+    float r = float(r_bits) / 3.0;
+    float g = float(g_bits) / 7.0;
+    float b = float(b_bits) / 3.0;
+
+    return vec3(r, g, b);
+}
+
+// Get material color from value
+vec3 getMaterialColor(int value) {
+    if (value < 0) {
+        return vec3(0.0);
+    }
+
+    // Values 1-7: Error materials (solid colors for debugging)
+    if (value >= 1 && value <= 7) {
+        if (value == 1) return vec3(1.0, 0.0, 0.3);      // Hot pink
+        if (value == 2) return vec3(1.0, 0.2, 0.0);      // Red-orange
+        if (value == 3) return vec3(1.0, 0.6, 0.0);      // Orange
+        if (value == 4) return vec3(0.0, 0.8, 1.0);      // Sky blue
+        if (value == 5) return vec3(0.6, 0.0, 1.0);      // Purple
+        if (value == 6) return vec3(0.0, 1.0, 0.5);      // Spring green
+        if (value == 7) return vec3(1.0, 1.0, 0.0);      // Yellow
+        return vec3(1.0, 0.0, 1.0); // Bright magenta fallback
+    }
+
+    // Values 0, 8-127: Use palette SSBO
+    if (value < 128) {
+        return materials[value].rgb;
+    }
+
+    // Values 128-255: R2G3B2 encoded colors
+    if (value <= 255) {
+        return decodeR2G3B2(value);
+    }
+
+    return vec3(0.0);
+}
+
+// ============================================================================
+// Octree Traversal Helpers
+// ============================================================================
+
+// Helper: sign function (returns -1 or 1)
+vec3 sign3(vec3 v) {
+    return mix(vec3(-1.0), vec3(1.0), greaterThanEqual(v, vec3(0.0)));
+}
+
+// Compute starting octant; at boundary (pos=0), use ray direction
+ivec3 computeOctant(vec3 pos, vec3 dir_sign) {
+    bvec3 is_greater = greaterThan(pos, vec3(0.0));
+    bvec3 is_equal = equal(pos, vec3(0.0));
+    bvec3 dir_positive = greaterThan(dir_sign, vec3(0.0));
+
+    bvec3 positive = bvec3(
+        is_greater.x || (is_equal.x && dir_positive.x),
+        is_greater.y || (is_equal.y && dir_positive.y),
+        is_greater.z || (is_equal.z && dir_positive.z)
+    );
+    return ivec3(positive);
+}
+
+// Convert octant ivec3 to index 0-7
+uint octantToIndex(ivec3 o) {
+    return uint(o.x + o.y * 2 + o.z * 4);
+}
+
+// Find axis with minimum time, return axis index (0=x, 1=y, 2=z)
+int minTimeAxis(vec3 t) {
+    if (t.x <= t.y && t.x <= t.z) return 0;
+    if (t.y <= t.z) return 1;
+    return 2;
+}
+
+// Decode axis integer to vec3 normal
+vec3 decodeAxis(int axis) {
+    if (axis == 1) return vec3(1.0, 0.0, 0.0);   // +X
+    if (axis == 2) return vec3(0.0, 1.0, 0.0);   // +Y
+    if (axis == 3) return vec3(0.0, 0.0, 1.0);   // +Z
+    if (axis == 4) return vec3(-1.0, 0.0, 0.0);  // -X
+    if (axis == 5) return vec3(0.0, -1.0, 0.0);  // -Y
+    if (axis == 6) return vec3(0.0, 0.0, -1.0);  // -Z
+    return vec3(0.0, 1.0, 0.0); // Default
+}
+
+// ============================================================================
+// BCF Octree Traversal (matches GL tracer implementation)
+// ============================================================================
+
+HitInfo raycastBcfOctree(vec3 pos, vec3 dir) {
+    HitInfo result;
+    result.hit = false;
+    result.t = 1e10;
+    result.value = 0;
+
+    // Compute direction signs
+    vec3 dir_sign = sign3(dir);
+
+    // Find entry point if outside [-1,1]³
+    vec3 ray_origin = pos;
+    int entry_normal_axis = 0;
+
+    if (max(abs(pos.x), max(abs(pos.y), abs(pos.z))) > 1.0) {
+        vec3 t_entry = (-dir_sign - pos) / dir;
+        vec3 t_exit = (dir_sign - pos) / dir;
+        float t_enter = max(max(t_entry.x, t_entry.y), t_entry.z);
+        float t_leave = min(min(t_exit.x, t_exit.y), t_exit.z);
+
+        if (t_enter > t_leave || t_leave < 0.0) {
+            return result; // Ray misses cube
+        }
+
+        ray_origin = pos + dir * max(t_enter, 0.0);
+
+        // Calculate entry normal
+        vec3 entry_point = ray_origin;
+        vec3 abs_entry = abs(entry_point);
+        float max_entry = max(abs_entry.x, max(abs_entry.y, abs_entry.z));
+        const float EPSILON = 0.001;
+        if (abs(abs_entry.x - max_entry) < EPSILON) {
+            entry_normal_axis = entry_point.x > 0.0 ? 1 : 4;
+        } else if (abs(abs_entry.y - max_entry) < EPSILON) {
+            entry_normal_axis = entry_point.y > 0.0 ? 2 : 5;
+        } else {
+            entry_normal_axis = entry_point.z > 0.0 ? 3 : 6;
+        }
+    }
+
+    // Stack arrays for traversal state
+    uint stack_offset[MAX_STACK_DEPTH];
+    vec3 stack_local_origin[MAX_STACK_DEPTH];
+    vec3 stack_ray_dir[MAX_STACK_DEPTH];
+    int stack_normal[MAX_STACK_DEPTH];
+    int stack_ptr = 0;
+
+    // Initialize stack with root node
+    stack_offset[0] = BCF_HEADER_SIZE;
+    stack_local_origin[0] = ray_origin;
+    stack_ray_dir[0] = dir;
+    stack_normal[0] = entry_normal_axis;
+    stack_ptr = 1;
+
+    // Main traversal loop
+    int iter = 0;
+    while (stack_ptr > 0 && iter < MAX_ITERATIONS) {
+        iter++;
+
+        // Pop state from stack
+        stack_ptr--;
+        uint node_offset = stack_offset[stack_ptr];
+        vec3 local_origin = stack_local_origin[stack_ptr];
+        vec3 ray_dir = stack_ray_dir[stack_ptr];
+        int normal_axis = stack_normal[stack_ptr];
+
+        // Read BCF node at current offset
+        uint node_type;
+        uint leaf_value = 0u;
+        uint leaf_values[8];
+        uint child_pointers[8];
+        uint ssss = 0u;
+        uint error_material = 0u;
+
+        readBcfNode(node_offset, node_type, leaf_value, leaf_values, child_pointers, ssss, error_material);
+
+        if (error_material != 0u) {
+            result.hit = true;
+            result.point = local_origin;
+            result.normal = decodeAxis(normal_axis);
+            result.value = int(error_material);
+            return result;
+        }
+
+        // Handle inline/extended leaf
+        if (node_type == NODE_TYPE_INLINE_LEAF || node_type == NODE_TYPE_EXTENDED_LEAF) {
+            if (leaf_value != 0u) {
+                result.hit = true;
+                result.point = local_origin;
+                result.normal = decodeAxis(normal_axis);
+                result.value = int(leaf_value);
+                return result;
+            }
+            continue;
+        }
+
+        // Handle octa-leaves
+        if (node_type == NODE_TYPE_OCTA_LEAVES) {
+            ivec3 octant = computeOctant(local_origin, dir_sign);
+            vec3 current_origin = local_origin;
+            int current_normal = normal_axis;
+
+            for (int step = 0; step < 8; step++) {
+                if (octant.x < 0 || octant.x > 1 || octant.y < 0 || octant.y > 1 || octant.z < 0 || octant.z > 1) {
+                    break;
+                }
+
+                uint oct_idx = octantToIndex(octant);
+                uint value = leaf_values[oct_idx];
+
+                if (value != 0u) {
+                    result.hit = true;
+                    result.point = current_origin;
+                    result.normal = decodeAxis(current_normal);
+                    result.value = int(value);
+                    return result;
+                }
+
+                // DDA step to next octant
+                bvec3 far_side = greaterThanEqual(current_origin * dir_sign, vec3(0.0));
+                vec3 adjusted = mix(current_origin, current_origin - dir_sign, far_side);
+                vec3 dist = abs(adjusted);
+                vec3 time = dist / abs(ray_dir);
+
+                int exit_axis_idx = minTimeAxis(time);
+                float exit_time = time[exit_axis_idx];
+
+                current_origin += ray_dir * exit_time;
+
+                int exit_sign = int(dir_sign[exit_axis_idx]);
+                octant[exit_axis_idx] += exit_sign;
+
+                float boundary = float(octant[exit_axis_idx]) - float(exit_sign + 1) * 0.5;
+                current_origin[exit_axis_idx] = boundary;
+
+                if (exit_axis_idx == 0) {
+                    current_normal = exit_sign > 0 ? 4 : 1;
+                } else if (exit_axis_idx == 1) {
+                    current_normal = exit_sign > 0 ? 5 : 2;
+                } else {
+                    current_normal = exit_sign > 0 ? 6 : 3;
+                }
+            }
+            continue;
+        }
+
+        // Handle octa-pointers
+        if (node_type == NODE_TYPE_OCTA_POINTERS) {
+            ivec3 octant = computeOctant(local_origin, dir_sign);
+            vec3 current_origin = local_origin;
+            int current_normal = normal_axis;
+
+            // Collect children to visit in DDA order
+            struct ChildState {
+                uint offset;
+                vec3 origin;
+                int normal;
+            };
+            ChildState children_to_visit[8];
+            int children_count = 0;
+
+            for (int step = 0; step < 8; step++) {
+                if (octant.x < 0 || octant.x > 1 || octant.y < 0 || octant.y > 1 || octant.z < 0 || octant.z > 1) {
+                    break;
+                }
+
+                uint oct_idx = octantToIndex(octant);
+                uint child_offset = child_pointers[oct_idx];
+
+                if (child_offset > 0u) {
+                    vec3 offset_vec = vec3(octant) * 2.0 - 1.0;
+                    vec3 child_origin = current_origin * 2.0 - offset_vec;
+
+                    children_to_visit[children_count].offset = child_offset;
+                    children_to_visit[children_count].origin = child_origin;
+                    children_to_visit[children_count].normal = current_normal;
+                    children_count++;
+                }
+
+                // DDA step to next octant
+                bvec3 far_side = greaterThanEqual(current_origin * dir_sign, vec3(0.0));
+                vec3 adjusted = mix(current_origin, current_origin - dir_sign, far_side);
+                vec3 dist = abs(adjusted);
+                vec3 time = dist / abs(ray_dir);
+
+                int exit_axis_idx = minTimeAxis(time);
+                float exit_time = time[exit_axis_idx];
+
+                current_origin += ray_dir * exit_time;
+
+                int exit_sign = int(dir_sign[exit_axis_idx]);
+                octant[exit_axis_idx] += exit_sign;
+
+                float boundary = float(octant[exit_axis_idx]) - float(exit_sign + 1) * 0.5;
+                current_origin[exit_axis_idx] = boundary;
+
+                if (exit_axis_idx == 0) {
+                    current_normal = exit_sign > 0 ? 4 : 1;
+                } else if (exit_axis_idx == 1) {
+                    current_normal = exit_sign > 0 ? 5 : 2;
+                } else {
+                    current_normal = exit_sign > 0 ? 6 : 3;
+                }
+            }
+
+            // Push all collected children to stack in REVERSE order
+            for (int i = children_count - 1; i >= 0; i--) {
+                if (stack_ptr >= MAX_STACK_DEPTH) {
+                    result.hit = true;
+                    result.point = local_origin;
+                    result.normal = decodeAxis(normal_axis);
+                    result.value = 4; // Error material 4 (stack errors)
+                    return result;
+                }
+
+                stack_offset[stack_ptr] = children_to_visit[i].offset;
+                stack_local_origin[stack_ptr] = children_to_visit[i].origin;
+                stack_ray_dir[stack_ptr] = ray_dir;
+                stack_normal[stack_ptr] = children_to_visit[i].normal;
+                stack_ptr++;
+            }
+            continue;
+        }
+    }
+
+    // Iteration timeout
+    if (iter >= MAX_ITERATIONS) {
+        result.hit = true;
+        result.value = 4; // Error material 4 (iteration timeout)
+    }
+
+    return result;
+}
+
+// ============================================================================
+// Camera Ray Generation
+// ============================================================================
+
 // Rotate vector by quaternion
 vec3 rotateByQuat(vec3 v, vec4 q) {
     vec3 qvec = q.xyz;
@@ -40,89 +518,40 @@ vec3 rotateByQuat(vec3 v, vec4 q) {
     return v + ((uv * qw) + uuv) * 2.0;
 }
 
-// Ray-box intersection using slab method
-// Returns: vec2(tmin, tmax) where tmin is entry, tmax is exit
-// If tmin > tmax or tmax < 0, no intersection
-vec2 rayBoxIntersection(vec3 rayOrigin, vec3 rayDir, vec3 boxMin, vec3 boxMax) {
-    vec3 invDir = 1.0 / rayDir;
-    vec3 t0 = (boxMin - rayOrigin) * invDir;
-    vec3 t1 = (boxMax - rayOrigin) * invDir;
-
-    vec3 tmin3 = min(t0, t1);
-    vec3 tmax3 = max(t0, t1);
-
-    float tmin = max(max(tmin3.x, tmin3.y), tmin3.z);
-    float tmax = min(min(tmax3.x, tmax3.y), tmax3.z);
-
-    return vec2(tmin, tmax);
-}
-
-// Calculate surface normal from ray entry point
-vec3 calculateBoxNormal(vec3 point, vec3 boxMin, vec3 boxMax) {
-    const float epsilon = 0.001;
-    vec3 center = (boxMin + boxMax) * 0.5;
-    vec3 size = boxMax - boxMin;
-    vec3 p = (point - center) / (size * 0.5);
-
-    vec3 normal = vec3(0.0);
-
-    // Find which face we're closest to
-    if (abs(p.x - 1.0) < epsilon) normal = vec3(1.0, 0.0, 0.0);
-    else if (abs(p.x + 1.0) < epsilon) normal = vec3(-1.0, 0.0, 0.0);
-    else if (abs(p.y - 1.0) < epsilon) normal = vec3(0.0, 1.0, 0.0);
-    else if (abs(p.y + 1.0) < epsilon) normal = vec3(0.0, -1.0, 0.0);
-    else if (abs(p.z - 1.0) < epsilon) normal = vec3(0.0, 0.0, 1.0);
-    else if (abs(p.z + 1.0) < epsilon) normal = vec3(0.0, 0.0, -1.0);
-
-    return normalize(normal);
-}
-
-// Simplified Lambert lighting calculation (matches CPU and GL tracers)
-vec3 calculateLighting(vec3 materialColor) {
-    // Diffuse lighting using Lambert's cosine law
-    float diffuse = max(dot(vec3(0.0, 1.0, 0.0), LIGHT_DIR), 0.0);  // Using +Y normal for simple cube
-
-    // Combine ambient and diffuse
-    return materialColor * (AMBIENT + diffuse * DIFFUSE_STRENGTH);
-}
-
 // Generate camera ray for pixel coordinates
 void getCameraRay(vec2 pixelCoords, out vec3 rayOrigin, out vec3 rayDir) {
-    // Normalized pixel coordinates (matching CPU and GL tracers)
-    // Center coordinates and normalize by height to preserve aspect ratio
     vec2 uv = (pixelCoords - 0.5 * uResolution) / uResolution.y;
 
     if (uUseCamera == 0) {
-        // Time-based orbit camera (matches CPU and GL tracers exactly)
+        // Time-based orbit camera
         rayOrigin = vec3(3.0 * cos(uTime * 0.3), 2.0, 3.0 * sin(uTime * 0.3));
         vec3 target = vec3(0.0, 0.0, 0.0);
         vec3 up = vec3(0.0, 1.0, 0.0);
 
-        // Look at target
         vec3 forward = normalize(target - rayOrigin);
         vec3 right = normalize(cross(forward, up));
         vec3 camUp = cross(right, forward);
 
-        // Simple ray direction (no FOV calculation needed)
         rayDir = normalize(forward + uv.x * right + uv.y * camUp);
     } else {
         // Explicit camera with quaternion rotation
         rayOrigin = uCameraPos;
 
-        // Base camera direction (looking down -Z)
         vec3 baseForward = vec3(0.0, 0.0, -1.0);
         vec3 baseRight = vec3(1.0, 0.0, 0.0);
         vec3 baseUp = vec3(0.0, 1.0, 0.0);
 
-        // Rotate camera vectors by quaternion
         vec3 forward = rotateByQuat(baseForward, uCameraRot);
         vec3 right = rotateByQuat(baseRight, uCameraRot);
         vec3 camUp = rotateByQuat(baseUp, uCameraRot);
 
-        // Simple ray direction (no FOV calculation needed)
         rayDir = normalize(forward + uv.x * right + uv.y * camUp);
     }
 }
+
+// ============================================================================
+// Main
+// ============================================================================
 
 void main() {
     ivec2 pixelCoords = ivec2(gl_GlobalInvocationID.xy);
@@ -136,31 +565,29 @@ void main() {
     vec3 rayOrigin, rayDir;
     getCameraRay(vec2(pixelCoords) + 0.5, rayOrigin, rayDir);
 
-    // Ray-box intersection
-    vec2 intersection = rayBoxIntersection(rayOrigin, rayDir, CUBE_MIN, CUBE_MAX);
-    float tmin = intersection.x;
-    float tmax = intersection.y;
+    // Background color
+    vec3 color = BACKGROUND_COLOR;
 
-    vec3 color;
+    // Raycast through BCF-encoded octree
+    HitInfo hit = raycastBcfOctree(rayOrigin, rayDir);
 
-    // Check if ray hits the box
-    if (tmin <= tmax && tmax >= 0.0) {
-        // Hit! Calculate shading
-        // Base cube color (simple gray for basic raycast)
-        vec3 cubeColor = vec3(0.8, 0.7, 0.6);
+    if (hit.hit) {
+        // Get material color from voxel value
+        vec3 materialColor = getMaterialColor(hit.value);
 
-        // Apply lighting
-        color = calculateLighting(cubeColor);
-
-        // Gamma correction
-        color = pow(color, vec3(1.0 / 2.2));
-    } else {
-        // Miss - background color (matches standardized background)
-        color = vec3(0.4, 0.5, 0.6);
-
-        // Gamma correction for background too
-        color = pow(color, vec3(1.0 / 2.2));
+        // Apply lighting (skip for error materials 1-7)
+        bool is_error_material = (hit.value >= 1 && hit.value <= 7);
+        if (is_error_material) {
+            color = materialColor;
+        } else {
+            // Diffuse lighting using Lambert's cosine law
+            float diffuse = max(dot(hit.normal, LIGHT_DIR), 0.0);
+            color = materialColor * (AMBIENT + diffuse * DIFFUSE_STRENGTH);
+        }
     }
+
+    // Gamma correction
+    color = pow(color, vec3(1.0 / 2.2));
 
     // Write to output image
     imageStore(outputImage, pixelCoords, vec4(color, 1.0));

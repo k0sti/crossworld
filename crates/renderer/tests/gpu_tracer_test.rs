@@ -80,8 +80,9 @@ fn create_test_context() -> (
     let window_handle = window.window_handle().ok().map(|h| h.as_raw());
     let gl_display = gl_config.display();
 
+    // Request OpenGL 4.3 for compute shader support (compute shaders require GL 4.3+ or ES 3.1+)
     let context_attributes = ContextAttributesBuilder::new()
-        .with_context_api(ContextApi::Gles(Some(Version::new(3, 0))))
+        .with_context_api(ContextApi::OpenGl(Some(Version::new(4, 3))))
         .build(window_handle);
 
     let gl_context = unsafe {

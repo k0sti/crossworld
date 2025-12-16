@@ -111,8 +111,10 @@ impl ApplicationHandler for App {
 
         let gl_display = gl_config.display();
 
+        // Request OpenGL 4.3 for compute shader support (GPU tracer requires it)
+        // Falls back to lower versions if 4.3 is not available
         let context_attributes = ContextAttributesBuilder::new()
-            .with_context_api(ContextApi::Gles(Some(Version::new(3, 0))))
+            .with_context_api(ContextApi::OpenGl(Some(Version::new(4, 3))))
             .build(window_handle);
 
         let gl_context = unsafe {
