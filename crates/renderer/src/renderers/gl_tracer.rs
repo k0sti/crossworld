@@ -225,7 +225,7 @@ impl GlTracer {
         gl: &Context,
         width: i32,
         height: i32,
-        camera: &CameraConfig,
+        camera: &Camera,
     ) {
         unsafe {
             if let Some(gl_program) = &self.gl_program {
@@ -496,7 +496,7 @@ impl GlTracerGl {
         gl: &Context,
         width: i32,
         height: i32,
-        camera: &CameraConfig,
+        camera: &Camera,
         disable_lighting: bool,
         show_errors: bool,
     ) {
@@ -604,7 +604,7 @@ impl Renderer for GlTracer {
         panic!("GlTracer requires GL context. Use render_to_framebuffer() instead.");
     }
 
-    fn render_with_camera(&mut self, _width: u32, _height: u32, _camera: &CameraConfig) {
+    fn render_with_camera(&mut self, _width: u32, _height: u32, _camera: &Camera) {
         panic!("GlTracer requires GL context. Use render_to_framebuffer() instead.");
     }
 
@@ -633,7 +633,7 @@ impl Renderer for GlTracer {
         gl: &Context,
         width: u32,
         height: u32,
-        camera: Option<&CameraConfig>,
+        camera: Option<&Camera>,
         time: Option<f32>,
     ) -> Result<(), String> {
         unsafe {

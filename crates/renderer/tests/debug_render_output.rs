@@ -1,7 +1,7 @@
 //! Debug test to render and inspect actual output
 
 use renderer::cpu_tracer::CpuTracer;
-use renderer::renderer::{CameraConfig, Renderer};
+use renderer::{Camera, Renderer};
 use renderer::scenes::create_octa_cube;
 use std::path::Path;
 
@@ -14,7 +14,7 @@ fn test_render_and_save_debug_image() {
     let mut tracer = CpuTracer::new_with_cube(cube);
 
     // Setup camera looking at the cube from an angle
-    let camera = CameraConfig::look_at(
+    let camera = Camera::look_at(
         glam::Vec3::new(3.0, 2.0, 3.0), // Camera position
         glam::Vec3::ZERO,               // Look at origin
         glam::Vec3::Y,                  // Up vector
@@ -137,7 +137,7 @@ fn test_render_multiple_angles() {
 
     for (name, camera_pos) in angles {
         let mut tracer = CpuTracer::new_with_cube(cube.clone());
-        let camera = CameraConfig::look_at(camera_pos, glam::Vec3::ZERO, glam::Vec3::Y);
+        let camera = Camera::look_at(camera_pos, glam::Vec3::ZERO, glam::Vec3::Y);
 
         tracer.render_with_camera(128, 128, &camera);
 

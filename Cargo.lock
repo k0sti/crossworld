@@ -3675,9 +3675,11 @@ name = "crossworld-world"
 version = "0.0.1"
 dependencies = [
  "console_error_panic_hook",
+ "crossworld-physics",
  "cube",
  "dot_vox",
  "getrandom 0.3.3",
+ "glam 0.29.3",
  "js-sys",
  "noise",
  "tracing",
@@ -7767,6 +7769,7 @@ name = "renderer"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
+ "crossworld-physics",
  "cube",
  "egui 0.29.1",
  "egui-winit",

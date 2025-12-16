@@ -9,7 +9,7 @@ use cube::{DefaultMeshBuilder, generate_face_mesh};
 use glow::*;
 use std::rc::Rc;
 
-use crate::renderer::{AMBIENT, CameraConfig, DIFFUSE_STRENGTH, Entity, LIGHT_DIR};
+use crate::renderer::{AMBIENT, Camera, DIFFUSE_STRENGTH, LIGHT_DIR, Object};
 use crate::shader_utils::create_program;
 
 /// Compiled mesh ready for GL rendering
@@ -172,7 +172,7 @@ impl MeshRenderer {
         mesh_index: usize,
         position: glam::Vec3,
         rotation: glam::Quat,
-        camera: &CameraConfig,
+        camera: &Camera,
         viewport_width: i32,
         viewport_height: i32,
     ) {
@@ -197,7 +197,7 @@ impl MeshRenderer {
         mesh_index: usize,
         position: glam::Vec3,
         rotation: glam::Quat,
-        camera: &CameraConfig,
+        camera: &Camera,
         viewport_width: i32,
         viewport_height: i32,
         _depth: u32,
@@ -283,13 +283,13 @@ impl MeshRenderer {
         }
     }
 
-    /// Render a mesh for a given entity
-    pub unsafe fn render_entity(
+    /// Render a mesh for a given object
+    pub unsafe fn render_object(
         &self,
         gl: &Context,
         mesh_index: usize,
-        entity: &dyn Entity,
-        camera: &CameraConfig,
+        object: &dyn Object,
+        camera: &Camera,
         viewport_width: i32,
         viewport_height: i32,
     ) {
@@ -297,8 +297,8 @@ impl MeshRenderer {
             self.render_mesh(
                 gl,
                 mesh_index,
-                entity.position(),
-                entity.rotation(),
+                object.position(),
+                object.rotation(),
                 camera,
                 viewport_width,
                 viewport_height,
@@ -306,13 +306,13 @@ impl MeshRenderer {
         }
     }
 
-    /// Render a mesh for a given entity with specified depth
-    pub unsafe fn render_entity_with_depth(
+    /// Render a mesh for a given object with specified depth
+    pub unsafe fn render_object_with_depth(
         &self,
         gl: &Context,
         mesh_index: usize,
-        entity: &dyn Entity,
-        camera: &CameraConfig,
+        object: &dyn Object,
+        camera: &Camera,
         viewport_width: i32,
         viewport_height: i32,
         depth: u32,
@@ -321,8 +321,8 @@ impl MeshRenderer {
             self.render_mesh_with_depth(
                 gl,
                 mesh_index,
-                entity.position(),
-                entity.rotation(),
+                object.position(),
+                object.rotation(),
                 camera,
                 viewport_width,
                 viewport_height,
@@ -406,7 +406,7 @@ impl crate::renderer::Renderer for MeshRenderer {
         panic!("MeshRenderer requires GL context. Use render_to_framebuffer() instead.");
     }
 
-    fn render_with_camera(&mut self, _width: u32, _height: u32, _camera: &crate::renderer::CameraConfig) {
+    fn render_with_camera(&mut self, _width: u32, _height: u32, _camera: &crate::renderer::Camera) {
         panic!("MeshRenderer requires GL context. Use render_to_framebuffer() instead.");
     }
 
@@ -431,7 +431,7 @@ impl crate::renderer::Renderer for MeshRenderer {
         _gl: &Context,
         _width: u32,
         _height: u32,
-        _camera: Option<&crate::renderer::CameraConfig>,
+        _camera: Option<&crate::renderer::Camera>,
         _time: Option<f32>,
     ) -> Result<(), String> {
         Err("MeshRenderer requires explicit mesh index, position, and rotation. Use render_mesh() or render_mesh_with_depth() instead.".to_string())

@@ -91,7 +91,7 @@ impl CpuTracer {
         y: u32,
         width: u32,
         height: u32,
-        camera: &CameraConfig,
+        camera: &Camera,
     ) -> glam::Vec3 {
         // Normalized pixel coordinates (flip Y to match GL coordinate system)
         let uv = glam::Vec2::new(
@@ -219,7 +219,7 @@ impl Renderer for CpuTracer {
         self.image_buffer = Some(buffer);
     }
 
-    fn render_with_camera(&mut self, width: u32, height: u32, camera: &CameraConfig) {
+    fn render_with_camera(&mut self, width: u32, height: u32, camera: &Camera) {
         // Create or resize image buffer
         let buffer = ImageBuffer::from_fn(width, height, |x, y| {
             let color = self.render_pixel_with_camera(x, y, width, height, camera);

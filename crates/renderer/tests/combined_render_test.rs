@@ -13,7 +13,7 @@ use glutin_winit::DisplayBuilder;
 use raw_window_handle::HasWindowHandle;
 use renderer::gl_tracer::GlTracer;
 use renderer::gpu_tracer::ComputeTracer;
-use renderer::renderer::CameraConfig;
+use renderer::Camera;
 use renderer::scenes::create_octa_cube;
 use std::num::NonZeroU32;
 use winit::event_loop::EventLoop;
@@ -200,7 +200,7 @@ fn test_both_tracers() {
     println!();
 
     let cube = create_octa_cube();
-    let camera = CameraConfig::look_at(
+    let camera = Camera::look_at(
         glam::Vec3::new(3.0, 2.0, 3.0),
         glam::Vec3::ZERO,
         glam::Vec3::Y,

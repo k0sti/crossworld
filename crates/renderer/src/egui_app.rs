@@ -8,7 +8,7 @@ use egui::{ColorImage, TextureHandle, TextureOptions};
 use glow::*;
 use renderer::scenes::{create_cube_from_id, get_model, get_model_ids};
 use renderer::{
-    BcfTracer, CameraConfig, ComputeTracer, CpuTracer, GlTracer, MeshRenderer, Renderer,
+    BcfTracer, Camera, ComputeTracer, CpuTracer, GlTracer, MeshRenderer, Renderer,
 };
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
@@ -19,7 +19,7 @@ struct RenderRequest {
     width: u32,
     height: u32,
     time: f32,
-    camera: Option<CameraConfig>,
+    camera: Option<Camera>,
     disable_lighting: bool,
     model_id: String,
 }
@@ -118,7 +118,7 @@ pub struct CubeRendererApp {
     sync_mode: bool, // If true, wait for CPU renderer to complete each frame
 
     // Camera control
-    camera: CameraConfig,
+    camera: Camera,
     camera_target: glam::Vec3,
     use_manual_camera: bool,
     mouse_sensitivity: f32,
@@ -195,7 +195,7 @@ impl CubeRendererApp {
         // Initialize camera
         let camera_target = glam::Vec3::ZERO;
         let camera =
-            CameraConfig::look_at(glam::Vec3::new(3.0, 2.0, 3.0), camera_target, glam::Vec3::Y);
+            Camera::look_at(glam::Vec3::new(3.0, 2.0, 3.0), camera_target, glam::Vec3::Y);
 
         // Create CPU renderer thread
         let cpu_sync_request = Arc::new(Mutex::new(None));
@@ -674,7 +674,7 @@ impl CubeRendererApp {
                         3.0 * (time * 0.3).sin(),
                     );
                     let target = glam::Vec3::ZERO;
-                    CameraConfig::look_at(camera_pos, target, glam::Vec3::Y)
+                    Camera::look_at(camera_pos, target, glam::Vec3::Y)
                 };
 
                 let depth = self.current_cube.max_depth() as u32;

@@ -4,7 +4,7 @@
 //! and matches the behavior of the existing CPU tracer.
 
 use cube::{Cube, io::bcf::serialize_bcf};
-use renderer::{BcfTracer, CameraConfig, CpuTracer, Renderer};
+use renderer::{BcfTracer, Camera, CpuTracer, Renderer};
 use std::rc::Rc;
 
 /// Test: BCF tracer can render a simple solid cube
@@ -90,7 +90,7 @@ fn test_bcf_tracer_static_camera() {
     let mut tracer = BcfTracer::new();
 
     // Fixed camera position
-    let camera = CameraConfig::default();
+    let camera = Camera::default();
 
     // Render twice with same camera
     tracer.render_with_camera(64, 64, &camera);
@@ -288,7 +288,7 @@ fn test_bcf_vs_cpu_tracer_comparison() {
     let mut cpu_tracer = CpuTracer::new_with_cube(cube);
 
     // Fixed camera for consistency
-    let camera = CameraConfig::default();
+    let camera = Camera::default();
 
     // Render with both tracers
     bcf_tracer.render_with_camera(128, 128, &camera);

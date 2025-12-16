@@ -3,88 +3,11 @@
 use glam::Vec3;
 
 // Re-export for use within this module and for backward compatibility
-pub use crate::camera::CameraConfig;
+pub use crate::camera::Camera;
 pub use crate::lighting::{AMBIENT, BACKGROUND_COLOR, DIFFUSE_STRENGTH, LIGHT_DIR};
 
-/// Entity trait for objects in 3D space
-///
-/// Represents any object with position and rotation in the scene
-pub trait Entity {
-    /// Get the entity's position in world space
-    fn position(&self) -> glam::Vec3;
-
-    /// Get the entity's rotation as a quaternion
-    fn rotation(&self) -> glam::Quat;
-
-    /// Set the entity's position
-    fn set_position(&mut self, position: glam::Vec3);
-
-    /// Set the entity's rotation
-    fn set_rotation(&mut self, rotation: glam::Quat);
-
-    /// Create a camera looking at this entity
-    fn make_camera(&self, offset: glam::Vec3, up: glam::Vec3) -> CameraConfig {
-        let camera_position = self.position() + offset;
-        CameraConfig::look_at(camera_position, self.position(), up)
-    }
-}
-
-/// A simple cube object that can be positioned and rotated in space
-#[derive(Debug, Clone, Copy)]
-pub struct CubeObject {
-    /// Position in world space
-    pub position: glam::Vec3,
-    /// Rotation as quaternion
-    pub rotation: glam::Quat,
-}
-
-impl CubeObject {
-    /// Create a new cube object at the origin with no rotation
-    pub fn new() -> Self {
-        Self {
-            position: glam::Vec3::ZERO,
-            rotation: glam::Quat::IDENTITY,
-        }
-    }
-
-    /// Create a new cube object at a specific position
-    pub fn at_position(position: glam::Vec3) -> Self {
-        Self {
-            position,
-            rotation: glam::Quat::IDENTITY,
-        }
-    }
-
-    /// Create a new cube object with position and rotation
-    pub fn with_transform(position: glam::Vec3, rotation: glam::Quat) -> Self {
-        Self { position, rotation }
-    }
-}
-
-impl Default for CubeObject {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl Entity for CubeObject {
-    fn position(&self) -> glam::Vec3 {
-        self.position
-    }
-
-    fn rotation(&self) -> glam::Quat {
-        self.rotation
-    }
-
-    fn set_position(&mut self, position: glam::Vec3) {
-        self.position = position;
-    }
-
-    fn set_rotation(&mut self, rotation: glam::Quat) {
-        self.rotation = rotation;
-    }
-}
-
+// Re-export Object trait from physics for convenience
+pub use crossworld_physics::Object;
 
 /// Common renderer trait for cube raytracers
 ///
@@ -120,7 +43,7 @@ pub trait Renderer {
     ///
     /// For software renderers, this renders to an internal image buffer.
     /// For GL renderers, this may panic - use `render_to_framebuffer()` instead.
-    fn render_with_camera(&mut self, width: u32, height: u32, camera: &CameraConfig);
+    fn render_with_camera(&mut self, width: u32, height: u32, camera: &Camera);
 
     /// Get the name of the renderer
     fn name(&self) -> &str;
@@ -191,7 +114,7 @@ pub trait Renderer {
         gl: &glow::Context,
         width: u32,
         height: u32,
-        camera: Option<&CameraConfig>,
+        camera: Option<&Camera>,
         time: Option<f32>,
     ) -> Result<(), String> {
         let _ = (gl, width, height, camera, time);
