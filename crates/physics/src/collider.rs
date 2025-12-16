@@ -114,8 +114,8 @@ impl VoxelColliderBuilder {
     fn process_voxel(&mut self, view: NeighborView, coord: CubeCoord) {
         let center = view.center();
 
-        // Skip empty voxels (value <= 0 typically means empty)
-        if center.id() <= 0 {
+        // Skip empty voxels (value == 0 means empty)
+        if center.id() == 0 {
             return;
         }
 
@@ -132,7 +132,7 @@ impl VoxelColliderBuilder {
         for (offset, face) in faces {
             if let Some(neighbor) = view.get(offset) {
                 // Face is exposed if neighbor is empty or different material
-                if neighbor.id() <= 0 || neighbor.id() != center.id() {
+                if neighbor.id() == 0 || neighbor.id() != center.id() {
                     self.add_face_rectangle(coord, face);
                 }
             }

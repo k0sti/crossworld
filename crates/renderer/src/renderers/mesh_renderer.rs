@@ -26,6 +26,12 @@ pub struct MeshRenderer {
     meshes: Vec<GlMesh>,
 }
 
+impl Default for MeshRenderer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MeshRenderer {
     pub fn new() -> Self {
         Self {
@@ -34,7 +40,11 @@ impl MeshRenderer {
         }
     }
 
-    /// Initialize GL resources (must be called with active GL context)
+    /// Initialize GL resources
+    ///
+    /// # Safety
+    ///
+    /// Must be called with an active GL context on the current thread.
     pub unsafe fn init_gl(&mut self, gl: &Context) -> Result<(), String> {
         unsafe {
             // Create shader program
@@ -46,6 +56,10 @@ impl MeshRenderer {
     }
 
     /// Upload a mesh from a voxel cube
+    ///
+    /// # Safety
+    ///
+    /// Must be called with an active GL context on the current thread.
     pub unsafe fn upload_mesh(
         &mut self,
         gl: &Context,
@@ -166,6 +180,11 @@ impl MeshRenderer {
     }
 
     /// Render a mesh at given position
+    ///
+    /// # Safety
+    ///
+    /// Must be called with an active GL context on the current thread.
+    #[allow(clippy::too_many_arguments)]
     pub unsafe fn render_mesh(
         &self,
         gl: &Context,
@@ -191,6 +210,11 @@ impl MeshRenderer {
     }
 
     /// Render a mesh at given position with specified depth for scaling
+    ///
+    /// # Safety
+    ///
+    /// Must be called with an active GL context on the current thread.
+    #[allow(clippy::too_many_arguments)]
     pub unsafe fn render_mesh_with_depth(
         &self,
         gl: &Context,
@@ -284,6 +308,10 @@ impl MeshRenderer {
     }
 
     /// Render a mesh for a given object
+    ///
+    /// # Safety
+    ///
+    /// Must be called with an active GL context on the current thread.
     pub unsafe fn render_object(
         &self,
         gl: &Context,
@@ -307,6 +335,11 @@ impl MeshRenderer {
     }
 
     /// Render a mesh for a given object with specified depth
+    ///
+    /// # Safety
+    ///
+    /// Must be called with an active GL context on the current thread.
+    #[allow(clippy::too_many_arguments)]
     pub unsafe fn render_object_with_depth(
         &self,
         gl: &Context,
@@ -332,6 +365,10 @@ impl MeshRenderer {
     }
 
     /// Clear all uploaded meshes (keeps shader program)
+    ///
+    /// # Safety
+    ///
+    /// Must be called with an active GL context on the current thread.
     pub unsafe fn clear_meshes(&mut self, gl: &Context) {
         unsafe {
             for mesh in &self.meshes {
@@ -344,6 +381,10 @@ impl MeshRenderer {
     }
 
     /// Cleanup GL resources
+    ///
+    /// # Safety
+    ///
+    /// Must be called with an active GL context on the current thread.
     pub unsafe fn destroy_gl(&mut self, gl: &Context) {
         unsafe {
             self.clear_meshes(gl);
