@@ -677,16 +677,16 @@ impl CubeRendererApp {
                     Camera::look_at(camera_pos, target, glam::Vec3::Y)
                 };
 
-                let depth = self.current_cube.max_depth() as u32;
-                self.mesh_renderer.render_mesh_with_depth(
+                // Render at unit scale (mesh is [0,1] space)
+                self.mesh_renderer.render_mesh_with_scale(
                     gl,
                     0,
                     position,
                     rotation,
+                    1.0,
                     &camera,
                     width as i32,
                     height as i32,
-                    depth,
                 );
             }
 

@@ -343,6 +343,131 @@ impl WasmPhysicsWorld {
         id
     }
 
+    /// Add a dynamic box body to the physics world
+    ///
+    /// Creates a box-shaped rigid body that responds to gravity and collisions.
+    ///
+    /// # Arguments
+    /// * `pos_x`, `pos_y`, `pos_z` - Initial position
+    /// * `half_x`, `half_y`, `half_z` - Half extents of the box (width/2, height/2, depth/2)
+    /// * `mass` - Mass of the body in kg
+    ///
+    /// # Returns
+    /// Object ID for the created body
+    #[wasm_bindgen(js_name = addBoxBody)]
+    pub fn add_box_body(
+        &self,
+        pos_x: f32,
+        pos_y: f32,
+        pos_z: f32,
+        half_x: f32,
+        half_y: f32,
+        half_z: f32,
+        mass: f32,
+    ) -> u32 {
+        let mut world = self.inner.borrow_mut();
+
+        // Create dynamic rigid body
+        let body = RigidBodyBuilder::dynamic()
+            .translation(vector![pos_x, pos_y, pos_z])
+            .build();
+
+        let body_handle = world.add_rigid_body(body);
+
+        // Create box collider with mass
+        let collider = ColliderBuilder::cuboid(half_x, half_y, half_z)
+            .density(mass / (8.0 * half_x * half_y * half_z)) // Convert mass to density
+            .friction(0.5)
+            .restitution(0.3)
+            .build();
+
+        world.add_collider(collider, body_handle);
+
+        body_handle.into_raw_parts().0
+    }
+
+    /// Add a dynamic sphere body to the physics world
+    ///
+    /// Creates a sphere-shaped rigid body that responds to gravity and collisions.
+    ///
+    /// # Arguments
+    /// * `pos_x`, `pos_y`, `pos_z` - Initial position
+    /// * `radius` - Radius of the sphere
+    /// * `mass` - Mass of the body in kg
+    ///
+    /// # Returns
+    /// Object ID for the created body
+    #[wasm_bindgen(js_name = addSphereBody)]
+    pub fn add_sphere_body(
+        &self,
+        pos_x: f32,
+        pos_y: f32,
+        pos_z: f32,
+        radius: f32,
+        mass: f32,
+    ) -> u32 {
+        let mut world = self.inner.borrow_mut();
+
+        // Create dynamic rigid body
+        let body = RigidBodyBuilder::dynamic()
+            .translation(vector![pos_x, pos_y, pos_z])
+            .build();
+
+        let body_handle = world.add_rigid_body(body);
+
+        // Create sphere collider with mass
+        let volume = (4.0 / 3.0) * std::f32::consts::PI * radius.powi(3);
+        let collider = ColliderBuilder::ball(radius)
+            .density(mass / volume) // Convert mass to density
+            .friction(0.5)
+            .restitution(0.5) // Spheres bounce more
+            .build();
+
+        world.add_collider(collider, body_handle);
+
+        body_handle.into_raw_parts().0
+    }
+
+    /// Add a static box collider to the physics world
+    ///
+    /// Creates a box-shaped collider that doesn't move but blocks other objects.
+    ///
+    /// # Arguments
+    /// * `pos_x`, `pos_y`, `pos_z` - Position
+    /// * `half_x`, `half_y`, `half_z` - Half extents of the box
+    ///
+    /// # Returns
+    /// Object ID for the created body
+    #[wasm_bindgen(js_name = addStaticBox)]
+    pub fn add_static_box(
+        &self,
+        pos_x: f32,
+        pos_y: f32,
+        pos_z: f32,
+        half_x: f32,
+        half_y: f32,
+        half_z: f32,
+    ) -> u32 {
+        let mut world = self.inner.borrow_mut();
+
+        // Create fixed (static) rigid body
+        let body = RigidBodyBuilder::fixed()
+            .translation(vector![pos_x, pos_y, pos_z])
+            .build();
+
+        let body_handle = world.add_rigid_body(body);
+
+        // Create box collider
+        let collider = ColliderBuilder::cuboid(half_x, half_y, half_z)
+            .friction(0.5)
+            .restitution(0.0)
+            .build();
+
+        world.add_collider(collider, body_handle);
+
+        body_handle.into_raw_parts().0
+    }
+
     /// Create a static ground plane at Y=0
     ///
     /// Creates an infinite horizontal plane for character controllers to walk on.
