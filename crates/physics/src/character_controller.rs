@@ -5,7 +5,7 @@ use rapier3d::prelude::*;
 use crate::world::PhysicsWorld;
 
 /// Configuration for character controller
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct CharacterControllerConfig {
     /// Height of the character capsule
     pub height: f32,
@@ -120,15 +120,65 @@ impl CharacterController {
 
         // Calculate target position
         let current_pos = self.position(world);
-        let target_pos = current_pos + velocity * dt;
+        let mut target_pos = current_pos + velocity * dt;
+
+        // Check for ground collision before moving
+        // Raycast from current position downward to find ground
+        let capsule_half_height = self.config.height / 2.0;
+        let ray_origin = current_pos;
+        let ray_dir = Vec3::NEG_Y;
+
+        // Use a long raycast to find any ground below
+        let max_ray_distance = 100.0;
+
+        if let Some((_handle, distance, _point, normal)) = world.cast_ray_with_exclusion(
+            ray_origin,
+            ray_dir,
+            max_ray_distance,
+            true,
+            Some(self.collider_handle),
+        ) {
+            // Ground is at: current_pos.y - distance
+            // Character bottom should be at: ground_y + capsule_half_height
+            let ground_y = current_pos.y - distance;
+            let min_y = ground_y + capsule_half_height;
+
+            // If target position would put character below ground, clamp it
+            if target_pos.y < min_y {
+                target_pos.y = min_y;
+
+                // We hit ground - update state
+                let distance_from_bottom = distance - capsule_half_height;
+                if distance_from_bottom <= self.config.ground_check_distance {
+                    self.is_grounded = true;
+                    self.ground_normal = normal;
+
+                    // Reset vertical velocity when landing
+                    if self.vertical_velocity < 0.0 {
+                        self.vertical_velocity = 0.0;
+                    }
+                }
+            } else {
+                // Not hitting ground yet
+                let distance_from_bottom = distance - capsule_half_height;
+                if distance_from_bottom <= self.config.ground_check_distance {
+                    self.is_grounded = true;
+                    self.ground_normal = normal;
+                } else {
+                    self.is_grounded = false;
+                    self.ground_normal = Vec3::Y;
+                }
+            }
+        } else {
+            // No ground detected
+            self.is_grounded = false;
+            self.ground_normal = Vec3::Y;
+        }
 
         // Update position
         if let Some(body) = world.get_rigid_body_mut(self.body_handle) {
             body.set_next_kinematic_translation(vector![target_pos.x, target_pos.y, target_pos.z]);
         }
-
-        // Update ground state
-        self.update_ground_state(world);
     }
 
     /// Attempt to jump if grounded
@@ -230,90 +280,6 @@ impl CharacterController {
         // Collider is automatically removed with the rigid body
     }
 
-    // Internal helper methods
-
-    /// Update ground detection state
-    fn update_ground_state(&mut self, world: &PhysicsWorld) {
-        let position = self.position(world);
-
-        // Raycast downward from the bottom of the character capsule
-        // The capsule bottom is at position.y - height/2
-        let ray_origin = position;
-        let ray_dir = Vec3::NEG_Y;
-
-        // Check just beyond the capsule bottom
-        let capsule_half_height = self.config.height / 2.0;
-
-        // Use adaptive ray distance: short when grounded, long when falling
-        // This allows finding ground even when falling from high up, but keeps
-        // the grounded check precise for walking on slopes
-        let max_distance = if self.is_grounded {
-            capsule_half_height + self.config.ground_check_distance // Precise check: ~1.0m
-        } else {
-            100.0 // Long-range check when falling: 100m
-        };
-
-        #[cfg(target_arch = "wasm32")]
-        {
-            use wasm_bindgen::prelude::*;
-            #[wasm_bindgen]
-            extern "C" {
-                #[wasm_bindgen(js_namespace = console)]
-                fn log(s: &str);
-            }
-            // log(&format!("[GroundDetect] pos.y={:.2}, half_height={:.2}, max_dist={:.2}, v_vel={:.2}",
-            //     position.y, capsule_half_height, max_distance, self.vertical_velocity));
-        }
-
-        if let Some((_handle, distance, _point, normal)) = world.cast_ray_with_exclusion(
-            ray_origin,
-            ray_dir,
-            max_distance,
-            true,
-            Some(self.collider_handle),
-        ) {
-            // Only consider grounded if the hit is close to the capsule bottom
-            let distance_from_bottom = distance - capsule_half_height;
-
-            #[cfg(target_arch = "wasm32")]
-            {
-                use wasm_bindgen::prelude::*;
-                #[wasm_bindgen]
-                extern "C" {
-                    #[wasm_bindgen(js_namespace = console)]
-                    fn log(s: &str);
-                }
-                // log(&format!("[GroundDetect] HIT: distance={:.2}, from_bottom={:.2}, check_dist={:.2}",
-                //     distance, distance_from_bottom, self.config.ground_check_distance));
-            }
-
-            if distance_from_bottom <= self.config.ground_check_distance {
-                self.is_grounded = true;
-                self.ground_normal = normal;
-
-                // If we hit ground and falling, reset vertical velocity
-                if self.vertical_velocity < 0.0 {
-                    self.vertical_velocity = 0.0;
-                }
-            } else {
-                self.is_grounded = false;
-                self.ground_normal = Vec3::Y;
-            }
-        } else {
-            #[cfg(target_arch = "wasm32")]
-            {
-                use wasm_bindgen::prelude::*;
-                #[wasm_bindgen]
-                extern "C" {
-                    #[wasm_bindgen(js_namespace = console)]
-                    fn log(s: &str);
-                }
-                // log("[GroundDetect] NO HIT");
-            }
-            self.is_grounded = false;
-            self.ground_normal = Vec3::Y;
-        }
-    }
 }
 
 /// Result of a raycast query
@@ -405,6 +371,108 @@ mod tests {
             initial_pos.x,
             initial_pos.x,
             final_pos.x
+        );
+    }
+
+    #[test]
+    fn test_character_stops_at_ground_plane() {
+        use nalgebra::Unit;
+        use rapier3d::prelude::*;
+
+        let mut world = PhysicsWorld::new(Vec3::new(0.0, -9.8, 0.0));
+
+        // Create a ground plane at Y=0
+        let ground_body = RigidBodyBuilder::fixed()
+            .translation(vector![0.0, 0.0, 0.0])
+            .build();
+        let ground_handle = world.add_rigid_body(ground_body);
+
+        let ground_normal = Unit::new_normalize(vector![0.0, 1.0, 0.0]);
+        let ground_collider = ColliderBuilder::halfspace(ground_normal)
+            .friction(0.5)
+            .restitution(0.0)
+            .build();
+        world.add_collider(ground_collider, ground_handle);
+
+        // Create character starting at Y=5 (above ground)
+        let config = CharacterControllerConfig::default(); // height=1.8, so capsule half-height=0.9
+        let mut controller = CharacterController::new(&mut world, Vec3::new(0.0, 5.0, 0.0), config);
+
+        // Simulate for 5 seconds (should be enough to fall and land)
+        for _ in 0..300 {
+            controller.move_with_velocity(&mut world, Vec3::ZERO, 1.0 / 60.0);
+            world.step(1.0 / 60.0);
+        }
+
+        let final_pos = controller.position(&world);
+
+        // Character should have landed and be grounded
+        assert!(
+            controller.is_grounded(),
+            "Character should be grounded after falling"
+        );
+
+        // Character center should be at height/2 above ground (0.9 for default config)
+        // Allow some tolerance for the ground check distance
+        let expected_y = config.height / 2.0;
+        assert!(
+            (final_pos.y - expected_y).abs() < 0.2,
+            "Character Y position should be ~{:.2}, but got {:.2}",
+            expected_y,
+            final_pos.y
+        );
+
+        // Character should not have fallen through the ground
+        assert!(
+            final_pos.y > 0.0,
+            "Character should not fall through ground (Y={:.2})",
+            final_pos.y
+        );
+    }
+
+    #[test]
+    fn test_character_lands_on_box() {
+        use rapier3d::prelude::*;
+
+        let mut world = PhysicsWorld::new(Vec3::new(0.0, -9.8, 0.0));
+
+        // Create a box at Y=0 (top surface at Y=0.5)
+        let box_body = RigidBodyBuilder::fixed()
+            .translation(vector![0.0, 0.0, 0.0])
+            .build();
+        let box_handle = world.add_rigid_body(box_body);
+
+        let box_collider = ColliderBuilder::cuboid(10.0, 0.5, 10.0) // Half extents: 20x1x20 box
+            .friction(0.5)
+            .build();
+        world.add_collider(box_collider, box_handle);
+
+        // Create character starting at Y=10 (above box)
+        let config = CharacterControllerConfig::default();
+        let mut controller =
+            CharacterController::new(&mut world, Vec3::new(0.0, 10.0, 0.0), config);
+
+        // Simulate for 5 seconds
+        for _ in 0..300 {
+            controller.move_with_velocity(&mut world, Vec3::ZERO, 1.0 / 60.0);
+            world.step(1.0 / 60.0);
+        }
+
+        let final_pos = controller.position(&world);
+
+        // Character should land on top of box (box top is at Y=0.5)
+        // Character center should be at box_top + capsule_half_height = 0.5 + 0.9 = 1.4
+        let expected_y = 0.5 + config.height / 2.0;
+        assert!(
+            (final_pos.y - expected_y).abs() < 0.2,
+            "Character Y position should be ~{:.2}, but got {:.2}",
+            expected_y,
+            final_pos.y
+        );
+
+        assert!(
+            controller.is_grounded(),
+            "Character should be grounded on box"
         );
     }
 }

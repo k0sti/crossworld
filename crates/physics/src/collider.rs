@@ -81,7 +81,9 @@ impl VoxelColliderBuilder {
                 // Spatial filtering: skip voxels outside region
                 if let Some(ref aabb) = region {
                     let voxel_size = 1.0 / (1 << coord.depth) as f32;
-                    let world_pos = coord.pos.as_vec3() * voxel_size;
+                    // Convert center-based coords to [0,1] range
+                    let scale = 1 << coord.depth;
+                    let world_pos = (coord.pos.as_vec3() / scale as f32 + Vec3::ONE) * 0.5;
                     let voxel_center = world_pos + Vec3::splat(voxel_size * 0.5);
 
                     let point =
@@ -145,7 +147,11 @@ impl VoxelColliderBuilder {
         let voxel_size = 1.0 / (1 << coord.depth) as f32;
 
         // Calculate world position from octree coordinate
-        let world_pos = coord.pos.as_vec3() * voxel_size;
+        // The coord.pos is in center-based coordinates {-2^depth..2^depth}
+        // We need to convert to [0, 1] range:
+        // world_pos = (coord.pos + 2^depth) / (2 * 2^depth) = (coord.pos / 2^depth + 1) / 2
+        let scale = 1 << coord.depth;
+        let world_pos = (coord.pos.as_vec3() / scale as f32 + Vec3::ONE) * 0.5;
 
         // Get face normal
         let normal_array = face.normal();

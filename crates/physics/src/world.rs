@@ -124,6 +124,16 @@ impl PhysicsWorld {
         self.gravity = vector![gravity.x, gravity.y, gravity.z];
     }
 
+    /// Get the number of rigid bodies in the world
+    pub fn rigid_body_count(&self) -> usize {
+        self.rigid_body_set.len()
+    }
+
+    /// Get the number of colliders in the world
+    pub fn collider_count(&self) -> usize {
+        self.collider_set.len()
+    }
+
     /// Perform a raycast through the physics world
     ///
     /// # Arguments
@@ -254,5 +264,56 @@ mod tests {
         let body_ref = world.get_rigid_body(handle).unwrap();
         // Should have fallen due to gravity
         assert!(body_ref.translation().y < 10.0);
+    }
+
+    #[test]
+    fn test_dynamic_body_stops_at_ground() {
+        use nalgebra::Unit;
+
+        let mut world = PhysicsWorld::new(Vec3::new(0.0, -9.81, 0.0));
+
+        // Create ground plane at Y=0
+        let ground_body = RigidBodyBuilder::fixed()
+            .translation(vector![0.0, 0.0, 0.0])
+            .build();
+        let ground_handle = world.add_rigid_body(ground_body);
+
+        let ground_normal = Unit::new_normalize(vector![0.0, 1.0, 0.0]);
+        let ground_collider = ColliderBuilder::halfspace(ground_normal)
+            .friction(0.5)
+            .restitution(0.0)
+            .build();
+        world.add_collider(ground_collider, ground_handle);
+
+        // Create a dynamic box at Y=5
+        let box_body = RigidBodyBuilder::dynamic()
+            .translation(vector![0.0, 5.0, 0.0])
+            .build();
+        let box_handle = world.add_rigid_body(box_body);
+
+        let box_collider = ColliderBuilder::cuboid(0.5, 0.5, 0.5) // 1x1x1 box
+            .density(1.0)
+            .friction(0.5)
+            .restitution(0.0)
+            .build();
+        world.add_collider(box_collider, box_handle);
+
+        // Simulate for 5 seconds (300 frames at 60fps)
+        for _ in 0..300 {
+            world.step(1.0 / 60.0);
+        }
+
+        let box_ref = world.get_rigid_body(box_handle).unwrap();
+        let final_y = box_ref.translation().y;
+
+        // Box should have landed on ground - center at Y=0.5 (half-height above ground)
+        assert!(
+            (final_y - 0.5).abs() < 0.1,
+            "Box should rest at Y=0.5, got Y={:.2}",
+            final_y
+        );
+
+        // Should not have fallen through
+        assert!(final_y > 0.0, "Box fell through ground! Y={:.2}", final_y);
     }
 }
