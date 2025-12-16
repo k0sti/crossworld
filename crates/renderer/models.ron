@@ -26,14 +26,14 @@
         (
             id: "extended",
             name: "Extended Octa Cube",
-            csm: Some("> [224 s[0 0 0 0 0 0 159 0] 156 0 131 s[224 248 252 156 159 131 227 255] 0 0]"),
+            csm: Some("> [224 [0 0 0 0 0 0 159 0] 156 0 131 [224 248 252 156 159 131 227 255] 0 0]"),
         ),
 
-        // Random Cubes
+        // Random Cubes (depth 3 octree)
         (
             id: "depth3",
             name: "Depth 3 Cube",
-            csm: Some("> [s[224 252 156 131 255 0 0 0] s[252 224 131 156 255 0 0 0] s[156 131 224 252 255 0 0 0] s[131 156 252 224 255 0 0 0] s[255 224 252 156 131 0 0 0] 0 0 0]"),
+            csm: Some("> [[224 252 156 131 255 0 0 0] [252 224 131 156 255 0 0 0] [156 131 224 252 255 0 0 0] [131 156 252 224 255 0 0 0] [255 224 252 156 131 0 0 0] 0 0 0]"),
         ),
 
         // Four vertical planes
@@ -68,26 +68,26 @@
         (
             id: "test_expansion",
             name: "Test Expansion Cube",
-            csm: Some("> [s[224 0 0 0 0 0 0 0] 0 0 0 0 0 0 0]"),
+            csm: Some("> [[224 0 0 0 0 0 0 0] 0 0 0 0 0 0 0]"),
         ),
 
-        // VOX models (loaded from files)
-        (
-            id: "vox_robot",
-            name: "Robot Character",
-            vox_path: Some("robot.vox"),
-        ),
-
+        // VOX models (loaded from assets/models/vox/)
         (
             id: "vox_alien_bot",
             name: "Alien Bot",
-            vox_path: Some("alien_bot.vox"),
+            vox_path: Some("alien_bot1.vox"),
         ),
 
         (
-            id: "vox_eskimo",
-            name: "Eskimo Character",
-            vox_path: Some("eskimo.vox"),
+            id: "vox_army",
+            name: "Army Character",
+            vox_path: Some("chr_army1.vox"),
+        ),
+
+        (
+            id: "vox_naked",
+            name: "Naked Character",
+            vox_path: Some("chr_naked5.vox"),
         ),
     ]
 )
