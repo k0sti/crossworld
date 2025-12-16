@@ -38,7 +38,8 @@ impl ModelEntry {
             let full_path = format!("{}{}", VOX_MODELS_BASE_PATH, vox_path);
             let bytes = fs::read(&full_path)
                 .map_err(|e| format!("Failed to read VOX file '{}': {}", full_path, e))?;
-            cube::load_vox_to_cube(&bytes, cube::glam::Vec3::ZERO)
+            // Center the model within the cube (0.5 = centered on each axis)
+            cube::load_vox_to_cube(&bytes, cube::glam::Vec3::splat(0.5))
                 .map(Rc::new)
                 .map_err(|e| format!("Failed to load VOX: {}", e))
         } else {
