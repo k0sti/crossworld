@@ -62,7 +62,7 @@ pub fn load_vox_models(models_path: &str) -> Vec<VoxModel> {
     if let Ok(entries) = fs::read_dir(path) {
         for entry in entries.flatten() {
             let file_path = entry.path();
-            if file_path.extension().map_or(false, |ext| ext == "vox") {
+            if file_path.extension().is_some_and(|ext| ext == "vox") {
                 // Read file bytes
                 let bytes = match fs::read(&file_path) {
                     Ok(b) => b,
