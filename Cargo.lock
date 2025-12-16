@@ -7327,6 +7327,7 @@ dependencies = [
 name = "proto-gl"
 version = "0.1.0"
 dependencies = [
+ "clap",
  "crossworld-physics",
  "cube",
  "egui 0.29.1",
