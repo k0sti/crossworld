@@ -13,7 +13,8 @@ pub struct OrbitCamera {
 impl OrbitCamera {
     pub fn new(distance: f32) -> Self {
         Self {
-            focus: Vec3::ZERO,
+            // World cube is in [0, 1] space, focus on center
+            focus: Vec3::splat(0.5),
             yaw: 0.0,
             pitch: 0.5,
             distance,
@@ -58,7 +59,7 @@ impl OrbitCamera {
     }
 
     pub fn handle_scroll(&mut self, delta: f32) {
-        self.distance -= delta;
-        self.distance = self.distance.clamp(5.0, 100.0);
+        self.distance -= delta * 0.1;
+        self.distance = self.distance.clamp(0.5, 10.0);
     }
 }
