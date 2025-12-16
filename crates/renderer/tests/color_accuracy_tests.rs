@@ -12,7 +12,7 @@
 //! - Background: Bluish-gray (102, 128, 153)
 
 use glam::Vec3;
-use renderer::{CameraConfig, CpuTracer, Renderer};
+use renderer::{Camera, CpuTracer, Renderer};
 
 /// Color tolerance for comparisons (±5 RGB units on 0-255 scale)
 const COLOR_TOLERANCE: u8 = 5;
@@ -56,7 +56,7 @@ fn test_cpu_tracer_material_colors() {
     let mut tracer = CpuTracer::new();
 
     // Fixed camera looking at the cube center
-    let camera = CameraConfig::look_at(
+    let camera = Camera::look_at(
         Vec3::new(3.0, 2.0, 3.0), // Position
         Vec3::ZERO,               // Target (cube center)
         Vec3::Y,                  // Up
@@ -159,7 +159,7 @@ fn test_cpu_tracer_background_color() {
     let mut tracer = CpuTracer::new();
 
     // Camera looking away from cube (should see background)
-    let camera = CameraConfig::look_at(
+    let camera = Camera::look_at(
         Vec3::new(0.0, 0.0, -5.0),  // Behind cube
         Vec3::new(0.0, 0.0, -10.0), // Looking further back
         Vec3::Y,
@@ -288,7 +288,7 @@ fn test_lighting_toggle() {
     let mut tracer = CpuTracer::new();
 
     // Fixed camera looking at the cube center
-    let camera = CameraConfig::look_at(
+    let camera = Camera::look_at(
         Vec3::new(3.0, 2.0, 3.0), // Position
         Vec3::ZERO,               // Target (cube center)
         Vec3::Y,                  // Up

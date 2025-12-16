@@ -787,7 +787,7 @@ impl BcfTracer {
         y: u32,
         width: u32,
         height: u32,
-        camera: &CameraConfig,
+        camera: &Camera,
     ) -> Vec3 {
         // Normalized pixel coordinates (flip Y to match GL coordinate system)
         let uv = glam::Vec2::new(
@@ -920,7 +920,7 @@ impl Renderer for BcfTracer {
         self.image_buffer = Some(buffer);
     }
 
-    fn render_with_camera(&mut self, width: u32, height: u32, camera: &CameraConfig) {
+    fn render_with_camera(&mut self, width: u32, height: u32, camera: &Camera) {
         // Create image buffer
         let buffer = ImageBuffer::from_fn(width, height, |x, y| {
             let color = self.render_pixel_with_camera(x, y, width, height, camera);

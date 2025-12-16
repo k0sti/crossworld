@@ -3,9 +3,13 @@
 //! Provides camera positioning, orientation, and movement utilities for
 //! both first-person and orbital camera controls.
 
-/// Camera configuration for rendering
+use crossworld_physics::Object;
+
+/// Camera for 3D rendering
+///
+/// Implements the `Object` trait for position/rotation access.
 #[derive(Debug, Clone)]
-pub struct CameraConfig {
+pub struct Camera {
     /// Camera position in world space
     pub position: glam::Vec3,
     /// Camera rotation (orientation)
@@ -20,7 +24,7 @@ pub struct CameraConfig {
     pub target_position: Option<glam::Vec3>,
 }
 
-impl Default for CameraConfig {
+impl Default for Camera {
     fn default() -> Self {
         let position = glam::Vec3::new(3.0, 2.0, 3.0);
         let target = glam::Vec3::ZERO;
@@ -43,10 +47,10 @@ impl Default for CameraConfig {
     }
 }
 
-impl Copy for CameraConfig {}
+impl Copy for Camera {}
 
-impl CameraConfig {
-    /// Create camera configuration with position looking at target
+impl Camera {
+    /// Create camera with position looking at target
     pub fn look_at(position: glam::Vec3, target: glam::Vec3, up: glam::Vec3) -> Self {
         // Build camera basis the same way as the raytracer does
         let forward = (target - position).normalize();
@@ -220,5 +224,34 @@ impl CameraConfig {
     #[allow(dead_code)]
     pub fn zoom(&mut self, delta: f32) {
         self.position += self.forward() * delta;
+    }
+
+    /// Create a camera looking at a target object
+    ///
+    /// # Arguments
+    /// * `target` - The object to look at (implements Object trait)
+    /// * `offset` - Offset from target position to place camera
+    /// * `up` - Up vector for camera orientation
+    pub fn looking_at(target: &dyn Object, offset: glam::Vec3, up: glam::Vec3) -> Self {
+        let camera_position = target.position() + offset;
+        Self::look_at(camera_position, target.position(), up)
+    }
+}
+
+impl Object for Camera {
+    fn position(&self) -> glam::Vec3 {
+        self.position
+    }
+
+    fn rotation(&self) -> glam::Quat {
+        self.rotation
+    }
+
+    fn set_position(&mut self, position: glam::Vec3) {
+        self.position = position;
+    }
+
+    fn set_rotation(&mut self, rotation: glam::Quat) {
+        self.rotation = rotation;
     }
 }

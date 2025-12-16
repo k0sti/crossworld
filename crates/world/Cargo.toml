@@ -34,6 +34,12 @@ dot_vox = "5.1"
 # Cube model for procedural generation
 cube = { path = "../cube" }
 
+# Physics traits (Object trait)
+crossworld-physics = { path = "../physics" }
+
+# Math types
+glam = "0.29"
+
 # Noise functions for terrain generation
 noise = "0.9"
 

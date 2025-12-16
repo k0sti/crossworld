@@ -13,7 +13,7 @@ use glutin_winit::DisplayBuilder;
 use image::{ImageBuffer, Rgb, Rgba};
 use raw_window_handle::HasWindowHandle;
 use renderer::gpu_tracer::ComputeTracer;
-use renderer::renderer::CameraConfig;
+use renderer::Camera;
 use renderer::scenes::create_octa_cube;
 use renderer::{CpuTracer, Renderer};
 use std::num::NonZeroU32;
@@ -207,7 +207,7 @@ fn test_gpu_cpu_tracer_comparison() {
 
     // Create test scene
     let cube = create_octa_cube();
-    let camera = CameraConfig::look_at(
+    let camera = Camera::look_at(
         glam::Vec3::new(3.0, 2.0, 3.0),
         glam::Vec3::ZERO,
         glam::Vec3::Y,

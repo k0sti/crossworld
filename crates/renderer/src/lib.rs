@@ -44,9 +44,12 @@ pub mod mesh_renderer {
     pub use crate::renderers::mesh_renderer::*;
 }
 
-// Re-export commonly used types at crate root for backward compatibility
-pub use camera::CameraConfig;
+// Re-export commonly used types at crate root
+pub use camera::Camera;
 pub use lighting::{AMBIENT, BACKGROUND_COLOR, DIFFUSE_STRENGTH, LIGHT_DIR};
-pub use renderer::{CubeObject, Entity, Renderer};
+pub use renderer::{Object, Renderer};
 pub use renderers::{BcfTracer, ComputeTracer, CpuTracer, GlTracer, MeshRenderer};
 pub use scenes::create_octa_cube;
+
+// Backward compatibility alias
+pub use camera::Camera as CameraConfig;

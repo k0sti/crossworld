@@ -290,7 +290,7 @@ impl ComputeTracer {
         gl: &Context,
         width: i32,
         height: i32,
-        camera: &CameraConfig,
+        camera: &Camera,
     ) {
         let Some(gl_state) = &mut self.gl_state else {
             return;
@@ -450,7 +450,7 @@ impl Renderer for ComputeTracer {
         panic!("ComputeTracer requires GL context. Use render_to_framebuffer() instead.");
     }
 
-    fn render_with_camera(&mut self, _width: u32, _height: u32, _camera: &CameraConfig) {
+    fn render_with_camera(&mut self, _width: u32, _height: u32, _camera: &Camera) {
         panic!("ComputeTracer requires GL context. Use render_to_framebuffer() instead.");
     }
 
@@ -484,7 +484,7 @@ impl Renderer for ComputeTracer {
         gl: &Context,
         width: u32,
         height: u32,
-        camera: Option<&CameraConfig>,
+        camera: Option<&Camera>,
         time: Option<f32>,
     ) -> Result<(), String> {
         unsafe {

@@ -1,7 +1,7 @@
 //! Validation tests to ensure renderers actually produce visible output
 
 use renderer::cpu_tracer::CpuTracer;
-use renderer::renderer::{CameraConfig, Renderer};
+use renderer::{Camera, Renderer};
 use renderer::scenes::create_octa_cube;
 
 #[test]
@@ -11,7 +11,7 @@ fn test_cpu_renderer_produces_visible_output() {
     let mut tracer = CpuTracer::new_with_cube(cube);
 
     // Setup camera
-    let camera = CameraConfig::look_at(
+    let camera = Camera::look_at(
         glam::Vec3::new(2.5, 2.0, 2.5),
         glam::Vec3::ZERO,
         glam::Vec3::Y,
@@ -102,7 +102,7 @@ fn test_default_cpu_renderer_produces_output() {
     let mut tracer = CpuTracer::new();
 
     // Use default camera settings
-    let camera = CameraConfig::look_at(
+    let camera = Camera::look_at(
         glam::Vec3::new(3.0, 2.0, 3.0),
         glam::Vec3::ZERO,
         glam::Vec3::Y,

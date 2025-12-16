@@ -7,7 +7,7 @@
 //! For raycast logic tests, see crates/cube/tests/raycast_table_tests.rs
 
 use glam::Vec3;
-use renderer::{CameraConfig, CpuTracer, Renderer};
+use renderer::{Camera, CpuTracer, Renderer};
 
 /// Color tolerance for cross-tracer comparisons (±10 RGB units)
 /// Higher than single-tracer tests due to rounding differences
@@ -59,7 +59,7 @@ fn get_pixel_at(
 #[test]
 fn test_cpu_tracer_basic_rendering() {
     // Basic smoke test: CPU tracer can render without crashing
-    let camera = CameraConfig::look_at(Vec3::new(-2.0, 1.5, -2.0), Vec3::ZERO, Vec3::Y);
+    let camera = Camera::look_at(Vec3::new(-2.0, 1.5, -2.0), Vec3::ZERO, Vec3::Y);
 
     let mut tracer = CpuTracer::new();
     tracer.render_with_camera(256, 256, &camera);
@@ -95,7 +95,7 @@ fn test_cpu_tracer_basic_rendering() {
 #[test]
 fn test_cpu_tracer_renders_expected_colors() {
     // Test that CPU tracer renders octa-cube with correct material colors
-    let camera = CameraConfig::look_at(Vec3::new(-2.0, 1.5, -2.0), Vec3::ZERO, Vec3::Y);
+    let camera = Camera::look_at(Vec3::new(-2.0, 1.5, -2.0), Vec3::ZERO, Vec3::Y);
 
     let mut tracer = CpuTracer::new();
     tracer.render_with_camera(256, 256, &camera);
@@ -142,7 +142,7 @@ fn test_cpu_tracer_renders_expected_colors() {
 #[test]
 fn test_cpu_tracer_consistency_across_renders() {
     // Test that CPU tracer produces identical output for same input
-    let camera = CameraConfig::look_at(Vec3::new(-2.0, 1.5, -2.0), Vec3::ZERO, Vec3::Y);
+    let camera = Camera::look_at(Vec3::new(-2.0, 1.5, -2.0), Vec3::ZERO, Vec3::Y);
 
     let mut tracer1 = CpuTracer::new();
     tracer1.render_with_camera(128, 128, &camera);
@@ -164,9 +164,9 @@ fn test_cpu_tracer_consistency_across_renders() {
 #[test]
 fn test_cpu_tracer_different_viewing_angles() {
     // Test that different camera angles produce different outputs
-    let camera_front = CameraConfig::look_at(Vec3::new(0.0, 0.0, -2.0), Vec3::ZERO, Vec3::Y);
+    let camera_front = Camera::look_at(Vec3::new(0.0, 0.0, -2.0), Vec3::ZERO, Vec3::Y);
 
-    let camera_side = CameraConfig::look_at(Vec3::new(-2.0, 0.0, 0.0), Vec3::ZERO, Vec3::Y);
+    let camera_side = Camera::look_at(Vec3::new(-2.0, 0.0, 0.0), Vec3::ZERO, Vec3::Y);
 
     let mut tracer1 = CpuTracer::new();
     tracer1.render_with_camera(128, 128, &camera_front);
@@ -188,7 +188,7 @@ fn test_cpu_tracer_different_viewing_angles() {
 #[test]
 fn test_cpu_tracer_center_pixel_hits_geometry() {
     // Test that center pixel hits the cube geometry (not background)
-    let camera = CameraConfig::look_at(Vec3::new(-2.0, 1.5, -2.0), Vec3::ZERO, Vec3::Y);
+    let camera = Camera::look_at(Vec3::new(-2.0, 1.5, -2.0), Vec3::ZERO, Vec3::Y);
 
     let mut tracer = CpuTracer::new();
     tracer.render_with_camera(128, 128, &camera);

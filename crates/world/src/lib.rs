@@ -1,5 +1,15 @@
 mod avatar;
+mod entity;
+mod identity;
 mod world_cube;
+
+// Re-export entity system types
+pub use avatar::Avatar;
+pub use entity::{Entity, Logic};
+pub use identity::Identity;
+
+// Re-export Object trait from physics for convenience
+pub use crossworld_physics::Object;
 
 #[cfg(test)]
 mod tests;
