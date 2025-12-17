@@ -21,12 +21,54 @@ struct RenderRequest {
     camera: Option<Camera>,
     disable_lighting: bool,
     model_id: String,
+    // For fabric models, we need the config and max_depth
+    fabric_config: Option<FabricConfig>,
+    fabric_max_depth: Option<u32>,
+    // For single voxel model, we need the material
+    single_voxel_material: Option<u8>,
 }
 
 // Response from CPU renderer thread
 struct RenderResponse {
     image: image::ImageBuffer<image::Rgb<u8>, Vec<u8>>,
     render_time_ms: f32,
+}
+
+/// Convert a fabric Cube<Quat> to Cube<u8> using surface detection (standalone function for thread use)
+fn fabric_to_material_cube(fabric_cube: &cube::Cube<glam::Quat>, depth: u32) -> cube::Cube<u8> {
+    use cube::fabric::quaternion_to_color;
+    use cube::Cube;
+
+    match fabric_cube {
+        Cube::Solid(quat) => {
+            let magnitude = quat.length();
+            if magnitude < 1.0 {
+                // Inside: solid voxel
+                // Convert quaternion rotation to color
+                let [r, g, b] = quaternion_to_color(*quat);
+                // Encode as R2G3B2 for shader (values 128-255)
+                // Shader expects: 128 + (r2 << 5) + (g3 << 2) + b2
+                // where r2 is 2 bits (0-3), g3 is 3 bits (0-7), b2 is 2 bits (0-3)
+                let r2 = (r >> 6) & 0x03;
+                let g3 = (g >> 5) & 0x07;
+                let b2 = (b >> 6) & 0x03;
+                Cube::Solid(128 | (r2 << 5) | (g3 << 2) | b2)
+            } else {
+                // Outside: empty
+                Cube::Solid(0)
+            }
+        }
+        Cube::Cubes(children) if depth > 0 => {
+            let new_children: [Rc<Cube<u8>>; 8] =
+                std::array::from_fn(|i| Rc::new(fabric_to_material_cube(&children[i], depth - 1)));
+            Cube::Cubes(Box::new(new_children))
+        }
+        Cube::Cubes(children) => {
+            // At max depth, evaluate first child
+            fabric_to_material_cube(&children[0], 0)
+        }
+        _ => Cube::Solid(0),
+    }
 }
 
 /// Which renderer to use for diff comparison
@@ -184,10 +226,26 @@ impl CubeRendererApp {
     pub unsafe fn new_with_sync(gl: &Arc<Context>, sync_mode: bool, model_name: Option<&str>) -> Result<Self, String> {
         // Create default scene (Octa Cube - Depth 1 for debugging, or user-specified model)
         let default_model_id = model_name.unwrap_or("octa");
-        let cube = create_cube_from_id(default_model_id).or_else(|e| {
-            eprintln!("Warning: {}, falling back to 'octa'", e);
-            create_cube_from_id("octa")
-        })?;
+        let fabric_config = get_fabric_config().clone();
+        let fabric_depth = get_fabric_config().max_depth;
+        let single_material = get_single_cube_config().default_material;
+
+        let cube = if default_model_id == "fabric" {
+            // Generate fabric model
+            use cube::FabricGenerator;
+            let generator = FabricGenerator::new(fabric_config.clone());
+            let fabric_cube = generator.generate_cube(fabric_depth);
+            Rc::new(fabric_to_material_cube(&fabric_cube, fabric_depth))
+        } else if default_model_id == "single" {
+            // Single cube with configured material
+            use cube::Cube;
+            Rc::new(Cube::Solid(single_material))
+        } else {
+            create_cube_from_id(default_model_id).or_else(|e| {
+                eprintln!("Warning: {}, falling back to 'octa'", e);
+                create_cube_from_id("octa")
+            })?
+        };
 
         // Initialize GL renderer (WebGL 2.0 fragment shader)
         let mut gl_renderer = GlTracer::new(cube.clone());
@@ -231,10 +289,30 @@ impl CubeRendererApp {
         let response_clone = Arc::clone(&cpu_sync_response);
 
         let thread_model_id = default_model_id.to_string();
+        let thread_fabric_config = get_fabric_config().clone();
+        let thread_fabric_depth = get_fabric_config().max_depth;
+        let thread_single_material = get_single_cube_config().default_material;
         thread::spawn(move || {
-            let initial_cube = create_cube_from_id(&thread_model_id).unwrap();
+            // Create initial cube - handle fabric and single specially
+            let initial_cube = if thread_model_id == "fabric" {
+                use cube::FabricGenerator;
+                let generator = FabricGenerator::new(thread_fabric_config.clone());
+                let fabric_cube = generator.generate_cube(thread_fabric_depth);
+                Rc::new(fabric_to_material_cube(&fabric_cube, thread_fabric_depth))
+            } else if thread_model_id == "single" {
+                use cube::Cube;
+                Rc::new(Cube::Solid(thread_single_material))
+            } else {
+                create_cube_from_id(&thread_model_id).unwrap_or_else(|e| {
+                    eprintln!("Failed to load model '{}': {}, falling back to octa", thread_model_id, e);
+                    create_cube_from_id("octa").unwrap()
+                })
+            };
             let mut cpu_renderer = CpuTracer::new_with_cube(initial_cube);
             let mut current_model_id = thread_model_id;
+            let mut current_fabric_config: Option<FabricConfig> = Some(thread_fabric_config);
+            let mut current_fabric_depth: Option<u32> = Some(thread_fabric_depth);
+            let mut current_single_material: Option<u8> = Some(thread_single_material);
 
             loop {
                 let request: Option<RenderRequest> = {
@@ -245,10 +323,44 @@ impl CubeRendererApp {
                 if let Some(request) = request {
                     let start = std::time::Instant::now();
 
-                    // Recreate renderer if model changed
-                    if request.model_id != current_model_id {
-                        current_model_id = request.model_id;
-                        let new_cube = create_cube_from_id(&current_model_id).unwrap();
+                    // Determine if we need to recreate the renderer
+                    let model_changed = request.model_id != current_model_id;
+                    let fabric_changed = request.fabric_config != current_fabric_config
+                        || request.fabric_max_depth != current_fabric_depth;
+                    let single_changed = request.single_voxel_material != current_single_material;
+
+                    if model_changed || (request.model_id == "fabric" && fabric_changed)
+                        || (request.model_id == "single" && single_changed)
+                    {
+                        current_model_id = request.model_id.clone();
+                        current_fabric_config = request.fabric_config.clone();
+                        current_fabric_depth = request.fabric_max_depth;
+                        current_single_material = request.single_voxel_material;
+
+                        let new_cube = if request.model_id == "fabric" {
+                            // Generate fabric model
+                            if let (Some(config), Some(depth)) =
+                                (&request.fabric_config, request.fabric_max_depth)
+                            {
+                                use cube::FabricGenerator;
+                                let generator = FabricGenerator::new(config.clone());
+                                let fabric_cube = generator.generate_cube(depth);
+                                Rc::new(fabric_to_material_cube(&fabric_cube, depth))
+                            } else {
+                                // Fallback to octa if fabric config missing
+                                create_cube_from_id("octa").unwrap()
+                            }
+                        } else if request.model_id == "single" {
+                            // Single cube with current material
+                            use cube::Cube;
+                            let material = request.single_voxel_material.unwrap_or(224);
+                            Rc::new(Cube::Solid(material))
+                        } else {
+                            create_cube_from_id(&request.model_id).unwrap_or_else(|e| {
+                                eprintln!("Failed to load model '{}': {}, falling back to octa", request.model_id, e);
+                                create_cube_from_id("octa").unwrap()
+                            })
+                        };
                         cpu_renderer = CpuTracer::new_with_cube(new_cube);
                     }
 
@@ -364,6 +476,47 @@ impl CubeRendererApp {
             DiffSource::Mesh => "mesh",
         };
         (left, right)
+    }
+
+    /// Save all individual renderer frames to files for debugging.
+    pub fn save_all_frames(&self, output_dir: &str) -> Result<(), String> {
+        std::fs::create_dir_all(output_dir)
+            .map_err(|e| format!("Failed to create output directory: {}", e))?;
+
+        let frames = [
+            ("cpu", &self.cpu_latest_frame),
+            ("gl", &self.gl_latest_frame),
+            ("bcf_cpu", &self.bcf_cpu_latest_frame),
+            ("gpu", &self.gpu_latest_frame),
+            ("mesh", &self.mesh_latest_frame),
+        ];
+
+        for (name, frame_opt) in frames {
+            if let Some(frame) = frame_opt {
+                let filename = format!("{}/frame_{}.png", output_dir, name);
+                let width = frame.size[0] as u32;
+                let height = frame.size[1] as u32;
+                let mut rgba_data = Vec::with_capacity((width * height * 4) as usize);
+                for pixel in &frame.pixels {
+                    rgba_data.push(pixel.r());
+                    rgba_data.push(pixel.g());
+                    rgba_data.push(pixel.b());
+                    rgba_data.push(pixel.a());
+                }
+
+                let img: image::ImageBuffer<image::Rgba<u8>, Vec<u8>> =
+                    image::ImageBuffer::from_raw(width, height, rgba_data)
+                        .ok_or_else(|| format!("Failed to create image buffer for {}", name))?;
+
+                img.save(&filename)
+                    .map_err(|e| format!("Failed to save {}: {}", name, e))?;
+                println!("Saved: {}", filename);
+            } else {
+                println!("Frame {} not available", name);
+            }
+        }
+
+        Ok(())
     }
 
     /// Save the diff image to a file. Returns the path if successful.
@@ -786,6 +939,21 @@ impl CubeRendererApp {
             camera,
             disable_lighting: self.disable_lighting,
             model_id: self.current_model_id.clone(),
+            fabric_config: if self.current_model_id == "fabric" {
+                Some(self.fabric_config.clone())
+            } else {
+                None
+            },
+            fabric_max_depth: if self.current_model_id == "fabric" {
+                Some(self.fabric_max_depth)
+            } else {
+                None
+            },
+            single_voxel_material: if self.current_model_id == "single" {
+                Some(self.single_voxel_material)
+            } else {
+                None
+            },
         };
 
         *self.cpu_sync_request.lock().unwrap() = Some(request);
@@ -1034,14 +1202,13 @@ impl CubeRendererApp {
                         .show(ui, |ui| {
                             let csm_models = ["octa", "extended", "depth3", "quad", "layer", "sdf", "generated", "test_expansion"];
                             for model_id in csm_models {
-                                if let Some(model) = get_model(model_id) {
-                                    if ui
+                                if let Some(model) = get_model(model_id)
+                                    && ui
                                         .selectable_label(self.current_model_id == model_id, &model.name)
                                         .clicked()
-                                    {
-                                        self.current_model_id = model_id.to_string();
-                                        model_changed = true;
-                                    }
+                                {
+                                    self.current_model_id = model_id.to_string();
+                                    model_changed = true;
                                 }
                             }
                         });
@@ -1053,14 +1220,13 @@ impl CubeRendererApp {
                         .show(ui, |ui| {
                             let vox_models = ["vox_alien_bot", "vox_army", "vox_naked"];
                             for model_id in vox_models {
-                                if let Some(model) = get_model(model_id) {
-                                    if ui
+                                if let Some(model) = get_model(model_id)
+                                    && ui
                                         .selectable_label(self.current_model_id == model_id, &model.name)
                                         .clicked()
-                                    {
-                                        self.current_model_id = model_id.to_string();
-                                        model_changed = true;
-                                    }
+                                {
+                                    self.current_model_id = model_id.to_string();
+                                    model_changed = true;
                                 }
                             }
                         });
@@ -1466,7 +1632,7 @@ impl CubeRendererApp {
             let generator = FabricGenerator::new(self.fabric_config.clone());
             let fabric_cube = generator.generate_cube(self.fabric_max_depth);
             // Convert Cube<Quat> to Cube<u8> using surface detection
-            Rc::new(self.fabric_to_material_cube(&fabric_cube, self.fabric_max_depth))
+            Rc::new(fabric_to_material_cube(&fabric_cube, self.fabric_max_depth))
         } else if self.current_model_id == "single" {
             // Single cube with current material
             use cube::Cube;
@@ -1503,41 +1669,6 @@ impl CubeRendererApp {
         }
     }
 
-    /// Convert a fabric Cube<Quat> to Cube<u8> using surface detection
-    fn fabric_to_material_cube(&self, fabric_cube: &cube::Cube<glam::Quat>, depth: u32) -> cube::Cube<u8> {
-        use cube::fabric::quaternion_to_color;
-        use cube::Cube;
-
-        match fabric_cube {
-            Cube::Solid(quat) => {
-                let magnitude = quat.length();
-                if magnitude < 1.0 {
-                    // Inside: solid voxel
-                    // Convert quaternion rotation to color
-                    let [r, g, b] = quaternion_to_color(*quat);
-                    // Encode as R2G3B2
-                    let r2 = (r >> 6) & 0x03;
-                    let g3 = (g >> 5) & 0x07;
-                    let b2 = (b >> 6) & 0x03;
-                    Cube::Solid((r2 << 6) | (g3 << 3) | b2 | 0x08) // Add 0x08 to avoid error colors
-                } else {
-                    // Outside: empty
-                    Cube::Solid(0)
-                }
-            }
-            Cube::Cubes(children) if depth > 0 => {
-                let new_children: [Rc<Cube<u8>>; 8] = std::array::from_fn(|i| {
-                    Rc::new(self.fabric_to_material_cube(&children[i], depth - 1))
-                });
-                Cube::Cubes(Box::new(new_children))
-            }
-            Cube::Cubes(children) => {
-                // At max depth, evaluate first child
-                self.fabric_to_material_cube(&children[0], 0)
-            }
-            _ => Cube::Solid(0),
-        }
-    }
 
     fn handle_camera_input(&mut self, response: &egui::Response) {
         if response.dragged() {

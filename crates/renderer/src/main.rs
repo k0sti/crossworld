@@ -272,6 +272,11 @@ impl ApplicationHandler for App {
                                     eprintln!("Warning: Failed to create output directory: {}", e);
                                 }
 
+                                // Save all individual frames for debugging
+                                if let Err(e) = cube_renderer.save_all_frames("output") {
+                                    eprintln!("Warning: Failed to save all frames: {}", e);
+                                }
+
                                 match cube_renderer.save_diff_image("output") {
                                     Ok(path) => {
                                         println!("\n=== Diff image saved ===");

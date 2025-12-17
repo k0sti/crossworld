@@ -141,7 +141,7 @@ impl ComputeTracer {
 
             // Pad BCF data to multiple of 4 bytes for uint32 packing
             let mut padded_bcf = bcf_data.clone();
-            while padded_bcf.len() % 4 != 0 {
+            while !padded_bcf.len().is_multiple_of(4) {
                 padded_bcf.push(0);
             }
 
