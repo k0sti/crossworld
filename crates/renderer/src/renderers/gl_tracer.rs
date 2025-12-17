@@ -57,8 +57,9 @@ pub struct GlTracer {
 pub struct GlTracerGl {
     program: Program,
     vao: VertexArray,
-    octree_texture: Option<Texture>, // 1D-like 2D texture for BCF data
+    octree_texture: Option<Texture>, // 2D texture for BCF data
     octree_data_size: u32,
+    octree_texture_width: u32, // Width of the 2D texture (for coordinate conversion)
     // Uniform locations
     resolution_location: Option<UniformLocation>,
     time_location: Option<UniformLocation>,
@@ -68,6 +69,7 @@ pub struct GlTracerGl {
     max_depth_location: Option<UniformLocation>,
     octree_data_location: Option<UniformLocation>,
     octree_data_size_location: Option<UniformLocation>,
+    octree_texture_width_location: Option<UniformLocation>,
     octree_size_location: Option<UniformLocation>,
     material_palette_location: Option<UniformLocation>,
     material_palette_texture: Option<Texture>,
@@ -285,31 +287,51 @@ impl GlTracerGl {
             // For now, we'll use texture buffer as it's more widely supported
             let _use_ssbo = false; // TODO: Detect SSBO support properly
 
-            println!("[GL Tracer] Using texture buffer for octree data");
-
-            // Create 1D texture for BCF data (more compatible than texture buffer)
-            // We use TEXTURE_2D with height=1 as a 1D-like texture because:
+            // Create 2D texture for BCF data
+            // We use a proper 2D texture because:
             // - WebGL 2.0 doesn't support TEXTURE_BUFFER
+            // - 1D textures have width limits (typically 16384)
+            // - For large data, we need to use width x height layout
             // - R8UI format provides direct byte access via texelFetch
-            // - NEAREST filtering ensures no interpolation
+
+            // Calculate texture dimensions to fit within GPU limits
+            // Max texture size is typically 16384, we use 8192 to be safe
+            const MAX_TEX_WIDTH: i32 = 8192;
+            let data_len = bcf_data.len() as i32;
+            let (tex_width, tex_height) = if data_len <= MAX_TEX_WIDTH {
+                (data_len, 1)
+            } else {
+                // Calculate dimensions for 2D layout
+                let height = (data_len + MAX_TEX_WIDTH - 1) / MAX_TEX_WIDTH;
+                (MAX_TEX_WIDTH, height)
+            };
+
+            // Pad data to fill the texture completely
+            let padded_size = (tex_width * tex_height) as usize;
+            let mut padded_data = bcf_data.clone();
+            padded_data.resize(padded_size, 0);
+
+            println!(
+                "[GL Tracer] Using {}x{} texture for {} bytes of octree data",
+                tex_width, tex_height, data_len
+            );
+
             let texture = gl
                 .create_texture()
                 .map_err(|e| format!("Failed to create texture: {}", e))?;
 
             gl.bind_texture(TEXTURE_2D, Some(texture));
 
-            // Upload as 1D-like 2D texture (width x 1 height)
-            let width = bcf_data.len() as i32;
             gl.tex_image_2d(
                 TEXTURE_2D,
-                0,               // mip level
-                R8UI as i32,     // internal format
-                width,           // width
-                1,               // height (1 for 1D-like texture)
-                0,               // border
-                RED_INTEGER,     // format
-                UNSIGNED_BYTE,   // type
-                Some(&bcf_data), // data
+                0,                  // mip level
+                R8UI as i32,        // internal format
+                tex_width,          // width
+                tex_height,         // height
+                0,                  // border
+                RED_INTEGER,        // format
+                UNSIGNED_BYTE,      // type
+                Some(&padded_data), // data
             );
 
             // Set texture parameters
@@ -331,6 +353,8 @@ impl GlTracerGl {
             let max_depth_location = gl.get_uniform_location(program, "u_max_depth");
             let octree_data_location = gl.get_uniform_location(program, "u_octree_data");
             let octree_data_size_location = gl.get_uniform_location(program, "u_octree_data_size");
+            let octree_texture_width_location =
+                gl.get_uniform_location(program, "u_octree_texture_width");
             let octree_size_location = gl.get_uniform_location(program, "u_octree_size");
             let material_palette_location = gl.get_uniform_location(program, "u_material_palette");
             let disable_lighting_location = gl.get_uniform_location(program, "u_disable_lighting");
@@ -353,6 +377,7 @@ impl GlTracerGl {
                 vao,
                 octree_texture: Some(texture),
                 octree_data_size: bcf_data.len() as u32,
+                octree_texture_width: tex_width as u32,
                 resolution_location,
                 time_location,
                 camera_pos_location,
@@ -361,6 +386,7 @@ impl GlTracerGl {
                 max_depth_location,
                 octree_data_location,
                 octree_data_size_location,
+                octree_texture_width_location,
                 octree_size_location,
                 material_palette_location,
                 material_palette_texture,
@@ -463,6 +489,9 @@ impl GlTracerGl {
             if let Some(loc) = &self.octree_data_size_location {
                 gl.uniform_1_u32(Some(loc), self.octree_data_size);
             }
+            if let Some(loc) = &self.octree_texture_width_location {
+                gl.uniform_1_u32(Some(loc), self.octree_texture_width);
+            }
             if let Some(loc) = &self.octree_size_location {
                 gl.uniform_1_i32(Some(loc), 8); // Octree bounds size
             }
@@ -553,6 +582,9 @@ impl GlTracerGl {
             }
             if let Some(loc) = &self.octree_data_size_location {
                 gl.uniform_1_u32(Some(loc), self.octree_data_size);
+            }
+            if let Some(loc) = &self.octree_texture_width_location {
+                gl.uniform_1_u32(Some(loc), self.octree_texture_width);
             }
             if let Some(loc) = &self.octree_size_location {
                 gl.uniform_1_i32(Some(loc), 8); // Octree bounds size

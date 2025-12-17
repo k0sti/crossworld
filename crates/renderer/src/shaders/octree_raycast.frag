@@ -13,9 +13,10 @@ uniform vec4 u_camera_rot;  // quaternion (x, y, z, w)
 uniform bool u_use_camera;
 uniform int u_max_depth;
 
-// BCF octree data (stored as 1D-like 2D texture)
+// BCF octree data (stored as 2D texture for large data support)
 uniform usampler2D u_octree_data;
 uniform uint u_octree_data_size;  // Size of BCF data in bytes
+uniform uint u_octree_texture_width;  // Width of texture (for 2D coordinate conversion)
 
 uniform sampler2D u_material_palette; // Material palette (128 entries)
 uniform bool u_disable_lighting; // If true, output pure material colors without lighting
@@ -203,9 +204,12 @@ uint readU8(uint offset, inout uint error_material) {
         error_material = 2u; // Material 2 = bounds/pointer errors
         return 0u;
     }
-    // 1D-like 2D texture: width = data_size, height = 1
+    // Convert 1D offset to 2D texture coordinates
+    // For large data, texture is stored as width x height 2D texture
+    int x = int(offset % u_octree_texture_width);
+    int y = int(offset / u_octree_texture_width);
     // Use texelFetch for direct integer access
-    return texelFetch(u_octree_data, ivec2(int(offset), 0), 0).r;
+    return texelFetch(u_octree_data, ivec2(x, y), 0).r;
 }
 
 // Read multi-byte pointer (little-endian)

@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Configuration for fabric generation
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FabricConfig {
     /// Magnitude at origin (|Q| < 1 = inside/solid)
     /// Typical value: 0.5
@@ -44,7 +44,7 @@ impl Default for FabricConfig {
 
 /// Additive state per depth level
 /// Applied as noise/variation to quaternion values at each depth
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct AdditiveState {
     /// Rotation noise in radians (applied as random axis rotation)
     pub rotation: f32,
