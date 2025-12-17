@@ -3,6 +3,7 @@
 // New module structure
 pub mod axis;
 pub mod core;
+pub mod fabric;
 pub mod io;
 pub mod material;
 pub mod mesh;
@@ -14,8 +15,8 @@ pub mod wasm;
 
 // Re-export main types from core
 pub use core::{
-    octant_char_to_index, octant_index_to_char, raycast, Cube, Hit, IVec3Ext,
-    RaycastDebugState, OCTANT_POSITIONS,
+    octant_char_to_index, octant_index_to_char, raycast, raycast_with_options, Cube, Hit, IVec3Ext,
+    RaycastDebugState, RaycastOptions, OCTANT_POSITIONS,
 };
 
 // Re-export axis types
@@ -35,6 +36,9 @@ pub use mesh::{
 
 // Re-export IO types
 pub use io::{load_vox_to_cube, parse_csm, serialize_csm, CsmError};
+
+// Re-export fabric types
+pub use fabric::{AdditiveState, FabricConfig, FabricGenerator};
 
 // Re-export render types
 pub use render::{
