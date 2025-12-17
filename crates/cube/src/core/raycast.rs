@@ -54,6 +54,14 @@ pub struct RaycastDebugState {
     pub path: Vec<CubeCoord>,
 }
 
+/// Options for controlling raycast behavior
+#[derive(Clone, Copy, Debug, Default)]
+pub struct RaycastOptions {
+    /// Maximum depth to traverse. If Some(d), nodes at depth d are treated as leaves.
+    /// None means traverse to the deepest leaf nodes.
+    pub max_depth: Option<u32>,
+}
+
 // ============================================================================
 // Raycast implementation
 // ============================================================================
@@ -62,11 +70,24 @@ impl<T: Copy + Default + PartialEq> Cube<T> {
     /// Raycast through octree
     pub fn raycast(
         &self,
+        ray_origin: Vec3,
+        ray_dir: Vec3,
+        normal: Axis,
+        coord: CubeCoord,
+        debug: Option<&mut RaycastDebugState>,
+    ) -> Option<Hit<T>> {
+        self.raycast_with_options(ray_origin, ray_dir, normal, coord, debug, &RaycastOptions::default())
+    }
+
+    /// Raycast through octree with options (including max_depth)
+    pub fn raycast_with_options(
+        &self,
         mut ray_origin: Vec3,
         ray_dir: Vec3,
         mut normal: Axis,
         coord: CubeCoord,
         mut debug: Option<&mut RaycastDebugState>,
+        options: &RaycastOptions,
     ) -> Option<Hit<T>> {
         if let Some(ref mut d) = debug {
             d.entry_count += 1;
@@ -74,6 +95,9 @@ impl<T: Copy + Default + PartialEq> Cube<T> {
                 return None;
             }
         }
+
+        // Check if we've reached max_depth - treat as leaf
+        let at_max_depth = options.max_depth.is_some_and(|max| coord.depth >= max);
 
         match self {
             Cube::Solid(value) => {
@@ -92,7 +116,7 @@ impl<T: Copy + Default + PartialEq> Cube<T> {
                 }
             }
 
-            Cube::Cubes(children) => {
+            Cube::Cubes(children) if !at_max_depth => {
                 let dir_sign = sign(ray_dir);
                 let mut octant = compute_octant(ray_origin, dir_sign);
 
@@ -110,12 +134,13 @@ impl<T: Copy + Default + PartialEq> Cube<T> {
                         depth: coord.depth + 1,
                     };
 
-                    let hit = child.raycast(
+                    let hit = child.raycast_with_options(
                         child_origin,
                         ray_dir,
                         normal,
                         child_coord,
                         debug.as_deref_mut(),
+                        options,
                     );
                     if hit.is_some() {
                         return hit;
@@ -152,6 +177,25 @@ impl<T: Copy + Default + PartialEq> Cube<T> {
                 }
             }
 
+            // At max_depth, treat Cubes as a solid node using first child's value
+            Cube::Cubes(children) => {
+                if let Some(d) = debug {
+                    d.path.push(coord);
+                }
+                // Get representative value from children (use first child's traversal)
+                let first_child_value = Self::get_representative_value(children);
+                if first_child_value != T::default() {
+                    Some(Hit {
+                        coord,
+                        value: first_child_value,
+                        normal,
+                        pos: ray_origin,
+                    })
+                } else {
+                    None
+                }
+            }
+
             // Handle other variants as solid
             _ => {
                 if let Some(d) = debug {
@@ -162,13 +206,43 @@ impl<T: Copy + Default + PartialEq> Cube<T> {
         }
     }
 
+    /// Get a representative value from children (for max_depth early termination)
+    fn get_representative_value(children: &[std::rc::Rc<Cube<T>>; 8]) -> T {
+        // Use first non-default value found, or default if all empty
+        for child in children.iter() {
+            match &**child {
+                Cube::Solid(v) if *v != T::default() => return *v,
+                Cube::Cubes(grandchildren) => {
+                    let v = Self::get_representative_value(grandchildren);
+                    if v != T::default() {
+                        return v;
+                    }
+                }
+                _ => {}
+            }
+        }
+        T::default()
+    }
+
     /// Optimized raycast for axis-aligned rays
     pub fn raycast_axis(
         &self,
         ray_origin: Vec3,
         ray_axis: Axis,
         coord: CubeCoord,
+        debug: Option<&mut RaycastDebugState>,
+    ) -> Option<Hit<T>> {
+        self.raycast_axis_with_options(ray_origin, ray_axis, coord, debug, &RaycastOptions::default())
+    }
+
+    /// Optimized raycast for axis-aligned rays with options (including max_depth)
+    pub fn raycast_axis_with_options(
+        &self,
+        ray_origin: Vec3,
+        ray_axis: Axis,
+        coord: CubeCoord,
         mut debug: Option<&mut RaycastDebugState>,
+        options: &RaycastOptions,
     ) -> Option<Hit<T>> {
         if let Some(ref mut d) = debug {
             d.entry_count += 1;
@@ -176,6 +250,9 @@ impl<T: Copy + Default + PartialEq> Cube<T> {
                 return None;
             }
         }
+
+        // Check if we've reached max_depth - treat as leaf
+        let at_max_depth = options.max_depth.is_some_and(|max| coord.depth >= max);
 
         match self {
             Cube::Solid(value) => {
@@ -194,7 +271,7 @@ impl<T: Copy + Default + PartialEq> Cube<T> {
                 }
             }
 
-            Cube::Cubes(children) => {
+            Cube::Cubes(children) if !at_max_depth => {
                 let dir_sign = ray_axis.to_vec3();
                 let mut octant = compute_octant(ray_origin, dir_sign);
                 let i = ray_axis.index();
@@ -211,11 +288,12 @@ impl<T: Copy + Default + PartialEq> Cube<T> {
                         depth: coord.depth + 1,
                     };
 
-                    let hit = child.raycast_axis(
+                    let hit = child.raycast_axis_with_options(
                         child_origin,
                         ray_axis,
                         child_coord,
                         debug.as_deref_mut(),
+                        options,
                     );
                     if hit.is_some() {
                         return hit;
@@ -228,6 +306,24 @@ impl<T: Copy + Default + PartialEq> Cube<T> {
                     if octant[i] < 0 || octant[i] > 1 {
                         return None;
                     }
+                }
+            }
+
+            // At max_depth, treat Cubes as a solid node
+            Cube::Cubes(children) => {
+                if let Some(d) = debug {
+                    d.path.push(coord);
+                }
+                let first_child_value = Self::get_representative_value(children);
+                if first_child_value != T::default() {
+                    Some(Hit {
+                        coord,
+                        value: first_child_value,
+                        normal: ray_axis.flip(),
+                        pos: ray_origin,
+                    })
+                } else {
+                    None
                 }
             }
 
@@ -252,6 +348,17 @@ pub fn raycast<T: Copy + Default + PartialEq>(
     ray_origin: Vec3,
     ray_dir: Vec3,
     debug: Option<&mut RaycastDebugState>,
+) -> Option<Hit<T>> {
+    raycast_with_options(root, ray_origin, ray_dir, debug, &RaycastOptions::default())
+}
+
+/// Raycast through octree from origin in direction with options
+pub fn raycast_with_options<T: Copy + Default + PartialEq>(
+    root: &Cube<T>,
+    ray_origin: Vec3,
+    ray_dir: Vec3,
+    debug: Option<&mut RaycastDebugState>,
+    options: &RaycastOptions,
 ) -> Option<Hit<T>> {
     if ray_dir == Vec3::ZERO {
         return None;
@@ -292,7 +399,7 @@ pub fn raycast<T: Copy + Default + PartialEq>(
         };
         let axis = Axis::from_index_sign(i, dir_sign[i] as i32);
 
-        root.raycast_axis(
+        root.raycast_axis_with_options(
             ray_origin,
             axis,
             CubeCoord {
@@ -300,6 +407,7 @@ pub fn raycast<T: Copy + Default + PartialEq>(
                 depth: 0,
             },
             debug,
+            options,
         )
     } else {
         // Default entry normal
@@ -332,7 +440,7 @@ pub fn raycast<T: Copy + Default + PartialEq>(
             entry_axis = Axis::from_index_sign(i, -dir_sign[i] as i32);
         }
 
-        root.raycast(
+        root.raycast_with_options(
             ray_origin,
             ray_dir,
             entry_axis,
@@ -341,6 +449,82 @@ pub fn raycast<T: Copy + Default + PartialEq>(
                 depth: 0,
             },
             debug,
+            options,
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::rc::Rc;
+
+    #[test]
+    fn test_raycast_max_depth() {
+        // Create a 3-level deep cube
+        let inner = Cube::cubes([
+            Rc::new(Cube::Solid(1)),
+            Rc::new(Cube::Solid(2)),
+            Rc::new(Cube::Solid(3)),
+            Rc::new(Cube::Solid(4)),
+            Rc::new(Cube::Solid(5)),
+            Rc::new(Cube::Solid(6)),
+            Rc::new(Cube::Solid(7)),
+            Rc::new(Cube::Solid(8)),
+        ]);
+
+        let outer: Cube<u8> = Cube::cubes([
+            Rc::new(inner),
+            Rc::new(Cube::Solid(20)),
+            Rc::new(Cube::Solid(30)),
+            Rc::new(Cube::Solid(40)),
+            Rc::new(Cube::Solid(50)),
+            Rc::new(Cube::Solid(60)),
+            Rc::new(Cube::Solid(70)),
+            Rc::new(Cube::Solid(80)),
+        ]);
+
+        // Ray from outside, pointing towards center
+        let ray_origin = Vec3::new(-2.0, 0.0, 0.0);
+        let ray_dir = Vec3::new(1.0, 0.0, 0.0);
+
+        // Without max_depth, should hit deepest leaf
+        let hit_full = raycast(&outer, ray_origin, ray_dir, None);
+        assert!(hit_full.is_some());
+        let hit_full = hit_full.unwrap();
+        assert!(hit_full.coord.depth >= 2, "Should reach depth 2 or more");
+
+        // With max_depth=1, should stop at depth 1
+        let options = RaycastOptions { max_depth: Some(1) };
+        let hit_limited = raycast_with_options(&outer, ray_origin, ray_dir, None, &options);
+        assert!(hit_limited.is_some());
+        let hit_limited = hit_limited.unwrap();
+        assert_eq!(hit_limited.coord.depth, 1, "Should stop at depth 1");
+    }
+
+    #[test]
+    fn test_raycast_max_depth_zero() {
+        // With max_depth=0, the root cube should be treated as a leaf
+        let cube: Cube<u8> = Cube::cubes([
+            Rc::new(Cube::Solid(1)),
+            Rc::new(Cube::Solid(2)),
+            Rc::new(Cube::Solid(3)),
+            Rc::new(Cube::Solid(4)),
+            Rc::new(Cube::Solid(5)),
+            Rc::new(Cube::Solid(6)),
+            Rc::new(Cube::Solid(7)),
+            Rc::new(Cube::Solid(8)),
+        ]);
+
+        let ray_origin = Vec3::new(-2.0, 0.0, 0.0);
+        let ray_dir = Vec3::new(1.0, 0.0, 0.0);
+
+        let options = RaycastOptions { max_depth: Some(0) };
+        let hit = raycast_with_options(&cube, ray_origin, ray_dir, None, &options);
+        assert!(hit.is_some());
+        let hit = hit.unwrap();
+        assert_eq!(hit.coord.depth, 0, "Should stop at depth 0");
+        // Value should be representative (first non-zero found)
+        assert!(hit.value > 0, "Should have a representative value");
     }
 }

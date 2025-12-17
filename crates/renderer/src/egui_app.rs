@@ -4,12 +4,11 @@
 //! five different cube renderers (CPU, GL, BCF CPU, GPU Compute, and Mesh)
 //! with diff comparison capabilities.
 
+use cube::FabricConfig;
 use egui::{ColorImage, TextureHandle, TextureOptions};
 use glow::*;
-use renderer::scenes::{create_cube_from_id, get_model, get_model_ids};
-use renderer::{
-    BcfTracer, Camera, ComputeTracer, CpuTracer, GlTracer, MeshRenderer, Renderer,
-};
+use renderer::scenes::{create_cube_from_id, get_fabric_config, get_model, get_single_cube_config};
+use renderer::{BcfTracer, Camera, ComputeTracer, CpuTracer, GlTracer, MeshRenderer, Renderer};
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -59,6 +58,26 @@ impl DiffSource {
             "compute" | "gpu" => Some(DiffSource::Gpu),
             "mesh" => Some(DiffSource::Mesh),
             _ => None,
+        }
+    }
+}
+
+/// State for collapsible model panel sections
+#[derive(Debug, Clone)]
+struct ModelPanelState {
+    single_cube_expanded: bool,
+    vox_expanded: bool,
+    csm_expanded: bool,
+    fabric_expanded: bool,
+}
+
+impl Default for ModelPanelState {
+    fn default() -> Self {
+        Self {
+            single_cube_expanded: true,
+            vox_expanded: false,
+            csm_expanded: true,
+            fabric_expanded: false,
         }
     }
 }
@@ -129,6 +148,13 @@ pub struct CubeRendererApp {
     show_gl_errors: bool,
     current_model_id: String,
     single_voxel_material: u8, // Material value for SingleRedVoxel model (0-255)
+
+    // Model selector panel state
+    model_panel_expanded: ModelPanelState,
+
+    // Fabric parameters (editable copy)
+    fabric_config: FabricConfig,
+    fabric_max_depth: u32,
 
     // Mesh caching settings
     mesh_cache_enabled: bool,
@@ -292,7 +318,10 @@ impl CubeRendererApp {
             disable_lighting: false,
             show_gl_errors: false,
             current_model_id: default_model_id.to_string(),
-            single_voxel_material: 224, // Default: red (R2G3B2 encoded)
+            single_voxel_material: get_single_cube_config().default_material,
+            model_panel_expanded: ModelPanelState::default(),
+            fabric_config: get_fabric_config().clone(),
+            fabric_max_depth: get_fabric_config().max_depth,
             mesh_cache_enabled: true,
             mesh_needs_regeneration: true, // Start with regeneration needed
             mesh_upload_time_ms: 0.0,
@@ -893,7 +922,11 @@ impl CubeRendererApp {
 
         self.update_fps();
 
-        // Top panel
+        // Track if model needs reloading
+        let mut model_changed = false;
+        let mut material_changed = false;
+
+        // Top panel - rendering controls only
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.heading("Cube Renderer");
@@ -906,6 +939,11 @@ impl CubeRendererApp {
                     "Resolution: {}x{}",
                     self.render_size.0, self.render_size.1
                 ));
+                ui.separator();
+                let current_model_name = get_model(&self.current_model_id)
+                    .map(|m| m.name.as_str())
+                    .unwrap_or("Unknown");
+                ui.label(format!("Model: {}", current_model_name));
             });
 
             ui.horizontal_wrapped(|ui| {
@@ -922,129 +960,204 @@ impl CubeRendererApp {
                 if ui.button("Regen Mesh").clicked() {
                     self.mesh_needs_regeneration = true;
                 }
+            });
+        });
+
+        // Left side panel - model selector
+        egui::SidePanel::left("model_panel")
+            .default_width(200.0)
+            .resizable(true)
+            .show(ctx, |ui| {
+                ui.heading("Models");
                 ui.separator();
 
-                // Model selector
-                ui.label("Test Model:");
-                let mut model_changed = false;
-                let current_model_name = get_model(&self.current_model_id)
-                    .map(|m| m.name.as_str())
-                    .unwrap_or("Unknown");
-                egui::ComboBox::from_label("")
-                    .selected_text(current_model_name)
-                    .show_ui(ui, |ui| {
-                        for model_id in get_model_ids() {
-                            let model_entry = get_model(model_id).unwrap();
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    // Single Cube category
+                    let single_header = egui::CollapsingHeader::new("Single Cube")
+                        .default_open(self.model_panel_expanded.single_cube_expanded)
+                        .show(ui, |ui| {
                             if ui
-                                .selectable_value(&mut self.current_model_id, model_id.to_string(), &model_entry.name)
+                                .selectable_label(self.current_model_id == "single", "Single Voxel")
                                 .clicked()
                             {
+                                self.current_model_id = "single".to_string();
                                 model_changed = true;
                             }
-                        }
-                    });
 
-                // Reload scene if model changed
-                if model_changed {
-                    let new_cube = create_cube_from_id(&self.current_model_id).unwrap();
-                    self.current_cube = new_cube.clone();
-                    self.mesh_needs_regeneration = true; // Mark mesh for regeneration
+                            // Material selector (only when single is selected)
+                            if self.current_model_id == "single" {
+                                ui.add_space(4.0);
+                                ui.label("Material:");
 
-                    self.gl_renderer = GlTracer::new(new_cube.clone());
-                    unsafe {
-                        if let Err(e) = self.gl_renderer.init_gl(gl) {
-                            eprintln!("Failed to reinitialize GL renderer: {}", e);
-                        }
-                    }
+                                // Preset dropdown
+                                egui::ComboBox::from_id_salt("single_material_preset")
+                                    .selected_text(format!("{}", self.single_voxel_material))
+                                    .show_ui(ui, |ui| {
+                                        let presets = [
+                                            (0, "Empty"),
+                                            (1, "Error: Hot Pink"),
+                                            (224, "R2G3B2: Red"),
+                                            (252, "R2G3B2: Yellow"),
+                                            (156, "R2G3B2: Green"),
+                                            (131, "R2G3B2: Blue"),
+                                        ];
+                                        for (value, name) in presets {
+                                            if ui
+                                                .selectable_value(
+                                                    &mut self.single_voxel_material,
+                                                    value,
+                                                    name,
+                                                )
+                                                .clicked()
+                                            {
+                                                material_changed = true;
+                                            }
+                                        }
+                                    });
 
-                    self.bcf_cpu_renderer = BcfTracer::new_from_cube(new_cube.clone());
-
-                    self.gpu_renderer = ComputeTracer::new(new_cube.clone());
-                    unsafe {
-                        if let Err(e) = self.gpu_renderer.init_gl(gl) {
-                            eprintln!("Failed to reinitialize GPU renderer: {}", e);
-                            self.gpu_render_time_ms = -1.0;
-                        }
-                    }
-
-                    // CPU renderer will be updated on next frame via sync thread
-                }
-
-                // Material selector for Single Red Voxel (depth 0) model
-                if self.current_model_id == "single" {
-                    ui.separator();
-                    ui.label("Material:");
-                    let mut material_changed = false;
-
-                    // Preset material buttons
-                    egui::ComboBox::from_label("Preset")
-                        .selected_text(format!("{}", self.single_voxel_material))
-                        .show_ui(ui, |ui| {
-                            let presets = [
-                                (0, "Empty"),
-                                (1, "Error: Hot Pink"),
-                                (2, "Error: Red-Orange"),
-                                (3, "Error: Orange"),
-                                (4, "Error: Sky Blue"),
-                                (5, "Error: Purple"),
-                                (6, "Error: Spring Green"),
-                                (7, "Error: Yellow"),
-                                (10, "Palette: Index 10"),
-                                (50, "Palette: Index 50"),
-                                (100, "Palette: Index 100"),
-                                (224, "R2G3B2: Red"),
-                                (252, "R2G3B2: Yellow"),
-                            ];
-
-                            for (value, name) in presets {
+                                // Slider for fine control
+                                let mut mat_val = self.single_voxel_material as i32;
                                 if ui
-                                    .selectable_value(&mut self.single_voxel_material, value, name)
-                                    .clicked()
+                                    .add(egui::Slider::new(&mut mat_val, 0..=255).text(""))
+                                    .changed()
                                 {
+                                    self.single_voxel_material = mat_val as u8;
                                     material_changed = true;
                                 }
                             }
                         });
+                    self.model_panel_expanded.single_cube_expanded = single_header.fully_open();
 
-                    // Numeric slider for fine control
-                    let mut mat_val = self.single_voxel_material as i32;
-                    if ui
-                        .add(egui::Slider::new(&mut mat_val, 0..=255).text("Value"))
-                        .changed()
-                    {
-                        self.single_voxel_material = mat_val as u8;
-                        material_changed = true;
-                    }
-
-                    // Reload if material changed
-                    if material_changed {
-                        use cube::Cube;
-                        let new_cube = Rc::new(Cube::Solid(self.single_voxel_material));
-                        self.current_cube = new_cube.clone();
-                        self.mesh_needs_regeneration = true; // Mark mesh for regeneration
-
-                        self.gl_renderer = GlTracer::new(new_cube.clone());
-                        unsafe {
-                            if let Err(e) = self.gl_renderer.init_gl(gl) {
-                                eprintln!("Failed to reinitialize GL renderer: {}", e);
+                    // CSM Models category
+                    let csm_header = egui::CollapsingHeader::new("CSM Models")
+                        .default_open(self.model_panel_expanded.csm_expanded)
+                        .show(ui, |ui| {
+                            let csm_models = ["octa", "extended", "depth3", "quad", "layer", "sdf", "generated", "test_expansion"];
+                            for model_id in csm_models {
+                                if let Some(model) = get_model(model_id) {
+                                    if ui
+                                        .selectable_label(self.current_model_id == model_id, &model.name)
+                                        .clicked()
+                                    {
+                                        self.current_model_id = model_id.to_string();
+                                        model_changed = true;
+                                    }
+                                }
                             }
-                        }
+                        });
+                    self.model_panel_expanded.csm_expanded = csm_header.fully_open();
 
-                        self.bcf_cpu_renderer = BcfTracer::new_from_cube(new_cube.clone());
-
-                        self.gpu_renderer = ComputeTracer::new(new_cube.clone());
-                        unsafe {
-                            if let Err(e) = self.gpu_renderer.init_gl(gl) {
-                                eprintln!("Failed to reinitialize GPU renderer: {}", e);
-                                self.gpu_render_time_ms = -1.0;
+                    // VOX Models category
+                    let vox_header = egui::CollapsingHeader::new("VOX Models")
+                        .default_open(self.model_panel_expanded.vox_expanded)
+                        .show(ui, |ui| {
+                            let vox_models = ["vox_alien_bot", "vox_army", "vox_naked"];
+                            for model_id in vox_models {
+                                if let Some(model) = get_model(model_id) {
+                                    if ui
+                                        .selectable_label(self.current_model_id == model_id, &model.name)
+                                        .clicked()
+                                    {
+                                        self.current_model_id = model_id.to_string();
+                                        model_changed = true;
+                                    }
+                                }
                             }
-                        }
+                        });
+                    self.model_panel_expanded.vox_expanded = vox_header.fully_open();
 
-                        // CPU renderer will be updated on next frame via sync thread
-                    }
-                }
+                    // Fabric Models category
+                    let fabric_header = egui::CollapsingHeader::new("Fabric Models")
+                        .default_open(self.model_panel_expanded.fabric_expanded)
+                        .show(ui, |ui| {
+                            if ui
+                                .selectable_label(self.current_model_id == "fabric", "Procedural Sphere")
+                                .clicked()
+                            {
+                                self.current_model_id = "fabric".to_string();
+                                model_changed = true;
+                            }
+
+                            // Fabric parameters (only when fabric is selected)
+                            if self.current_model_id == "fabric" {
+                                ui.add_space(4.0);
+                                ui.label("Parameters:");
+
+                                // Max depth slider
+                                let mut depth = self.fabric_max_depth as i32;
+                                if ui
+                                    .add(egui::Slider::new(&mut depth, 1..=7).text("Max Depth"))
+                                    .changed()
+                                {
+                                    self.fabric_max_depth = depth as u32;
+                                    model_changed = true;
+                                }
+
+                                // Root magnitude
+                                if ui
+                                    .add(
+                                        egui::Slider::new(&mut self.fabric_config.root_magnitude, 0.1..=0.9)
+                                            .text("Root Mag"),
+                                    )
+                                    .changed()
+                                {
+                                    model_changed = true;
+                                }
+
+                                // Boundary magnitude
+                                if ui
+                                    .add(
+                                        egui::Slider::new(&mut self.fabric_config.boundary_magnitude, 1.1..=5.0)
+                                            .text("Boundary"),
+                                    )
+                                    .changed()
+                                {
+                                    model_changed = true;
+                                }
+
+                                // Surface radius
+                                if ui
+                                    .add(
+                                        egui::Slider::new(&mut self.fabric_config.surface_radius, 0.3..=1.5)
+                                            .text("Surface R"),
+                                    )
+                                    .changed()
+                                {
+                                    model_changed = true;
+                                }
+                            }
+                        });
+                    self.model_panel_expanded.fabric_expanded = fabric_header.fully_open();
+                });
             });
-        });
+
+        // Handle model/material changes
+        if model_changed {
+            self.reload_model(gl);
+        } else if material_changed && self.current_model_id == "single" {
+            // Material change for single cube
+            use cube::Cube;
+            let new_cube = Rc::new(Cube::Solid(self.single_voxel_material));
+            self.current_cube = new_cube.clone();
+            self.mesh_needs_regeneration = true;
+
+            self.gl_renderer = GlTracer::new(new_cube.clone());
+            unsafe {
+                if let Err(e) = self.gl_renderer.init_gl(gl) {
+                    eprintln!("Failed to reinitialize GL renderer: {}", e);
+                }
+            }
+
+            self.bcf_cpu_renderer = BcfTracer::new_from_cube(new_cube.clone());
+
+            self.gpu_renderer = ComputeTracer::new(new_cube.clone());
+            unsafe {
+                if let Err(e) = self.gpu_renderer.init_gl(gl) {
+                    eprintln!("Failed to reinitialize GPU renderer: {}", e);
+                    self.gpu_render_time_ms = -1.0;
+                }
+            }
+        }
 
         // Main panel with 3x2 grid
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -1343,6 +1456,87 @@ impl CubeRendererApp {
                 ui.label("N/A");
             }
         });
+    }
+
+    /// Reload the current model into all renderers
+    fn reload_model(&mut self, gl: &Arc<Context>) {
+        let new_cube = if self.current_model_id == "fabric" {
+            // Generate fabric model
+            use cube::FabricGenerator;
+            let generator = FabricGenerator::new(self.fabric_config.clone());
+            let fabric_cube = generator.generate_cube(self.fabric_max_depth);
+            // Convert Cube<Quat> to Cube<u8> using surface detection
+            Rc::new(self.fabric_to_material_cube(&fabric_cube, self.fabric_max_depth))
+        } else if self.current_model_id == "single" {
+            // Single cube with current material
+            use cube::Cube;
+            Rc::new(Cube::Solid(self.single_voxel_material))
+        } else {
+            // Load from config
+            match create_cube_from_id(&self.current_model_id) {
+                Ok(cube) => cube,
+                Err(e) => {
+                    eprintln!("Failed to load model '{}': {}", self.current_model_id, e);
+                    return;
+                }
+            }
+        };
+
+        self.current_cube = new_cube.clone();
+        self.mesh_needs_regeneration = true;
+
+        self.gl_renderer = GlTracer::new(new_cube.clone());
+        unsafe {
+            if let Err(e) = self.gl_renderer.init_gl(gl) {
+                eprintln!("Failed to reinitialize GL renderer: {}", e);
+            }
+        }
+
+        self.bcf_cpu_renderer = BcfTracer::new_from_cube(new_cube.clone());
+
+        self.gpu_renderer = ComputeTracer::new(new_cube.clone());
+        unsafe {
+            if let Err(e) = self.gpu_renderer.init_gl(gl) {
+                eprintln!("Failed to reinitialize GPU renderer: {}", e);
+                self.gpu_render_time_ms = -1.0;
+            }
+        }
+    }
+
+    /// Convert a fabric Cube<Quat> to Cube<u8> using surface detection
+    fn fabric_to_material_cube(&self, fabric_cube: &cube::Cube<glam::Quat>, depth: u32) -> cube::Cube<u8> {
+        use cube::fabric::quaternion_to_color;
+        use cube::Cube;
+
+        match fabric_cube {
+            Cube::Solid(quat) => {
+                let magnitude = quat.length();
+                if magnitude < 1.0 {
+                    // Inside: solid voxel
+                    // Convert quaternion rotation to color
+                    let [r, g, b] = quaternion_to_color(*quat);
+                    // Encode as R2G3B2
+                    let r2 = (r >> 6) & 0x03;
+                    let g3 = (g >> 5) & 0x07;
+                    let b2 = (b >> 6) & 0x03;
+                    Cube::Solid((r2 << 6) | (g3 << 3) | b2 | 0x08) // Add 0x08 to avoid error colors
+                } else {
+                    // Outside: empty
+                    Cube::Solid(0)
+                }
+            }
+            Cube::Cubes(children) if depth > 0 => {
+                let new_children: [Rc<Cube<u8>>; 8] = std::array::from_fn(|i| {
+                    Rc::new(self.fabric_to_material_cube(&children[i], depth - 1))
+                });
+                Cube::Cubes(Box::new(new_children))
+            }
+            Cube::Cubes(children) => {
+                // At max depth, evaluate first child
+                self.fabric_to_material_cube(&children[0], 0)
+            }
+            _ => Cube::Solid(0),
+        }
     }
 
     fn handle_camera_input(&mut self, response: &egui::Response) {

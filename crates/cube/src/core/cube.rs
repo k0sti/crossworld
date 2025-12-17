@@ -159,6 +159,18 @@ impl<T> Cube<T> {
         }
     }
 
+    /// Get the value stored in this cube node.
+    ///
+    /// Returns `Some(&T)` for `Solid` nodes, `None` for subdivided nodes (`Cubes`, `Quad`, `Layers`).
+    /// Use this for generic value retrieval across any `Cube<T>` type.
+    #[inline]
+    pub fn value(&self) -> Option<&T> {
+        match self {
+            Cube::Solid(v) => Some(v),
+            Cube::Cubes(_) | Cube::Quad { .. } | Cube::Layers { .. } => None,
+        }
+    }
+
     /// Get cube at specific coordinate
     pub fn get(&self, cube_coord: CubeCoord) -> &Cube<T> {
         if cube_coord.depth == 0 {
@@ -1259,5 +1271,102 @@ mod tests {
 
         let bottom = expanded.get(coord);
         assert_eq!(*bottom, Cube::Solid(1), "Bottom should have Y=0 material");
+    }
+
+    #[test]
+    fn test_cube_value_solid() {
+        // Test value() on Solid variant
+        let cube: Cube<u8> = Cube::Solid(42);
+        assert_eq!(cube.value(), Some(&42));
+
+        // Test with different types
+        let cube_f32: Cube<f32> = Cube::Solid(3.14);
+        assert_eq!(cube_f32.value(), Some(&3.14));
+
+        let cube_string: Cube<String> = Cube::Solid("hello".to_string());
+        assert_eq!(cube_string.value(), Some(&"hello".to_string()));
+    }
+
+    #[test]
+    fn test_cube_value_cubes() {
+        // Test value() on Cubes variant - should return None
+        let cube: Cube<u8> = Cube::cubes([
+            Rc::new(Cube::Solid(1)),
+            Rc::new(Cube::Solid(2)),
+            Rc::new(Cube::Solid(3)),
+            Rc::new(Cube::Solid(4)),
+            Rc::new(Cube::Solid(5)),
+            Rc::new(Cube::Solid(6)),
+            Rc::new(Cube::Solid(7)),
+            Rc::new(Cube::Solid(8)),
+        ]);
+        assert_eq!(cube.value(), None);
+    }
+
+    #[test]
+    fn test_cube_value_quad() {
+        // Test value() on Quad variant - should return None
+        let cube: Cube<u8> = Cube::quad(
+            Axis::PosX,
+            [
+                Rc::new(Cube::Solid(1)),
+                Rc::new(Cube::Solid(2)),
+                Rc::new(Cube::Solid(3)),
+                Rc::new(Cube::Solid(4)),
+            ],
+        );
+        assert_eq!(cube.value(), None);
+    }
+
+    #[test]
+    fn test_cube_value_layers() {
+        // Test value() on Layers variant - should return None
+        let cube: Cube<u8> = Cube::layers(
+            Axis::PosY,
+            [Rc::new(Cube::Solid(1)), Rc::new(Cube::Solid(2))],
+        );
+        assert_eq!(cube.value(), None);
+    }
+
+    #[test]
+    fn test_cube_value_nested() {
+        // Test value() on nested structure
+        let inner = Cube::cubes([
+            Rc::new(Cube::Solid(10)),
+            Rc::new(Cube::Solid(20)),
+            Rc::new(Cube::Solid(30)),
+            Rc::new(Cube::Solid(40)),
+            Rc::new(Cube::Solid(50)),
+            Rc::new(Cube::Solid(60)),
+            Rc::new(Cube::Solid(70)),
+            Rc::new(Cube::Solid(80)),
+        ]);
+
+        let outer: Cube<u8> = Cube::cubes([
+            Rc::new(inner),
+            Rc::new(Cube::Solid(2)),
+            Rc::new(Cube::Solid(3)),
+            Rc::new(Cube::Solid(4)),
+            Rc::new(Cube::Solid(5)),
+            Rc::new(Cube::Solid(6)),
+            Rc::new(Cube::Solid(7)),
+            Rc::new(Cube::Solid(8)),
+        ]);
+
+        // Outer should return None (it's a Cubes variant)
+        assert_eq!(outer.value(), None);
+
+        // Children that are Solid should return Some
+        assert_eq!(outer.get_child(1).unwrap().value(), Some(&2));
+        assert_eq!(outer.get_child(7).unwrap().value(), Some(&8));
+
+        // Child that is Cubes should return None
+        assert_eq!(outer.get_child(0).unwrap().value(), None);
+
+        // Grandchildren should return their values
+        if let Cube::Cubes(children) = &**outer.get_child(0).unwrap() {
+            assert_eq!(children[0].value(), Some(&10));
+            assert_eq!(children[7].value(), Some(&80));
+        }
     }
 }
