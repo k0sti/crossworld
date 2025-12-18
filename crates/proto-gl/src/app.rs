@@ -88,7 +88,12 @@ pub struct ProtoGlApp {
     // Debug toggles
     render_world: bool,
     render_objects: bool,
+    wireframe_objects: bool,
     show_debug_info: bool,
+    /// Use mesh renderer for world instead of raytracer
+    world_use_mesh: bool,
+    /// World mesh index (when using mesh renderer)
+    world_mesh_index: Option<usize>,
 
     // Debug mode (single frame)
     debug_mode: bool,
@@ -156,7 +161,10 @@ impl ProtoGlApp {
             config,
             render_world: true,
             render_objects: true,
+            wireframe_objects: false,
             show_debug_info: true,
+            world_use_mesh: true, // Default to mesh renderer
+            world_mesh_index: None,
             debug_mode,
             frame_count: 0,
             capture_frame_path,
@@ -340,6 +348,20 @@ impl ApplicationHandler for ProtoGlApp {
             }
         }
 
+        // Upload world mesh for mesh renderer mode
+        let world_mesh_index = unsafe {
+            match mesh_renderer.upload_mesh(&gl, &world_cube_rc, world_depth) {
+                Ok(idx) => {
+                    println!("  Uploaded world mesh (index: {})", idx);
+                    Some(idx)
+                }
+                Err(e) => {
+                    eprintln!("  Warning: Failed to upload world mesh: {}", e);
+                    None
+                }
+            }
+        };
+
         println!("Proto-GL Physics Viewer initialized!");
         println!("  World depth: {}", world_depth);
         println!("  Camera distance: {:.1}", self.orbit_camera.distance);
@@ -365,6 +387,7 @@ impl ApplicationHandler for ProtoGlApp {
         self.object_mesh_indices = object_mesh_indices;
         self.world_cube = Some(world_cube);
         self.world_depth = world_depth;
+        self.world_mesh_index = world_mesh_index;
         self.physics_world = Some(physics_world);
         self.camera_object = Some(camera_object);
         self.objects = objects;
@@ -647,15 +670,40 @@ impl ProtoGlApp {
             },
         };
 
-        // Render world using GlTracer (if enabled)
+        // Render world (if enabled)
         if self.render_world {
-            unsafe {
-                gl_tracer.render_to_gl_with_camera(
-                    gl,
-                    size.width as i32,
-                    size.height as i32,
-                    &camera,
-                );
+            if self.world_use_mesh {
+                // Use mesh renderer for world
+                if let (Some(mesh_renderer), Some(world_mesh_idx)) =
+                    (self.mesh_renderer.as_ref(), self.world_mesh_index)
+                {
+                    // World is at origin with scale 1.0 (unit cube [0,1]³)
+                    let position = glam::Vec3::new(0.5, 0.5, 0.5); // Center of unit cube
+                    let rotation = glam::Quat::IDENTITY;
+                    let scale = 1.0;
+                    unsafe {
+                        mesh_renderer.render_mesh_with_scale(
+                            gl,
+                            world_mesh_idx,
+                            position,
+                            rotation,
+                            scale,
+                            &camera,
+                            size.width as i32,
+                            size.height as i32,
+                        );
+                    }
+                }
+            } else {
+                // Use raytracer for world
+                unsafe {
+                    gl_tracer.render_to_gl_with_camera(
+                        gl,
+                        size.width as i32,
+                        size.height as i32,
+                        &camera,
+                    );
+                }
             }
         }
 
@@ -683,6 +731,7 @@ impl ProtoGlApp {
                     // object_size is the desired edge length in normalized world units
                     let scale = self.config.spawning.object_size;
                     unsafe {
+                        // Render solid mesh
                         mesh_renderer.render_mesh_with_scale(
                             gl,
                             self.object_mesh_indices[i],
@@ -693,6 +742,18 @@ impl ProtoGlApp {
                             size.width as i32,
                             size.height as i32,
                         );
+                        // Render wireframe bounding box if enabled
+                        if self.wireframe_objects {
+                            mesh_renderer.render_wireframe_box(
+                                gl,
+                                position,
+                                rotation,
+                                scale,
+                                &camera,
+                                size.width as i32,
+                                size.height as i32,
+                            );
+                        }
                     }
                 }
             }
@@ -730,6 +791,8 @@ impl ProtoGlApp {
             object_count: self.objects.len(),
             render_world: self.render_world,
             render_objects: self.render_objects,
+            wireframe_objects: self.wireframe_objects,
+            world_use_mesh: self.world_use_mesh,
             show_debug_info: self.show_debug_info,
             camera_mode: self.camera_mode,
         };
@@ -745,6 +808,8 @@ impl ProtoGlApp {
         // Update app state from UI
         self.render_world = ui_state.render_world;
         self.render_objects = ui_state.render_objects;
+        self.wireframe_objects = ui_state.wireframe_objects;
+        self.world_use_mesh = ui_state.world_use_mesh;
         self.show_debug_info = ui_state.show_debug_info;
 
         // Paint egui

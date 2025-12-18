@@ -16,6 +16,8 @@ pub struct UiState {
     pub object_count: usize,
     pub render_world: bool,
     pub render_objects: bool,
+    pub wireframe_objects: bool,
+    pub world_use_mesh: bool,
     pub show_debug_info: bool,
     pub camera_mode: CameraMode,
 }
@@ -59,7 +61,9 @@ pub fn render_debug_panel(ctx: &egui::Context, state: &mut UiState) {
         ui.separator();
         ui.heading("Rendering");
         ui.checkbox(&mut state.render_world, "Render World");
+        ui.checkbox(&mut state.world_use_mesh, "World Use Mesh");
         ui.checkbox(&mut state.render_objects, "Render Objects");
+        ui.checkbox(&mut state.wireframe_objects, "Wireframe Objects");
         ui.checkbox(&mut state.show_debug_info, "Show Debug Info");
 
         if state.show_debug_info {
