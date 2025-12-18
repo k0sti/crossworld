@@ -1,7 +1,92 @@
+use glam::Vec3;
 use rand::Rng;
 use crossworld_physics::{rapier3d::prelude::*, PhysicsWorld, VoxelColliderBuilder};
 use crate::config::SpawningConfig;
 use crate::models::{VoxModel, CubeObject};
+
+/// Camera object with physics body for first-person movement
+pub struct CameraObject {
+    pub body_handle: RigidBodyHandle,
+    pub collider_handle: ColliderHandle,
+}
+
+impl CameraObject {
+    /// Create a new camera object with physics
+    ///
+    /// # Arguments
+    /// * `physics_world` - Physics world to add camera to
+    /// * `position` - Initial position
+    /// * `height` - Camera capsule height
+    /// * `radius` - Camera capsule radius
+    pub fn new(
+        physics_world: &mut PhysicsWorld,
+        position: Vec3,
+        height: f32,
+        radius: f32,
+    ) -> Self {
+        // Use kinematic body for direct control with collision detection
+        let rb = RigidBodyBuilder::kinematic_position_based()
+            .translation(vector![position.x, position.y, position.z])
+            .build();
+        let rb_handle = physics_world.add_rigid_body(rb);
+
+        // Create capsule collider for the camera body
+        let capsule_half_height = (height / 2.0 - radius).max(0.0);
+        let collider = ColliderBuilder::capsule_y(capsule_half_height, radius)
+            .friction(0.0)
+            .restitution(0.0)
+            .build();
+        let coll_handle = physics_world.add_collider(collider, rb_handle);
+
+        Self {
+            body_handle: rb_handle,
+            collider_handle: coll_handle,
+        }
+    }
+
+    /// Get current position from physics body
+    pub fn position(&self, physics_world: &PhysicsWorld) -> Vec3 {
+        if let Some(body) = physics_world.get_rigid_body(self.body_handle) {
+            let pos = body.translation();
+            Vec3::new(pos.x, pos.y, pos.z)
+        } else {
+            Vec3::ZERO
+        }
+    }
+
+    /// Move the camera with physics-based collision
+    ///
+    /// # Arguments
+    /// * `physics_world` - Physics world
+    /// * `velocity` - Desired velocity
+    /// * `dt` - Delta time
+    /// * `gravity` - Gravity value (negative for downward)
+    pub fn move_with_velocity(
+        &mut self,
+        physics_world: &mut PhysicsWorld,
+        velocity: Vec3,
+        dt: f32,
+        _gravity: f32,
+    ) {
+        let current_pos = self.position(physics_world);
+
+        // For now, simple direct movement (no gravity - fly mode)
+        // This allows free movement including up/down with F/V keys
+        let target_pos = current_pos + velocity * dt;
+
+        // Set the kinematic body's next position
+        if let Some(body) = physics_world.get_rigid_body_mut(self.body_handle) {
+            body.set_next_kinematic_translation(vector![target_pos.x, target_pos.y, target_pos.z]);
+        }
+    }
+
+    /// Teleport camera to a specific position
+    pub fn set_position(&mut self, physics_world: &mut PhysicsWorld, position: Vec3) {
+        if let Some(body) = physics_world.get_rigid_body_mut(self.body_handle) {
+            body.set_translation(vector![position.x, position.y, position.z], true);
+        }
+    }
+}
 
 /// Spawn dynamic cube objects with physics
 pub fn spawn_cube_objects(
