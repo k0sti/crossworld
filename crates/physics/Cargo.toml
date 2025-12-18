@@ -16,6 +16,7 @@ wasm-opt = false
 default = []
 wasm = ["dep:wasm-bindgen", "dep:serde", "dep:serde-wasm-bindgen"]
 bevy = []
+fabric = []  # Future: SDF collision for fabric-generated cubes
 
 [dependencies]
 # Physics engine - use git version for latest features

@@ -1,15 +1,19 @@
-use cube::{
-    traverse_octree, Cube, CubeCoord, Face, NeighborGrid, NeighborView, OFFSET_BACK, OFFSET_DOWN,
-    OFFSET_FRONT, OFFSET_LEFT, OFFSET_RIGHT, OFFSET_UP,
-};
+//! Collision geometry generation from voxel cubes
+//!
+//! This module provides utilities for generating Rapier3D colliders from
+//! voxel octree structures. It uses the cube crate's face traversal to
+//! identify exposed faces and creates compound colliders from them.
+
+use crate::collision::Aabb;
+use cube::{visit_faces, visit_faces_in_region, Cube, FaceInfo, RegionBounds};
 use glam::{Quat, Vec3};
 use rapier3d::prelude::*;
 use std::rc::Rc;
 
 /// Builder for generating collision geometry from voxel cubes
 ///
-/// Uses the cube crate's traverse_with_neighbors to iterate through voxel faces
-/// and generates rectangle colliders for exposed faces.
+/// Uses the cube crate's face traversal to iterate through exposed voxel faces
+/// and generates thin cuboid colliders for each face.
 pub struct VoxelColliderBuilder {
     rectangles: Vec<FaceRectangle>,
 }
@@ -32,27 +36,28 @@ impl VoxelColliderBuilder {
 
     /// Generate a compound collider from a voxel cube
     ///
+    /// Processes all exposed faces and creates thin cuboid colliders for each.
+    ///
     /// # Arguments
     /// * `cube` - The octree cube to generate collision from
-    /// * `max_depth` - Maximum depth to traverse (higher = more detailed collision)
+    /// * `_max_depth` - Deprecated parameter (kept for API compatibility)
     ///
     /// # Returns
     /// Rapier Collider containing compound shape of all exposed faces
-    pub fn from_cube(cube: &Rc<Cube<u8>>, max_depth: u32) -> Collider {
-        Self::from_cube_region(cube, max_depth, None)
+    pub fn from_cube(cube: &Rc<Cube<u8>>, _max_depth: u32) -> Collider {
+        Self::from_cube_with_region(cube, None)
     }
 
     /// Generate a compound collider from a voxel cube with optional spatial filtering
     ///
     /// This is an optimized version that allows filtering voxels to a specific region.
-    /// Only voxels whose centers are within the given AABB will be processed.
-    /// This significantly reduces collision complexity when only a subset of the voxel
-    /// object participates in collision (e.g., when AABBs barely overlap).
+    /// Only voxels within the region bounds will be processed, significantly reducing
+    /// collision complexity when only a subset of the voxel object participates
+    /// in collision (e.g., when AABBs barely overlap).
     ///
     /// # Arguments
     /// * `cube` - The octree cube to generate collision from
-    /// * `max_depth` - Maximum depth to traverse (higher = more detailed collision)
-    /// * `region` - Optional AABB to filter voxels. If None, processes all voxels.
+    /// * `region` - Optional region bounds to filter voxels. If None, processes all voxels.
     ///
     /// # Returns
     /// Rapier Collider containing compound shape of exposed faces in the region
@@ -61,112 +66,86 @@ impl VoxelColliderBuilder {
     /// - Full collision (region = None): O(n) faces for n voxels
     /// - Filtered collision: O(k) faces for k voxels in overlap region
     /// - Typical reduction: 70-90% fewer faces for small overlap regions
-    #[cfg(not(target_arch = "wasm32"))]
-    pub fn from_cube_region(
-        cube: &Rc<Cube<u8>>,
-        _max_depth: u32,
-        region: Option<rapier3d::parry::bounding_volume::Aabb>,
-    ) -> Collider {
+    pub fn from_cube_with_region(cube: &Rc<Cube<u8>>, region: Option<&RegionBounds>) -> Collider {
         let mut builder = Self::new();
 
-        // Create neighbor grid with appropriate border materials
-        // For world terrain: solid bottom (1), empty top (0)
+        // Border materials: solid at bottom, empty at top
         let border_materials = [1, 1, 0, 0];
-        let grid = NeighborGrid::new(cube, border_materials);
 
-        // Traverse all voxels and collect face rectangles
-        traverse_octree(
-            &grid,
-            &mut |view, coord, _subleaf| {
-                // Spatial filtering: skip voxels outside region
-                if let Some(ref aabb) = region {
-                    let voxel_size = 1.0 / (1 << coord.depth) as f32;
-                    // Convert center-based coords to [0,1] range
-                    let scale = 1 << coord.depth;
-                    let world_pos = (coord.pos.as_vec3() / scale as f32 + Vec3::ONE) * 0.5;
-                    let voxel_center = world_pos + Vec3::splat(voxel_size * 0.5);
-
-                    let point =
-                        rapier3d::na::Point3::new(voxel_center.x, voxel_center.y, voxel_center.z);
-
-                    if !aabb.contains_local_point(&point) {
-                        return false; // Skip this voxel and its children
-                    }
-                }
-
-                builder.process_voxel(view, coord);
-                false // Don't subdivide further
-            },
-        );
+        match region {
+            Some(bounds) => {
+                // Use region-bounded traversal for efficiency
+                visit_faces_in_region(
+                    cube,
+                    bounds,
+                    |face_info| {
+                        builder.add_face_from_info(face_info);
+                    },
+                    border_materials,
+                );
+            }
+            None => {
+                // Full traversal
+                visit_faces(
+                    cube,
+                    |face_info| {
+                        builder.add_face_from_info(face_info);
+                    },
+                    border_materials,
+                );
+            }
+        }
 
         builder.build_compound_collider()
     }
 
-    /// WASM-compatible version that doesn't support spatial filtering
-    #[cfg(target_arch = "wasm32")]
+    /// Generate a compound collider with an AABB filter (convenience wrapper)
+    ///
+    /// # Arguments
+    /// * `cube` - The octree cube to generate collision from
+    /// * `_max_depth` - Deprecated parameter (kept for API compatibility)
+    /// * `region` - Optional AABB in local [0,1] space to filter voxels
+    ///
+    /// # Returns
+    /// Rapier Collider containing compound shape of exposed faces in the region
     pub fn from_cube_region(
         cube: &Rc<Cube<u8>>,
-        max_depth: u32,
-        _region: Option<()>, // Dummy parameter for API compatibility
+        _max_depth: u32,
+        region: Option<&Aabb>,
     ) -> Collider {
-        Self::from_cube(cube, max_depth)
-    }
-
-    /// Process a single voxel and add face rectangles for exposed faces
-    fn process_voxel(&mut self, view: NeighborView, coord: CubeCoord) {
-        let center = view.center();
-
-        // Skip empty voxels (value == 0 means empty)
-        if center.id() == 0 {
-            return;
-        }
-
-        // Check each of 6 faces
-        let faces = [
-            (OFFSET_LEFT, Face::Left),
-            (OFFSET_RIGHT, Face::Right),
-            (OFFSET_DOWN, Face::Bottom),
-            (OFFSET_UP, Face::Top),
-            (OFFSET_BACK, Face::Back),
-            (OFFSET_FRONT, Face::Front),
-        ];
-
-        for (offset, face) in faces {
-            if let Some(neighbor) = view.get(offset) {
-                // Face is exposed if neighbor is empty or different material
-                if neighbor.id() == 0 || neighbor.id() != center.id() {
-                    self.add_face_rectangle(coord, face);
+        match region {
+            Some(aabb) => {
+                // Convert AABB to RegionBounds
+                // Use depth 3 for a reasonable granularity (8x8x8 cells)
+                let depth = 3;
+                match RegionBounds::from_local_aabb(aabb.min, aabb.max, depth) {
+                    Some(bounds) => Self::from_cube_with_region(cube, Some(&bounds)),
+                    None => {
+                        // AABB doesn't intersect cube - return minimal collider
+                        ColliderBuilder::ball(0.001).build()
+                    }
                 }
             }
+            None => Self::from_cube_with_region(cube, None),
         }
     }
 
-    /// Add a face rectangle for collision generation
-    fn add_face_rectangle(&mut self, coord: CubeCoord, face: Face) {
-        // Calculate voxel size based on depth
-        let voxel_size = 1.0 / (1 << coord.depth) as f32;
-
-        // Calculate world position from octree coordinate
-        // The coord.pos is in center-based coordinates {-2^depth..2^depth}
-        // We need to convert to [0, 1] range:
-        // world_pos = (coord.pos + 2^depth) / (2 * 2^depth) = (coord.pos / 2^depth + 1) / 2
-        let scale = 1 << coord.depth;
-        let world_pos = (coord.pos.as_vec3() / scale as f32 + Vec3::ONE) * 0.5;
-
-        // Get face normal
-        let normal_array = face.normal();
+    /// Add a face rectangle from FaceInfo
+    fn add_face_from_info(&mut self, face_info: &FaceInfo) {
+        let normal_array = face_info.face.normal();
         let normal = Vec3::from(normal_array);
 
         // Calculate face center position
-        // Face is offset by half voxel size in the normal direction
-        let voxel_center = world_pos + Vec3::splat(voxel_size * 0.5);
-        let face_offset = normal * voxel_size * 0.5;
+        // face_info.position is the voxel's base position in [0,1] space
+        // Face center is at voxel center + half size in normal direction
+        let voxel_center = face_info.position + Vec3::splat(face_info.size * 0.5);
+        let face_offset = normal * face_info.size * 0.5;
         let face_center = voxel_center + face_offset;
 
         self.rectangles.push(FaceRectangle {
             center: face_center,
             normal,
-            size: voxel_size,
+            size: face_info.size,
         });
     }
 
@@ -285,8 +264,8 @@ mod tests {
         let cube = Rc::new(Cube::Solid(0)); // Empty
         let collider = VoxelColliderBuilder::from_cube(&cube, 3);
 
-        // Empty cube should generate minimal collider
-        assert!(collider.shape().as_ball().is_some() || collider.shape().as_compound().is_some());
+        // Empty cube should generate minimal collider (ball)
+        assert!(collider.shape().as_ball().is_some());
     }
 
     #[test]
@@ -318,85 +297,81 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(target_arch = "wasm32"))]
-    fn test_spatial_filtering() {
-        use rapier3d::parry::bounding_volume::Aabb;
-
-        // Create a solid cube
+    fn test_from_cube_with_region() {
         let cube = Rc::new(Cube::Solid(1));
 
-        // Test 1: Full collision (no region)
-        let mut builder_full = VoxelColliderBuilder::new();
-        let grid = NeighborGrid::new(&cube, [1, 1, 0, 0]);
-        traverse_octree(
-            &grid,
-            &mut |view, coord, _| {
-                builder_full.process_voxel(view, coord);
-                false
-            },
-        );
-        let full_face_count = builder_full.face_count();
+        // Full traversal
+        let full_collider = VoxelColliderBuilder::from_cube_with_region(&cube, None);
+        assert!(full_collider.shape().as_compound().is_some());
 
-        // Test 2: Filtered collision (small region in corner)
-        let small_region = Aabb::new(
-            rapier3d::na::Point3::new(0.0, 0.0, 0.0),
-            rapier3d::na::Point3::new(0.25, 0.25, 0.25),
-        );
+        // Partial region (corner)
+        let bounds =
+            RegionBounds::from_local_aabb(Vec3::ZERO, Vec3::splat(0.4), 2).unwrap();
+        let partial_collider = VoxelColliderBuilder::from_cube_with_region(&cube, Some(&bounds));
 
-        let filtered_collider =
-            VoxelColliderBuilder::from_cube_region(&cube, 3, Some(small_region));
-
-        // Filtered should generate a valid collider
+        // Both should produce valid colliders
         assert!(
-            filtered_collider.shape().as_compound().is_some()
-                || filtered_collider.shape().as_ball().is_some()
+            partial_collider.shape().as_compound().is_some()
+                || partial_collider.shape().as_ball().is_some()
         );
-
-        // Test 3: Empty region (no overlap)
-        let empty_region = Aabb::new(
-            rapier3d::na::Point3::new(10.0, 10.0, 10.0),
-            rapier3d::na::Point3::new(11.0, 11.0, 11.0),
-        );
-
-        let empty_collider = VoxelColliderBuilder::from_cube_region(&cube, 3, Some(empty_region));
-
-        // Should generate minimal/empty collider
-        assert!(
-            empty_collider.shape().as_ball().is_some() || {
-                if let Some(compound) = empty_collider.shape().as_compound() {
-                    compound.shapes().len() == 0
-                } else {
-                    false
-                }
-            }
-        );
-
-        println!("Full collision faces: {}", full_face_count);
-        println!("Spatial filtering test completed successfully (reduction verified by non-crash)");
     }
 
     #[test]
-    #[cfg(not(target_arch = "wasm32"))]
-    fn test_overlapping_faces_api() {
-        use rapier3d::parry::bounding_volume::Aabb;
-
+    fn test_from_cube_region_with_aabb() {
         let cube = Rc::new(Cube::Solid(1));
 
-        // Create overlapping region
-        let overlap_region = Aabb::new(
-            rapier3d::na::Point3::new(0.4, 0.4, 0.4),
-            rapier3d::na::Point3::new(0.6, 0.6, 0.6),
+        // Test with AABB filter
+        let aabb = Aabb::new(Vec3::ZERO, Vec3::splat(0.5));
+        let collider = VoxelColliderBuilder::from_cube_region(&cube, 3, Some(&aabb));
+
+        assert!(
+            collider.shape().as_compound().is_some() || collider.shape().as_ball().is_some()
         );
+    }
 
-        // Generate collider for overlap region
-        let collider = VoxelColliderBuilder::from_cube_region(&cube, 4, Some(overlap_region));
+    #[test]
+    fn test_empty_region() {
+        let cube = Rc::new(Cube::Solid(1));
 
-        // Should generate valid compound collider with reduced face count
-        if let Some(compound) = collider.shape().as_compound() {
-            assert!(
-                compound.shapes().len() > 0,
-                "Should have at least some faces in overlap region"
-            );
-        }
+        // AABB completely outside the cube
+        let aabb = Aabb::new(Vec3::splat(10.0), Vec3::splat(11.0));
+        let collider = VoxelColliderBuilder::from_cube_region(&cube, 3, Some(&aabb));
+
+        // Should return minimal collider
+        assert!(collider.shape().as_ball().is_some());
+    }
+
+    #[test]
+    fn test_region_reduces_faces() {
+        // Create a subdivided cube
+        let cube = Rc::new(Cube::tabulate(|_| Cube::Solid(1)));
+
+        // Full traversal
+        let mut full_builder = VoxelColliderBuilder::new();
+        visit_faces(
+            &cube,
+            |f| full_builder.add_face_from_info(f),
+            [1, 1, 0, 0],
+        );
+        let full_count = full_builder.face_count();
+
+        // Partial region
+        let bounds = RegionBounds::from_local_aabb(Vec3::ZERO, Vec3::splat(0.4), 2).unwrap();
+        let mut partial_builder = VoxelColliderBuilder::new();
+        visit_faces_in_region(
+            &cube,
+            &bounds,
+            |f| partial_builder.add_face_from_info(f),
+            [1, 1, 0, 0],
+        );
+        let partial_count = partial_builder.face_count();
+
+        // Region should have fewer faces
+        assert!(
+            partial_count < full_count,
+            "Partial count {} should be < full count {}",
+            partial_count,
+            full_count
+        );
     }
 }
