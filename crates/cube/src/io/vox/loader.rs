@@ -45,7 +45,8 @@ fn convert_dotvox_to_cube(vox_data: &DotVoxData, align: Vec3) -> Result<Cube<u8>
     // Use the first model
     let dot_vox_model = &vox_data.models[0];
 
-    eprintln!("[VOX Loading] Number of voxels in file: {}", dot_vox_model.voxels.len());
+    // Debug logging disabled for performance
+    // eprintln!("[VOX Loading] Number of voxels in file: {}", dot_vox_model.voxels.len());
 
     // Get model size (MagicaVoxel coordinates)
     let vox_size = dot_vox_model.size;
@@ -53,7 +54,7 @@ fn convert_dotvox_to_cube(vox_data: &DotVoxData, align: Vec3) -> Result<Cube<u8>
     let model_height = vox_size.z; // MagicaVoxel's Z becomes our Y (height)
     let model_depth = vox_size.y; // MagicaVoxel's Y becomes our Z (depth)
 
-    eprintln!("[VOX Loading] Model dimensions: {}x{}x{} (width x height x depth)", model_width, model_height, model_depth);
+    // eprintln!("[VOX Loading] Model dimensions: {}x{}x{} (width x height x depth)", model_width, model_height, model_depth);
 
     // Calculate required depth from model dimensions
     let max_model_size = model_width.max(model_height).max(model_depth);
@@ -65,7 +66,7 @@ fn convert_dotvox_to_cube(vox_data: &DotVoxData, align: Vec3) -> Result<Cube<u8>
     };
     let cube_size = 1 << depth;
 
-    eprintln!("[VOX Loading] Calculated depth: {}, cube size: {}^3", depth, cube_size);
+    // eprintln!("[VOX Loading] Calculated depth: {}, cube size: {}^3", depth, cube_size);
 
     // Clamp alignment to valid range
     let align = align.clamp(Vec3::ZERO, Vec3::ONE);
@@ -75,7 +76,7 @@ fn convert_dotvox_to_cube(vox_data: &DotVoxData, align: Vec3) -> Result<Cube<u8>
     let offset_y = ((cube_size - model_height) as f32 * align.y) as i32;
     let offset_z = ((cube_size - model_depth) as f32 * align.z) as i32;
 
-    eprintln!("[VOX Loading] Offsets: x={}, y={}, z={}", offset_x, offset_y, offset_z);
+    // eprintln!("[VOX Loading] Offsets: x={}, y={}, z={}", offset_x, offset_y, offset_z);
 
     // Create cube with empty material (0)
     let mut cube = Cube::solid(0u8);
@@ -119,11 +120,11 @@ fn convert_dotvox_to_cube(vox_data: &DotVoxData, align: Vec3) -> Result<Cube<u8>
         );
     }
 
-    eprintln!("[VOX Loading] Materials used during loading: {} unique", materials_used.len());
-    eprintln!("[VOX Loading] Sample voxels:");
-    for (idx, x, y, z, mat, r, g, b) in sample_voxels {
-        eprintln!("  Voxel {}: pos=({},{},{}), material={}, RGB=({},{},{})", idx, x, y, z, mat, r, g, b);
-    }
+    // eprintln!("[VOX Loading] Materials used during loading: {} unique", materials_used.len());
+    // eprintln!("[VOX Loading] Sample voxels:");
+    // for (idx, x, y, z, mat, r, g, b) in sample_voxels {
+    //     eprintln!("  Voxel {}: pos=({},{},{}), material={}, RGB=({},{},{})", idx, x, y, z, mat, r, g, b);
+    // }
 
     Ok(cube)
 }

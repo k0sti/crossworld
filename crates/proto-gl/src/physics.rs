@@ -1,6 +1,7 @@
 use glam::Vec3;
 use rand::Rng;
-use crossworld_physics::{rapier3d::prelude::*, PhysicsWorld, VoxelColliderBuilder};
+use crossworld_physics::rapier3d::prelude::*;
+use crossworld_physics::PhysicsWorld;
 use crate::config::SpawningConfig;
 use crate::models::{VoxModel, CubeObject};
 
@@ -112,19 +113,21 @@ pub fn spawn_cube_objects(
             .build();
         let rb_handle = physics_world.add_rigid_body(rb);
 
-        // Create collider - use simple box for small cubes, voxel collider for detailed models
-        // object_size is the edge length of the cube, so half-extent = object_size / 2
+        // Create collider - ALWAYS use simple box colliders for dynamic objects
+        //
+        // PERFORMANCE NOTE: VoxelColliderBuilder::from_cube() generates compound colliders
+        // with one cuboid per exposed voxel face. For depth 4-7 models, this creates
+        // thousands of collision primitives per object. With 100 objects, this results
+        // in hundreds of thousands of collision shapes, causing extremely slow physics.
+        //
+        // Solution: Use simple box colliders for physics - visual detail doesn't need
+        // to match collision shape. A bounding box is sufficient for game physics.
         let half_extent = config.object_size * 0.5;
-        let collider = if model.depth == 0 {
-            ColliderBuilder::cuboid(half_extent, half_extent, half_extent)
-                .density(1.0)
-                .friction(0.5)
-                .restitution(0.3)
-                .build()
-        } else {
-            // For more detailed models, scale the voxel collider appropriately
-            VoxelColliderBuilder::from_cube(&model.cube, model.depth)
-        };
+        let collider = ColliderBuilder::cuboid(half_extent, half_extent, half_extent)
+            .density(1.0)
+            .friction(0.5)
+            .restitution(0.3)
+            .build();
         let coll_handle = physics_world.add_collider(collider, rb_handle);
 
         objects.push(CubeObject {
