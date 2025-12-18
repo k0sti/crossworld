@@ -11,7 +11,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
 use winit::application::ApplicationHandler;
-use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
+use winit::event::{DeviceEvent, DeviceId, ElementState, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::{CursorGrabMode, Window, WindowId};
@@ -64,7 +64,8 @@ pub struct ProtoGlApp {
 
     // Input state
     keyboard_state: KeyboardState,
-    last_mouse_pos: Option<(f32, f32)>,
+    /// Last mouse position for FPS camera delta calculation
+    last_mouse_pos: Option<(f64, f64)>,
 
     // World state
     world_cube: Option<Cube<u8>>,
@@ -320,9 +321,9 @@ impl ApplicationHandler for ProtoGlApp {
         println!("  Uploaded meshes: {}", object_mesh_indices.len());
         println!("  FPS camera spawn: {:?}", self.config.fps.spawn_position);
         println!("Controls:");
-        println!("  Tab: Toggle camera mode (Orbit/FPS)");
+        println!("  Tab: Enter/exit First-Person mode");
         println!("  Orbit: Right-click drag to rotate, scroll to zoom");
-        println!("  FPS: Click to capture mouse, WASD to move, F/V for up/down, Esc to release");
+        println!("  FPS: WASD to move, F/V for up/down, Tab/Esc to exit");
 
         self.window = Some(window);
         self.gl_context = Some(gl_context);
@@ -374,15 +375,9 @@ impl ApplicationHandler for ProtoGlApp {
                 let pressed = event.state == ElementState::Pressed;
 
                 match event.physical_key {
-                    // Tab to toggle camera mode
-                    PhysicalKey::Code(KeyCode::Tab) if pressed => {
+                    // Tab or Escape to toggle/exit camera mode
+                    PhysicalKey::Code(KeyCode::Tab) | PhysicalKey::Code(KeyCode::Escape) if pressed => {
                         self.toggle_camera_mode();
-                    }
-                    // Escape to release mouse in FPS mode
-                    PhysicalKey::Code(KeyCode::Escape) if pressed => {
-                        if self.camera_mode == CameraMode::FirstPerson && self.fps_camera.mouse_captured {
-                            self.release_mouse();
-                        }
                     }
                     // WASD movement
                     PhysicalKey::Code(KeyCode::KeyW) => self.keyboard_state.w = pressed,
@@ -398,22 +393,11 @@ impl ApplicationHandler for ProtoGlApp {
                 }
             }
             WindowEvent::MouseInput { state, button, .. } => {
-                match self.camera_mode {
-                    CameraMode::Orbit => {
-                        if button == MouseButton::Right {
-                            self.orbit_camera.dragging = state == ElementState::Pressed;
-                            if !self.orbit_camera.dragging {
-                                self.orbit_camera.last_mouse_pos = None;
-                            }
-                        }
-                    }
-                    CameraMode::FirstPerson => {
-                        // Left click to capture mouse
-                        if button == MouseButton::Left && state == ElementState::Pressed {
-                            if !self.fps_camera.mouse_captured {
-                                self.capture_mouse();
-                            }
-                        }
+                // Orbit camera: right-click drag to rotate
+                if self.camera_mode == CameraMode::Orbit && button == MouseButton::Right {
+                    self.orbit_camera.dragging = state == ElementState::Pressed;
+                    if !self.orbit_camera.dragging {
+                        self.orbit_camera.last_mouse_pos = None;
                     }
                 }
             }
@@ -435,26 +419,18 @@ impl ApplicationHandler for ProtoGlApp {
                     }
                     CameraMode::FirstPerson => {
                         if self.fps_camera.mouse_captured {
+                            // Calculate delta from last frame's position
                             if let Some((last_x, last_y)) = self.last_mouse_pos {
-                                let delta_x = position.x as f32 - last_x;
-                                let delta_y = position.y as f32 - last_y;
-                                self.fps_camera.handle_mouse_move(delta_x, delta_y);
-                            }
-                            self.last_mouse_pos = Some((position.x as f32, position.y as f32));
+                                let delta_x = position.x - last_x;
+                                let delta_y = position.y - last_y;
 
-                            // Re-center cursor for continuous mouse look
-                            if let Some(window) = &self.window {
-                                let size = window.inner_size();
-                                let center_x = size.width as f64 / 2.0;
-                                let center_y = size.height as f64 / 2.0;
-                                // Only re-center if we've moved significantly
-                                let dx = (position.x - center_x).abs();
-                                let dy = (position.y - center_y).abs();
-                                if dx > 100.0 || dy > 100.0 {
-                                    let _ = window.set_cursor_position(winit::dpi::PhysicalPosition::new(center_x, center_y));
-                                    self.last_mouse_pos = Some((center_x as f32, center_y as f32));
+                                // Only process if there's actual movement
+                                if delta_x.abs() > 0.1 || delta_y.abs() > 0.1 {
+                                    self.fps_camera.handle_mouse_move(delta_x as f32, delta_y as f32);
                                 }
                             }
+                            // Always update last position for next frame's delta calculation
+                            self.last_mouse_pos = Some((position.x, position.y));
                         }
                     }
                 }
@@ -478,6 +454,21 @@ impl ApplicationHandler for ProtoGlApp {
             _ => {}
         }
     }
+
+    fn device_event(
+        &mut self,
+        _event_loop: &ActiveEventLoop,
+        _device_id: DeviceId,
+        event: DeviceEvent,
+    ) {
+        // Handle raw mouse motion for locked cursor mode (used on Wayland)
+        if let DeviceEvent::MouseMotion { delta } = event {
+            if self.camera_mode == CameraMode::FirstPerson && self.fps_camera.mouse_captured {
+                let (delta_x, delta_y) = delta;
+                self.fps_camera.handle_mouse_move(delta_x as f32, delta_y as f32);
+            }
+        }
+    }
 }
 
 impl ProtoGlApp {
@@ -485,11 +476,13 @@ impl ProtoGlApp {
     fn toggle_camera_mode(&mut self) {
         self.camera_mode = match self.camera_mode {
             CameraMode::Orbit => {
-                println!("Switched to First-Person mode");
+                println!("Switched to First-Person mode (Tab/Esc to exit)");
                 // Sync FPS camera position with physics object
                 if let (Some(physics_world), Some(camera_obj)) = (&self.physics_world, &self.camera_object) {
                     self.fps_camera.set_position(camera_obj.position(physics_world));
                 }
+                // Capture mouse immediately
+                self.capture_mouse();
                 CameraMode::FirstPerson
             }
             CameraMode::FirstPerson => {
@@ -503,12 +496,19 @@ impl ProtoGlApp {
     /// Capture mouse for FPS look-around
     fn capture_mouse(&mut self) {
         if let Some(window) = &self.window {
-            // Try to confine cursor first, then try to grab it
-            let _ = window.set_cursor_grab(CursorGrabMode::Confined)
-                .or_else(|_| window.set_cursor_grab(CursorGrabMode::Locked));
+            // Try Locked mode first (provides raw motion on Wayland), fall back to Confined
+            let grab_result = window.set_cursor_grab(CursorGrabMode::Locked)
+                .or_else(|_| window.set_cursor_grab(CursorGrabMode::Confined));
+
+            if let Err(e) = grab_result {
+                println!("Warning: Failed to grab cursor: {:?}", e);
+            }
+
             window.set_cursor_visible(false);
             self.fps_camera.mouse_captured = true;
+            // Reset last position so first move doesn't cause a jump
             self.last_mouse_pos = None;
+
             println!("Mouse captured - move to look around, Esc to release");
         }
     }
