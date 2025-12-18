@@ -3,6 +3,16 @@ use crate::CubeCoord;
 use glam::IVec3;
 use std::rc::Rc;
 
+/// A single voxel with position and material value.
+/// Used for batch construction of octrees via `Cube::from_voxels`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Voxel {
+    /// Position in corner-based coordinates [0, 2^depth)
+    pub pos: IVec3,
+    /// Material value (0 = empty, 1-127 = predefined, 128-255 = RGB encoded)
+    pub material: u8,
+}
+
 /// Pre-computed octant positions for fast lookup
 /// Uses binary coordinates: 0 or 1 for each axis
 /// Octant indexing: index = x + y*2 + z*4
@@ -650,6 +660,112 @@ impl Cube<u8> {
     /// Create an empty cube (all air/zeros)
     pub fn empty() -> Self {
         Cube::Solid(0)
+    }
+
+    /// Build an octree from a list of voxels using recursive octant sorting.
+    ///
+    /// This is more efficient than calling `update()` for each voxel, especially
+    /// for large voxel sets. Instead of O(n × depth) per voxel (traversing from root),
+    /// this builds the tree bottom-up in O(n log n) time.
+    ///
+    /// # Arguments
+    /// * `voxels` - Slice of voxels with positions in corner-based coordinates [0, 2^depth)
+    /// * `depth` - Octree depth (determines cube size: 2^depth per axis)
+    /// * `default` - Default material for empty space (typically 0)
+    ///
+    /// # Algorithm
+    /// 1. If depth is 0 or only one voxel, return a solid cube
+    /// 2. Otherwise, partition voxels into 8 octants based on position bits
+    /// 3. Recursively build children for each octant
+    /// 4. If all children are identical solids, simplify to single solid
+    ///
+    /// # Example
+    /// ```
+    /// use cube::{Cube, Voxel};
+    /// use glam::IVec3;
+    ///
+    /// let voxels = vec![
+    ///     Voxel { pos: IVec3::new(0, 0, 0), material: 128 },
+    ///     Voxel { pos: IVec3::new(1, 0, 0), material: 129 },
+    ///     Voxel { pos: IVec3::new(0, 1, 1), material: 130 },
+    /// ];
+    /// let cube = Cube::from_voxels(&voxels, 2, 0);
+    /// ```
+    pub fn from_voxels(voxels: &[Voxel], depth: u32, default: u8) -> Self {
+        if voxels.is_empty() {
+            return Cube::Solid(default);
+        }
+
+        if depth == 0 {
+            // At depth 0, just use the first voxel's material
+            // (all voxels at same position should have same material)
+            return Cube::Solid(voxels[0].material);
+        }
+
+        // Partition voxels into 8 octants based on the high bit at this depth level
+        // For depth d, we check bit (d-1) of each coordinate
+        let bit_index = depth - 1;
+        let mut octant_voxels: [Vec<Voxel>; 8] = Default::default();
+
+        for voxel in voxels {
+            // Extract the bit at bit_index for each axis to determine octant
+            let octant_x = ((voxel.pos.x >> bit_index) & 1) as usize;
+            let octant_y = ((voxel.pos.y >> bit_index) & 1) as usize;
+            let octant_z = ((voxel.pos.z >> bit_index) & 1) as usize;
+            let octant_index = octant_x | (octant_y << 1) | (octant_z << 2);
+
+            octant_voxels[octant_index].push(*voxel);
+        }
+
+        // Recursively build children
+        let children: [Rc<Cube<u8>>; 8] = std::array::from_fn(|i| {
+            Rc::new(Self::from_voxels(&octant_voxels[i], bit_index, default))
+        });
+
+        // Check if all children are identical solids - if so, simplify
+        if let Cube::Solid(first_val) = &*children[0] {
+            let all_same = children[1..]
+                .iter()
+                .all(|c| matches!(&**c, Cube::Solid(v) if v == first_val));
+            if all_same {
+                return Cube::Solid(*first_val);
+            }
+        }
+
+        Cube::Cubes(Box::new(children))
+    }
+
+    /// Build an octree from a list of voxels, automatically calculating depth.
+    ///
+    /// Determines the minimum depth needed to contain all voxel positions,
+    /// then calls `from_voxels`.
+    ///
+    /// # Arguments
+    /// * `voxels` - Slice of voxels with positions in corner-based coordinates
+    /// * `default` - Default material for empty space (typically 0)
+    ///
+    /// # Returns
+    /// Tuple of (cube, depth) where depth is the calculated octree depth
+    pub fn from_voxels_auto_depth(voxels: &[Voxel], default: u8) -> (Self, u32) {
+        if voxels.is_empty() {
+            return (Cube::Solid(default), 0);
+        }
+
+        // Find the maximum coordinate to determine required depth
+        let max_coord = voxels
+            .iter()
+            .map(|v| v.pos.x.max(v.pos.y).max(v.pos.z))
+            .max()
+            .unwrap_or(0);
+
+        // Calculate minimum depth: need 2^depth > max_coord
+        let depth = if max_coord <= 0 {
+            0
+        } else {
+            (max_coord as f32).log2().ceil() as u32
+        };
+
+        (Self::from_voxels(voxels, depth, default), depth)
     }
 
     /// Set a voxel at the given position and depth
@@ -1368,5 +1484,148 @@ mod tests {
             assert_eq!(children[0].value(), Some(&10));
             assert_eq!(children[7].value(), Some(&80));
         }
+    }
+
+    #[test]
+    fn test_from_voxels_empty() {
+        // Empty voxel list should produce solid default
+        let voxels: Vec<Voxel> = vec![];
+        let cube = Cube::from_voxels(&voxels, 2, 42);
+        assert_eq!(cube, Cube::Solid(42));
+    }
+
+    #[test]
+    fn test_from_voxels_single() {
+        // Single voxel at origin
+        let voxels = vec![Voxel {
+            pos: IVec3::new(0, 0, 0),
+            material: 128,
+        }];
+        let cube = Cube::from_voxels(&voxels, 1, 0);
+
+        // Should be able to retrieve the voxel at position (0,0,0)
+        let retrieved = cube.get(CubeCoord::new(IVec3::new(0, 0, 0), 1));
+        assert_eq!(retrieved.id(), 128);
+    }
+
+    #[test]
+    fn test_from_voxels_all_octants() {
+        // Place one voxel in each octant of a depth-1 cube
+        let voxels = vec![
+            Voxel { pos: IVec3::new(0, 0, 0), material: 1 },
+            Voxel { pos: IVec3::new(1, 0, 0), material: 2 },
+            Voxel { pos: IVec3::new(0, 1, 0), material: 3 },
+            Voxel { pos: IVec3::new(1, 1, 0), material: 4 },
+            Voxel { pos: IVec3::new(0, 0, 1), material: 5 },
+            Voxel { pos: IVec3::new(1, 0, 1), material: 6 },
+            Voxel { pos: IVec3::new(0, 1, 1), material: 7 },
+            Voxel { pos: IVec3::new(1, 1, 1), material: 8 },
+        ];
+        let cube = Cube::from_voxels(&voxels, 1, 0);
+
+        // Verify each octant has correct material
+        // Octant index = x + y*2 + z*4
+        for (i, voxel) in voxels.iter().enumerate() {
+            let retrieved = cube.get(CubeCoord::new(voxel.pos, 1));
+            assert_eq!(
+                retrieved.id(),
+                voxel.material,
+                "Octant {} mismatch",
+                i
+            );
+        }
+    }
+
+    #[test]
+    fn test_from_voxels_sparse() {
+        // Sparse voxels in a depth-3 cube (8x8x8)
+        let voxels = vec![
+            Voxel { pos: IVec3::new(0, 0, 0), material: 100 },
+            Voxel { pos: IVec3::new(7, 7, 7), material: 200 },
+            Voxel { pos: IVec3::new(3, 4, 5), material: 150 },
+        ];
+        let cube = Cube::from_voxels(&voxels, 3, 0);
+
+        // Verify placed voxels
+        assert_eq!(cube.get(CubeCoord::new(IVec3::new(0, 0, 0), 3)).id(), 100);
+        assert_eq!(cube.get(CubeCoord::new(IVec3::new(7, 7, 7), 3)).id(), 200);
+        assert_eq!(cube.get(CubeCoord::new(IVec3::new(3, 4, 5), 3)).id(), 150);
+
+        // Verify empty locations have default value
+        assert_eq!(cube.get(CubeCoord::new(IVec3::new(1, 1, 1), 3)).id(), 0);
+        assert_eq!(cube.get(CubeCoord::new(IVec3::new(5, 5, 5), 3)).id(), 0);
+    }
+
+    #[test]
+    fn test_from_voxels_simplification() {
+        // All voxels have same material - should simplify to solid
+        let voxels: Vec<Voxel> = (0..8)
+            .map(|i| Voxel {
+                pos: IVec3::new(i & 1, (i >> 1) & 1, (i >> 2) & 1),
+                material: 42,
+            })
+            .collect();
+        let cube = Cube::from_voxels(&voxels, 1, 42);
+
+        // Should be simplified to a single solid
+        assert!(matches!(cube, Cube::Solid(42)));
+    }
+
+    #[test]
+    fn test_from_voxels_matches_update() {
+        // Verify from_voxels produces same result as multiple update() calls
+        let voxels = vec![
+            Voxel { pos: IVec3::new(0, 0, 0), material: 10 },
+            Voxel { pos: IVec3::new(1, 0, 0), material: 20 },
+            Voxel { pos: IVec3::new(0, 1, 0), material: 30 },
+            Voxel { pos: IVec3::new(2, 2, 2), material: 40 },
+            Voxel { pos: IVec3::new(3, 3, 3), material: 50 },
+        ];
+        let depth = 2;
+
+        // Build using from_voxels
+        let cube_batch = Cube::from_voxels(&voxels, depth, 0);
+
+        // Build using update()
+        let mut cube_update = Cube::Solid(0u8);
+        for voxel in &voxels {
+            cube_update = cube_update.update(
+                CubeCoord::new(voxel.pos, depth),
+                Cube::Solid(voxel.material),
+            );
+        }
+
+        // Verify all positions match
+        for z in 0..4 {
+            for y in 0..4 {
+                for x in 0..4 {
+                    let pos = IVec3::new(x, y, z);
+                    let batch_val = cube_batch.get(CubeCoord::new(pos, depth)).id();
+                    let update_val = cube_update.get(CubeCoord::new(pos, depth)).id();
+                    assert_eq!(
+                        batch_val, update_val,
+                        "Mismatch at {:?}: from_voxels={}, update={}",
+                        pos, batch_val, update_val
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_from_voxels_auto_depth() {
+        // Test auto depth calculation
+        let voxels = vec![
+            Voxel { pos: IVec3::new(0, 0, 0), material: 1 },
+            Voxel { pos: IVec3::new(15, 15, 15), material: 2 },
+        ];
+        let (cube, depth) = Cube::from_voxels_auto_depth(&voxels, 0);
+
+        // Max coord is 15, so depth should be 4 (2^4 = 16 > 15)
+        assert_eq!(depth, 4);
+
+        // Verify voxels are accessible
+        assert_eq!(cube.get(CubeCoord::new(IVec3::new(0, 0, 0), depth)).id(), 1);
+        assert_eq!(cube.get(CubeCoord::new(IVec3::new(15, 15, 15), depth)).id(), 2);
     }
 }

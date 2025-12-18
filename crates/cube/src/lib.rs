@@ -16,7 +16,7 @@ pub mod wasm;
 // Re-export main types from core
 pub use core::{
     octant_char_to_index, octant_index_to_char, raycast, raycast_with_options, Cube, Hit, IVec3Ext,
-    RaycastDebugState, RaycastOptions, OCTANT_POSITIONS,
+    RaycastDebugState, RaycastOptions, Voxel, OCTANT_POSITIONS,
 };
 
 // Re-export axis types
