@@ -92,16 +92,19 @@ pub struct ProtoGlApp {
     // Debug mode (single frame)
     debug_mode: bool,
     frame_count: u32,
+
+    // Frame capture mode
+    capture_frame_path: Option<String>,
 }
 
 impl Default for ProtoGlApp {
     fn default() -> Self {
-        Self::new(false)
+        Self::new(false, None)
     }
 }
 
 impl ProtoGlApp {
-    pub fn new(debug_mode: bool) -> Self {
+    pub fn new(debug_mode: bool, capture_frame_path: Option<String>) -> Self {
         // Load config from file or use defaults
         let config = load_config().unwrap_or_else(|e| {
             eprintln!("Warning: Failed to load config.toml: {}", e);
@@ -119,6 +122,9 @@ impl ProtoGlApp {
 
         if debug_mode {
             println!("[DEBUG] Running in debug mode - will exit after single frame");
+        }
+        if let Some(ref path) = capture_frame_path {
+            println!("[CAPTURE] Will save frame to: {}", path);
         }
 
         Self {
@@ -152,6 +158,7 @@ impl ProtoGlApp {
             show_debug_info: true,
             debug_mode,
             frame_count: 0,
+            capture_frame_path,
         }
     }
 }
@@ -730,9 +737,17 @@ impl ProtoGlApp {
             &full_output.textures_delta,
         );
 
+        // Capture frame to file if requested (before swap to capture the rendered content)
+        if let Some(ref path) = self.capture_frame_path {
+            match self.save_framebuffer_to_file(gl, size.width, size.height, path) {
+                Ok(()) => println!("[CAPTURE] Frame saved to: {}", path),
+                Err(e) => eprintln!("[CAPTURE] Failed to save frame: {}", e),
+            }
+        }
+
         gl_surface.swap_buffers(gl_context).unwrap();
 
-        // In debug mode, exit after single frame
+        // In debug mode or capture mode, exit after single frame
         if self.debug_mode {
             println!("[DEBUG] Frame {} rendered, exiting", self.frame_count);
             self.cleanup();
@@ -741,6 +756,54 @@ impl ProtoGlApp {
         }
 
         window.request_redraw();
+    }
+
+    /// Save the current framebuffer to an image file
+    fn save_framebuffer_to_file(
+        &self,
+        gl: &Context,
+        width: u32,
+        height: u32,
+        path: &str,
+    ) -> Result<(), String> {
+        // Read pixels from framebuffer (RGBA format)
+        let mut pixels = vec![0u8; (width * height * 4) as usize];
+        unsafe {
+            gl.read_pixels(
+                0,
+                0,
+                width as i32,
+                height as i32,
+                glow::RGBA,
+                glow::UNSIGNED_BYTE,
+                glow::PixelPackData::Slice(&mut pixels),
+            );
+        }
+
+        // Convert RGBA to RGB (image crate expects RGB for PNG)
+        let rgb_pixels: Vec<u8> = pixels
+            .chunks(4)
+            .flat_map(|rgba| [rgba[0], rgba[1], rgba[2]])
+            .collect();
+
+        // Flip Y-axis (GL origin is bottom-left, image origin is top-left)
+        let mut flipped = vec![0u8; rgb_pixels.len()];
+        for y in 0..height {
+            let src_row = &rgb_pixels[(y * width * 3) as usize..((y + 1) * width * 3) as usize];
+            let dst_y = height - 1 - y;
+            let dst_row = &mut flipped[(dst_y * width * 3) as usize..((dst_y + 1) * width * 3) as usize];
+            dst_row.copy_from_slice(src_row);
+        }
+
+        // Save to file
+        image::save_buffer(
+            path,
+            &flipped,
+            width,
+            height,
+            image::ColorType::Rgb8,
+        )
+        .map_err(|e| e.to_string())
     }
 
     fn cleanup(&mut self) {

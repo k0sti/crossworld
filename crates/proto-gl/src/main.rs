@@ -11,6 +11,11 @@ struct Args {
     /// Use 0 for normal windowed mode with debug output
     #[arg(long)]
     debug: Option<Option<u32>>,
+
+    /// Capture a single frame and save to file (e.g., --capture-frame output.png)
+    /// Renders one frame, saves to the specified path, then exits
+    #[arg(long, value_name = "PATH")]
+    capture_frame: Option<String>,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -32,14 +37,25 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         // iterations == 0 means run windowed with debug flag
         let event_loop = EventLoop::new()?;
-        let mut app = ProtoGlApp::new(true);
+        let mut app = ProtoGlApp::new(true, None);
+        event_loop.run_app(&mut app)?;
+        return Ok(());
+    }
+
+    // Check if --capture-frame was passed
+    if let Some(path) = args.capture_frame {
+        println!("=== CAPTURE FRAME MODE ===");
+        println!("Will render single frame and save to: {}\n", path);
+
+        let event_loop = EventLoop::new()?;
+        let mut app = ProtoGlApp::new(true, Some(path));
         event_loop.run_app(&mut app)?;
         return Ok(());
     }
 
     // Normal windowed mode
     let event_loop = EventLoop::new()?;
-    let mut app = ProtoGlApp::new(false);
+    let mut app = ProtoGlApp::new(false, None);
 
     event_loop.run_app(&mut app)?;
     Ok(())
