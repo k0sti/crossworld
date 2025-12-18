@@ -859,13 +859,14 @@ impl CubeRendererApp {
                     Camera::look_at(camera_pos, target, glam::Vec3::Y)
                 };
 
-                // Render at unit scale (mesh is [0,1] space)
+                // Mesh vertices are in [0,1] space, offset to [-0.5, 0.5] by mesh_renderer
+                // Raytracers use [-1, 1] space, so scale by 2.0 to match
                 self.mesh_renderer.render_mesh_with_scale(
                     gl,
                     0,
                     position,
                     rotation,
-                    1.0,
+                    2.0,
                     &camera,
                     width as i32,
                     height as i32,
