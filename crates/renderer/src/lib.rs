@@ -45,7 +45,7 @@ pub mod mesh_renderer {
 }
 
 // Re-export commonly used types at crate root
-pub use camera::Camera;
+pub use camera::{Camera, DEFAULT_VFOV};
 pub use lighting::{AMBIENT, BACKGROUND_COLOR, DIFFUSE_STRENGTH, LIGHT_DIR};
 pub use renderer::{Object, Renderer};
 pub use renderers::{BcfTracer, ComputeTracer, CpuTracer, GlTracer, MeshRenderer};

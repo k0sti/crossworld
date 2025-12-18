@@ -65,6 +65,7 @@ pub struct GlTracerGl {
     time_location: Option<UniformLocation>,
     camera_pos_location: Option<UniformLocation>,
     camera_rot_location: Option<UniformLocation>,
+    tan_half_vfov_location: Option<UniformLocation>,
     use_camera_location: Option<UniformLocation>,
     max_depth_location: Option<UniformLocation>,
     octree_data_location: Option<UniformLocation>,
@@ -349,6 +350,7 @@ impl GlTracerGl {
             let time_location = gl.get_uniform_location(program, "u_time");
             let camera_pos_location = gl.get_uniform_location(program, "u_camera_pos");
             let camera_rot_location = gl.get_uniform_location(program, "u_camera_rot");
+            let tan_half_vfov_location = gl.get_uniform_location(program, "u_tan_half_vfov");
             let use_camera_location = gl.get_uniform_location(program, "u_use_camera");
             let max_depth_location = gl.get_uniform_location(program, "u_max_depth");
             let octree_data_location = gl.get_uniform_location(program, "u_octree_data");
@@ -382,6 +384,7 @@ impl GlTracerGl {
                 time_location,
                 camera_pos_location,
                 camera_rot_location,
+                tan_half_vfov_location,
                 use_camera_location,
                 max_depth_location,
                 octree_data_location,
@@ -457,9 +460,7 @@ impl GlTracerGl {
             gl.disable(DEPTH_TEST);
             gl.disable(BLEND);
 
-            // Clear to background color (matches BACKGROUND_COLOR in Rust)
-            gl.clear_color(0.4, 0.5, 0.6, 1.0);
-            gl.clear(COLOR_BUFFER_BIT);
+            // Note: Caller is responsible for clearing the framebuffer with BACKGROUND_COLOR
 
             gl.use_program(Some(self.program));
             gl.bind_vertex_array(Some(self.vao));
@@ -537,9 +538,7 @@ impl GlTracerGl {
             gl.disable(DEPTH_TEST);
             gl.disable(BLEND);
 
-            // Clear to background color (matches BACKGROUND_COLOR in Rust)
-            gl.clear_color(0.4, 0.5, 0.6, 1.0);
-            gl.clear(COLOR_BUFFER_BIT);
+            // Note: Caller is responsible for clearing the framebuffer with BACKGROUND_COLOR
 
             gl.use_program(Some(self.program));
             gl.bind_vertex_array(Some(self.vao));
@@ -573,6 +572,9 @@ impl GlTracerGl {
                     camera.rotation.z,
                     camera.rotation.w,
                 );
+            }
+            if let Some(loc) = &self.tan_half_vfov_location {
+                gl.uniform_1_f32(Some(loc), (camera.vfov * 0.5).tan());
             }
             if let Some(loc) = &self.use_camera_location {
                 gl.uniform_1_i32(Some(loc), 1);

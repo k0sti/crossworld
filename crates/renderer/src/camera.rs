@@ -24,6 +24,9 @@ pub struct Camera {
     pub target_position: Option<glam::Vec3>,
 }
 
+/// Default vertical field of view: 60 degrees
+pub const DEFAULT_VFOV: f32 = 60.0 * std::f32::consts::PI / 180.0;
+
 impl Default for Camera {
     fn default() -> Self {
         let position = glam::Vec3::new(3.0, 2.0, 3.0);
@@ -39,7 +42,7 @@ impl Default for Camera {
         Self {
             position,
             rotation,
-            vfov: 2.0 * 0.5_f32.atan(), // ~53.13 degrees - matches raytracer's implicit FOV
+            vfov: DEFAULT_VFOV,
             pitch,
             yaw,
             target_position: Some(target),
@@ -69,7 +72,7 @@ impl Camera {
         Self {
             position,
             rotation,
-            vfov: 2.0 * 0.5_f32.atan(), // ~53.13 degrees - matches raytracer's implicit FOV
+            vfov: DEFAULT_VFOV,
             pitch,
             yaw,
             target_position: Some(target),
@@ -101,7 +104,7 @@ impl Camera {
         Self {
             position,
             rotation,
-            vfov: 2.0 * 0.5_f32.atan(), // ~53.13 degrees - matches raytracer's implicit FOV
+            vfov: DEFAULT_VFOV,
             pitch,
             yaw,
             target_position: None,
