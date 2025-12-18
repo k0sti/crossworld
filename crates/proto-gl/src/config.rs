@@ -10,6 +10,8 @@ pub struct ProtoGlConfig {
     pub rendering: RenderConfig,
     #[serde(default)]
     pub fps: FpsConfig,
+    #[serde(default)]
+    pub structures: StructuresConfig,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -80,6 +82,70 @@ impl Default for FpsConfig {
     }
 }
 
+/// Configuration for placing random structures in the world
+#[derive(Debug, Deserialize, Clone)]
+pub struct StructuresConfig {
+    /// Whether to enable structure placement
+    #[serde(default = "default_structures_enabled")]
+    pub enabled: bool,
+    /// Path to directory containing .vox model files
+    #[serde(default = "default_structures_path")]
+    pub models_path: String,
+    /// Prefix filter for model filenames (e.g., "obj_" to only load obj_*.vox)
+    #[serde(default = "default_structures_prefix")]
+    pub prefix: String,
+    /// Number of structures to place
+    #[serde(default = "default_structures_count")]
+    pub count: u32,
+    /// Spawn radius from world center (0.0-0.5, where 0.5 is half the world)
+    #[serde(default = "default_structures_spawn_radius")]
+    pub spawn_radius: f32,
+    /// Random seed for structure placement (0 = use random seed)
+    #[serde(default)]
+    pub seed: u64,
+    /// Maximum model depth to load (limits model size for performance)
+    #[serde(default = "default_structures_max_depth")]
+    pub max_depth: u32,
+}
+
+fn default_structures_max_depth() -> u32 {
+    3 // 8x8x8 max model size
+}
+
+fn default_structures_enabled() -> bool {
+    false
+}
+
+fn default_structures_path() -> String {
+    "assets/models/vox/".to_string()
+}
+
+fn default_structures_prefix() -> String {
+    "obj_".to_string()
+}
+
+fn default_structures_count() -> u32 {
+    10
+}
+
+fn default_structures_spawn_radius() -> f32 {
+    0.4
+}
+
+impl Default for StructuresConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_structures_enabled(),
+            models_path: default_structures_path(),
+            prefix: default_structures_prefix(),
+            count: default_structures_count(),
+            spawn_radius: default_structures_spawn_radius(),
+            seed: 0,
+            max_depth: default_structures_max_depth(),
+        }
+    }
+}
+
 impl Default for ProtoGlConfig {
     fn default() -> Self {
         Self {
@@ -110,6 +176,7 @@ impl Default for ProtoGlConfig {
                 camera_distance: 2.0,
             },
             fps: FpsConfig::default(),
+            structures: StructuresConfig::default(),
         }
     }
 }

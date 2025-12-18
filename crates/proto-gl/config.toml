@@ -1,7 +1,7 @@
 [world]
 macro_depth = 3
-micro_depth = 4
-border_depth = 4
+micro_depth = 0
+border_depth = 10
 border_materials = [32, 32, 0, 0]
 root_cube = "> [32 65 0 0 89 90 0 111]"
 
@@ -30,3 +30,13 @@ mouse_sensitivity = 0.003 # Mouse sensitivity for look-around
 eye_height = 0.1          # Camera capsule height
 collision_radius = 0.02   # Camera capsule radius for collision
 spawn_position = [0.5, 0.6, 0.5]  # Spawn position (center of world, above ground)
+
+[structures]
+# Random structure placement settings
+enabled = true                        # Enable/disable structure placement
+models_path = "assets/models/vox/"    # Directory containing .vox files
+prefix = "obj_"                       # Only load files starting with this prefix
+count = 1                            # Number of structures to place
+spawn_radius = 0.35                   # Spawn radius from center (0.0-0.5)
+seed = 0                              # Random seed (0 = random)
+max_depth = 3                         # Max model depth (3 = 8x8x8, 4 = 16x16x16)
