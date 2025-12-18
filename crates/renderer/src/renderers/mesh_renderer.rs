@@ -24,6 +24,8 @@ pub struct GlMesh {
 pub struct MeshRenderer {
     program: Option<NativeProgram>,
     meshes: Vec<GlMesh>,
+    /// Wireframe box mesh for bounding box rendering
+    wireframe_box: Option<GlMesh>,
 }
 
 impl Default for MeshRenderer {
@@ -37,6 +39,7 @@ impl MeshRenderer {
         Self {
             program: None,
             meshes: Vec::new(),
+            wireframe_box: None,
         }
     }
 
@@ -51,7 +54,76 @@ impl MeshRenderer {
             let program = create_program(gl, VERTEX_SHADER, FRAGMENT_SHADER)?;
             self.program = Some(program);
 
+            // Create wireframe box mesh (unit cube from 0 to 1)
+            self.wireframe_box = Some(self.create_wireframe_box(gl)?);
+
             Ok(())
+        }
+    }
+
+    /// Create a wireframe box mesh (12 edges of a unit cube)
+    unsafe fn create_wireframe_box(&self, gl: &Context) -> Result<GlMesh, String> {
+        unsafe {
+            // 8 vertices of a unit cube [0, 1]³
+            // Each vertex: position (3) + normal (3) + color (3) = 9 floats
+            let white = [1.0f32, 1.0, 1.0];
+            let normal = [0.0f32, 1.0, 0.0]; // Dummy normal for wireframe
+
+            #[rustfmt::skip]
+            let vertices: Vec<f32> = vec![
+                // Position          Normal       Color
+                0.0, 0.0, 0.0,  normal[0], normal[1], normal[2],  white[0], white[1], white[2], // 0: front-bottom-left
+                1.0, 0.0, 0.0,  normal[0], normal[1], normal[2],  white[0], white[1], white[2], // 1: front-bottom-right
+                1.0, 1.0, 0.0,  normal[0], normal[1], normal[2],  white[0], white[1], white[2], // 2: front-top-right
+                0.0, 1.0, 0.0,  normal[0], normal[1], normal[2],  white[0], white[1], white[2], // 3: front-top-left
+                0.0, 0.0, 1.0,  normal[0], normal[1], normal[2],  white[0], white[1], white[2], // 4: back-bottom-left
+                1.0, 0.0, 1.0,  normal[0], normal[1], normal[2],  white[0], white[1], white[2], // 5: back-bottom-right
+                1.0, 1.0, 1.0,  normal[0], normal[1], normal[2],  white[0], white[1], white[2], // 6: back-top-right
+                0.0, 1.0, 1.0,  normal[0], normal[1], normal[2],  white[0], white[1], white[2], // 7: back-top-left
+            ];
+
+            // 12 edges as line pairs (24 indices)
+            #[rustfmt::skip]
+            let indices: Vec<u32> = vec![
+                // Front face edges
+                0, 1,  1, 2,  2, 3,  3, 0,
+                // Back face edges
+                4, 5,  5, 6,  6, 7,  7, 4,
+                // Connecting edges
+                0, 4,  1, 5,  2, 6,  3, 7,
+            ];
+
+            let vao = gl.create_vertex_array().map_err(|e| format!("Failed to create VAO: {}", e))?;
+            gl.bind_vertex_array(Some(vao));
+
+            let vbo = gl.create_buffer().map_err(|e| format!("Failed to create VBO: {}", e))?;
+            gl.bind_buffer(ARRAY_BUFFER, Some(vbo));
+            gl.buffer_data_u8_slice(ARRAY_BUFFER, bytemuck::cast_slice(&vertices), STATIC_DRAW);
+
+            // Position attribute (location 0)
+            gl.enable_vertex_attrib_array(0);
+            gl.vertex_attrib_pointer_f32(0, 3, FLOAT, false, 9 * std::mem::size_of::<f32>() as i32, 0);
+
+            // Normal attribute (location 1)
+            gl.enable_vertex_attrib_array(1);
+            gl.vertex_attrib_pointer_f32(1, 3, FLOAT, false, 9 * std::mem::size_of::<f32>() as i32, 3 * std::mem::size_of::<f32>() as i32);
+
+            // Color attribute (location 2)
+            gl.enable_vertex_attrib_array(2);
+            gl.vertex_attrib_pointer_f32(2, 3, FLOAT, false, 9 * std::mem::size_of::<f32>() as i32, 6 * std::mem::size_of::<f32>() as i32);
+
+            let ebo = gl.create_buffer().map_err(|e| format!("Failed to create EBO: {}", e))?;
+            gl.bind_buffer(ELEMENT_ARRAY_BUFFER, Some(ebo));
+            gl.buffer_data_u8_slice(ELEMENT_ARRAY_BUFFER, bytemuck::cast_slice(&indices), STATIC_DRAW);
+
+            gl.bind_vertex_array(None);
+
+            Ok(GlMesh {
+                vao,
+                vbo,
+                ebo,
+                index_count: indices.len() as i32,
+            })
         }
     }
 
@@ -227,6 +299,39 @@ impl MeshRenderer {
         viewport_height: i32,
     ) {
         unsafe {
+            self.render_mesh_with_options(
+                gl,
+                mesh_index,
+                position,
+                rotation,
+                scale,
+                false, // wireframe
+                camera,
+                viewport_width,
+                viewport_height,
+            )
+        }
+    }
+
+    /// Render a mesh at given position with specified scale and wireframe option
+    ///
+    /// # Safety
+    ///
+    /// Must be called with an active GL context on the current thread.
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn render_mesh_with_options(
+        &self,
+        gl: &Context,
+        mesh_index: usize,
+        position: glam::Vec3,
+        rotation: glam::Quat,
+        scale: f32,
+        wireframe: bool,
+        camera: &Camera,
+        viewport_width: i32,
+        viewport_height: i32,
+    ) {
+        unsafe {
             let Some(program) = self.program else { return };
             if mesh_index >= self.meshes.len() {
                 return;
@@ -238,11 +343,17 @@ impl MeshRenderer {
             gl.enable(DEPTH_TEST);
             gl.depth_func(LESS);
 
-            // Enable backface culling for proper rendering
+            // Enable backface culling for proper rendering (disabled for wireframe)
             // Voxel faces should be counter-clockwise when viewed from outside
-            gl.enable(CULL_FACE);
-            gl.cull_face(BACK);
-            gl.front_face(CCW);
+            if wireframe {
+                gl.disable(CULL_FACE);
+                gl.disable(DEPTH_TEST);
+                gl.polygon_mode(FRONT_AND_BACK, LINE);
+            } else {
+                gl.enable(CULL_FACE);
+                gl.cull_face(BACK);
+                gl.front_face(CCW);
+            }
 
             // Calculate matrices
             let aspect = viewport_width as f32 / viewport_height as f32;
@@ -302,6 +413,71 @@ impl MeshRenderer {
             // Restore GL state
             gl.disable(DEPTH_TEST);
             gl.disable(CULL_FACE);
+            if wireframe {
+                gl.polygon_mode(FRONT_AND_BACK, FILL);
+            }
+        }
+    }
+
+    /// Render a wireframe bounding box around an object
+    ///
+    /// # Safety
+    ///
+    /// Must be called with an active GL context on the current thread.
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn render_wireframe_box(
+        &self,
+        gl: &Context,
+        position: glam::Vec3,
+        rotation: glam::Quat,
+        scale: f32,
+        camera: &Camera,
+        viewport_width: i32,
+        viewport_height: i32,
+    ) {
+        unsafe {
+            let Some(program) = self.program else { return };
+            let Some(ref wireframe_mesh) = self.wireframe_box else { return };
+
+            gl.use_program(Some(program));
+            gl.disable(DEPTH_TEST); // Always on top
+            gl.disable(CULL_FACE);
+
+            // Calculate matrices
+            let aspect = viewport_width as f32 / viewport_height as f32;
+            let projection = glam::Mat4::perspective_rh(camera.vfov, aspect, 0.1, 1000.0);
+
+            let forward = camera.rotation * glam::Vec3::NEG_Z;
+            let up = camera.rotation * glam::Vec3::Y;
+            let target = camera.position + forward;
+            let view = glam::Mat4::look_at_rh(camera.position, target, up);
+
+            // Same transform as mesh: center the unit cube then scale
+            let mesh_offset = glam::Vec3::splat(-0.5);
+            let model = glam::Mat4::from_translation(position)
+                * glam::Mat4::from_quat(rotation)
+                * glam::Mat4::from_scale(glam::Vec3::splat(scale))
+                * glam::Mat4::from_translation(mesh_offset);
+
+            // Upload uniforms
+            let mvp = projection * view * model;
+            let mvp_loc = gl.get_uniform_location(program, "uMVP");
+            gl.uniform_matrix_4_f32_slice(mvp_loc.as_ref(), false, mvp.as_ref());
+
+            let model_loc = gl.get_uniform_location(program, "uModel");
+            gl.uniform_matrix_4_f32_slice(model_loc.as_ref(), false, model.as_ref());
+
+            // Full brightness for wireframe (no lighting)
+            let ambient_loc = gl.get_uniform_location(program, "uAmbient");
+            gl.uniform_1_f32(ambient_loc.as_ref(), 1.0);
+
+            let diffuse_strength_loc = gl.get_uniform_location(program, "uDiffuseStrength");
+            gl.uniform_1_f32(diffuse_strength_loc.as_ref(), 0.0);
+
+            // Draw wireframe box using LINES
+            gl.bind_vertex_array(Some(wireframe_mesh.vao));
+            gl.draw_elements(LINES, wireframe_mesh.index_count, UNSIGNED_INT, 0);
+            gl.bind_vertex_array(None);
         }
     }
 
