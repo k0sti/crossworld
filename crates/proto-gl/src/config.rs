@@ -8,6 +8,8 @@ pub struct ProtoGlConfig {
     pub physics: PhysicsConfig,
     pub spawning: SpawningConfig,
     pub rendering: RenderConfig,
+    #[serde(default)]
+    pub fps: FpsConfig,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -52,6 +54,32 @@ pub struct RenderConfig {
     pub camera_distance: f32,
 }
 
+#[derive(Debug, Deserialize, Clone)]
+pub struct FpsConfig {
+    /// Movement speed in units per second
+    pub move_speed: f32,
+    /// Mouse sensitivity for look-around
+    pub mouse_sensitivity: f32,
+    /// Camera height offset (eye level)
+    pub eye_height: f32,
+    /// Camera capsule radius for collision
+    pub collision_radius: f32,
+    /// Spawn position for FPS camera
+    pub spawn_position: [f32; 3],
+}
+
+impl Default for FpsConfig {
+    fn default() -> Self {
+        Self {
+            move_speed: 5.0,
+            mouse_sensitivity: 0.003,
+            eye_height: 1.7,
+            collision_radius: 0.3,
+            spawn_position: [0.5, 0.8, 0.5],
+        }
+    }
+}
+
 impl Default for ProtoGlConfig {
     fn default() -> Self {
         Self {
@@ -79,6 +107,7 @@ impl Default for ProtoGlConfig {
                 viewport_height: 600,
                 camera_distance: 30.0,
             },
+            fps: FpsConfig::default(),
         }
     }
 }

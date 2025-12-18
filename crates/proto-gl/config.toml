@@ -22,3 +22,11 @@ object_size = 0.05  # Object edge length (1.0 = full world size)
 viewport_width = 800
 viewport_height = 600
 camera_distance = 2.0
+
+[fps]
+# First-person camera settings
+move_speed = 0.5          # Movement speed in units per second
+mouse_sensitivity = 0.003 # Mouse sensitivity for look-around
+eye_height = 0.1          # Camera capsule height
+collision_radius = 0.02   # Camera capsule radius for collision
+spawn_position = [0.5, 0.6, 0.5]  # Spawn position (center of world, above ground)

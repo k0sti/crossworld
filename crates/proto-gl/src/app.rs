@@ -13,18 +13,31 @@ use std::time::Instant;
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
-use winit::window::{Window, WindowId};
+use winit::keyboard::{KeyCode, PhysicalKey};
+use winit::window::{CursorGrabMode, Window, WindowId};
 
 use cube::Cube;
 use crossworld_physics::{rapier3d::prelude::*, PhysicsWorld, VoxelColliderBuilder};
 use renderer::{CameraConfig, GlTracer, MeshRenderer};
 
-use crate::camera::OrbitCamera;
+use crate::camera::{CameraMode, FirstPersonCamera, OrbitCamera};
 use crate::config::{load_config, ProtoGlConfig};
 use crate::models::{load_vox_models, CubeObject};
-use crate::physics::spawn_cube_objects;
+use crate::physics::{spawn_cube_objects, CameraObject};
 use crate::ui::{render_debug_panel, UiState};
 use crate::world::generate_world;
+
+/// Keyboard input state for FPS controls
+#[derive(Default, Clone, Copy)]
+pub struct KeyboardState {
+    pub w: bool,
+    pub a: bool,
+    pub s: bool,
+    pub d: bool,
+    pub f: bool,  // Up
+    pub v: bool,  // Down
+    pub space: bool,  // Jump (for future use)
+}
 
 pub struct ProtoGlApp {
     // Window and GL state
@@ -42,7 +55,16 @@ pub struct ProtoGlApp {
     gl_tracer: Option<GlTracer>,
     mesh_renderer: Option<MeshRenderer>,
     object_mesh_indices: Vec<usize>,
-    camera: OrbitCamera,
+
+    // Camera state
+    camera_mode: CameraMode,
+    orbit_camera: OrbitCamera,
+    fps_camera: FirstPersonCamera,
+    camera_object: Option<CameraObject>,
+
+    // Input state
+    keyboard_state: KeyboardState,
+    last_mouse_pos: Option<(f32, f32)>,
 
     // World state
     world_cube: Option<Cube<u8>>,
@@ -86,7 +108,13 @@ impl ProtoGlApp {
             ProtoGlConfig::default()
         });
 
-        let camera = OrbitCamera::new(config.rendering.camera_distance);
+        let orbit_camera = OrbitCamera::new(config.rendering.camera_distance);
+
+        // Initialize FPS camera with config
+        let spawn_pos = glam::Vec3::from(config.fps.spawn_position);
+        let mut fps_camera = FirstPersonCamera::new(spawn_pos);
+        fps_camera.move_speed = config.fps.move_speed;
+        fps_camera.sensitivity = config.fps.mouse_sensitivity;
 
         if debug_mode {
             println!("[DEBUG] Running in debug mode - will exit after single frame");
@@ -103,7 +131,12 @@ impl ProtoGlApp {
             gl_tracer: None,
             mesh_renderer: None,
             object_mesh_indices: Vec::new(),
-            camera,
+            camera_mode: CameraMode::Orbit,
+            orbit_camera,
+            fps_camera,
+            camera_object: None,
+            keyboard_state: KeyboardState::default(),
+            last_mouse_pos: None,
             world_cube: None,
             world_depth: 0,
             physics_world: None,
@@ -252,6 +285,15 @@ impl ApplicationHandler for ProtoGlApp {
         let models = load_vox_models(&self.config.spawning.models_path);
         let objects = spawn_cube_objects(&self.config.spawning, &models, &mut physics_world);
 
+        // Create camera physics object for first-person mode
+        let spawn_pos = glam::Vec3::from(self.config.fps.spawn_position);
+        let camera_object = CameraObject::new(
+            &mut physics_world,
+            spawn_pos,
+            self.config.fps.eye_height,
+            self.config.fps.collision_radius,
+        );
+
         // Upload meshes for each spawned object
         let mut object_mesh_indices = Vec::new();
         for obj in &objects {
@@ -271,11 +313,16 @@ impl ApplicationHandler for ProtoGlApp {
 
         println!("Proto-GL Physics Viewer initialized!");
         println!("  World depth: {}", world_depth);
-        println!("  Camera distance: {:.1}", self.camera.distance);
+        println!("  Camera distance: {:.1}", self.orbit_camera.distance);
         println!("  Gravity: {:.2}", self.config.physics.gravity);
         println!("  Physics timestep: {:.4}", self.config.physics.timestep);
         println!("  Spawned objects: {}", objects.len());
         println!("  Uploaded meshes: {}", object_mesh_indices.len());
+        println!("  FPS camera spawn: {:?}", self.config.fps.spawn_position);
+        println!("Controls:");
+        println!("  Tab: Toggle camera mode (Orbit/FPS)");
+        println!("  Orbit: Right-click drag to rotate, scroll to zoom");
+        println!("  FPS: Click to capture mouse, WASD to move, F/V for up/down, Esc to release");
 
         self.window = Some(window);
         self.gl_context = Some(gl_context);
@@ -290,6 +337,7 @@ impl ApplicationHandler for ProtoGlApp {
         self.world_cube = Some(world_cube);
         self.world_depth = world_depth;
         self.physics_world = Some(physics_world);
+        self.camera_object = Some(camera_object);
         self.objects = objects;
     }
 
@@ -322,37 +370,106 @@ impl ApplicationHandler for ProtoGlApp {
                     window.request_redraw();
                 }
             }
+            WindowEvent::KeyboardInput { event, .. } => {
+                let pressed = event.state == ElementState::Pressed;
+
+                match event.physical_key {
+                    // Tab to toggle camera mode
+                    PhysicalKey::Code(KeyCode::Tab) if pressed => {
+                        self.toggle_camera_mode();
+                    }
+                    // Escape to release mouse in FPS mode
+                    PhysicalKey::Code(KeyCode::Escape) if pressed => {
+                        if self.camera_mode == CameraMode::FirstPerson && self.fps_camera.mouse_captured {
+                            self.release_mouse();
+                        }
+                    }
+                    // WASD movement
+                    PhysicalKey::Code(KeyCode::KeyW) => self.keyboard_state.w = pressed,
+                    PhysicalKey::Code(KeyCode::KeyA) => self.keyboard_state.a = pressed,
+                    PhysicalKey::Code(KeyCode::KeyS) => self.keyboard_state.s = pressed,
+                    PhysicalKey::Code(KeyCode::KeyD) => self.keyboard_state.d = pressed,
+                    // F/V for up/down
+                    PhysicalKey::Code(KeyCode::KeyF) => self.keyboard_state.f = pressed,
+                    PhysicalKey::Code(KeyCode::KeyV) => self.keyboard_state.v = pressed,
+                    // Space for jump
+                    PhysicalKey::Code(KeyCode::Space) => self.keyboard_state.space = pressed,
+                    _ => {}
+                }
+            }
             WindowEvent::MouseInput { state, button, .. } => {
-                if button == MouseButton::Right {
-                    self.camera.dragging = state == ElementState::Pressed;
-                    if !self.camera.dragging {
-                        self.camera.last_mouse_pos = None;
+                match self.camera_mode {
+                    CameraMode::Orbit => {
+                        if button == MouseButton::Right {
+                            self.orbit_camera.dragging = state == ElementState::Pressed;
+                            if !self.orbit_camera.dragging {
+                                self.orbit_camera.last_mouse_pos = None;
+                            }
+                        }
+                    }
+                    CameraMode::FirstPerson => {
+                        // Left click to capture mouse
+                        if button == MouseButton::Left && state == ElementState::Pressed {
+                            if !self.fps_camera.mouse_captured {
+                                self.capture_mouse();
+                            }
+                        }
                     }
                 }
             }
             WindowEvent::CursorMoved { position, .. } => {
-                if self.camera.dragging {
-                    if let Some((last_x, last_y)) = self.camera.last_mouse_pos {
-                        let delta_x = position.x as f32 - last_x;
-                        let delta_y = position.y as f32 - last_y;
-                        self.camera.handle_mouse_drag(delta_x, delta_y);
-                    }
-                    self.camera.last_mouse_pos = Some((position.x as f32, position.y as f32));
+                match self.camera_mode {
+                    CameraMode::Orbit => {
+                        if self.orbit_camera.dragging {
+                            if let Some((last_x, last_y)) = self.orbit_camera.last_mouse_pos {
+                                let delta_x = position.x as f32 - last_x;
+                                let delta_y = position.y as f32 - last_y;
+                                self.orbit_camera.handle_mouse_drag(delta_x, delta_y);
+                            }
+                            self.orbit_camera.last_mouse_pos = Some((position.x as f32, position.y as f32));
 
-                    if let Some(window) = &self.window {
-                        window.request_redraw();
+                            if let Some(window) = &self.window {
+                                window.request_redraw();
+                            }
+                        }
+                    }
+                    CameraMode::FirstPerson => {
+                        if self.fps_camera.mouse_captured {
+                            if let Some((last_x, last_y)) = self.last_mouse_pos {
+                                let delta_x = position.x as f32 - last_x;
+                                let delta_y = position.y as f32 - last_y;
+                                self.fps_camera.handle_mouse_move(delta_x, delta_y);
+                            }
+                            self.last_mouse_pos = Some((position.x as f32, position.y as f32));
+
+                            // Re-center cursor for continuous mouse look
+                            if let Some(window) = &self.window {
+                                let size = window.inner_size();
+                                let center_x = size.width as f64 / 2.0;
+                                let center_y = size.height as f64 / 2.0;
+                                // Only re-center if we've moved significantly
+                                let dx = (position.x - center_x).abs();
+                                let dy = (position.y - center_y).abs();
+                                if dx > 100.0 || dy > 100.0 {
+                                    let _ = window.set_cursor_position(winit::dpi::PhysicalPosition::new(center_x, center_y));
+                                    self.last_mouse_pos = Some((center_x as f32, center_y as f32));
+                                }
+                            }
+                        }
                     }
                 }
             }
             WindowEvent::MouseWheel { delta, .. } => {
-                let scroll_delta = match delta {
-                    MouseScrollDelta::LineDelta(_x, y) => y * 2.0,
-                    MouseScrollDelta::PixelDelta(pos) => pos.y as f32 * 0.01,
-                };
-                self.camera.handle_scroll(scroll_delta);
+                if self.camera_mode == CameraMode::Orbit {
+                    let scroll_delta = match delta {
+                        MouseScrollDelta::LineDelta(_x, y) => y * 2.0,
+                        MouseScrollDelta::PixelDelta(pos) => pos.y as f32 * 0.01,
+                    };
+                    self.orbit_camera.handle_scroll(scroll_delta);
 
-                if let Some(window) = &self.window {
-                    window.request_redraw();
+                    if let Some(window) = &self.window {
+                        window.request_redraw();
+                    }
                 }
             }
             WindowEvent::RedrawRequested => {
@@ -364,6 +481,48 @@ impl ApplicationHandler for ProtoGlApp {
 }
 
 impl ProtoGlApp {
+    /// Toggle between Orbit and FirstPerson camera modes
+    fn toggle_camera_mode(&mut self) {
+        self.camera_mode = match self.camera_mode {
+            CameraMode::Orbit => {
+                println!("Switched to First-Person mode");
+                // Sync FPS camera position with physics object
+                if let (Some(physics_world), Some(camera_obj)) = (&self.physics_world, &self.camera_object) {
+                    self.fps_camera.set_position(camera_obj.position(physics_world));
+                }
+                CameraMode::FirstPerson
+            }
+            CameraMode::FirstPerson => {
+                println!("Switched to Orbit mode");
+                self.release_mouse();
+                CameraMode::Orbit
+            }
+        };
+    }
+
+    /// Capture mouse for FPS look-around
+    fn capture_mouse(&mut self) {
+        if let Some(window) = &self.window {
+            // Try to confine cursor first, then try to grab it
+            let _ = window.set_cursor_grab(CursorGrabMode::Confined)
+                .or_else(|_| window.set_cursor_grab(CursorGrabMode::Locked));
+            window.set_cursor_visible(false);
+            self.fps_camera.mouse_captured = true;
+            self.last_mouse_pos = None;
+            println!("Mouse captured - move to look around, Esc to release");
+        }
+    }
+
+    /// Release mouse from FPS mode
+    fn release_mouse(&mut self) {
+        if let Some(window) = &self.window {
+            let _ = window.set_cursor_grab(CursorGrabMode::None);
+            window.set_cursor_visible(true);
+            self.fps_camera.mouse_captured = false;
+            self.last_mouse_pos = None;
+        }
+    }
+
     fn render(&mut self, event_loop: &ActiveEventLoop) {
         if self.window.is_none() {
             return;
@@ -378,6 +537,31 @@ impl ProtoGlApp {
         self.frame_time = delta;
         self.fps = 1.0 / delta.max(0.001);
 
+        // Update FPS camera movement if in first-person mode
+        if self.camera_mode == CameraMode::FirstPerson {
+            // Calculate velocity from keyboard input
+            let velocity = self.fps_camera.calculate_velocity(
+                self.keyboard_state.w,
+                self.keyboard_state.s,
+                self.keyboard_state.a,
+                self.keyboard_state.d,
+                self.keyboard_state.f,
+                self.keyboard_state.v,
+            );
+
+            // Move camera physics object
+            if let (Some(physics_world), Some(camera_obj)) =
+                (&mut self.physics_world, &mut self.camera_object)
+            {
+                camera_obj.move_with_velocity(
+                    physics_world,
+                    velocity,
+                    delta,
+                    self.config.physics.gravity,
+                );
+            }
+        }
+
         // Physics simulation with fixed timestep
         if let Some(physics_world) = &mut self.physics_world {
             self.physics_accumulator += delta;
@@ -386,6 +570,15 @@ impl ProtoGlApp {
             while self.physics_accumulator >= timestep {
                 physics_world.step(timestep);
                 self.physics_accumulator -= timestep;
+            }
+        }
+
+        // Update FPS camera position from physics
+        if self.camera_mode == CameraMode::FirstPerson {
+            if let (Some(physics_world), Some(camera_obj)) =
+                (&self.physics_world, &self.camera_object)
+            {
+                self.fps_camera.set_position(camera_obj.position(physics_world));
             }
         }
 
@@ -406,14 +599,24 @@ impl ProtoGlApp {
             gl.clear(COLOR_BUFFER_BIT | DEPTH_BUFFER_BIT);
         }
 
-        // Create camera config from orbit camera
-        let camera = CameraConfig {
-            position: self.camera.position(),
-            rotation: self.camera.rotation(),
-            vfov: 60.0_f32.to_radians(),
-            pitch: self.camera.pitch,
-            yaw: self.camera.yaw,
-            target_position: Some(self.camera.focus),
+        // Create camera config based on current mode
+        let camera = match self.camera_mode {
+            CameraMode::Orbit => CameraConfig {
+                position: self.orbit_camera.position(),
+                rotation: self.orbit_camera.rotation(),
+                vfov: 60.0_f32.to_radians(),
+                pitch: self.orbit_camera.pitch(),
+                yaw: self.orbit_camera.yaw(),
+                target_position: Some(self.orbit_camera.focus),
+            },
+            CameraMode::FirstPerson => CameraConfig {
+                position: self.fps_camera.position(),
+                rotation: self.fps_camera.rotation(),
+                vfov: 60.0_f32.to_radians(),
+                pitch: self.fps_camera.pitch(),
+                yaw: self.fps_camera.yaw(),
+                target_position: None,
+            },
         };
 
         // Render world using GlTracer (if enabled)
@@ -468,21 +671,39 @@ impl ProtoGlApp {
         }
 
         // Capture UI state before egui run
+        let (cam_distance, cam_yaw, cam_pitch, cam_pos, cam_rot) = match self.camera_mode {
+            CameraMode::Orbit => (
+                self.orbit_camera.distance,
+                self.orbit_camera.yaw(),
+                self.orbit_camera.pitch(),
+                self.orbit_camera.position(),
+                self.orbit_camera.rotation(),
+            ),
+            CameraMode::FirstPerson => (
+                0.0, // No distance in FPS mode
+                self.fps_camera.yaw(),
+                self.fps_camera.pitch(),
+                self.fps_camera.position(),
+                self.fps_camera.rotation(),
+            ),
+        };
+
         let mut ui_state = UiState {
             fps: self.fps,
             frame_time: self.frame_time,
             world_depth: self.world_depth,
             gravity: self.config.physics.gravity,
             timestep: self.config.physics.timestep,
-            camera_distance: self.camera.distance,
-            camera_yaw: self.camera.yaw,
-            camera_pitch: self.camera.pitch,
-            camera_pos: self.camera.position(),
-            camera_rot: self.camera.rotation(),
+            camera_distance: cam_distance,
+            camera_yaw: cam_yaw,
+            camera_pitch: cam_pitch,
+            camera_pos: cam_pos,
+            camera_rot: cam_rot,
             object_count: self.objects.len(),
             render_world: self.render_world,
             render_objects: self.render_objects,
             show_debug_info: self.show_debug_info,
+            camera_mode: self.camera_mode,
         };
 
         // Run egui

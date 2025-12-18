@@ -1,4 +1,5 @@
 use glam::{Vec3, Quat};
+use crate::camera::CameraMode;
 
 /// UI state captured from app for rendering
 pub struct UiState {
@@ -16,6 +17,7 @@ pub struct UiState {
     pub render_world: bool,
     pub render_objects: bool,
     pub show_debug_info: bool,
+    pub camera_mode: CameraMode,
 }
 
 /// Render the egui debug panel
@@ -36,7 +38,21 @@ pub fn render_debug_panel(ctx: &egui::Context, state: &mut UiState) {
 
         ui.separator();
         ui.heading("Camera");
-        ui.label(format!("Distance: {:.1}", state.camera_distance));
+        let mode_str = match state.camera_mode {
+            CameraMode::Orbit => "Orbit",
+            CameraMode::FirstPerson => "First-Person",
+        };
+        ui.label(format!("Mode: {} (Tab to toggle)", mode_str));
+
+        match state.camera_mode {
+            CameraMode::Orbit => {
+                ui.label(format!("Distance: {:.1}", state.camera_distance));
+            }
+            CameraMode::FirstPerson => {
+                ui.label(format!("Position: ({:.1}, {:.1}, {:.1})",
+                    state.camera_pos.x, state.camera_pos.y, state.camera_pos.z));
+            }
+        }
         ui.label(format!("Yaw: {:.2}", state.camera_yaw));
         ui.label(format!("Pitch: {:.2}", state.camera_pitch));
 
@@ -61,8 +77,23 @@ pub fn render_debug_panel(ctx: &egui::Context, state: &mut UiState) {
         }
 
         ui.separator();
-        ui.label("Controls:");
-        ui.label("• Right-click drag: Rotate camera");
-        ui.label("• Mouse wheel: Zoom");
+        ui.heading("Controls");
+        ui.label("Tab: Toggle camera mode");
+        ui.add_space(4.0);
+        match state.camera_mode {
+            CameraMode::Orbit => {
+                ui.label("Orbit Mode:");
+                ui.label("• Right-click drag: Rotate");
+                ui.label("• Mouse wheel: Zoom");
+            }
+            CameraMode::FirstPerson => {
+                ui.label("First-Person Mode:");
+                ui.label("• Click to capture mouse");
+                ui.label("• WASD: Move");
+                ui.label("• F/V: Up/Down");
+                ui.label("• Mouse: Look around");
+                ui.label("• Esc: Release mouse");
+            }
+        }
     });
 }
