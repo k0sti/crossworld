@@ -18,7 +18,7 @@ use winit::window::{CursorGrabMode, Window, WindowId};
 
 use cube::Cube;
 use crossworld_physics::{rapier3d::prelude::*, PhysicsWorld, VoxelColliderBuilder};
-use renderer::{CameraConfig, GlTracer, MeshRenderer};
+use renderer::{CameraConfig, GlTracer, MeshRenderer, BACKGROUND_COLOR};
 
 use crate::camera::{CameraMode, FirstPersonCamera, OrbitCamera};
 use crate::config::{load_config, ProtoGlConfig};
@@ -287,9 +287,9 @@ impl ApplicationHandler for ProtoGlApp {
             }
         }
 
-        // Enable debug visualization
+        // Enable debug visualization with lighting
         gl_tracer.set_show_errors(true);
-        gl_tracer.set_disable_lighting(true);
+        gl_tracer.set_disable_lighting(false);
 
         // Debug: print world cube info
         println!("[DEBUG] World cube type: {:?}", match &world_cube {
@@ -646,7 +646,7 @@ impl ProtoGlApp {
 
         unsafe {
             gl.viewport(0, 0, size.width as i32, size.height as i32);
-            gl.clear_color(0.1, 0.1, 0.1, 1.0);
+            gl.clear_color(BACKGROUND_COLOR.x, BACKGROUND_COLOR.y, BACKGROUND_COLOR.z, 1.0);
             gl.clear(COLOR_BUFFER_BIT | DEPTH_BUFFER_BIT);
         }
 

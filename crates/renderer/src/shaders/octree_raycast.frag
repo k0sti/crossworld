@@ -10,6 +10,7 @@ uniform vec2 u_resolution;
 uniform float u_time;
 uniform vec3 u_camera_pos;
 uniform vec4 u_camera_rot;  // quaternion (x, y, z, w)
+uniform float u_tan_half_vfov;  // tan(vertical_fov / 2) for perspective projection
 uniform bool u_use_camera;
 uniform int u_max_depth;
 
@@ -917,36 +918,41 @@ HitInfo raycastBcfOctree(vec3 pos, vec3 dir) {
 }
 
 void main() {
-    // Normalized pixel coordinates
-    vec2 uv = (gl_FragCoord.xy - 0.5 * u_resolution) / u_resolution.y;
+    // Normalized pixel coordinates in [-1, 1] range (NDC)
+    vec2 ndc = (gl_FragCoord.xy - 0.5 * u_resolution) / (0.5 * u_resolution.y);
+    float aspect = u_resolution.x / u_resolution.y;
 
     // Camera setup
     vec3 cameraPos;
     vec3 forward, right, camUp;
+    float tan_half_vfov;
 
     if (u_use_camera) {
         // Use explicit camera configuration
         cameraPos = u_camera_pos;
+        tan_half_vfov = u_tan_half_vfov;
 
         // Get camera basis vectors from quaternion
         forward = quat_rotate(u_camera_rot, vec3(0.0, 0.0, -1.0));
         right = quat_rotate(u_camera_rot, vec3(1.0, 0.0, 0.0));
         camUp = quat_rotate(u_camera_rot, vec3(0.0, 1.0, 0.0));
     } else {
-        // Use time-based orbiting camera
+        // Use time-based orbiting camera with default 60° vertical FOV
         cameraPos = vec3(3.0 * cos(u_time * 0.3), 2.0, 3.0 * sin(u_time * 0.3));
         vec3 target = vec3(0.0, 0.0, 0.0);
         vec3 up = vec3(0.0, 1.0, 0.0);
+        tan_half_vfov = tan(radians(30.0)); // 60° vfov -> tan(30°)
 
         forward = normalize(target - cameraPos);
         right = normalize(cross(forward, up));
         camUp = cross(right, forward);
     }
 
-    // Create ray
+    // Create ray using perspective projection
+    // This matches the mesh renderer's perspective_rh projection exactly
     Ray ray;
     ray.origin = cameraPos;
-    ray.direction = normalize(forward + uv.x * right + uv.y * camUp);
+    ray.direction = normalize(forward + ndc.x * tan_half_vfov * right + ndc.y * tan_half_vfov * camUp);
 
     // Background color (matches BACKGROUND_COLOR in Rust)
     vec3 color = vec3(0.4, 0.5, 0.6);
