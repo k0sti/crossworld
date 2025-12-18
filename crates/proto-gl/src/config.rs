@@ -97,15 +97,17 @@ impl Default for ProtoGlConfig {
             spawning: SpawningConfig {
                 spawn_count: 10,
                 models_path: "assets/models/".to_string(),
-                min_height: 10.0,
-                max_height: 30.0,
-                spawn_radius: 20.0,
+                // Heights and spawn radius in [0,1]³ world space
+                min_height: 0.6,
+                max_height: 0.9,
+                spawn_radius: 0.3,
                 object_size: 0.05,
             },
             rendering: RenderConfig {
-                viewport_width: 800,
-                viewport_height: 600,
-                camera_distance: 30.0,
+                viewport_width: 1000,
+                viewport_height: 750,
+                // Camera distance appropriate for [0,1]³ world
+                camera_distance: 2.0,
             },
             fps: FpsConfig::default(),
         }

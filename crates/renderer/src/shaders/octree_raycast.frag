@@ -952,8 +952,10 @@ void main() {
     vec3 color = vec3(0.4, 0.5, 0.6);
 
     // Raycast through BCF-encoded octree
-    // The octree is in world space [-1, 1]³
-    HitInfo octreeHit = raycastBcfOctree(ray.origin, ray.direction);
+    // The octree internally uses [-1, 1]³ space, but world coordinates are [0, 1]³
+    // Transform ray origin from world space [0, 1]³ to octree space [-1, 1]³
+    vec3 rayOriginLocal = ray.origin * 2.0 - 1.0;
+    HitInfo octreeHit = raycastBcfOctree(rayOriginLocal, ray.direction);
 
     if (octreeHit.hit) {
         // Get material color from voxel value (materials 1-7 are animated error materials)

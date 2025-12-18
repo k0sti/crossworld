@@ -24,6 +24,9 @@ egui-winit = "0.29"
 glam = "0.29"
 rand = "0.8"
 
+# Image output
+image = "0.25"
+
 # Configuration
 toml = "0.8"
 serde = { version = "1.0", features = ["derive"] }

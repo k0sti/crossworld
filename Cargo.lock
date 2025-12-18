@@ -7337,6 +7337,7 @@ dependencies = [
  "glow 0.14.2",
  "glutin",
  "glutin-winit",
+ "image",
  "rand 0.8.5",
  "raw-window-handle",
  "renderer",
