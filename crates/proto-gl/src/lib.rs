@@ -6,6 +6,7 @@ pub mod camera;
 pub mod config;
 pub mod models;
 pub mod physics;
+pub mod structures;
 pub mod ui;
 pub mod world;
 

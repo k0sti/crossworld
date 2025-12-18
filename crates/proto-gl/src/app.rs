@@ -24,6 +24,7 @@ use crate::camera::{CameraMode, FirstPersonCamera, OrbitCamera};
 use crate::config::{load_config, ProtoGlConfig};
 use crate::models::{load_vox_models, CubeObject};
 use crate::physics::{spawn_cube_objects, CameraObject};
+use crate::structures::{load_structure_models, place_structures};
 use crate::ui::{render_debug_panel, UiState};
 use crate::world::generate_world;
 
@@ -244,7 +245,27 @@ impl ApplicationHandler for ProtoGlApp {
         let painter = egui_glow::Painter::new(gl.clone(), "", None, false).unwrap();
 
         // Generate world
-        let (world_cube, world_depth) = generate_world(&self.config.world);
+        let (mut world_cube, world_depth) = generate_world(&self.config.world);
+
+        // Place structures into the world if enabled
+        if self.config.structures.enabled {
+            let structure_models = load_structure_models(&self.config.structures);
+            if !structure_models.is_empty() {
+                // Content depth is macro_depth + border_depth (root cube resolution after expansion)
+                let content_depth = self.config.world.macro_depth + self.config.world.border_depth;
+                world_cube = place_structures(
+                    &world_cube,
+                    world_depth,
+                    content_depth,
+                    &self.config.structures,
+                    &structure_models,
+                );
+                println!(
+                    "Placed {} structures into world",
+                    self.config.structures.count
+                );
+            }
+        }
 
         // Initialize GL tracer with world cube
         let world_cube_rc = Rc::new(world_cube.clone());
