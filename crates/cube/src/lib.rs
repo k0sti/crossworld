@@ -24,8 +24,9 @@ pub use axis::Axis;
 
 // Re-export traversal types
 pub use traversal::{
-    traverse_octree, visit_faces, CubeCoord, FaceInfo, NeighborGrid, NeighborView,
-    TraversalVisitor, OFFSET_BACK, OFFSET_DOWN, OFFSET_FRONT, OFFSET_LEFT, OFFSET_RIGHT, OFFSET_UP,
+    traverse_octree, visit_faces, visit_faces_in_region, CubeCoord, FaceInfo, NeighborGrid,
+    NeighborView, RegionBounds, TraversalVisitor, OFFSET_BACK, OFFSET_DOWN, OFFSET_FRONT,
+    OFFSET_LEFT, OFFSET_RIGHT, OFFSET_UP,
 };
 
 // Re-export mesh types

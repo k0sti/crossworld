@@ -1,7 +1,9 @@
 mod character_controller;
 mod collider;
+pub mod collision;
 mod cube_object;
 mod object;
+pub mod sdf;
 mod world;
 
 // Only compile WASM bindings when "wasm" feature is enabled

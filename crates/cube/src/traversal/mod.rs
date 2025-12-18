@@ -11,7 +11,7 @@ pub use neighbor_grid::{
     CubeCoord, NeighborGrid, NeighborView, OFFSET_BACK, OFFSET_DOWN, OFFSET_FRONT, OFFSET_LEFT,
     OFFSET_RIGHT, OFFSET_UP,
 };
-pub use visit_faces::{visit_faces, FaceInfo};
+pub use visit_faces::{visit_faces, visit_faces_in_region, FaceInfo, RegionBounds};
 
 // traverse_octree and TraversalVisitor are defined in this file and exported directly
 

@@ -23,7 +23,9 @@ crates/physics/
     ├── lib.rs                    # Module exports
     ├── character_controller.rs   # Character physics and movement
     ├── collider.rs               # Voxel collision geometry generation
-    ├── cube_object.rs            # Cube rigid body wrapper
+    ├── collision.rs              # AABB and intersection region types (WASM-compatible)
+    ├── cube_object.rs            # Cube rigid body wrapper with AABB support
+    ├── sdf.rs                    # SDF collision trait and implementations
     ├── world.rs                  # Physics world state
     └── wasm.rs                   # WASM bindings for web
 ```
@@ -205,6 +207,119 @@ impl VoxelColliderBuilder {
 2. **LOD colliders**: Generate simpler collision geometry for distant objects
 3. **Caching**: Cache generated colliders and invalidate only when voxels change
 4. **Spatial partitioning**: Only generate colliders for active regions near dynamic objects
+
+### 2.5. AABB-Based Collision System (`collision.rs`)
+
+The new collision module provides efficient collision detection using Axis-Aligned Bounding Boxes (AABB) and region-bounded traversal.
+
+#### Core Types
+
+**Aabb** - Axis-aligned bounding box using glam types (WASM-compatible):
+
+```rust
+pub struct Aabb {
+    pub min: Vec3,
+    pub max: Vec3,
+}
+
+impl Aabb {
+    pub fn unit() -> Self;                                           // Unit cube [0,1]³
+    pub fn to_world(&self, position: Vec3, rotation: Quat, scale: f32) -> Self;
+    pub fn intersects(&self, other: &Aabb) -> bool;                 // Overlap test
+    pub fn intersection(&self, other: &Aabb) -> Option<Aabb>;       // Get overlap volume
+}
+```
+
+**IntersectionRegion** - Octree region overlapping a bounding volume:
+
+```rust
+pub struct IntersectionRegion {
+    pub coord: CubeCoord,  // Base octant coordinate
+    pub size: IVec3,       // Size in each dimension (1 or 2)
+}
+
+impl IntersectionRegion {
+    pub fn from_aabb(world_aabb: &Aabb, cube_pos: Vec3, cube_scale: f32, depth: u32) -> Option<Self>;
+    pub fn octant_count(&self) -> usize;                            // 1 to 8 octants
+    pub fn iter_coords(&self) -> impl Iterator<Item = CubeCoord>;   // All covered coords
+}
+```
+
+#### Collision Helpers
+
+**CubeCollider** - Static cube vs dynamic object collision:
+
+```rust
+impl CubeCollider {
+    pub fn might_collide(cube_aabb: &Aabb, object_aabb: &Aabb) -> bool;
+    pub fn intersection_region(
+        cube_aabb: &Aabb, object_aabb: &Aabb,
+        cube_pos: Vec3, cube_scale: f32
+    ) -> Option<Aabb>;
+}
+```
+
+**ObjectCollider** - Dynamic object vs dynamic object collision:
+
+```rust
+impl ObjectCollider {
+    pub fn might_collide(aabb_a: &Aabb, aabb_b: &Aabb) -> bool;
+    pub fn intersection_regions(
+        aabb_a: &Aabb, aabb_b: &Aabb,
+        pos_a: Vec3, pos_b: Vec3,
+        scale_a: f32, scale_b: f32
+    ) -> Option<(Aabb, Aabb)>;
+}
+```
+
+#### Why AABB over Bounding Spheres?
+
+- **Tighter fit**: Cubes are box-shaped; AABBs have 1:1 volume ratio vs ~47% waste with spheres
+- **Simple tests**: AABB intersection is just min/max comparisons
+- **Natural octree alignment**: Octants are axis-aligned, so AABB-octant tests are trivial
+- **OBB support**: Rotated cubes transform to world AABB by transforming 8 corners
+
+#### Region-Bounded Traversal
+
+The `cube` crate provides `visit_faces_in_region()` which only visits voxel faces within specified bounds:
+
+```rust
+pub fn visit_faces_in_region<F>(
+    root: &Cube<u8>,
+    bounds: &RegionBounds,
+    visitor: F,
+    border_materials: [u8; 4]
+) where F: FnMut(&FaceInfo);
+```
+
+This reduces collision face generation by 70-90% for typical collision scenarios where only a small region overlaps.
+
+### 2.6. SDF Interface (`sdf.rs`)
+
+The SDF (Signed Distance Function) module provides a trait for smooth surface collision, designed for fabric-generated voxel models.
+
+```rust
+pub trait SdfCollider {
+    /// Signed distance from point to surface (negative = inside)
+    fn sdf(&self, point: Vec3) -> f32;
+
+    /// Surface normal at point (gradient of SDF)
+    fn normal(&self, point: Vec3) -> Vec3;
+
+    /// Check if a point is inside the surface
+    fn is_inside(&self, point: Vec3) -> bool;
+
+    /// Find penetration depth for a sphere
+    fn sphere_penetration(&self, center: Vec3, radius: f32) -> Option<(f32, Vec3)>;
+}
+```
+
+For fabric models, SDF is derived from quaternion field magnitude:
+- `|Q| < 1.0`: Inside (solid)
+- `|Q| = 1.0`: Surface boundary
+- `|Q| > 1.0`: Outside (air)
+
+See `crates/physics/src/sdf.rs` for `SphereSdf` and `BoxSdf` reference implementations.
 
 ### 3. Rigid Body Management (`rigid_body.rs`)
 

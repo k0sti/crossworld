@@ -223,7 +223,7 @@ impl<'a> NeighborView<'a> {
 /// - Root cube (depth=0) has pos = (0, 0, 0)
 /// - Child positions offset by ±1 in each direction
 /// - At depth d, positions range from -(2^d) to +(2^d) in steps of 2
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct CubeCoord {
     /// Position in octree space (center-based)
     /// Root: (0, 0, 0), children offset by ±1

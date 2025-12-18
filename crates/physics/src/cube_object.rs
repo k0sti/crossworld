@@ -1,3 +1,4 @@
+use crate::collision::Aabb;
 use crate::world::PhysicsWorld;
 use cube::Cube;
 use glam::{Quat, Vec3};
@@ -16,6 +17,8 @@ pub struct CubeObject {
     pub(crate) collider_handle: Option<ColliderHandle>,
     /// The voxel cube used for collision geometry (optional)
     pub cube: Option<Rc<Cube<u8>>>,
+    /// Scale of the cube object (default 1.0)
+    scale: f32,
 }
 
 impl CubeObject {
@@ -42,6 +45,7 @@ impl CubeObject {
             body_handle,
             collider_handle: None,
             cube: None,
+            scale: 1.0,
         }
     }
 
@@ -64,6 +68,7 @@ impl CubeObject {
             body_handle,
             collider_handle: None,
             cube: None,
+            scale: 1.0,
         }
     }
 
@@ -86,6 +91,7 @@ impl CubeObject {
             body_handle,
             collider_handle: None,
             cube: None,
+            scale: 1.0,
         }
     }
 
@@ -110,6 +116,61 @@ impl CubeObject {
     /// Get the cube reference if it exists
     pub fn cube(&self) -> Option<&Rc<Cube<u8>>> {
         self.cube.as_ref()
+    }
+
+    /// Get the scale of the cube object
+    pub fn scale(&self) -> f32 {
+        self.scale
+    }
+
+    /// Set the scale of the cube object
+    ///
+    /// Note: This does not automatically update the collider. You may need
+    /// to regenerate the collider after changing scale.
+    pub fn set_scale(&mut self, scale: f32) {
+        self.scale = scale;
+    }
+
+    /// Get the local-space AABB for this cube object
+    ///
+    /// Returns the unit cube [0,1]³ representing the unscaled, unrotated bounding box.
+    /// This is constant for all CubeObjects since voxel cubes are defined in [0,1]³ space.
+    pub fn local_aabb(&self) -> Aabb {
+        Aabb::unit()
+    }
+
+    /// Get the world-space AABB for this cube object
+    ///
+    /// Computes a tight AABB by transforming the local unit cube using the object's
+    /// position, rotation, and scale. The result is an axis-aligned bounding box
+    /// that fully contains the rotated cube.
+    ///
+    /// # Arguments
+    /// * `world` - The physics world to query position/rotation from
+    ///
+    /// # Example
+    /// ```ignore
+    /// let aabb = cube_object.world_aabb(&world);
+    /// if aabb.intersects(&other_aabb) {
+    ///     // Potential collision - do narrow phase
+    /// }
+    /// ```
+    pub fn world_aabb(&self, world: &PhysicsWorld) -> Aabb {
+        let position = self.position(world);
+        let rotation = self.rotation(world);
+        self.local_aabb().to_world(position, rotation, self.scale)
+    }
+
+    /// Check if this object's AABB intersects with another AABB
+    ///
+    /// This is a broad-phase collision test. A positive result means
+    /// the objects might be colliding and require narrow-phase testing.
+    ///
+    /// # Arguments
+    /// * `world` - The physics world
+    /// * `other` - The other AABB to test against
+    pub fn intersects_aabb(&self, world: &PhysicsWorld, other: &Aabb) -> bool {
+        self.world_aabb(world).intersects(other)
     }
 
     /// Get the current position of the rigid body
@@ -289,5 +350,71 @@ mod tests {
 
         // Should have moved upward due to applied force
         assert!(body.position(&world).y > 0.0);
+    }
+
+    #[test]
+    fn test_local_aabb() {
+        let mut world = PhysicsWorld::new(Vec3::new(0.0, -9.81, 0.0));
+        let body = CubeObject::new_dynamic(&mut world, Vec3::ZERO, 1.0);
+
+        let aabb = body.local_aabb();
+        assert_eq!(aabb.min, Vec3::ZERO);
+        assert_eq!(aabb.max, Vec3::ONE);
+    }
+
+    #[test]
+    fn test_world_aabb_at_origin() {
+        let mut world = PhysicsWorld::new(Vec3::new(0.0, -9.81, 0.0));
+        let body = CubeObject::new_dynamic(&mut world, Vec3::ZERO, 1.0);
+
+        let aabb = body.world_aabb(&world);
+        assert_eq!(aabb.min, Vec3::ZERO);
+        assert_eq!(aabb.max, Vec3::ONE);
+    }
+
+    #[test]
+    fn test_world_aabb_with_translation() {
+        let mut world = PhysicsWorld::new(Vec3::new(0.0, -9.81, 0.0));
+        let body = CubeObject::new_dynamic(&mut world, Vec3::new(10.0, 5.0, 3.0), 1.0);
+
+        let aabb = body.world_aabb(&world);
+        assert_eq!(aabb.min, Vec3::new(10.0, 5.0, 3.0));
+        assert_eq!(aabb.max, Vec3::new(11.0, 6.0, 4.0));
+    }
+
+    #[test]
+    fn test_world_aabb_with_scale() {
+        let mut world = PhysicsWorld::new(Vec3::new(0.0, -9.81, 0.0));
+        let mut body = CubeObject::new_dynamic(&mut world, Vec3::ZERO, 1.0);
+        body.set_scale(2.0);
+
+        let aabb = body.world_aabb(&world);
+        assert_eq!(aabb.min, Vec3::ZERO);
+        assert_eq!(aabb.max, Vec3::splat(2.0));
+    }
+
+    #[test]
+    fn test_scale_getter_setter() {
+        let mut world = PhysicsWorld::new(Vec3::new(0.0, -9.81, 0.0));
+        let mut body = CubeObject::new_dynamic(&mut world, Vec3::ZERO, 1.0);
+
+        assert_eq!(body.scale(), 1.0);
+
+        body.set_scale(3.5);
+        assert_eq!(body.scale(), 3.5);
+    }
+
+    #[test]
+    fn test_intersects_aabb() {
+        let mut world = PhysicsWorld::new(Vec3::new(0.0, -9.81, 0.0));
+        let body = CubeObject::new_dynamic(&mut world, Vec3::ZERO, 1.0);
+
+        // Overlapping AABB
+        let overlapping = Aabb::new(Vec3::splat(0.5), Vec3::splat(1.5));
+        assert!(body.intersects_aabb(&world, &overlapping));
+
+        // Non-overlapping AABB
+        let distant = Aabb::new(Vec3::splat(10.0), Vec3::splat(11.0));
+        assert!(!body.intersects_aabb(&world, &distant));
     }
 }
