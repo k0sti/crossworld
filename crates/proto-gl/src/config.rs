@@ -28,6 +28,25 @@ fn default_border_materials() -> [u8; 4] {
     [32, 32, 0, 0] // Bottom: bedrock, Top: air
 }
 
+impl WorldConfig {
+    /// Calculate world size: 2^(macro_depth + border_depth)
+    /// This is the edge length of the world cube.
+    pub fn world_size(&self) -> f32 {
+        (1 << (self.macro_depth + self.border_depth)) as f32
+    }
+
+    /// Calculate half world size (for centered coordinates)
+    /// World extends from -half_world to +half_world on each axis.
+    pub fn half_world(&self) -> f32 {
+        self.world_size() / 2.0
+    }
+
+    /// Ground level (bottom of world)
+    pub fn ground_y(&self) -> f32 {
+        -self.half_world()
+    }
+}
+
 #[derive(Debug, Deserialize, Clone)]
 pub struct PhysicsConfig {
     pub gravity: f32,

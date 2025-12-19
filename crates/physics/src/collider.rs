@@ -37,6 +37,7 @@ impl VoxelColliderBuilder {
     /// Generate a compound collider from a voxel cube
     ///
     /// Processes all exposed faces and creates thin cuboid colliders for each.
+    /// The collider is generated in [0,1] normalized space.
     ///
     /// # Arguments
     /// * `cube` - The octree cube to generate collision from
@@ -46,6 +47,22 @@ impl VoxelColliderBuilder {
     /// Rapier Collider containing compound shape of all exposed faces
     pub fn from_cube(cube: &Rc<Cube<u8>>, _max_depth: u32) -> Collider {
         Self::from_cube_with_region(cube, None)
+    }
+
+    /// Generate a compound collider from a voxel cube with world-space scaling
+    ///
+    /// Processes all exposed faces and creates thin cuboid colliders for each,
+    /// scaled and positioned to world coordinates.
+    ///
+    /// # Arguments
+    /// * `cube` - The octree cube to generate collision from
+    /// * `_max_depth` - Deprecated parameter (kept for API compatibility)
+    /// * `world_size` - The world size (collider will span [-world_size/2, world_size/2])
+    ///
+    /// # Returns
+    /// Rapier Collider containing compound shape of all exposed faces in world space
+    pub fn from_cube_scaled(cube: &Rc<Cube<u8>>, _max_depth: u32, world_size: f32) -> Collider {
+        Self::from_cube_with_region_scaled(cube, None, world_size)
     }
 
     /// Generate a compound collider from a voxel cube with optional spatial filtering
@@ -97,6 +114,52 @@ impl VoxelColliderBuilder {
         }
 
         builder.build_compound_collider()
+    }
+
+    /// Generate a compound collider from a voxel cube with optional spatial filtering and world-space scaling
+    ///
+    /// # Arguments
+    /// * `cube` - The octree cube to generate collision from
+    /// * `region` - Optional region bounds to filter voxels. If None, processes all voxels.
+    /// * `world_size` - The world size (collider will span [-world_size/2, world_size/2])
+    ///
+    /// # Returns
+    /// Rapier Collider containing compound shape of exposed faces in world space
+    pub fn from_cube_with_region_scaled(
+        cube: &Rc<Cube<u8>>,
+        region: Option<&RegionBounds>,
+        world_size: f32,
+    ) -> Collider {
+        let mut builder = Self::new();
+
+        // Border materials: solid at bottom, empty at top
+        let border_materials = [1, 1, 0, 0];
+
+        match region {
+            Some(bounds) => {
+                // Use region-bounded traversal for efficiency
+                visit_faces_in_region(
+                    cube,
+                    bounds,
+                    |face_info| {
+                        builder.add_face_from_info(face_info);
+                    },
+                    border_materials,
+                );
+            }
+            None => {
+                // Full traversal
+                visit_faces(
+                    cube,
+                    |face_info| {
+                        builder.add_face_from_info(face_info);
+                    },
+                    border_materials,
+                );
+            }
+        }
+
+        builder.build_compound_collider_scaled(world_size)
     }
 
     /// Generate a compound collider with an AABB filter (convenience wrapper)
@@ -151,18 +214,36 @@ impl VoxelColliderBuilder {
 
     /// Build a compound collider from all collected face rectangles
     fn build_compound_collider(self) -> Collider {
+        self.build_compound_collider_with_scale(1.0, Vec3::ZERO)
+    }
+
+    /// Build a compound collider from all collected face rectangles with world-space scaling
+    ///
+    /// # Arguments
+    /// * `world_size` - The world size (collider will span [-world_size/2, world_size/2])
+    fn build_compound_collider_scaled(self, world_size: f32) -> Collider {
+        // Transform from [0,1] to [-half_world, half_world]
+        let half_world = world_size / 2.0;
+        let offset = Vec3::splat(-half_world); // Shift [0,1] to [-0.5,0.5] then scale
+        self.build_compound_collider_with_scale(world_size, offset)
+    }
+
+    /// Build a compound collider with scale and offset
+    fn build_compound_collider_with_scale(self, scale: f32, offset: Vec3) -> Collider {
         if self.rectangles.is_empty() {
             // Empty collider - just use a tiny sphere
             return ColliderBuilder::ball(0.001).build();
         }
 
         // Create thin cuboid colliders for each face
-        let thickness = 0.05; // Thin collider for faces
+        // Scale thickness proportionally to face size
+        let base_thickness = 0.05;
         let shapes: Vec<_> = self
             .rectangles
             .iter()
             .map(|rect| {
-                let half_size = rect.size / 2.0;
+                let half_size = (rect.size * scale) / 2.0;
+                let thickness = base_thickness * scale;
 
                 // Create cuboid shape
                 // The cuboid is oriented with Z as the normal direction initially
@@ -172,7 +253,8 @@ impl VoxelColliderBuilder {
                 let rotation = Self::rotation_from_normal(rect.normal);
 
                 // Create isometry (position + rotation)
-                let pos = rect.center;
+                // Transform position from [0,1] to world coords
+                let pos = rect.center * scale + offset;
                 let isometry = Isometry::new(
                     vector![pos.x, pos.y, pos.z],
                     vector![rotation.x, rotation.y, rotation.z],

@@ -312,8 +312,9 @@ impl ApplicationHandler for ProtoGlApp {
         let gravity = glam::Vec3::new(0.0, self.config.physics.gravity, 0.0);
         let mut physics_world = PhysicsWorld::new(gravity);
 
-        // Create world collider (static terrain)
-        let world_collider = VoxelColliderBuilder::from_cube(&world_cube_rc, world_depth);
+        // Create world collider (static terrain) scaled to world coordinates
+        let world_size = self.config.world.world_size();
+        let world_collider = VoxelColliderBuilder::from_cube_scaled(&world_cube_rc, world_depth, world_size);
         let world_body = RigidBodyBuilder::fixed().build();
         let world_body_handle = physics_world.add_rigid_body(world_body);
         physics_world.add_collider(world_collider, world_body_handle);
@@ -677,10 +678,10 @@ impl ProtoGlApp {
                 if let (Some(mesh_renderer), Some(world_mesh_idx)) =
                     (self.mesh_renderer.as_ref(), self.world_mesh_index)
                 {
-                    // World is at origin with scale 1.0 (unit cube [0,1]³)
-                    let position = glam::Vec3::new(0.5, 0.5, 0.5); // Center of unit cube
+                    // World is centered at origin (0, 0, 0) with world_size scale
+                    let position = glam::Vec3::ZERO;
                     let rotation = glam::Quat::IDENTITY;
-                    let scale = 1.0;
+                    let scale = self.config.world.world_size();
                     unsafe {
                         mesh_renderer.render_mesh_with_scale(
                             gl,
