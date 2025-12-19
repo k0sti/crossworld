@@ -1,4 +1,6 @@
 [world]
+# World size = 2^(macro_depth + border_depth) = 2^13 = 8192 units
+# World centered at origin: x,z in [-4096, 4096], y (ground at -4096, sky at +4096)
 macro_depth = 3
 micro_depth = 0
 border_depth = 10
@@ -12,24 +14,24 @@ timestep = 0.016666  # 60 Hz
 [spawning]
 spawn_count = 10
 models_path = "assets/models/vox/"
-# World cube is normalized [0, 1], so spawn within those bounds
-min_height = 0.6    # Spawn above ground level
-max_height = 0.9    # Below top of world
-spawn_radius = 0.3  # Spawn within center of world (0.5 +/- 0.3)
-object_size = 0.05  # Object edge length (1.0 = full world size)
+# World coordinates: origin at center, ground at y=-half_world
+min_height = 10.0    # Spawn above ground level (world units)
+max_height = 100.0   # Below top of world (world units)
+spawn_radius = 100.0 # Spawn radius from center (world units)
+object_size = 10.0   # Object edge length (world units)
 
 [rendering]
 viewport_width = 800
 viewport_height = 600
-camera_distance = 2.0
+camera_distance = 10.0  # Camera distance appropriate for world size
 
 [fps]
-# First-person camera settings
-move_speed = 0.5          # Movement speed in units per second
+# First-person camera settings (world units)
+move_speed = 100.0        # Movement speed in world units per second
 mouse_sensitivity = 0.003 # Mouse sensitivity for look-around
-eye_height = 0.1          # Camera capsule height
-collision_radius = 0.02   # Camera capsule radius for collision
-spawn_position = [0.5, 0.6, 0.5]  # Spawn position (center of world, above ground)
+eye_height = 1.8          # Eye height above feet (world units)
+collision_radius = 0.5    # Character capsule radius (world units)
+spawn_position = [0.0, 10.0, 0.0]  # Spawn at center, above ground
 
 [structures]
 # Random structure placement settings
@@ -37,6 +39,6 @@ enabled = true                        # Enable/disable structure placement
 models_path = "assets/models/vox/"    # Directory containing .vox files
 prefix = "obj_"                       # Only load files starting with this prefix
 count = 1                            # Number of structures to place
-spawn_radius = 0.35                   # Spawn radius from center (0.0-0.5)
+spawn_radius = 2000.0                 # Spawn radius from center (world units)
 seed = 0                              # Random seed (0 = random)
 max_depth = 3                         # Max model depth (3 = 8x8x8, 4 = 16x16x16)

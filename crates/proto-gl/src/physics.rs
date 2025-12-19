@@ -99,10 +99,12 @@ pub fn spawn_cube_objects(
     let mut rng = rand::thread_rng();
 
     for i in 0..config.spawn_count {
-        // Random position centered at (0.5, 0.5, 0.5) within world cube [0, 1]
-        let x = 0.5 + rng.gen_range(-config.spawn_radius..config.spawn_radius);
+        // Random position centered at origin (0, 0, 0)
+        // X and Z: random within spawn_radius of center
+        // Y: random between min_height and max_height (above ground which is at y < 0)
+        let x = rng.gen_range(-config.spawn_radius..config.spawn_radius);
         let y = rng.gen_range(config.min_height..config.max_height);
-        let z = 0.5 + rng.gen_range(-config.spawn_radius..config.spawn_radius);
+        let z = rng.gen_range(-config.spawn_radius..config.spawn_radius);
 
         // Random model
         let model = &models[i as usize % models.len()];

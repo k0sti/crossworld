@@ -45,18 +45,21 @@ pub fn run_physics_debug(iterations: u32) -> Result<(), Box<dyn Error>> {
     let (world_cube, world_depth) = generate_world(&config.world);
     let world_cube_rc = Rc::new(world_cube);
 
+    let world_size = config.world.world_size();
+    let half_world = config.world.half_world();
     println!("World generated:");
     println!("  Depth: {}", world_depth);
-    println!("  World cube size: 1.0 (normalized coordinates 0-1)");
-    println!("  ⚠️  Objects spawning at radius {:.1} are OUTSIDE world bounds!", config.spawning.spawn_radius);
+    println!("  World size: {:.0} (2^{} units)", world_size, config.world.macro_depth + config.world.border_depth);
+    println!("  World bounds: [{:.0}, {:.0}] centered at origin", -half_world, half_world);
+    println!("  Ground level: y = {:.0}", -half_world);
     println!();
 
     // Initialize physics world
     let gravity = glam::Vec3::new(0.0, config.physics.gravity, 0.0);
     let mut physics_world = PhysicsWorld::new(gravity);
 
-    // Create world collider (static terrain)
-    let world_collider = VoxelColliderBuilder::from_cube(&world_cube_rc, world_depth);
+    // Create world collider (static terrain) scaled to world coordinates
+    let world_collider = VoxelColliderBuilder::from_cube_scaled(&world_cube_rc, world_depth, world_size);
 
     // Debug: check world collider
     if let Some(compound) = world_collider.shape().as_compound() {
@@ -79,17 +82,18 @@ pub fn run_physics_debug(iterations: u32) -> Result<(), Box<dyn Error>> {
     let world_body_handle = physics_world.add_rigid_body(world_body);
     physics_world.add_collider(world_collider, world_body_handle);
 
-    // Add explicit ground plane at Y=0 for testing
+    // Add explicit ground plane at ground level (y = -half_world)
+    let ground_y = config.world.ground_y();
     let ground_body = RigidBodyBuilder::fixed()
-        .translation(vector![0.5, 0.0, 0.5])
+        .translation(vector![0.0, ground_y, 0.0])
         .build();
     let ground_handle = physics_world.add_rigid_body(ground_body);
-    let ground_collider = ColliderBuilder::cuboid(10.0, 0.1, 10.0)  // Large flat ground
+    let ground_collider = ColliderBuilder::cuboid(half_world, 0.1, half_world)  // Large flat ground
         .friction(0.5)
         .restitution(0.0)
         .build();
     physics_world.add_collider(ground_collider, ground_handle);
-    println!("Added ground plane at Y=0");
+    println!("Added ground plane at Y={:.0}", ground_y);
 
     // Load models and spawn dynamic cubes
     let models = load_vox_models(&config.spawning.models_path);
@@ -143,8 +147,8 @@ pub fn run_physics_debug(iterations: u32) -> Result<(), Box<dyn Error>> {
                         if is_sleeping { "[SLEEPING]" } else { "" }
                     );
 
-                    // Check if fallen through world (Y < -10 is definitely wrong)
-                    if pos.y < -10.0 {
+                    // Check if fallen through world (below ground level)
+                    if pos.y < ground_y - 10.0 {
                         println!("    ⚠️  WARNING: Object fell through world!");
                     }
                 }
@@ -156,16 +160,16 @@ pub fn run_physics_debug(iterations: u32) -> Result<(), Box<dyn Error>> {
     println!("=== Simulation complete ===\n");
 
     // Final summary
-    println!("Final positions:");
+    println!("Final positions (ground at Y={:.0}):", ground_y);
     let mut fell_through = 0;
     for (i, obj) in objects.iter().enumerate() {
         if let Some(body) = physics_world.get_rigid_body(obj.body_handle) {
             let pos = body.translation();
-            let status = if pos.y < -10.0 {
+            let status = if pos.y < ground_y - 10.0 {
                 fell_through += 1;
                 "❌ FELL THROUGH"
-            } else if pos.y < 0.0 {
-                "⚠️  Below origin"
+            } else if pos.y < ground_y {
+                "⚠️  Below ground"
             } else {
                 "✓ OK"
             };

@@ -31,8 +31,8 @@ impl OrbitCamera {
         let orientation = Quat::from_rotation_arc(Vec3::NEG_Z, -initial_dir);
 
         Self {
-            // World cube is in [0, 1] space, focus on center
-            focus: Vec3::splat(0.5),
+            // World is centered at origin (0, 0, 0)
+            focus: Vec3::ZERO,
             orientation,
             distance,
             dragging: false,
@@ -110,8 +110,11 @@ impl OrbitCamera {
     }
 
     pub fn handle_scroll(&mut self, delta: f32) {
-        self.distance -= delta * 0.1;
-        self.distance = self.distance.clamp(0.5, 10.0);
+        // Scale scroll sensitivity with distance for smooth zooming at all scales
+        let scroll_factor = self.distance * 0.1;
+        self.distance -= delta * scroll_factor;
+        // Allow viewing the full world (up to ~2x world size for perspective)
+        self.distance = self.distance.clamp(10.0, 20000.0);
     }
 }
 

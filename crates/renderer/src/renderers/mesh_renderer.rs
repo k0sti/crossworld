@@ -357,7 +357,7 @@ impl MeshRenderer {
 
             // Calculate matrices
             let aspect = viewport_width as f32 / viewport_height as f32;
-            let projection = glam::Mat4::perspective_rh(camera.vfov, aspect, 0.1, 1000.0);
+            let projection = glam::Mat4::perspective_rh(camera.vfov, aspect, 1.0, 50000.0);
 
             // View matrix construction to match raytracer's camera EXACTLY
             // The raytracer rotates basis vectors: forward = rotate(-Z), up = rotate(+Y)
@@ -445,7 +445,7 @@ impl MeshRenderer {
 
             // Calculate matrices
             let aspect = viewport_width as f32 / viewport_height as f32;
-            let projection = glam::Mat4::perspective_rh(camera.vfov, aspect, 0.1, 1000.0);
+            let projection = glam::Mat4::perspective_rh(camera.vfov, aspect, 1.0, 50000.0);
 
             let forward = camera.rotation * glam::Vec3::NEG_Z;
             let up = camera.rotation * glam::Vec3::Y;

@@ -1,7 +1,8 @@
 //! Structure placement module for randomly placing vox models into the world cube.
 //!
 //! This module loads vox models with a specific prefix (e.g., "obj_") and places them
-//! randomly within the world cube, aligned to the ground (y=0) and rotated in 90° steps.
+//! randomly within the world cube, aligned to the ground (y < 0, at -half_world) and
+//! rotated in 90° steps. The world uses origin-centered coordinates.
 
 use crate::config::StructuresConfig;
 use cube::{load_vox_to_cube, Axis, Cube};
@@ -201,6 +202,7 @@ pub fn place_structures(
 
     let mut result = world_cube.clone();
     let world_size = 1u32 << world_depth; // 2^world_depth
+    let half_world = world_size as f32 / 2.0;
 
     // Calculate the scale factor to match model voxels with terrain voxels
     // The terrain content is at content_depth resolution, then expanded with borders
@@ -208,28 +210,25 @@ pub fn place_structures(
     // by the difference between world_depth and content_depth
     let depth_offset = world_depth - content_depth;
 
-    // Calculate spawn area (centered around 0.5, 0.5 in XZ)
-    let center = world_size as f32 / 2.0;
-    let radius = config.spawn_radius * world_size as f32;
+    // Spawn radius is specified in world units (centered at origin)
+    let radius = config.spawn_radius;
 
     for _ in 0..config.count {
         // Select random model
         let model = &models[rng.gen_range(0..models.len())];
 
-        // Calculate position in world coordinates
-        // Random X, Z within spawn radius, Y starting above 0
+        // Calculate position in world coordinates (origin at center)
+        // Random X, Z within spawn radius, Y at ground level
         let angle: f32 = rng.gen_range(0.0..std::f32::consts::TAU);
         let dist: f32 = rng.gen_range(0.0..radius);
-        let x = (center + angle.cos() * dist) as i32;
-        let z = (center + angle.sin() * dist) as i32;
+        // Convert from origin-centered coords to octree coords (0 to world_size)
+        let x = (half_world + angle.cos() * dist) as i32;
+        let z = (half_world + angle.sin() * dist) as i32;
 
         // Find Y position: place on ground surface
-        // The world uses border expansion. With 6 border expansions:
-        // - Ground extends from y=0 to approximately y=world_size/2
-        // - Air is above that
-        // The exact ground level is at (world_size/2) + (world_size/128) for typical configs
-        // Place structures at the ground surface (just above ground level)
-        let y = (world_size / 2) as i32 + 64; // Approximate ground surface
+        // Ground is at y = -half_world in world coords, which is y = 0 in octree coords
+        // Place structures at ground surface (just above ground level)
+        let y = 64; // Approximate ground surface in octree coords
 
         // Random rotation (0, 90, 180, or 270 degrees)
         let rotation = rng.gen_range(0..4);
