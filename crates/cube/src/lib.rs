@@ -15,8 +15,8 @@ pub mod wasm;
 
 // Re-export main types from core
 pub use core::{
-    octant_char_to_index, octant_index_to_char, raycast, raycast_with_options, Cube, Hit, IVec3Ext,
-    RaycastDebugState, RaycastOptions, Voxel, OCTANT_POSITIONS,
+    octant_char_to_index, octant_index_to_char, raycast, raycast_with_options, Cube, CubeBox, Hit,
+    IVec3Ext, RaycastDebugState, RaycastOptions, Voxel, OCTANT_POSITIONS,
 };
 
 // Re-export axis types
@@ -36,7 +36,9 @@ pub use mesh::{
 };
 
 // Re-export IO types
-pub use io::{load_vox_to_cube, parse_csm, serialize_csm, CsmError};
+#[allow(deprecated)]
+pub use io::load_vox_to_cube;
+pub use io::{load_vox_to_cubebox, load_vox_to_cubebox_compact, parse_csm, serialize_csm, CsmError};
 
 // Re-export fabric types
 pub use fabric::{AdditiveState, FabricConfig, FabricGenerator};

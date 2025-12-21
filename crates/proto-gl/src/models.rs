@@ -1,8 +1,9 @@
-use std::rc::Rc;
 use std::path::Path;
-use cube::{Cube, load_vox_to_cube};
-use crossworld_physics::rapier3d::prelude::{RigidBodyHandle, ColliderHandle};
-use glam::Vec3;
+use std::rc::Rc;
+
+use cube::{Cube, CubeBox, load_vox_to_cubebox_compact};
+use crossworld_physics::rapier3d::prelude::{ColliderHandle, RigidBodyHandle};
+use glam::IVec3;
 use serde::Deserialize;
 
 /// CSV record for models.csv
@@ -21,11 +22,33 @@ struct CsvModelEntry {
 
 /// A voxel model loaded from a .vox file
 pub struct VoxModel {
-    pub cube: Rc<Cube<u8>>,
+    /// The bounded voxel model with preserved dimensions
+    pub cubebox: CubeBox<u8>,
     pub name: String,
-    pub depth: u32,
     /// Scale exponent from CSV (actual_scale = 2^scale_exp)
     pub scale_exp: i32,
+}
+
+impl VoxModel {
+    /// Get the cube reference for rendering
+    pub fn cube(&self) -> &Cube<u8> {
+        &self.cubebox.cube
+    }
+
+    /// Get a shared reference to the cube
+    pub fn cube_rc(&self) -> Rc<Cube<u8>> {
+        Rc::new(self.cubebox.cube.clone())
+    }
+
+    /// Get the octree depth
+    pub fn depth(&self) -> u32 {
+        self.cubebox.depth
+    }
+
+    /// Get the original model size in voxels
+    pub fn size(&self) -> IVec3 {
+        self.cubebox.size
+    }
 }
 
 /// A dynamic cube object in the physics simulation
@@ -43,6 +66,8 @@ pub struct CubeObject {
     pub depth: u32,
     /// Scale exponent from CSV (actual_scale = 2^scale_exp)
     pub scale_exp: i32,
+    /// Original model size in voxels (for accurate bounding box)
+    pub model_size: IVec3,
 }
 
 /// Load object models from CSV (models with model_type="object")
@@ -101,18 +126,16 @@ pub fn load_vox_models(csv_path: &str, models_path: &str) -> Vec<VoxModel> {
             }
         };
 
-        // Load with center alignment
-        match load_vox_to_cube(&bytes, Vec3::splat(0.5)) {
-            Ok(cube) => {
-                let depth = calculate_cube_depth(&cube);
+        // Load with compact CubeBox (tight bounds around actual voxels)
+        match load_vox_to_cubebox_compact(&bytes) {
+            Ok(cubebox) => {
                 println!(
-                    "Loaded object model: {} (depth {}, scale_exp {})",
-                    entry.name, depth, scale_exp
+                    "Loaded object model: {} (size {:?}, depth {}, scale_exp {})",
+                    entry.name, cubebox.size, cubebox.depth, scale_exp
                 );
                 models.push(VoxModel {
-                    cube: Rc::new(cube),
+                    cubebox,
                     name: entry.name.clone(),
-                    depth,
                     scale_exp,
                 });
             }
@@ -136,53 +159,20 @@ pub fn load_vox_models(csv_path: &str, models_path: &str) -> Vec<VoxModel> {
 fn create_fallback_models() -> Vec<VoxModel> {
     vec![
         VoxModel {
-            cube: Rc::new(Cube::solid(5)), // Grass
+            cubebox: CubeBox::new(Cube::solid(5), IVec3::ONE, 0), // Grass
             name: "simple_cube_grass".to_string(),
-            depth: 0,
             scale_exp: 0,
         },
         VoxModel {
-            cube: Rc::new(Cube::solid(4)), // Stone
+            cubebox: CubeBox::new(Cube::solid(4), IVec3::ONE, 0), // Stone
             name: "simple_cube_stone".to_string(),
-            depth: 0,
             scale_exp: 0,
         },
         VoxModel {
-            cube: Rc::new(Cube::solid(9)), // Wood
+            cubebox: CubeBox::new(Cube::solid(9), IVec3::ONE, 0), // Wood
             name: "simple_cube_wood".to_string(),
-            depth: 0,
             scale_exp: 0,
         },
     ]
 }
 
-/// Calculate the depth of a cube (how many levels of octree)
-fn calculate_cube_depth(cube: &Cube<u8>) -> u32 {
-    fn depth_recursive(cube: &Cube<u8>) -> u32 {
-        match cube {
-            Cube::Solid(_) => 0,
-            Cube::Cubes(children) => {
-                1 + children
-                    .iter()
-                    .map(|c| depth_recursive(c))
-                    .max()
-                    .unwrap_or(0)
-            }
-            Cube::Quad { quads, .. } => {
-                1 + quads
-                    .iter()
-                    .map(|c| depth_recursive(c))
-                    .max()
-                    .unwrap_or(0)
-            }
-            Cube::Layers { layers, .. } => {
-                1 + layers
-                    .iter()
-                    .map(|c| depth_recursive(c))
-                    .max()
-                    .unwrap_or(0)
-            }
-        }
-    }
-    depth_recursive(cube)
-}
