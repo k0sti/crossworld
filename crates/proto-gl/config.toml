@@ -1,6 +1,6 @@
 [world]
 # World size = 2^(macro_depth + border_depth) = 2^13 = 8192 units
-# World centered at origin: x,z in [-4096, 4096], y (ground at -4096, sky at +4096)
+# World centered at origin: x,z in [-4096, 4096], ground surface at Y=0
 macro_depth = 3
 micro_depth = 0
 border_depth = 10
