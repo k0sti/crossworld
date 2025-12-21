@@ -138,16 +138,38 @@ impl<T> Cube<T> {
         OCTANT_POSITIONS.iter().copied()
     }
 
-    /// Calculate octant index at given depth for position
-    /// Returns which octant (0-7) the position falls into at this depth level
-    /// Extracts the bit at the given depth level for each axis to determine octant
+    /// Calculate octant index at given depth for a position
+    ///
+    /// Supports two coordinate systems:
+    /// - **Corner-based** (non-negative): positions in [0, 2^depth), uses bit extraction
+    /// - **Center-based** (can be negative): positions in {-(2^d-1), ..., 2^d-1} with step 2,
+    ///   uses sign-based octant determination
+    ///
+    /// The function automatically detects which system based on whether any coordinate is negative.
+    ///
+    /// # Arguments
+    /// * `depth` - The depth level at which to compute the octant (0 = deepest)
+    /// * `pos` - Position coordinates (corner-based or center-based)
+    ///
+    /// # Returns
+    /// Octant index 0-7 where bit pattern is x + y*2 + z*4
     #[inline]
     pub fn index(depth: u32, pos: IVec3) -> usize {
-        // Extract the bit at this depth level for each axis
-        // This works for both positive corner-based coordinates (0..2^n)
-        // and center-based coordinates (sign indicates octant)
-        let p = (pos >> depth) & 1; // Extract bit at depth level (0 or 1)
-        p.to_octant_index()
+        // Check if any coordinate is negative to determine coordinate system
+        if pos.x < 0 || pos.y < 0 || pos.z < 0 {
+            // Center-based coordinates: use sign after shifting
+            let shifted = pos >> depth;
+            let p = IVec3::new(
+                (shifted.x >= 0) as i32,
+                (shifted.y >= 0) as i32,
+                (shifted.z >= 0) as i32,
+            );
+            p.to_octant_index()
+        } else {
+            // Corner-based coordinates: use bit extraction
+            let p = (pos >> depth) & 1;
+            p.to_octant_index()
+        }
     }
 
     /// Get child cube by octant index (0-7)

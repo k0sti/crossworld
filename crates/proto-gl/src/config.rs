@@ -57,6 +57,9 @@ pub struct PhysicsConfig {
     /// Chunked collider configuration
     #[serde(default)]
     pub chunked: ChunkedColliderConfig,
+    /// Number of steps to run in debug mode (0 = infinite)
+    #[serde(default)]
+    pub debug_steps: u32,
 }
 
 fn default_world_collision_strategy() -> String {
@@ -222,6 +225,7 @@ impl Default for ProtoGlConfig {
                 timestep: 0.016666,
                 world_collision_strategy: default_world_collision_strategy(),
                 chunked: ChunkedColliderConfig::default(),
+                debug_steps: 0,
             },
             spawning: SpawningConfig {
                 spawn_count: 10,

@@ -11,26 +11,28 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
 use winit::application::ApplicationHandler;
-use winit::event::{DeviceEvent, DeviceId, ElementState, MouseButton, MouseScrollDelta, WindowEvent};
+use winit::event::{
+    DeviceEvent, DeviceId, ElementState, MouseButton, MouseScrollDelta, WindowEvent,
+};
 use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::{CursorGrabMode, Window, WindowId};
 
-use cube::Cube;
 use crossworld_physics::{
+    PhysicsWorld,
     collision::Aabb,
     rapier3d::prelude::*,
-    world_collider::{create_world_collider, WorldCollider},
-    PhysicsWorld,
+    world_collider::{WorldCollider, create_world_collider},
 };
-use renderer::{CameraConfig, GlTracer, MeshRenderer, BACKGROUND_COLOR};
+use cube::Cube;
+use renderer::{BACKGROUND_COLOR, CameraConfig, GlTracer, MeshRenderer};
 
 use crate::camera::{CameraMode, FirstPersonCamera, OrbitCamera};
-use crate::config::{load_config, ProtoGlConfig};
-use crate::models::{load_vox_models, CubeObject};
-use crate::physics::{spawn_cube_objects, CameraObject};
+use crate::config::{ProtoGlConfig, load_config};
+use crate::models::{CubeObject, load_vox_models};
+use crate::physics::{CameraObject, spawn_cube_objects};
 use crate::structures::{load_structure_models, place_structures};
-use crate::ui::{render_debug_panel, UiState};
+use crate::ui::{UiState, render_debug_panel};
 use crate::world::generate_world;
 
 /// Keyboard input state for FPS controls
@@ -40,9 +42,9 @@ pub struct KeyboardState {
     pub a: bool,
     pub s: bool,
     pub d: bool,
-    pub f: bool,  // Up
-    pub v: bool,  // Down
-    pub space: bool,  // Jump (for future use)
+    pub f: bool,     // Up
+    pub v: bool,     // Down
+    pub space: bool, // Jump (for future use)
 }
 
 pub struct ProtoGlApp {
@@ -169,7 +171,7 @@ impl ProtoGlApp {
             config,
             render_world: true,
             render_objects: true,
-            wireframe_objects: true,  // Enable by default for testing CubeBox bounds
+            wireframe_objects: true, // Enable by default for testing CubeBox bounds
             show_debug_info: true,
             world_use_mesh: true, // Default to mesh renderer
             world_mesh_index: None,
@@ -300,12 +302,15 @@ impl ApplicationHandler for ProtoGlApp {
         gl_tracer.set_disable_lighting(false);
 
         // Debug: print world cube info
-        println!("[DEBUG] World cube type: {:?}", match &world_cube {
-            Cube::Solid(v) => format!("Solid({})", v),
-            Cube::Cubes(_) => "Cubes(...)".to_string(),
-            Cube::Quad { .. } => "Quad(...)".to_string(),
-            Cube::Layers { .. } => "Layers(...)".to_string(),
-        });
+        println!(
+            "[DEBUG] World cube type: {:?}",
+            match &world_cube {
+                Cube::Solid(v) => format!("Solid({})", v),
+                Cube::Cubes(_) => "Cubes(...)".to_string(),
+                Cube::Quad { .. } => "Quad(...)".to_string(),
+                Cube::Layers { .. } => "Layers(...)".to_string(),
+            }
+        );
 
         // Initialize mesh renderer
         let mut mesh_renderer = MeshRenderer::new();
@@ -322,6 +327,33 @@ impl ApplicationHandler for ProtoGlApp {
 
         // Create world collider using configured strategy
         let world_size = self.config.world.world_size();
+        // Hybrid collision strategy: Manual world collision resolution
+        {
+            use std::io::Write;
+            let mut file = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open("debug.log")
+                .unwrap();
+            writeln!(
+                file,
+                "DEBUG: Strategy: '{}'",
+                self.config.physics.world_collision_strategy
+            )
+            .unwrap();
+        }
+
+        if self.config.physics.world_collision_strategy == "hybrid" {
+            {
+                use std::io::Write;
+                let mut file = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open("debug.log")
+                    .unwrap();
+                writeln!(file, "DEBUG: Hybrid collision strategy active").unwrap();
+            }
+        }
         let mut world_collider = create_world_collider(
             &self.config.physics.world_collision_strategy,
             self.config.physics.chunked.chunk_size,
@@ -343,7 +375,10 @@ impl ApplicationHandler for ProtoGlApp {
         );
 
         // Load models and spawn dynamic cubes
-        let models = load_vox_models(&self.config.spawning.models_csv, &self.config.spawning.models_path);
+        let models = load_vox_models(
+            &self.config.spawning.models_csv,
+            &self.config.spawning.models_path,
+        );
         let objects = spawn_cube_objects(&self.config.spawning, &models, &mut physics_world);
 
         // Create camera physics object for first-person mode
@@ -362,10 +397,16 @@ impl ApplicationHandler for ProtoGlApp {
                 match mesh_renderer.upload_mesh(&gl, &obj.cube, obj.depth) {
                     Ok(mesh_idx) => {
                         object_mesh_indices.push(mesh_idx);
-                        println!("  Uploaded mesh for {} (index: {})", obj.model_name, mesh_idx);
+                        println!(
+                            "  Uploaded mesh for {} (index: {})",
+                            obj.model_name, mesh_idx
+                        );
                     }
                     Err(e) => {
-                        eprintln!("  Warning: Failed to upload mesh for {}: {}", obj.model_name, e);
+                        eprintln!(
+                            "  Warning: Failed to upload mesh for {}: {}",
+                            obj.model_name, e
+                        );
                         object_mesh_indices.push(0); // Use fallback
                     }
                 }
@@ -452,7 +493,9 @@ impl ApplicationHandler for ProtoGlApp {
 
                 match event.physical_key {
                     // Tab or Escape to toggle/exit camera mode
-                    PhysicalKey::Code(KeyCode::Tab) | PhysicalKey::Code(KeyCode::Escape) if pressed => {
+                    PhysicalKey::Code(KeyCode::Tab) | PhysicalKey::Code(KeyCode::Escape)
+                        if pressed =>
+                    {
                         self.toggle_camera_mode();
                     }
                     // WASD movement
@@ -486,7 +529,8 @@ impl ApplicationHandler for ProtoGlApp {
                                 let delta_y = position.y as f32 - last_y;
                                 self.orbit_camera.handle_mouse_drag(delta_x, delta_y);
                             }
-                            self.orbit_camera.last_mouse_pos = Some((position.x as f32, position.y as f32));
+                            self.orbit_camera.last_mouse_pos =
+                                Some((position.x as f32, position.y as f32));
 
                             if let Some(window) = &self.window {
                                 window.request_redraw();
@@ -502,7 +546,8 @@ impl ApplicationHandler for ProtoGlApp {
 
                                 // Only process if there's actual movement
                                 if delta_x.abs() > 0.1 || delta_y.abs() > 0.1 {
-                                    self.fps_camera.handle_mouse_move(delta_x as f32, delta_y as f32);
+                                    self.fps_camera
+                                        .handle_mouse_move(delta_x as f32, delta_y as f32);
                                 }
                             }
                             // Always update last position for next frame's delta calculation
@@ -541,7 +586,8 @@ impl ApplicationHandler for ProtoGlApp {
         if let DeviceEvent::MouseMotion { delta } = event {
             if self.camera_mode == CameraMode::FirstPerson && self.fps_camera.mouse_captured {
                 let (delta_x, delta_y) = delta;
-                self.fps_camera.handle_mouse_move(delta_x as f32, delta_y as f32);
+                self.fps_camera
+                    .handle_mouse_move(delta_x as f32, delta_y as f32);
             }
         }
     }
@@ -554,8 +600,11 @@ impl ProtoGlApp {
             CameraMode::Orbit => {
                 println!("Switched to First-Person mode (Tab/Esc to exit)");
                 // Sync FPS camera position with physics object
-                if let (Some(physics_world), Some(camera_obj)) = (&self.physics_world, &self.camera_object) {
-                    self.fps_camera.set_position(camera_obj.position(physics_world));
+                if let (Some(physics_world), Some(camera_obj)) =
+                    (&self.physics_world, &self.camera_object)
+                {
+                    self.fps_camera
+                        .set_position(camera_obj.position(physics_world));
                 }
                 // Capture mouse immediately
                 self.capture_mouse();
@@ -573,7 +622,8 @@ impl ProtoGlApp {
     fn capture_mouse(&mut self) {
         if let Some(window) = &self.window {
             // Try Locked mode first (provides raw motion on Wayland), fall back to Confined
-            let grab_result = window.set_cursor_grab(CursorGrabMode::Locked)
+            let grab_result = window
+                .set_cursor_grab(CursorGrabMode::Locked)
                 .or_else(|_| window.set_cursor_grab(CursorGrabMode::Confined));
 
             if let Err(e) = grab_result {
@@ -608,10 +658,31 @@ impl ProtoGlApp {
 
         // Update timing
         let now = Instant::now();
-        let delta = now.duration_since(self.last_frame).as_secs_f32();
+        let mut delta = now.duration_since(self.last_frame).as_secs_f32();
         self.last_frame = now;
+
+        // Reset delta on first frame to avoid huge physics jump from initialization time
+        if self.frame_count == 0 {
+            delta = 0.0;
+        }
+
+        // Cap delta to avoid "spiral of death" if frame rate drops
+        delta = delta.min(0.1);
+
         self.frame_time = delta;
         self.fps = 1.0 / delta.max(0.001);
+
+        // Debug exit
+        if self.config.physics.debug_steps > 0 && self.frame_count > self.config.physics.debug_steps
+        {
+            println!(
+                "[DEBUG] Reached {} steps, exiting",
+                self.config.physics.debug_steps
+            );
+            self.cleanup();
+            event_loop.exit();
+            return;
+        }
 
         // Update FPS camera movement if in first-person mode
         if self.camera_mode == CameraMode::FirstPerson {
@@ -654,10 +725,15 @@ impl ProtoGlApp {
                         let pos = body.translation();
                         let position = glam::Vec3::new(pos.x, pos.y, pos.z);
 
-                        // Use object size for AABB (apply scale)
+                        // Use actual model size for AABB (apply scale)
+                        let octree_size = (1 << obj.depth) as f32;
                         let scale_factor = 2.0_f32.powi(obj.scale_exp);
-                        let half_size = self.config.spawning.object_size * scale_factor * 0.5;
-                        let half_extent = glam::Vec3::splat(half_size);
+                        let base_scale = self.config.spawning.object_size * scale_factor;
+                        let half_extent = glam::Vec3::new(
+                            (obj.model_size.x as f32 / octree_size) * base_scale * 0.5,
+                            (obj.model_size.y as f32 / octree_size) * base_scale * 0.5,
+                            (obj.model_size.z as f32 / octree_size) * base_scale * 0.5,
+                        );
 
                         Some((
                             obj.body_handle,
@@ -677,8 +753,19 @@ impl ProtoGlApp {
             // Resolve world collisions for hybrid strategy (which bypasses Rapier)
             if let Some(world_collider) = &self.world_collider {
                 // Only resolve if strategy uses manual collision (hybrid)
-                if world_collider.metrics().strategy_name == "hybrid" {
-                    for obj in &self.objects {
+                let strategy = world_collider.metrics().strategy_name;
+                {
+                    use std::io::Write;
+                    if let Ok(mut file) = std::fs::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open("debug.log")
+                    {
+                        writeln!(file, "DEBUG: Loop strategy check: '{}'", strategy).ok();
+                    }
+                }
+                if strategy == "hybrid" {
+                    for (i, obj) in self.objects.iter().enumerate() {
                         // Get body position and compute AABB
                         let body = match physics_world.get_rigid_body(obj.body_handle) {
                             Some(b) => b,
@@ -687,15 +774,33 @@ impl ProtoGlApp {
                         let pos = body.translation();
                         let position = glam::Vec3::new(pos.x, pos.y, pos.z);
 
-                        // Compute AABB for collision resolution
+                        // Compute AABB for collision resolution (using actual model size)
+                        let octree_size = (1 << obj.depth) as f32;
                         let scale_factor = 2.0_f32.powi(obj.scale_exp);
-                        let half_size = self.config.spawning.object_size * scale_factor * 0.5;
-                        let half_extent = glam::Vec3::splat(half_size);
+                        let base_scale = self.config.spawning.object_size * scale_factor;
+                        let half_extent = glam::Vec3::new(
+                            (obj.model_size.x as f32 / octree_size) * base_scale * 0.5,
+                            (obj.model_size.y as f32 / octree_size) * base_scale * 0.5,
+                            (obj.model_size.z as f32 / octree_size) * base_scale * 0.5,
+                        );
                         let body_aabb = Aabb::new(position - half_extent, position + half_extent);
 
                         // Get correction from world collider
                         let correction =
                             world_collider.resolve_collision(obj.body_handle, &body_aabb);
+
+                        if self.config.physics.debug_steps > 0 {
+                            println!(
+                                "[PHYSICS] Frame {}: Obj {} at pos {:?}, correction {:?}",
+                                self.frame_count, i, position, correction
+                            );
+                            if position.y < 0.0 {
+                                println!(
+                                    "[WARNING] Obj {} FELL THROUGH GROUND! y = {:.3}",
+                                    i, position.y
+                                );
+                            }
+                        }
 
                         // Apply correction to body position and dampen velocity
                         if correction.length_squared() > 0.0 {
@@ -734,7 +839,8 @@ impl ProtoGlApp {
             if let (Some(physics_world), Some(camera_obj)) =
                 (&self.physics_world, &self.camera_object)
             {
-                self.fps_camera.set_position(camera_obj.position(physics_world));
+                self.fps_camera
+                    .set_position(camera_obj.position(physics_world));
             }
         }
 
@@ -751,7 +857,12 @@ impl ProtoGlApp {
 
         unsafe {
             gl.viewport(0, 0, size.width as i32, size.height as i32);
-            gl.clear_color(BACKGROUND_COLOR.x, BACKGROUND_COLOR.y, BACKGROUND_COLOR.z, 1.0);
+            gl.clear_color(
+                BACKGROUND_COLOR.x,
+                BACKGROUND_COLOR.y,
+                BACKGROUND_COLOR.z,
+                1.0,
+            );
             gl.clear(COLOR_BUFFER_BIT | DEPTH_BUFFER_BIT);
         }
 
@@ -830,21 +941,31 @@ impl ProtoGlApp {
                     let rotation = body.rotation();
 
                     let position = glam::Vec3::new(position.x, position.y, position.z);
-                    let rotation = glam::Quat::from_xyzw(rotation.i, rotation.j, rotation.k, rotation.w);
+                    let rotation =
+                        glam::Quat::from_xyzw(rotation.i, rotation.j, rotation.k, rotation.w);
 
-                    // Mesh is in [0,1] space, centered to [-0.5, 0.5] by renderer
+                    // Calculate normalized size (model size as fraction of octree)
+                    let octree_size = (1 << obj.depth) as f32;
+                    let normalized_size = glam::Vec3::new(
+                        obj.model_size.x as f32 / octree_size,
+                        obj.model_size.y as f32 / octree_size,
+                        obj.model_size.z as f32 / octree_size,
+                    );
+
+                    // Mesh is in [0, normalized_size] space, centered to [-normalized_size/2, normalized_size/2] by renderer
                     // object_size is the desired edge length in normalized world units
                     // Apply per-object scale: actual_scale = object_size * 2^scale_exp
                     let scale_factor = 2.0_f32.powi(obj.scale_exp);
                     let scale = self.config.spawning.object_size * scale_factor;
                     unsafe {
                         // Render solid mesh
-                        mesh_renderer.render_mesh_with_scale(
+                        mesh_renderer.render_mesh_with_normalized_size(
                             gl,
                             self.object_mesh_indices[i],
                             position,
                             rotation,
                             scale,
+                            normalized_size,
                             &camera,
                             size.width as i32,
                             size.height as i32,
@@ -994,19 +1115,14 @@ impl ProtoGlApp {
         for y in 0..height {
             let src_row = &rgb_pixels[(y * width * 3) as usize..((y + 1) * width * 3) as usize];
             let dst_y = height - 1 - y;
-            let dst_row = &mut flipped[(dst_y * width * 3) as usize..((dst_y + 1) * width * 3) as usize];
+            let dst_row =
+                &mut flipped[(dst_y * width * 3) as usize..((dst_y + 1) * width * 3) as usize];
             dst_row.copy_from_slice(src_row);
         }
 
         // Save to file
-        image::save_buffer(
-            path,
-            &flipped,
-            width,
-            height,
-            image::ColorType::Rgb8,
-        )
-        .map_err(|e| e.to_string())
+        image::save_buffer(path, &flipped, width, height, image::ColorType::Rgb8)
+            .map_err(|e| e.to_string())
     }
 
     fn cleanup(&mut self) {
