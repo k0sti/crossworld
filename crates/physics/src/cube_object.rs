@@ -1,6 +1,6 @@
 use crate::collision::Aabb;
 use crate::world::PhysicsWorld;
-use cube::Cube;
+use cube::CubeBox;
 use glam::{Quat, Vec3};
 use nalgebra::{Quaternion, UnitQuaternion};
 use rapier3d::prelude::*;
@@ -9,14 +9,16 @@ use std::rc::Rc;
 /// Represents a physics object with a rigid body, collider, and voxel cube
 ///
 /// This is a convenience wrapper that combines a rigid body handle,
-/// its primary collider handle, and a reference to the voxel cube used
-/// for collision geometry.
+/// its primary collider handle, and a reference to the voxel CubeBox used
+/// for collision geometry. CubeBox preserves actual model dimensions,
+/// enabling accurate bounding boxes and collision generation.
 #[derive(Debug, Clone)]
 pub struct CubeObject {
     pub(crate) body_handle: RigidBodyHandle,
     pub(crate) collider_handle: Option<ColliderHandle>,
-    /// The voxel cube used for collision geometry (optional)
-    pub cube: Option<Rc<Cube<u8>>>,
+    /// The voxel CubeBox used for collision geometry (optional)
+    /// Contains both the octree data and actual model dimensions
+    pub cube: Option<Rc<CubeBox<u8>>>,
     /// Scale of the cube object (default 1.0)
     scale: f32,
 }
@@ -105,16 +107,16 @@ impl CubeObject {
         self.collider_handle = Some(handle);
     }
 
-    /// Set the cube reference for this object
+    /// Set the CubeBox reference for this object
     ///
     /// # Arguments
-    /// * `cube` - Reference to the voxel cube used for collision
-    pub fn set_cube(&mut self, cube: Rc<Cube<u8>>) {
-        self.cube = Some(cube);
+    /// * `cubebox` - Reference to the voxel CubeBox used for collision
+    pub fn set_cube(&mut self, cubebox: Rc<CubeBox<u8>>) {
+        self.cube = Some(cubebox);
     }
 
-    /// Get the cube reference if it exists
-    pub fn cube(&self) -> Option<&Rc<Cube<u8>>> {
+    /// Get the CubeBox reference if it exists
+    pub fn cube(&self) -> Option<&Rc<CubeBox<u8>>> {
         self.cube.as_ref()
     }
 
@@ -133,17 +135,31 @@ impl CubeObject {
 
     /// Get the local-space AABB for this cube object
     ///
-    /// Returns the unit cube [0,1]³ representing the unscaled, unrotated bounding box.
-    /// This is constant for all CubeObjects since voxel cubes are defined in [0,1]³ space.
+    /// If a CubeBox is attached, returns an AABB sized to the actual model dimensions
+    /// normalized by the octree size. For a 16x30x12 model in a depth-5 octree (32³),
+    /// returns AABB from (0,0,0) to (0.5, 0.9375, 0.375).
+    ///
+    /// If no CubeBox is attached, returns the unit cube [0,1]³ as fallback.
     pub fn local_aabb(&self) -> Aabb {
-        Aabb::unit()
+        match &self.cube {
+            Some(cubebox) => {
+                let octree_size = cubebox.octree_size() as f32;
+                let max = Vec3::new(
+                    cubebox.size.x as f32 / octree_size,
+                    cubebox.size.y as f32 / octree_size,
+                    cubebox.size.z as f32 / octree_size,
+                );
+                Aabb::new(Vec3::ZERO, max)
+            }
+            None => Aabb::unit(), // Fallback for objects without cube data
+        }
     }
 
     /// Get the world-space AABB for this cube object
     ///
-    /// Computes a tight AABB by transforming the local unit cube using the object's
+    /// Computes a tight AABB by transforming the local AABB using the object's
     /// position, rotation, and scale. The result is an axis-aligned bounding box
-    /// that fully contains the rotated cube.
+    /// that fully contains the rotated object.
     ///
     /// # Arguments
     /// * `world` - The physics world to query position/rotation from
@@ -315,6 +331,8 @@ impl CubeObject {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use cube::Cube;
+    use glam::IVec3;
 
     #[test]
     fn test_dynamic_body_creation() {
@@ -353,13 +371,47 @@ mod tests {
     }
 
     #[test]
-    fn test_local_aabb() {
+    fn test_local_aabb_without_cubebox() {
         let mut world = PhysicsWorld::new(Vec3::new(0.0, -9.81, 0.0));
         let body = CubeObject::new_dynamic(&mut world, Vec3::ZERO, 1.0);
 
+        // Without a CubeBox, falls back to unit cube
         let aabb = body.local_aabb();
         assert_eq!(aabb.min, Vec3::ZERO);
         assert_eq!(aabb.max, Vec3::ONE);
+    }
+
+    #[test]
+    fn test_local_aabb_with_cubebox() {
+        let mut world = PhysicsWorld::new(Vec3::new(0.0, -9.81, 0.0));
+        let mut body = CubeObject::new_dynamic(&mut world, Vec3::ZERO, 1.0);
+
+        // Create a 16x30x12 model in depth-5 octree (32³)
+        let cube = Cube::Solid(1u8);
+        let cubebox = CubeBox::new(cube, IVec3::new(16, 30, 12), 5);
+        body.set_cube(Rc::new(cubebox));
+
+        let aabb = body.local_aabb();
+        assert_eq!(aabb.min, Vec3::ZERO);
+        // Expected: (16/32, 30/32, 12/32) = (0.5, 0.9375, 0.375)
+        assert!((aabb.max.x - 0.5).abs() < 0.0001);
+        assert!((aabb.max.y - 0.9375).abs() < 0.0001);
+        assert!((aabb.max.z - 0.375).abs() < 0.0001);
+    }
+
+    #[test]
+    fn test_local_aabb_uniform_model() {
+        let mut world = PhysicsWorld::new(Vec3::new(0.0, -9.81, 0.0));
+        let mut body = CubeObject::new_dynamic(&mut world, Vec3::ZERO, 1.0);
+
+        // A 32x32x32 model in depth-5 octree fills entire space
+        let cube = Cube::Solid(1u8);
+        let cubebox = CubeBox::new(cube, IVec3::splat(32), 5);
+        body.set_cube(Rc::new(cubebox));
+
+        let aabb = body.local_aabb();
+        assert_eq!(aabb.min, Vec3::ZERO);
+        assert_eq!(aabb.max, Vec3::ONE); // 32/32 = 1.0
     }
 
     #[test]
@@ -416,5 +468,26 @@ mod tests {
         // Non-overlapping AABB
         let distant = Aabb::new(Vec3::splat(10.0), Vec3::splat(11.0));
         assert!(!body.intersects_aabb(&world, &distant));
+    }
+
+    #[test]
+    fn test_world_aabb_with_cubebox_and_scale() {
+        let mut world = PhysicsWorld::new(Vec3::new(0.0, -9.81, 0.0));
+        let mut body = CubeObject::new_dynamic(&mut world, Vec3::new(10.0, 0.0, 10.0), 1.0);
+
+        // 16x30x12 avatar in depth-5 octree (32³), scaled by 2.0
+        let cube = Cube::Solid(1u8);
+        let cubebox = CubeBox::new(cube, IVec3::new(16, 30, 12), 5);
+        body.set_cube(Rc::new(cubebox));
+        body.set_scale(2.0);
+
+        let aabb = body.world_aabb(&world);
+        // Local AABB: (0,0,0) to (0.5, 0.9375, 0.375)
+        // Scaled: (0,0,0) to (1.0, 1.875, 0.75)
+        // Translated: (10, 0, 10) to (11.0, 1.875, 10.75)
+        assert_eq!(aabb.min, Vec3::new(10.0, 0.0, 10.0));
+        assert!((aabb.max.x - 11.0).abs() < 0.0001);
+        assert!((aabb.max.y - 1.875).abs() < 0.0001);
+        assert!((aabb.max.z - 10.75).abs() < 0.0001);
     }
 }

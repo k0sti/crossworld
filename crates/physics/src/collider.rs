@@ -5,7 +5,7 @@
 //! identify exposed faces and creates compound colliders from them.
 
 use crate::collision::Aabb;
-use cube::{visit_faces, visit_faces_in_region, Cube, FaceInfo, RegionBounds};
+use cube::{visit_faces, visit_faces_in_region, Cube, CubeBox, FaceInfo, RegionBounds};
 use glam::{Quat, Vec3};
 use rapier3d::prelude::*;
 use std::rc::Rc;
@@ -23,7 +23,10 @@ pub struct VoxelColliderBuilder {
 struct FaceRectangle {
     center: Vec3,
     normal: Vec3,
-    size: f32,
+    /// Face size - either uniform (for unit cubes) or per-axis (for CubeBox)
+    /// For uniform: all components equal the voxel size
+    /// For non-uniform: components scaled by CubeBox dimensions
+    size: Vec3,
 }
 
 impl VoxelColliderBuilder {
@@ -193,22 +196,163 @@ impl VoxelColliderBuilder {
         }
     }
 
-    /// Add a face rectangle from FaceInfo
+    // ===== CubeBox Methods =====
+    // These methods handle models with non-uniform dimensions that differ
+    // from the power-of-2 octree size.
+
+    /// Generate a compound collider from a CubeBox model with actual dimensions
+    ///
+    /// CubeBox contains size information that may differ from power-of-2 octree dimensions.
+    /// This method accounts for that scaling to generate colliders matching the actual model bounds.
+    ///
+    /// # Arguments
+    /// * `cubebox` - The CubeBox with octree, size, and depth information
+    ///
+    /// # Returns
+    /// Rapier Collider with faces scaled to match cubebox.size (not octree power-of-2)
+    ///
+    /// # Example
+    /// A 16x30x12 avatar in a depth-5 octree (32³) will have colliders scaled by
+    /// (0.5, 0.9375, 0.375) compared to the full octree space.
+    pub fn from_cubebox(cubebox: &CubeBox<u8>) -> Collider {
+        Self::from_cubebox_with_region(cubebox, None)
+    }
+
+    /// Generate a collider from CubeBox with world-space scaling
+    ///
+    /// Combines CubeBox dimension scaling with world-space transformation.
+    ///
+    /// # Arguments
+    /// * `cubebox` - The CubeBox model
+    /// * `world_size` - The world size for positioning
+    pub fn from_cubebox_scaled(cubebox: &CubeBox<u8>, world_size: f32) -> Collider {
+        Self::from_cubebox_with_region_scaled(cubebox, None, world_size)
+    }
+
+    /// Generate a collider from CubeBox with optional region filtering
+    ///
+    /// # Arguments
+    /// * `cubebox` - The CubeBox model with actual dimensions
+    /// * `region` - Optional region bounds to filter voxels
+    pub fn from_cubebox_with_region(
+        cubebox: &CubeBox<u8>,
+        region: Option<&RegionBounds>,
+    ) -> Collider {
+        let mut builder = Self::new();
+        let border_materials = [1, 1, 0, 0];
+
+        // Calculate per-axis scale: actual size / octree size
+        let octree_size = cubebox.octree_size() as f32;
+        let scale = Vec3::new(
+            cubebox.size.x as f32 / octree_size,
+            cubebox.size.y as f32 / octree_size,
+            cubebox.size.z as f32 / octree_size,
+        );
+
+        match region {
+            Some(bounds) => {
+                visit_faces_in_region(
+                    &Rc::new(cubebox.cube.clone()),
+                    bounds,
+                    |face_info| {
+                        builder.add_face_from_info_scaled(face_info, scale);
+                    },
+                    border_materials,
+                );
+            }
+            None => {
+                visit_faces(
+                    &Rc::new(cubebox.cube.clone()),
+                    |face_info| {
+                        builder.add_face_from_info_scaled(face_info, scale);
+                    },
+                    border_materials,
+                );
+            }
+        }
+
+        builder.build_compound_collider()
+    }
+
+    /// Generate a collider from CubeBox with region filtering and world-space scaling
+    ///
+    /// # Arguments
+    /// * `cubebox` - The CubeBox model with actual dimensions
+    /// * `region` - Optional region bounds to filter voxels
+    /// * `world_size` - The world size for positioning
+    pub fn from_cubebox_with_region_scaled(
+        cubebox: &CubeBox<u8>,
+        region: Option<&RegionBounds>,
+        world_size: f32,
+    ) -> Collider {
+        let mut builder = Self::new();
+        let border_materials = [1, 1, 0, 0];
+
+        // Calculate per-axis scale: actual size / octree size
+        let octree_size = cubebox.octree_size() as f32;
+        let scale = Vec3::new(
+            cubebox.size.x as f32 / octree_size,
+            cubebox.size.y as f32 / octree_size,
+            cubebox.size.z as f32 / octree_size,
+        );
+
+        match region {
+            Some(bounds) => {
+                visit_faces_in_region(
+                    &Rc::new(cubebox.cube.clone()),
+                    bounds,
+                    |face_info| {
+                        builder.add_face_from_info_scaled(face_info, scale);
+                    },
+                    border_materials,
+                );
+            }
+            None => {
+                visit_faces(
+                    &Rc::new(cubebox.cube.clone()),
+                    |face_info| {
+                        builder.add_face_from_info_scaled(face_info, scale);
+                    },
+                    border_materials,
+                );
+            }
+        }
+
+        builder.build_compound_collider_scaled(world_size)
+    }
+
+    /// Add a face rectangle from FaceInfo (uniform size for unit cubes)
     fn add_face_from_info(&mut self, face_info: &FaceInfo) {
+        // For uniform cubes, size is the same in all directions
+        self.add_face_from_info_scaled(face_info, Vec3::ONE);
+    }
+
+    /// Add a face rectangle from FaceInfo with per-axis scaling
+    ///
+    /// Used for CubeBox models where actual dimensions differ from octree power-of-2.
+    /// The scale parameter represents size/octree_size for each axis.
+    ///
+    /// # Arguments
+    /// * `face_info` - Face information from traversal (in [0,1] normalized space)
+    /// * `scale` - Per-axis scale factor (e.g., (0.5, 0.9375, 0.375) for 16x30x12 in 32³)
+    fn add_face_from_info_scaled(&mut self, face_info: &FaceInfo, scale: Vec3) {
         let normal_array = face_info.face.normal();
         let normal = Vec3::from(normal_array);
 
+        // Scale position and size by per-axis factors
+        let scaled_pos = face_info.position * scale;
+        let scaled_size = Vec3::splat(face_info.size) * scale;
+
         // Calculate face center position
-        // face_info.position is the voxel's base position in [0,1] space
         // Face center is at voxel center + half size in normal direction
-        let voxel_center = face_info.position + Vec3::splat(face_info.size * 0.5);
-        let face_offset = normal * face_info.size * 0.5;
+        let voxel_center = scaled_pos + scaled_size * 0.5;
+        let face_offset = normal * (scaled_size * 0.5);
         let face_center = voxel_center + face_offset;
 
         self.rectangles.push(FaceRectangle {
             center: face_center,
             normal,
-            size: face_info.size,
+            size: scaled_size,
         });
     }
 
@@ -242,11 +386,16 @@ impl VoxelColliderBuilder {
             .rectangles
             .iter()
             .map(|rect| {
-                let half_size = (rect.size * scale) / 2.0;
+                // rect.size is now Vec3 - use components for face dimensions
+                // The face lies on a plane perpendicular to the normal
+                // Determine which two axes form the face based on normal direction
+                let (half_width, half_height) = Self::face_dimensions(&rect.size, &rect.normal);
+                let half_width = half_width * scale / 2.0;
+                let half_height = half_height * scale / 2.0;
 
                 // Create cuboid shape
                 // The cuboid is oriented with Z as the normal direction initially
-                let shape = SharedShape::cuboid(half_size, half_size, thickness);
+                let shape = SharedShape::cuboid(half_width, half_height, thickness);
 
                 // Calculate rotation to align Z-axis with face normal
                 let rotation = Self::rotation_from_normal(rect.normal);
@@ -264,6 +413,26 @@ impl VoxelColliderBuilder {
             .collect();
 
         ColliderBuilder::compound(shapes).build()
+    }
+
+    /// Determine face dimensions based on size vector and face normal
+    ///
+    /// Returns (width, height) for the face plane perpendicular to the normal.
+    fn face_dimensions(size: &Vec3, normal: &Vec3) -> (f32, f32) {
+        // Face lies on two axes perpendicular to the normal
+        // For X-facing faces (Left/Right): use Y and Z
+        // For Y-facing faces (Top/Bottom): use X and Z
+        // For Z-facing faces (Front/Back): use X and Y
+        if normal.x.abs() > 0.5 {
+            // X-axis normal (Left/Right)
+            (size.y, size.z)
+        } else if normal.y.abs() > 0.5 {
+            // Y-axis normal (Top/Bottom)
+            (size.x, size.z)
+        } else {
+            // Z-axis normal (Front/Back)
+            (size.x, size.y)
+        }
     }
 
     /// Calculate rotation axis-angle from a normal vector
@@ -330,6 +499,7 @@ pub fn create_capsule_collider(half_height: f32, radius: f32) -> Collider {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use glam::IVec3;
 
     #[test]
     fn test_collider_from_solid_cube() {
@@ -447,5 +617,90 @@ mod tests {
             partial_count,
             full_count
         );
+    }
+
+    // ===== CubeBox Tests =====
+
+    #[test]
+    fn test_collider_from_cubebox_uniform() {
+        // A 32x32x32 model in depth-5 octree fills entire space
+        let cube = Cube::Solid(1u8);
+        let cubebox = CubeBox::new(cube, IVec3::splat(32), 5);
+        let collider = VoxelColliderBuilder::from_cubebox(&cubebox);
+
+        // Should generate compound collider with 6 faces
+        assert!(collider.shape().as_compound().is_some());
+    }
+
+    #[test]
+    fn test_collider_from_cubebox_non_uniform() {
+        // A 16x30x12 avatar in depth-5 octree (32³)
+        let cube = Cube::Solid(1u8);
+        let cubebox = CubeBox::new(cube, IVec3::new(16, 30, 12), 5);
+        let collider = VoxelColliderBuilder::from_cubebox(&cubebox);
+
+        // Should generate compound collider
+        assert!(collider.shape().as_compound().is_some());
+    }
+
+    #[test]
+    fn test_collider_from_empty_cubebox() {
+        // Empty cube in CubeBox
+        let cube = Cube::Solid(0u8);
+        let cubebox = CubeBox::new(cube, IVec3::splat(16), 4);
+        let collider = VoxelColliderBuilder::from_cubebox(&cubebox);
+
+        // Empty should generate minimal collider (ball)
+        assert!(collider.shape().as_ball().is_some());
+    }
+
+    #[test]
+    fn test_cubebox_face_count_scaling() {
+        // Compare face counts: uniform vs non-uniform
+        // Both should have same face count since it's same solid cube,
+        // just different sizing
+        let cube_uniform = Cube::Solid(1u8);
+        let cubebox_uniform = CubeBox::new(cube_uniform, IVec3::splat(32), 5);
+
+        let cube_nonuniform = Cube::Solid(1u8);
+        let cubebox_nonuniform = CubeBox::new(cube_nonuniform, IVec3::new(16, 30, 12), 5);
+
+        let mut builder_uniform = VoxelColliderBuilder::new();
+        visit_faces(
+            &Rc::new(cubebox_uniform.cube.clone()),
+            |f| builder_uniform.add_face_from_info(f),
+            [1, 1, 0, 0],
+        );
+
+        let mut builder_nonuniform = VoxelColliderBuilder::new();
+        let scale = Vec3::new(0.5, 0.9375, 0.375);
+        visit_faces(
+            &Rc::new(cubebox_nonuniform.cube.clone()),
+            |f| builder_nonuniform.add_face_from_info_scaled(f, scale),
+            [1, 1, 0, 0],
+        );
+
+        // Same cube = same face count
+        assert_eq!(builder_uniform.face_count(), builder_nonuniform.face_count());
+    }
+
+    #[test]
+    fn test_face_dimensions() {
+        let size = Vec3::new(0.5, 0.9375, 0.375);
+
+        // X-facing face uses Y and Z
+        let (w, h) = VoxelColliderBuilder::face_dimensions(&size, &Vec3::X);
+        assert!((w - 0.9375).abs() < 0.0001);
+        assert!((h - 0.375).abs() < 0.0001);
+
+        // Y-facing face uses X and Z
+        let (w, h) = VoxelColliderBuilder::face_dimensions(&size, &Vec3::Y);
+        assert!((w - 0.5).abs() < 0.0001);
+        assert!((h - 0.375).abs() < 0.0001);
+
+        // Z-facing face uses X and Y
+        let (w, h) = VoxelColliderBuilder::face_dimensions(&size, &Vec3::Z);
+        assert!((w - 0.5).abs() < 0.0001);
+        assert!((h - 0.9375).abs() < 0.0001);
     }
 }
