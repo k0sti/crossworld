@@ -91,58 +91,30 @@ export class VoxelAvatar extends BaseAvatar {
     geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     geometry.setIndex(new THREE.BufferAttribute(indices, 1));
 
-    // Generate UV coordinates based on face normals (same as world cube)
-    // UVs are tied to the face normal direction for proper texture mapping
-    // Scale texture by 2^3 (8x) for higher frequency detail
-    const textureScale = Math.pow(2, 3); // 8x scale
-    const uvs = new Float32Array(vertices.length / 3 * 2);
-
-    for (let i = 0; i < vertices.length / 3; i++) {
-      const nx = normals[i * 3];
-      const ny = normals[i * 3 + 1];
-      const nz = normals[i * 3 + 2];
-
-      const x = vertices[i * 3];
-      const y = vertices[i * 3 + 1];
-      const z = vertices[i * 3 + 2];
-
-      // Determine dominant axis from normal (face direction)
-      const absNx = Math.abs(nx);
-      const absNy = Math.abs(ny);
-      const absNz = Math.abs(nz);
-
-      let u: number, v: number;
-
-      if (absNy > absNx && absNy > absNz) {
-        // Top/Bottom face (Y-dominant)
-        u = x * textureScale;
-        v = z * textureScale;
-      } else if (absNx > absNz) {
-        // Left/Right face (X-dominant)
-        u = z * textureScale;
-        v = y * textureScale;
-      } else {
-        // Front/Back face (Z-dominant)
-        u = x * textureScale;
-        v = y * textureScale;
-      }
-
-      // Use fractional part for tiling (0-1 range per voxel face)
-      uvs[i * 2] = u - Math.floor(u);
-      uvs[i * 2 + 1] = v - Math.floor(v);
-    }
-
+    // Use pre-computed UVs from WASM (already generated in Rust)
+    const uvs = geometryData.uvs ? new Float32Array(geometryData.uvs) : new Float32Array(vertices.length / 3 * 2);
     geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
 
-    // Add materialId attribute for all vertices (same material for entire avatar)
-    const materialId = this.config.materialId ?? 0; // Default to 0 (vertex colors only)
-    const materialIds = new Float32Array(vertices.length / 3).fill(materialId);
+    // Use pre-computed material IDs from WASM, or override with config materialId for avatar texturing
+    const configMaterialId = this.config.materialId ?? 0;
+    let materialIds: Float32Array;
+    if (configMaterialId !== 0) {
+      // Override all material IDs with config value (for avatar-wide texture)
+      materialIds = new Float32Array(vertices.length / 3).fill(configMaterialId);
+    } else if (geometryData.materialIds) {
+      // Use per-voxel material IDs from WASM
+      materialIds = new Float32Array(geometryData.materialIds);
+    } else {
+      // Fallback to no textures
+      materialIds = new Float32Array(vertices.length / 3).fill(0);
+    }
     geometry.setAttribute('materialId', new THREE.BufferAttribute(materialIds, 1));
 
-    logger.log('renderer', `[VoxelAvatar] Geometry materialId attribute:`, {
-      materialId,
+    logger.log('renderer', `[VoxelAvatar] Geometry from WASM:`, {
       vertexCount: vertices.length / 3,
-      sampleValues: materialIds.slice(0, 5)
+      hasUvs: !!geometryData.uvs,
+      hasMaterialIds: !!geometryData.materialIds,
+      configMaterialId,
     });
 
     // Create material using the same shader system as the world cube
@@ -172,7 +144,7 @@ export class VoxelAvatar extends BaseAvatar {
 
     this.group.add(this.mesh);
 
-    const textureInfo = materialId >= 2 && materialId <= 127 ? `materialId=${materialId}` : 'vertex colors only';
+    const textureInfo = configMaterialId >= 2 && configMaterialId <= 127 ? `materialId=${configMaterialId}` : 'vertex colors only';
     logger.log('renderer', `VoxelAvatar created for ${this.config.userNpub}:`, {
       vertices: vertices.length / 3,
       triangles: indices.length / 3,

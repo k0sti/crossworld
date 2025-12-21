@@ -3,6 +3,16 @@ import type { GeometryData } from 'crossworld-world'
 import cubeInit from 'cube'
 import * as cubeWasm from 'cube'
 
+/** Result from WasmCube.generateMesh() */
+interface MeshResult {
+  vertices: number[];
+  indices: number[];
+  normals: number[];
+  colors: number[];
+  uvs: number[];
+  material_ids: number[];
+}
+
 /**
  * Load a .vox file from a URL and generate Three.js geometry
  * @param url URL to the .vox file
@@ -30,7 +40,7 @@ export async function loadVoxFromUrl(url: string, _userNpub?: string, maxDepth: 
   // Generate mesh from the cube (null palette = original colors)
   // maxDepth determines resolution: 2^maxDepth = max voxels per axis
   // Common values: 4 (16x16x16), 5 (32x32x32), 6 (64x64x64)
-  const result = wasmCube.generateMesh(null, maxDepth)
+  const result = wasmCube.generateMesh(null, maxDepth) as MeshResult | { error: string }
 
   if ('error' in result) {
     logger.error('common', `[voxLoader] Failed to parse VOX file from ${url}: ${result.error}`)
@@ -42,6 +52,8 @@ export async function loadVoxFromUrl(url: string, _userNpub?: string, maxDepth: 
     indices: new Uint32Array(result.indices),
     normals: new Float32Array(result.normals),
     colors: new Float32Array(result.colors),
+    uvs: new Float32Array(result.uvs),
+    materialIds: new Uint8Array(result.material_ids),
   } as GeometryData
 
   // Log warning if geometry is empty
@@ -83,7 +95,7 @@ export async function loadVoxFromFile(file: File, _userNpub?: string, maxDepth: 
   // Generate mesh from the cube (null palette = original colors)
   // maxDepth determines resolution: 2^maxDepth = max voxels per axis
   // Common values: 4 (16x16x16), 5 (32x32x32), 6 (64x64x64)
-  const result = wasmCube.generateMesh(null, maxDepth)
+  const result = wasmCube.generateMesh(null, maxDepth) as MeshResult | { error: string }
 
   if ('error' in result) {
     logger.error('common', `[voxLoader] Failed to parse VOX file from ${file.name}: ${result.error}`)
@@ -95,6 +107,8 @@ export async function loadVoxFromFile(file: File, _userNpub?: string, maxDepth: 
     indices: new Uint32Array(result.indices),
     normals: new Float32Array(result.normals),
     colors: new Float32Array(result.colors),
+    uvs: new Float32Array(result.uvs),
+    materialIds: new Uint8Array(result.material_ids),
   } as GeometryData
 
   // Log warning if geometry is empty

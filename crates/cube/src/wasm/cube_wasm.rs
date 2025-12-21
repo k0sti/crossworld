@@ -19,6 +19,8 @@ pub struct MeshResult {
     pub indices: Vec<u32>,
     pub normals: Vec<f32>,
     pub colors: Vec<f32>,
+    pub uvs: Vec<f32>,
+    pub material_ids: Vec<u8>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -273,6 +275,8 @@ impl WasmCube {
             indices: builder.indices,
             normals: builder.normals,
             colors: builder.colors,
+            uvs: builder.uvs,
+            material_ids: builder.material_ids,
         };
         serde_wasm_bindgen::to_value(&result).unwrap_or_else(|e| {
             let error = ParseError {
