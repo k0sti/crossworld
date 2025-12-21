@@ -236,14 +236,13 @@ impl VoxelColliderBuilder {
         }
 
         // Create thin cuboid colliders for each face
-        // Scale thickness proportionally to face size
-        let base_thickness = 0.05;
+        // Thickness is fixed (thin shell), face size scales with world
+        let thickness = 0.5; // Fixed thin shell thickness in world units
         let shapes: Vec<_> = self
             .rectangles
             .iter()
             .map(|rect| {
                 let half_size = (rect.size * scale) / 2.0;
-                let thickness = base_thickness * scale;
 
                 // Create cuboid shape
                 // The cuboid is oriented with Z as the normal direction initially

@@ -51,7 +51,7 @@ pub fn run_physics_debug(iterations: u32) -> Result<(), Box<dyn Error>> {
     println!("  Depth: {}", world_depth);
     println!("  World size: {:.0} (2^{} units)", world_size, config.world.macro_depth + config.world.border_depth);
     println!("  World bounds: [{:.0}, {:.0}] centered at origin", -half_world, half_world);
-    println!("  Ground level: y = {:.0}", -half_world);
+    println!("  Ground surface: Y=0 (border midpoint)");
     println!();
 
     // Initialize physics world
@@ -81,19 +81,7 @@ pub fn run_physics_debug(iterations: u32) -> Result<(), Box<dyn Error>> {
     let world_body = RigidBodyBuilder::fixed().build();
     let world_body_handle = physics_world.add_rigid_body(world_body);
     physics_world.add_collider(world_collider, world_body_handle);
-
-    // Add explicit ground plane at ground level (y = -half_world)
-    let ground_y = config.world.ground_y();
-    let ground_body = RigidBodyBuilder::fixed()
-        .translation(vector![0.0, ground_y, 0.0])
-        .build();
-    let ground_handle = physics_world.add_rigid_body(ground_body);
-    let ground_collider = ColliderBuilder::cuboid(half_world, 0.1, half_world)  // Large flat ground
-        .friction(0.5)
-        .restitution(0.0)
-        .build();
-    physics_world.add_collider(ground_collider, ground_handle);
-    println!("Added ground plane at Y={:.0}", ground_y);
+    println!("World collider ready (ground surface at Y=0)");
 
     // Load models and spawn dynamic cubes
     let models = load_vox_models(&config.spawning.models_csv, &config.spawning.models_path);
@@ -147,8 +135,8 @@ pub fn run_physics_debug(iterations: u32) -> Result<(), Box<dyn Error>> {
                         if is_sleeping { "[SLEEPING]" } else { "" }
                     );
 
-                    // Check if fallen through world (below ground level)
-                    if pos.y < ground_y - 10.0 {
+                    // Check if fallen through world (below ground level at Y=0)
+                    if pos.y < -10.0 {
                         println!("    ⚠️  WARNING: Object fell through world!");
                     }
                 }
@@ -160,15 +148,15 @@ pub fn run_physics_debug(iterations: u32) -> Result<(), Box<dyn Error>> {
     println!("=== Simulation complete ===\n");
 
     // Final summary
-    println!("Final positions (ground at Y={:.0}):", ground_y);
+    println!("Final positions (ground at Y=0):");
     let mut fell_through = 0;
     for (i, obj) in objects.iter().enumerate() {
         if let Some(body) = physics_world.get_rigid_body(obj.body_handle) {
             let pos = body.translation();
-            let status = if pos.y < ground_y - 10.0 {
+            let status = if pos.y < -10.0 {
                 fell_through += 1;
                 "❌ FELL THROUGH"
-            } else if pos.y < ground_y {
+            } else if pos.y < 0.0 {
                 "⚠️  Below ground"
             } else {
                 "✓ OK"
