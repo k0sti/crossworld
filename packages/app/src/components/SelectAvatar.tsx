@@ -454,50 +454,22 @@ export function SelectAvatar({ isOpen, onClose, onSave, currentSelection }: Sele
           geometry.setAttribute('color', new THREE.BufferAttribute(geometryData.colors, 3));
           geometry.setIndex(new THREE.BufferAttribute(geometryData.indices, 1));
 
-          // Generate UV coordinates - combine both approaches
-          // Use face normals to determine which axes to use, plus add normal contribution for variation
-          const uvs = new Float32Array(geometryData.vertices.length / 3 * 2);
-
-          for (let i = 0; i < geometryData.vertices.length / 3; i++) {
-            const nx = geometryData.normals[i * 3];
-            const ny = geometryData.normals[i * 3 + 1];
-            const nz = geometryData.normals[i * 3 + 2];
-
-            const x = geometryData.vertices[i * 3];
-            const y = geometryData.vertices[i * 3 + 1];
-            const z = geometryData.vertices[i * 3 + 2];
-
-            // Determine dominant axis from normal (face direction)
-            const absNx = Math.abs(nx);
-            const absNy = Math.abs(ny);
-            const absNz = Math.abs(nz);
-
-            let u: number, v: number;
-
-            // Use position divided by a scale factor for texture tiling
-            // Scale by 2^textureDepth to increase texture frequency
-            const textureScale = Math.pow(2, textureDepth);
-            const scale = 10 * textureScale; // Higher scale = larger UVs = smaller texture
-
-            if (absNy > absNx && absNy > absNz) {
-              // Top/Bottom face (Y-dominant)
-              u = x / scale + nx * 0.1;
-              v = z / scale + nz * 0.1;
-            } else if (absNx > absNz) {
-              // Left/Right face (X-dominant)
-              u = z / scale + nz * 0.1;
-              v = y / scale + ny * 0.1;
-            } else {
-              // Front/Back face (Z-dominant)
-              u = x / scale + nx * 0.1;
-              v = y / scale + ny * 0.1;
+          // Use pre-computed UVs from WASM, with optional texture depth scaling
+          let uvs: Float32Array;
+          if (geometryData.uvs && geometryData.uvs.length > 0) {
+            // Use WASM-generated UVs as base
+            uvs = new Float32Array(geometryData.uvs);
+            // Apply texture depth scaling if needed (multiply UV coordinates)
+            if (textureDepth !== 0) {
+              const textureScale = Math.pow(2, textureDepth);
+              for (let i = 0; i < uvs.length; i++) {
+                uvs[i] = (uvs[i] * textureScale) % 1.0;
+              }
             }
-
-            // Use fractional part for tiling (0-1 range per texture repeat)
-            uvs[i * 2] = u - Math.floor(u);
-            uvs[i * 2 + 1] = v - Math.floor(v);
+          } else {
+            // Fallback: generate UVs if not provided by WASM
+            uvs = new Float32Array(geometryData.vertices.length / 3 * 2);
           }
-
           geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
 
           // Get material ID from selected texture (only if textures are enabled)
