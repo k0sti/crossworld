@@ -56,6 +56,10 @@ pub struct PhysicsConfig {
 #[derive(Debug, Deserialize, Clone)]
 pub struct SpawningConfig {
     pub spawn_count: u32,
+    /// Path to models.csv file
+    #[serde(default = "default_models_csv_path")]
+    pub models_csv: String,
+    /// Path to directory containing model files
     pub models_path: String,
     pub min_height: f32,
     pub max_height: f32,
@@ -66,6 +70,10 @@ pub struct SpawningConfig {
 
 fn default_object_size() -> f32 {
     0.5
+}
+
+fn default_models_csv_path() -> String {
+    "assets/models.csv".to_string()
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -107,12 +115,12 @@ pub struct StructuresConfig {
     /// Whether to enable structure placement
     #[serde(default = "default_structures_enabled")]
     pub enabled: bool,
+    /// Path to models.csv file
+    #[serde(default = "default_models_csv_path")]
+    pub models_csv: String,
     /// Path to directory containing .vox model files
     #[serde(default = "default_structures_path")]
     pub models_path: String,
-    /// Prefix filter for model filenames (e.g., "obj_" to only load obj_*.vox)
-    #[serde(default = "default_structures_prefix")]
-    pub prefix: String,
     /// Number of structures to place
     #[serde(default = "default_structures_count")]
     pub count: u32,
@@ -136,11 +144,7 @@ fn default_structures_enabled() -> bool {
 }
 
 fn default_structures_path() -> String {
-    "assets/models/vox/".to_string()
-}
-
-fn default_structures_prefix() -> String {
-    "obj_".to_string()
+    "assets/models/".to_string()
 }
 
 fn default_structures_count() -> u32 {
@@ -155,8 +159,8 @@ impl Default for StructuresConfig {
     fn default() -> Self {
         Self {
             enabled: default_structures_enabled(),
+            models_csv: default_models_csv_path(),
             models_path: default_structures_path(),
-            prefix: default_structures_prefix(),
             count: default_structures_count(),
             spawn_radius: default_structures_spawn_radius(),
             seed: 0,
@@ -181,6 +185,7 @@ impl Default for ProtoGlConfig {
             },
             spawning: SpawningConfig {
                 spawn_count: 10,
+                models_csv: default_models_csv_path(),
                 models_path: "assets/models/".to_string(),
                 // Heights and spawn radius in [0,1]³ world space
                 min_height: 0.6,

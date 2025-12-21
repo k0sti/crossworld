@@ -1,13 +1,31 @@
 use std::rc::Rc;
+use std::path::Path;
 use cube::{Cube, load_vox_to_cube};
 use crossworld_physics::rapier3d::prelude::{RigidBodyHandle, ColliderHandle};
 use glam::Vec3;
+use serde::Deserialize;
+
+/// CSV record for models.csv
+#[derive(Debug, Clone, Deserialize)]
+struct CsvModelEntry {
+    name: String,
+    path: String,
+    file_type: String,
+    #[allow(dead_code)]
+    size: u64,
+    model_type: String,
+    scale: String,
+    #[allow(dead_code)]
+    notes: String,
+}
 
 /// A voxel model loaded from a .vox file
 pub struct VoxModel {
     pub cube: Rc<Cube<u8>>,
     pub name: String,
     pub depth: u32,
+    /// Scale exponent from CSV (actual_scale = 2^scale_exp)
+    pub scale_exp: i32,
 }
 
 /// A dynamic cube object in the physics simulation
@@ -23,93 +41,119 @@ pub struct CubeObject {
     pub model_name: String,
     /// Octree depth for rendering
     pub depth: u32,
+    /// Scale exponent from CSV (actual_scale = 2^scale_exp)
+    pub scale_exp: i32,
 }
 
-/// Load .vox models from a directory
-pub fn load_vox_models(models_path: &str) -> Vec<VoxModel> {
+/// Load object models from CSV (models with model_type="object")
+pub fn load_vox_models(csv_path: &str, models_path: &str) -> Vec<VoxModel> {
     use std::fs;
-    use std::path::Path;
 
     let mut models = Vec::new();
+    let csv_path_obj = Path::new(csv_path);
 
-    // Check if directory exists
-    let path = Path::new(models_path);
-    if !path.exists() || !path.is_dir() {
-        eprintln!("Warning: Models directory not found: {}", models_path);
-        eprintln!("Creating fallback simple cube models");
-
-        // Create a few simple cube models as fallback
-        models.push(VoxModel {
-            cube: Rc::new(Cube::solid(5)), // Grass
-            name: "simple_cube_grass".to_string(),
-            depth: 0,
-        });
-        models.push(VoxModel {
-            cube: Rc::new(Cube::solid(4)), // Stone
-            name: "simple_cube_stone".to_string(),
-            depth: 0,
-        });
-        models.push(VoxModel {
-            cube: Rc::new(Cube::solid(9)), // Wood
-            name: "simple_cube_wood".to_string(),
-            depth: 0,
-        });
-
-        return models;
+    if !csv_path_obj.exists() {
+        eprintln!("Warning: Models CSV not found: {}", csv_path);
+        eprintln!("Using fallback simple cube models");
+        return create_fallback_models();
     }
 
-    // Load .vox files from directory
-    if let Ok(entries) = fs::read_dir(path) {
-        for entry in entries.flatten() {
-            let file_path = entry.path();
-            if file_path.extension().is_some_and(|ext| ext == "vox") {
-                // Read file bytes
-                let bytes = match fs::read(&file_path) {
-                    Ok(b) => b,
-                    Err(e) => {
-                        eprintln!("Warning: Failed to read {}: {}", file_path.display(), e);
-                        continue;
-                    }
-                };
+    // Load CSV and filter for object models
+    let mut reader = match csv::Reader::from_path(csv_path_obj) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("Warning: Failed to read CSV {}: {}", csv_path, e);
+            return create_fallback_models();
+        }
+    };
 
-                // Load with center alignment
-                match load_vox_to_cube(&bytes, Vec3::splat(0.5)) {
-                    Ok(cube) => {
-                        // Calculate depth from cube size
-                        let depth = calculate_cube_depth(&cube);
-                        let name = file_path
-                            .file_stem()
-                            .unwrap_or_default()
-                            .to_string_lossy()
-                            .to_string();
-                        models.push(VoxModel {
-                            cube: Rc::new(cube),
-                            name,
-                            depth,
-                        });
-                        println!("Loaded model: {} (depth {})", file_path.display(), depth);
-                    }
-                    Err(e) => {
-                        eprintln!("Warning: Failed to load {}: {}", file_path.display(), e);
-                    }
-                }
+    let object_entries: Vec<CsvModelEntry> = reader
+        .deserialize()
+        .filter_map(|r: Result<CsvModelEntry, _>| r.ok())
+        .filter(|e| e.model_type == "object" && e.file_type == "vox")
+        .collect();
+
+    if object_entries.is_empty() {
+        println!("No object models found in CSV (model_type='object')");
+        return create_fallback_models();
+    }
+
+    println!("Found {} object entries in CSV", object_entries.len());
+
+    for entry in object_entries {
+        // Build full path: models_path + entry.path
+        let file_path = Path::new(models_path).join(&entry.path);
+
+        if !file_path.exists() {
+            eprintln!("Warning: Model file not found: {}", file_path.display());
+            continue;
+        }
+
+        // Parse scale exponent
+        let scale_exp: i32 = entry.scale.trim().parse().unwrap_or(0);
+
+        // Read file bytes
+        let bytes = match fs::read(&file_path) {
+            Ok(b) => b,
+            Err(e) => {
+                eprintln!("Warning: Failed to read {}: {}", file_path.display(), e);
+                continue;
+            }
+        };
+
+        // Load with center alignment
+        match load_vox_to_cube(&bytes, Vec3::splat(0.5)) {
+            Ok(cube) => {
+                let depth = calculate_cube_depth(&cube);
+                println!(
+                    "Loaded object model: {} (depth {}, scale_exp {})",
+                    entry.name, depth, scale_exp
+                );
+                models.push(VoxModel {
+                    cube: Rc::new(cube),
+                    name: entry.name.clone(),
+                    depth,
+                    scale_exp,
+                });
+            }
+            Err(e) => {
+                eprintln!("Warning: Failed to load {}: {}", file_path.display(), e);
             }
         }
     }
 
     // If no models loaded, use fallback
     if models.is_empty() {
-        eprintln!("Warning: No .vox models found in {}", models_path);
-        eprintln!("Using fallback simple cube models");
-        models.push(VoxModel {
-            cube: Rc::new(Cube::solid(5)),
-            name: "fallback_cube".to_string(),
-            depth: 0,
-        });
+        eprintln!("Warning: No object models loaded from CSV");
+        return create_fallback_models();
     }
 
-    println!("Loaded {} model(s)", models.len());
+    println!("Loaded {} object model(s)", models.len());
     models
+}
+
+/// Create fallback simple cube models
+fn create_fallback_models() -> Vec<VoxModel> {
+    vec![
+        VoxModel {
+            cube: Rc::new(Cube::solid(5)), // Grass
+            name: "simple_cube_grass".to_string(),
+            depth: 0,
+            scale_exp: 0,
+        },
+        VoxModel {
+            cube: Rc::new(Cube::solid(4)), // Stone
+            name: "simple_cube_stone".to_string(),
+            depth: 0,
+            scale_exp: 0,
+        },
+        VoxModel {
+            cube: Rc::new(Cube::solid(9)), // Wood
+            name: "simple_cube_wood".to_string(),
+            depth: 0,
+            scale_exp: 0,
+        },
+    ]
 }
 
 /// Calculate the depth of a cube (how many levels of octree)

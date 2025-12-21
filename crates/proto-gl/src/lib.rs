@@ -96,7 +96,7 @@ pub fn run_physics_debug(iterations: u32) -> Result<(), Box<dyn Error>> {
     println!("Added ground plane at Y={:.0}", ground_y);
 
     // Load models and spawn dynamic cubes
-    let models = load_vox_models(&config.spawning.models_path);
+    let models = load_vox_models(&config.spawning.models_csv, &config.spawning.models_path);
     println!("Loaded {} models", models.len());
 
     let objects = spawn_cube_objects(&config.spawning, &models, &mut physics_world);

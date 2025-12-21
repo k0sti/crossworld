@@ -115,6 +115,11 @@ pub fn spawn_cube_objects(
             .build();
         let rb_handle = physics_world.add_rigid_body(rb);
 
+        // Calculate effective size with scale exponent
+        // actual_scale = 2^scale_exp (positive = bigger, negative = smaller)
+        let scale_factor = 2.0_f32.powi(model.scale_exp);
+        let object_size = config.object_size * scale_factor;
+
         // Create collider - ALWAYS use simple box colliders for dynamic objects
         //
         // PERFORMANCE NOTE: VoxelColliderBuilder::from_cube() generates compound colliders
@@ -124,7 +129,7 @@ pub fn spawn_cube_objects(
         //
         // Solution: Use simple box colliders for physics - visual detail doesn't need
         // to match collision shape. A bounding box is sufficient for game physics.
-        let half_extent = config.object_size * 0.5;
+        let half_extent = object_size * 0.5;
         let collider = ColliderBuilder::cuboid(half_extent, half_extent, half_extent)
             .density(1.0)
             .friction(0.5)
@@ -138,6 +143,7 @@ pub fn spawn_cube_objects(
             collider_handle: coll_handle,
             model_name: model.name.clone(),
             depth: model.depth,
+            scale_exp: model.scale_exp,
         });
     }
 
