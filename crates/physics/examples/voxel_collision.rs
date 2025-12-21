@@ -1,6 +1,5 @@
 use crossworld_physics::{
-    create_sphere_collider, glam::Vec3, CubeObject, PhysicsWorld,
-    VoxelColliderBuilder,
+    create_sphere_collider, glam::Vec3, CubeObject, PhysicsWorld, VoxelColliderBuilder,
 };
 use std::rc::Rc;
 
