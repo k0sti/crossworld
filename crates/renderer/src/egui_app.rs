@@ -144,8 +144,10 @@ pub struct CubeRendererApp {
     // GL framebuffers
     gl_framebuffer: Option<Framebuffer>,
     gl_texture: Option<Texture>,
+    gl_depth_rb: Option<Renderbuffer>,
     gpu_framebuffer: Option<Framebuffer>,
     gpu_texture: Option<Texture>,
+    gpu_depth_rb: Option<Renderbuffer>,
     mesh_framebuffer: Option<Framebuffer>,
     mesh_texture: Option<Texture>,
     mesh_depth_rb: Option<Renderbuffer>,
@@ -397,8 +399,10 @@ impl CubeRendererApp {
             mesh_renderer,
             gl_framebuffer: None,
             gl_texture: None,
+            gl_depth_rb: None,
             gpu_framebuffer: None,
             gpu_texture: None,
+            gpu_depth_rb: None,
             mesh_framebuffer: None,
             mesh_texture: None,
             mesh_depth_rb: None,
@@ -572,11 +576,17 @@ impl CubeRendererApp {
                 if let Some(tex) = self.gl_texture {
                     gl.delete_texture(tex);
                 }
+                if let Some(rb) = self.gl_depth_rb {
+                    gl.delete_renderbuffer(rb);
+                }
                 if let Some(fb) = self.gpu_framebuffer {
                     gl.delete_framebuffer(fb);
                 }
                 if let Some(tex) = self.gpu_texture {
                     gl.delete_texture(tex);
+                }
+                if let Some(rb) = self.gpu_depth_rb {
+                    gl.delete_renderbuffer(rb);
                 }
                 if let Some(fb) = self.mesh_framebuffer {
                     gl.delete_framebuffer(fb);
@@ -588,38 +598,7 @@ impl CubeRendererApp {
                     gl.delete_renderbuffer(rb);
                 }
 
-                // Helper to create framebuffer + texture (color only)
-                let create_fb_tex = |gl: &Context| -> (Framebuffer, Texture) {
-                    let texture = gl.create_texture().unwrap();
-                    gl.bind_texture(TEXTURE_2D, Some(texture));
-                    gl.tex_image_2d(
-                        TEXTURE_2D,
-                        0,
-                        RGBA as i32,
-                        width,
-                        height,
-                        0,
-                        RGBA,
-                        UNSIGNED_BYTE,
-                        None,
-                    );
-                    gl.tex_parameter_i32(TEXTURE_2D, TEXTURE_MIN_FILTER, LINEAR as i32);
-                    gl.tex_parameter_i32(TEXTURE_2D, TEXTURE_MAG_FILTER, LINEAR as i32);
-
-                    let framebuffer = gl.create_framebuffer().unwrap();
-                    gl.bind_framebuffer(FRAMEBUFFER, Some(framebuffer));
-                    gl.framebuffer_texture_2d(
-                        FRAMEBUFFER,
-                        COLOR_ATTACHMENT0,
-                        TEXTURE_2D,
-                        Some(texture),
-                        0,
-                    );
-
-                    (framebuffer, texture)
-                };
-
-                // Helper to create framebuffer + texture + depth buffer (for mesh rendering)
+                // Helper to create framebuffer + texture + depth buffer
                 let create_fb_tex_depth =
                     |gl: &Context| -> (Framebuffer, Texture, Renderbuffer) {
                         let texture = gl.create_texture().unwrap();
@@ -662,17 +641,19 @@ impl CubeRendererApp {
                         (framebuffer, texture, depth_rb)
                     };
 
-                // Create all framebuffers
-                let (gl_framebuffer, gl_texture) = create_fb_tex(gl);
-                let (gpu_framebuffer, gpu_texture) = create_fb_tex(gl);
+                // Create all framebuffers with depth buffers
+                let (gl_framebuffer, gl_texture, gl_depth_rb) = create_fb_tex_depth(gl);
+                let (gpu_framebuffer, gpu_texture, gpu_depth_rb) = create_fb_tex_depth(gl);
                 let (mesh_framebuffer, mesh_texture, mesh_depth_rb) = create_fb_tex_depth(gl);
 
                 gl.bind_framebuffer(FRAMEBUFFER, None);
 
                 self.gl_texture = Some(gl_texture);
                 self.gl_framebuffer = Some(gl_framebuffer);
+                self.gl_depth_rb = Some(gl_depth_rb);
                 self.gpu_texture = Some(gpu_texture);
                 self.gpu_framebuffer = Some(gpu_framebuffer);
+                self.gpu_depth_rb = Some(gpu_depth_rb);
                 self.mesh_texture = Some(mesh_texture);
                 self.mesh_depth_rb = Some(mesh_depth_rb);
                 self.mesh_framebuffer = Some(mesh_framebuffer);

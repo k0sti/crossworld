@@ -59,6 +59,7 @@ struct ComputeTracerGl {
     blit_program: Program,
     blit_vao: VertexArray,
     output_texture: Texture,
+    depth_texture: Texture,
     texture_width: i32,
     texture_height: i32,
     // BCF octree data SSBO (binding = 0)
@@ -73,6 +74,8 @@ struct ComputeTracerGl {
     uniform_camera_rot: Option<UniformLocation>,
     uniform_use_camera: Option<UniformLocation>,
     uniform_octree_data_size: Option<UniformLocation>,
+    uniform_near: Option<UniformLocation>,
+    uniform_far: Option<UniformLocation>,
     // Blit shader uniform locations
     blit_uniform_texture: Option<UniformLocation>,
 }
@@ -106,6 +109,8 @@ impl ComputeTracer {
             let uniform_camera_rot = gl.get_uniform_location(compute_program, "uCameraRot");
             let uniform_use_camera = gl.get_uniform_location(compute_program, "uUseCamera");
             let uniform_octree_data_size = gl.get_uniform_location(compute_program, "uOctreeDataSize");
+            let uniform_near = gl.get_uniform_location(compute_program, "uNear");
+            let uniform_far = gl.get_uniform_location(compute_program, "uFar");
 
             println!("[GPU Tracer] Uniform locations:");
             println!("  uResolution: {:?}", uniform_resolution);
@@ -133,6 +138,11 @@ impl ComputeTracer {
             let output_texture = gl
                 .create_texture()
                 .map_err(|e| format!("Failed to create output texture: {}", e))?;
+
+            // Create depth texture (R32F format for high precision)
+            let depth_texture = gl
+                .create_texture()
+                .map_err(|e| format!("Failed to create depth texture: {}", e))?;
 
             // Serialize cube to BCF format
             println!("[GPU Tracer] Serializing octree to BCF format...");
@@ -164,6 +174,7 @@ impl ComputeTracer {
                 blit_program,
                 blit_vao,
                 output_texture,
+                depth_texture,
                 texture_width: 0,
                 texture_height: 0,
                 octree_ssbo,
@@ -175,6 +186,8 @@ impl ComputeTracer {
                 uniform_camera_rot,
                 uniform_use_camera,
                 uniform_octree_data_size,
+                uniform_near,
+                uniform_far,
                 blit_uniform_texture,
             });
 
@@ -247,6 +260,9 @@ impl ComputeTracer {
             // Bind output texture as image (unit 0)
             gl.bind_image_texture(0, gl_state.output_texture, 0, false, 0, WRITE_ONLY, RGBA8);
 
+            // Bind depth texture as image (unit 1)
+            gl.bind_image_texture(1, gl_state.depth_texture, 0, false, 0, WRITE_ONLY, R32F);
+
             // Bind octree data SSBO (binding = 0)
             gl.bind_buffer_base(SHADER_STORAGE_BUFFER, 0, Some(gl_state.octree_ssbo));
 
@@ -265,6 +281,13 @@ impl ComputeTracer {
             }
             if let Some(loc) = &gl_state.uniform_octree_data_size {
                 gl.uniform_1_u32(Some(loc), gl_state.octree_data_size);
+            }
+            // Set near/far planes for depth calculation (matches mesh renderer)
+            if let Some(loc) = &gl_state.uniform_near {
+                gl.uniform_1_f32(Some(loc), 1.0);
+            }
+            if let Some(loc) = &gl_state.uniform_far {
+                gl.uniform_1_f32(Some(loc), 50000.0);
             }
 
             // Dispatch compute shader (8x8 local work group size)
@@ -306,6 +329,9 @@ impl ComputeTracer {
             // Bind output texture as image (unit 0)
             gl.bind_image_texture(0, gl_state.output_texture, 0, false, 0, WRITE_ONLY, RGBA8);
 
+            // Bind depth texture as image (unit 1)
+            gl.bind_image_texture(1, gl_state.depth_texture, 0, false, 0, WRITE_ONLY, R32F);
+
             // Bind octree data SSBO (binding = 0)
             gl.bind_buffer_base(SHADER_STORAGE_BUFFER, 0, Some(gl_state.octree_ssbo));
 
@@ -339,6 +365,13 @@ impl ComputeTracer {
             if let Some(loc) = &gl_state.uniform_octree_data_size {
                 gl.uniform_1_u32(Some(loc), gl_state.octree_data_size);
             }
+            // Set near/far planes for depth calculation (matches mesh renderer)
+            if let Some(loc) = &gl_state.uniform_near {
+                gl.uniform_1_f32(Some(loc), 1.0);
+            }
+            if let Some(loc) = &gl_state.uniform_far {
+                gl.uniform_1_f32(Some(loc), 50000.0);
+            }
 
             // Dispatch compute shader (8x8 local work group size)
             let work_groups_x = (width + 7) / 8;
@@ -354,7 +387,7 @@ impl ComputeTracer {
         }
     }
 
-    /// Ensure output texture exists and has correct size
+    /// Ensure output texture and depth texture exist and have correct size
     unsafe fn ensure_output_texture(
         gl: &Context,
         gl_state: &mut ComputeTracerGl,
@@ -363,10 +396,11 @@ impl ComputeTracer {
     ) {
         if gl_state.texture_width != width || gl_state.texture_height != height {
             unsafe {
-                // Delete old texture
+                // Delete old textures
                 gl.delete_texture(gl_state.output_texture);
+                gl.delete_texture(gl_state.depth_texture);
 
-                // Create new texture
+                // Create new output texture
                 let output_texture = gl
                     .create_texture()
                     .map_err(|e| format!("Failed to recreate texture: {}", e))
@@ -385,7 +419,27 @@ impl ComputeTracer {
 
                 gl.bind_texture(TEXTURE_2D, None);
 
+                // Create new depth texture (R32F format for high precision depth)
+                let depth_texture = gl
+                    .create_texture()
+                    .map_err(|e| format!("Failed to recreate depth texture: {}", e))
+                    .unwrap();
+
+                gl.bind_texture(TEXTURE_2D, Some(depth_texture));
+
+                // Use R32F for depth texture
+                gl.tex_storage_2d(TEXTURE_2D, 1, R32F, width, height);
+
+                // Set texture parameters
+                gl.tex_parameter_i32(TEXTURE_2D, TEXTURE_MIN_FILTER, NEAREST as i32);
+                gl.tex_parameter_i32(TEXTURE_2D, TEXTURE_MAG_FILTER, NEAREST as i32);
+                gl.tex_parameter_i32(TEXTURE_2D, TEXTURE_WRAP_S, CLAMP_TO_EDGE as i32);
+                gl.tex_parameter_i32(TEXTURE_2D, TEXTURE_WRAP_T, CLAMP_TO_EDGE as i32);
+
+                gl.bind_texture(TEXTURE_2D, None);
+
                 gl_state.output_texture = output_texture;
+                gl_state.depth_texture = depth_texture;
                 gl_state.texture_width = width;
                 gl_state.texture_height = height;
             }
