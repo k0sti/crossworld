@@ -3,7 +3,7 @@ import type { GeometryData } from 'crossworld-world'
 import cubeInit from 'cube'
 import * as cubeWasm from 'cube'
 
-/** Result from WasmCube.generateMesh() */
+/** Result from WasmCubeBox.generateMesh() */
 interface MeshResult {
   vertices: number[];
   indices: number[];
@@ -13,8 +13,89 @@ interface MeshResult {
   material_ids: number[];
 }
 
+/** Loaded vox model with bounds information */
+export interface VoxModel {
+  geometry: GeometryData;
+  /** Model size in voxels (X, Y, Z) */
+  size: { x: number; y: number; z: number };
+  /** Octree depth */
+  depth: number;
+  /** Octree size (2^depth) */
+  octreeSize: number;
+}
+
+/**
+ * Load a .vox file from a URL and generate Three.js geometry with bounds
+ * @param url URL to the .vox file
+ * @param _userNpub Optional user npub for color customization (not used - kept for API compatibility)
+ * @returns VoxModel with geometry and bounds information
+ */
+export async function loadVoxBoxFromUrl(url: string, _userNpub?: string): Promise<VoxModel> {
+  // Ensure WASM is initialized
+  await cubeInit()
+
+  // Fetch the .vox file
+  const response = await fetch(url)
+  if (!response.ok) {
+    throw new Error(`Failed to fetch .vox file: ${response.statusText}`)
+  }
+
+  const arrayBuffer = await response.arrayBuffer()
+  const bytes = new Uint8Array(arrayBuffer)
+
+  // Load .vox file into WasmCubeBox (preserves model bounds)
+  // @ts-ignore - WASM module exports loadVoxBox
+  const wasmCubeBox = cubeWasm.loadVoxBox(bytes)
+
+  // Get model bounds
+  const size = {
+    x: wasmCubeBox.sizeX,
+    y: wasmCubeBox.sizeY,
+    z: wasmCubeBox.sizeZ,
+  }
+  const depth = wasmCubeBox.depth
+  const octreeSize = wasmCubeBox.octreeSize
+
+  // Generate mesh from the cube box (null palette = original colors)
+  const result = wasmCubeBox.generateMesh(null) as MeshResult | { error: string }
+
+  if ('error' in result) {
+    logger.error('common', `[voxLoader] Failed to parse VOX file from ${url}: ${result.error}`)
+    throw new Error(`Failed to parse VOX file: ${result.error}`)
+  }
+
+  const geometry = {
+    vertices: new Float32Array(result.vertices),
+    indices: new Uint32Array(result.indices),
+    normals: new Float32Array(result.normals),
+    colors: new Float32Array(result.colors),
+    uvs: new Float32Array(result.uvs),
+    materialIds: new Uint8Array(result.material_ids),
+  } as GeometryData
+
+  // Log warning if geometry is empty
+  if (geometry.vertices.length === 0 || geometry.indices.length === 0) {
+    logger.warn('common', `[voxLoader] VOX file loaded but has no geometry: ${url}`, {
+      vertices: geometry.vertices.length / 3,
+      indices: geometry.indices.length,
+      fileSize: bytes.length,
+      size,
+    })
+  } else {
+    logger.log('common', `[voxLoader] VOX file loaded successfully: ${url}`, {
+      vertices: geometry.vertices.length / 3,
+      triangles: geometry.indices.length / 3,
+      size,
+      depth,
+    })
+  }
+
+  return { geometry, size, depth, octreeSize }
+}
+
 /**
  * Load a .vox file from a URL and generate Three.js geometry
+ * @deprecated Use loadVoxBoxFromUrl() instead, which returns bounds information
  * @param url URL to the .vox file
  * @param _userNpub Optional user npub for color customization (not used - kept for API compatibility)
  * @param maxDepth Maximum octree depth (default: 3 for 8x8x8 avatars). Higher = supports larger models but increases scale.
@@ -74,7 +155,72 @@ export async function loadVoxFromUrl(url: string, _userNpub?: string, maxDepth: 
 }
 
 /**
+ * Load a .vox file from a File object with bounds information
+ * @param file File object containing .vox data
+ * @param _userNpub Optional user npub for color customization (not used - kept for API compatibility)
+ * @returns VoxModel with geometry and bounds information
+ */
+export async function loadVoxBoxFromFile(file: File, _userNpub?: string): Promise<VoxModel> {
+  // Ensure WASM is initialized
+  await cubeInit()
+
+  // Read file as ArrayBuffer
+  const arrayBuffer = await file.arrayBuffer()
+  const bytes = new Uint8Array(arrayBuffer)
+
+  // Load .vox file into WasmCubeBox (preserves model bounds)
+  // @ts-ignore - WASM module exports loadVoxBox
+  const wasmCubeBox = cubeWasm.loadVoxBox(bytes)
+
+  // Get model bounds
+  const size = {
+    x: wasmCubeBox.sizeX,
+    y: wasmCubeBox.sizeY,
+    z: wasmCubeBox.sizeZ,
+  }
+  const depth = wasmCubeBox.depth
+  const octreeSize = wasmCubeBox.octreeSize
+
+  // Generate mesh from the cube box (null palette = original colors)
+  const result = wasmCubeBox.generateMesh(null) as MeshResult | { error: string }
+
+  if ('error' in result) {
+    logger.error('common', `[voxLoader] Failed to parse VOX file from ${file.name}: ${result.error}`)
+    throw new Error(`Failed to parse VOX file: ${result.error}`)
+  }
+
+  const geometry = {
+    vertices: new Float32Array(result.vertices),
+    indices: new Uint32Array(result.indices),
+    normals: new Float32Array(result.normals),
+    colors: new Float32Array(result.colors),
+    uvs: new Float32Array(result.uvs),
+    materialIds: new Uint8Array(result.material_ids),
+  } as GeometryData
+
+  // Log warning if geometry is empty
+  if (geometry.vertices.length === 0 || geometry.indices.length === 0) {
+    logger.warn('common', `[voxLoader] VOX file loaded but has no geometry: ${file.name}`, {
+      vertices: geometry.vertices.length / 3,
+      indices: geometry.indices.length,
+      fileSize: bytes.length,
+      size,
+    })
+  } else {
+    logger.log('common', `[voxLoader] VOX file loaded successfully: ${file.name}`, {
+      vertices: geometry.vertices.length / 3,
+      triangles: geometry.indices.length / 3,
+      size,
+      depth,
+    })
+  }
+
+  return { geometry, size, depth, octreeSize }
+}
+
+/**
  * Load a .vox file from a File object (e.g., from file input)
+ * @deprecated Use loadVoxBoxFromFile() instead, which returns bounds information
  * @param file File object containing .vox data
  * @param _userNpub Optional user npub for color customization (not used - kept for API compatibility)
  * @param maxDepth Maximum octree depth (default: 3 for 8x8x8 avatars). Higher = supports larger models but increases scale.
