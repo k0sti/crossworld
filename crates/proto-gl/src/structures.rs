@@ -5,8 +5,8 @@
 //! rotated in 90° steps. The world uses origin-centered coordinates.
 
 use crate::config::StructuresConfig;
-use cube::{load_vox_to_cube, Axis, Cube};
-use glam::{IVec3, Vec3};
+use cube::{load_vox_to_cubebox, Axis, Cube, CubeBox};
+use glam::IVec3;
 use rand::prelude::*;
 use serde::Deserialize;
 use std::fs;
@@ -29,14 +29,29 @@ struct CsvModelEntry {
 
 /// A structure model loaded from a .vox file, ready for placement
 pub struct StructureModel {
-    /// The voxel cube data (y-aligned to bottom)
-    pub cube: Cube<u8>,
+    /// The bounded voxel model with preserved dimensions
+    pub cubebox: CubeBox<u8>,
     /// Model name (filename without extension)
     pub name: String,
-    /// Octree depth of this model
-    pub depth: u32,
     /// Scale exponent from CSV (actual_scale = 2^scale_exp)
     pub scale_exp: i32,
+}
+
+impl StructureModel {
+    /// Get the cube reference
+    pub fn cube(&self) -> &Cube<u8> {
+        &self.cubebox.cube
+    }
+
+    /// Get the octree depth
+    pub fn depth(&self) -> u32 {
+        self.cubebox.depth
+    }
+
+    /// Get the original model size in voxels
+    pub fn size(&self) -> IVec3 {
+        self.cubebox.size
+    }
 }
 
 /// Load structure models from CSV (models with model_type="structure")
@@ -95,23 +110,24 @@ pub fn load_structure_models(config: &StructuresConfig) -> Vec<StructureModel> {
             }
         };
 
-        // Load with bottom alignment (align.y = 0.0 means model starts at y=0)
-        // Center on X and Z axes (0.5), align bottom on Y (0.0)
-        match load_vox_to_cube(&bytes, Vec3::new(0.5, 0.0, 0.5)) {
-            Ok(cube) => {
-                let depth = calculate_cube_depth(&cube);
+        // Load with CubeBox (preserves model bounds, model at origin)
+        match load_vox_to_cubebox(&bytes) {
+            Ok(cubebox) => {
                 // Filter by max_depth for performance
-                if depth <= config.max_depth {
+                if cubebox.depth <= config.max_depth {
+                    println!(
+                        "Loaded structure: {} (size {:?}, depth {}, scale_exp {})",
+                        entry.name, cubebox.size, cubebox.depth, scale_exp
+                    );
                     models.push(StructureModel {
-                        cube,
+                        cubebox,
                         name: entry.name.clone(),
-                        depth,
                         scale_exp,
                     });
                 } else {
                     println!(
                         "Skipping {} (depth {} > max_depth {})",
-                        entry.name, depth, config.max_depth
+                        entry.name, cubebox.depth, config.max_depth
                     );
                 }
             }
@@ -122,10 +138,10 @@ pub fn load_structure_models(config: &StructuresConfig) -> Vec<StructureModel> {
     }
 
     // Sort by depth and show stats
-    models.sort_by_key(|m| m.depth);
+    models.sort_by_key(|m| m.depth());
     let depths: Vec<(String, u32, i32)> = models
         .iter()
-        .map(|m| (m.name.clone(), m.depth, m.scale_exp))
+        .map(|m| (m.name.clone(), m.depth(), m.scale_exp))
         .collect();
     println!(
         "Loaded {} structure models: {:?}",
@@ -133,37 +149,6 @@ pub fn load_structure_models(config: &StructuresConfig) -> Vec<StructureModel> {
         depths
     );
     models
-}
-
-/// Calculate the depth of a cube (how many levels of octree)
-fn calculate_cube_depth(cube: &Cube<u8>) -> u32 {
-    fn depth_recursive(cube: &Cube<u8>) -> u32 {
-        match cube {
-            Cube::Solid(_) => 0,
-            Cube::Cubes(children) => {
-                1 + children
-                    .iter()
-                    .map(|c| depth_recursive(c))
-                    .max()
-                    .unwrap_or(0)
-            }
-            Cube::Quad { quads, .. } => {
-                1 + quads
-                    .iter()
-                    .map(|c| depth_recursive(c))
-                    .max()
-                    .unwrap_or(0)
-            }
-            Cube::Layers { layers, .. } => {
-                1 + layers
-                    .iter()
-                    .map(|c| depth_recursive(c))
-                    .max()
-                    .unwrap_or(0)
-            }
-        }
-    }
-    depth_recursive(cube)
 }
 
 /// Rotate a cube by 90° around Y axis (0, 1, 2, or 3 times for 0°, 90°, 180°, 270°)
@@ -270,19 +255,19 @@ pub fn place_structures(
 
         // Random rotation (0, 90, 180, or 270 degrees)
         let rotation = rng.gen_range(0..4);
-        let rotated_cube = rotate_y_90(&model.cube, rotation);
+        let rotated_cube = rotate_y_90(model.cube(), rotation);
 
         // Calculate model size at its native resolution
-        let model_size = 1u32 << model.depth;
+        let model_size = 1u32 << model.depth();
 
-        // Base scale = model.depth + depth_offset means model voxels match terrain voxel size
+        // Base scale = model.depth() + depth_offset means model voxels match terrain voxel size
         // A depth-2 model (4x4x4) with depth_offset=6 gets scale=8
         // This means the 4x4x4 model becomes 4*2^6 = 256 world voxels per axis
         //
         // Additional scaling from CSV: actual_scale = 2^scale_exp
         // Positive scale_exp = larger, Negative scale_exp = smaller
         // Final scale = base_scale + scale_exp
-        let base_scale = (model.depth + depth_offset) as i32;
+        let base_scale = (model.depth() + depth_offset) as i32;
         let final_scale = (base_scale + model.scale_exp).max(0) as u32;
 
         // Calculate scaled model size in world coordinates
@@ -321,17 +306,6 @@ pub fn place_structures(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_calculate_cube_depth() {
-        // Solid cube has depth 0
-        let solid = Cube::Solid(5u8);
-        assert_eq!(calculate_cube_depth(&solid), 0);
-
-        // Single level of children has depth 1
-        let one_level = Cube::cubes(std::array::from_fn(|_| Rc::new(Cube::Solid(5u8))));
-        assert_eq!(calculate_cube_depth(&one_level), 1);
-    }
 
     #[test]
     fn test_swap_xz() {

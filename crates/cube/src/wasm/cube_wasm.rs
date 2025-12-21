@@ -5,8 +5,8 @@ use wasm_bindgen::prelude::*;
 use crate::{
     generate_face_mesh,
     glam::{IVec3, Vec3},
-    parse_csm, raycast, serialize_csm, ColorMapper, Cube, CubeCoord, DefaultMeshBuilder,
-    PaletteColorMapper, VoxColorMapper,
+    load_vox_to_cubebox, parse_csm, raycast, serialize_csm, ColorMapper, Cube, CubeBox, CubeCoord,
+    DefaultMeshBuilder, PaletteColorMapper, VoxColorMapper,
 };
 
 // ============================================================================
@@ -378,6 +378,7 @@ pub fn load_vox(
     align_z: f32,
 ) -> Result<WasmCube, JsValue> {
     let align = Vec3::new(align_x, align_y, align_z);
+    #[allow(deprecated)]
     match crate::load_vox_to_cube(bytes, align) {
         Ok(cube_u8) => {
             // Material IDs from .vox files are in range 128-255
@@ -385,6 +386,185 @@ pub fn load_vox(
                 inner: Rc::new(cube_u8),
             })
         }
+        Err(e) => {
+            let error = ParseError {
+                error: format!("Failed to load .vox file: {}", e),
+            };
+            Err(serde_wasm_bindgen::to_value(&error).unwrap())
+        }
+    }
+}
+
+// ============================================================================
+// WasmCubeBox - Bounded Voxel Model
+// ============================================================================
+
+/// A bounded voxel model with explicit dimensions.
+///
+/// WasmCubeBox pairs a cube with its actual model dimensions,
+/// preserving bounds information for physics, placement, and rendering.
+/// The model is always positioned at origin (0,0,0) within the octree.
+#[wasm_bindgen]
+pub struct WasmCubeBox {
+    inner: CubeBox<u8>,
+}
+
+#[wasm_bindgen]
+impl WasmCubeBox {
+    /// Get the X dimension of the original model
+    #[wasm_bindgen(getter, js_name = sizeX)]
+    pub fn size_x(&self) -> i32 {
+        self.inner.size.x
+    }
+
+    /// Get the Y dimension of the original model
+    #[wasm_bindgen(getter, js_name = sizeY)]
+    pub fn size_y(&self) -> i32 {
+        self.inner.size.y
+    }
+
+    /// Get the Z dimension of the original model
+    #[wasm_bindgen(getter, js_name = sizeZ)]
+    pub fn size_z(&self) -> i32 {
+        self.inner.size.z
+    }
+
+    /// Get the octree depth
+    #[wasm_bindgen(getter)]
+    pub fn depth(&self) -> u32 {
+        self.inner.depth
+    }
+
+    /// Get the octree size (2^depth)
+    #[wasm_bindgen(getter, js_name = octreeSize)]
+    pub fn octree_size(&self) -> i32 {
+        self.inner.octree_size()
+    }
+
+    /// Get the inner cube as a WasmCube
+    pub fn cube(&self) -> WasmCube {
+        WasmCube {
+            inner: Rc::new(self.inner.cube.clone()),
+        }
+    }
+
+    /// Place this model into a target cube at the specified position
+    ///
+    /// # Arguments
+    /// * `target` - The cube to place into
+    /// * `target_depth` - Depth of the target cube
+    /// * `x, y, z` - Position in target cube coordinates (corner-based)
+    /// * `scale` - Scale exponent: 0 = 1:1, 1 = 2x, 2 = 4x
+    ///
+    /// # Returns
+    /// New WasmCube with the model placed
+    #[wasm_bindgen(js_name = placeIn)]
+    pub fn place_in(
+        &self,
+        target: &WasmCube,
+        target_depth: u32,
+        x: i32,
+        y: i32,
+        z: i32,
+        scale: i32,
+    ) -> WasmCube {
+        let position = IVec3::new(x, y, z);
+        let result = self.inner.place_in(&target.inner, target_depth, position, scale);
+        WasmCube {
+            inner: Rc::new(result),
+        }
+    }
+
+    /// Generate mesh geometry from this cube box
+    ///
+    /// # Arguments
+    /// * `palette` - Array of {r, g, b} color objects (0.0-1.0 range), or null to use HSV
+    ///
+    /// # Returns
+    /// MeshResult with vertices, indices, normals, colors or ParseError
+    #[wasm_bindgen(js_name = generateMesh)]
+    pub fn generate_mesh(&self, palette: JsValue) -> JsValue {
+        let cube = self.inner.cube.clone();
+        let max_depth = self.inner.depth;
+        let mut builder = DefaultMeshBuilder::new();
+
+        // Border materials for avatars: all empty (0)
+        let border_materials = [0, 0, 0, 0];
+
+        // Parse palette if provided, otherwise use VoxColorMapper for R2G3B2 decoding
+        if palette.is_null() || palette.is_undefined() {
+            let mapper = VoxColorMapper::new();
+            generate_face_mesh(
+                &cube,
+                &mut builder,
+                |v| mapper.map(v),
+                border_materials,
+                max_depth,
+            );
+        } else {
+            // Try to deserialize palette
+            match serde_wasm_bindgen::from_value::<Vec<Color>>(palette) {
+                Ok(colors) => {
+                    let palette_colors: Vec<[f32; 3]> =
+                        colors.iter().map(|c| [c.r, c.g, c.b]).collect();
+                    let mapper = PaletteColorMapper::new(palette_colors);
+                    generate_face_mesh(
+                        &cube,
+                        &mut builder,
+                        |v| mapper.map(v),
+                        border_materials,
+                        max_depth,
+                    );
+                }
+                Err(e) => {
+                    let error = ParseError {
+                        error: format!("Invalid palette format: {}", e),
+                    };
+                    return serde_wasm_bindgen::to_value(&error).unwrap();
+                }
+            }
+        }
+
+        // Scale mesh from [0,1] space to [0, 2^max_depth] world space
+        let scale = (1 << max_depth) as f32;
+        for i in 0..builder.vertices.len() {
+            builder.vertices[i] *= scale;
+        }
+
+        let result = MeshResult {
+            vertices: builder.vertices,
+            indices: builder.indices,
+            normals: builder.normals,
+            colors: builder.colors,
+            uvs: builder.uvs,
+            material_ids: builder.material_ids,
+        };
+        serde_wasm_bindgen::to_value(&result).unwrap_or_else(|e| {
+            let error = ParseError {
+                error: format!("Serialization error: {}", e),
+            };
+            serde_wasm_bindgen::to_value(&error).unwrap()
+        })
+    }
+}
+
+/// Load a .vox file from bytes into a WasmCubeBox with bounds preserved
+///
+/// The model is always positioned at origin (0,0,0) within the octree.
+/// Use `placeIn()` to position the model with desired alignment.
+///
+/// # Arguments
+/// * `bytes` - .vox file bytes
+///
+/// # Returns
+/// WasmCubeBox on success containing the cube and its original dimensions
+///
+/// # Errors
+/// Throws JS error if loading fails
+#[wasm_bindgen(js_name = loadVoxBox)]
+pub fn load_vox_box(bytes: &[u8]) -> Result<WasmCubeBox, JsValue> {
+    match load_vox_to_cubebox(bytes) {
+        Ok(cubebox) => Ok(WasmCubeBox { inner: cubebox }),
         Err(e) => {
             let error = ParseError {
                 error: format!("Failed to load .vox file: {}", e),

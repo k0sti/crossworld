@@ -23,7 +23,7 @@ chunk_size = 64.0       # World units per chunk (smaller = more granular loading
 load_radius = 128.0     # Distance to load chunks around objects
 
 [spawning]
-spawn_count = 10
+spawn_count = 50
 models_csv = "assets/models.csv"  # CSV file with model definitions
 models_path = "assets/models/"     # Base directory for model files
 # World coordinates: origin at center, ground at y=-half_world
