@@ -597,6 +597,87 @@ impl MeshRenderer {
         }
     }
 
+    /// Render a wireframe AABB (Axis-Aligned Bounding Box) with a specific color
+    ///
+    /// Unlike `render_cubebox_wireframe`, this renders an AABB directly from min/max
+    /// corners in world space, without any model transformation.
+    ///
+    /// # Arguments
+    /// * `aabb_min` - Minimum corner of the AABB in world space
+    /// * `aabb_max` - Maximum corner of the AABB in world space
+    /// * `color` - RGB color for the wireframe [0.0-1.0]
+    ///
+    /// # Safety
+    ///
+    /// Must be called with an active GL context on the current thread.
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn render_aabb_wireframe(
+        &self,
+        gl: &Context,
+        aabb_min: glam::Vec3,
+        aabb_max: glam::Vec3,
+        color: [f32; 3],
+        camera: &Camera,
+        viewport_width: i32,
+        viewport_height: i32,
+    ) {
+        unsafe {
+            let Some(program) = self.program else { return };
+            let Some(ref wireframe_mesh) = self.wireframe_box else {
+                return;
+            };
+
+            gl.use_program(Some(program));
+            gl.disable(DEPTH_TEST); // Always on top
+            gl.disable(CULL_FACE);
+
+            // Calculate matrices
+            let aspect = viewport_width as f32 / viewport_height as f32;
+            let projection = glam::Mat4::perspective_rh(camera.vfov, aspect, 1.0, 50000.0);
+
+            let forward = camera.rotation * glam::Vec3::NEG_Z;
+            let up = camera.rotation * glam::Vec3::Y;
+            let target = camera.position + forward;
+            let view = glam::Mat4::look_at_rh(camera.position, target, up);
+
+            // Transform unit [0,1] wireframe to AABB bounds:
+            // Size = max - min
+            // Position = min (corner-based, not center-based)
+            let size = aabb_max - aabb_min;
+            let model = glam::Mat4::from_translation(aabb_min) * glam::Mat4::from_scale(size);
+
+            // Upload uniforms
+            let mvp = projection * view * model;
+            let mvp_loc = gl.get_uniform_location(program, "uMVP");
+            gl.uniform_matrix_4_f32_slice(mvp_loc.as_ref(), false, mvp.as_ref());
+
+            let model_loc = gl.get_uniform_location(program, "uModel");
+            gl.uniform_matrix_4_f32_slice(model_loc.as_ref(), false, model.as_ref());
+
+            // Full brightness for wireframe (no lighting)
+            let ambient_loc = gl.get_uniform_location(program, "uAmbient");
+            gl.uniform_1_f32(ambient_loc.as_ref(), 1.0);
+
+            let diffuse_strength_loc = gl.get_uniform_location(program, "uDiffuseStrength");
+            gl.uniform_1_f32(diffuse_strength_loc.as_ref(), 0.0);
+
+            // Set wireframe color via vertex color override uniform
+            let color_override_loc = gl.get_uniform_location(program, "uColorOverride");
+            gl.uniform_3_f32(color_override_loc.as_ref(), color[0], color[1], color[2]);
+
+            let use_color_override_loc = gl.get_uniform_location(program, "uUseColorOverride");
+            gl.uniform_1_i32(use_color_override_loc.as_ref(), 1);
+
+            // Draw wireframe box using LINES
+            gl.bind_vertex_array(Some(wireframe_mesh.vao));
+            gl.draw_elements(LINES, wireframe_mesh.index_count, UNSIGNED_INT, 0);
+            gl.bind_vertex_array(None);
+
+            // Disable color override
+            gl.uniform_1_i32(use_color_override_loc.as_ref(), 0);
+        }
+    }
+
     /// Render a mesh for a given object
     ///
     /// # Safety
@@ -717,13 +798,18 @@ in vec3 vColor;
 uniform vec3 uLightDir;
 uniform float uAmbient;
 uniform float uDiffuseStrength;
+uniform vec3 uColorOverride;
+uniform int uUseColorOverride;
 
 out vec4 FragColor;
 
 void main() {
+    // Use color override if set (for colored wireframes)
+    vec3 baseColor = uUseColorOverride == 1 ? uColorOverride : vColor;
+
     vec3 normal = normalize(vNormal);
     float diffuse = max(dot(normal, uLightDir), 0.0);
-    vec3 lighting = vColor * (uAmbient + diffuse * uDiffuseStrength);
+    vec3 lighting = baseColor * (uAmbient + diffuse * uDiffuseStrength);
 
     // Gamma correction to match CPU tracer output
     vec3 gammaCorrected = pow(lighting, vec3(1.0 / 2.2));
