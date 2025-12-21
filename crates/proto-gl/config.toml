@@ -10,12 +10,8 @@ root_cube = "> [32 65 0 0 89 90 0 111]"
 [physics]
 gravity = -9.81
 timestep = 0.016666  # 60 Hz
-
-# World collision strategy: "monolithic", "chunked", or "hybrid"
-# - monolithic: Single compound collider for entire world (baseline, simple but slow for large worlds)
-# - chunked: Loads/unloads chunk colliders based on object proximity (balanced performance)
-# - hybrid: Bypasses Rapier for world collision using direct octree queries (experimental)
-world_collision_strategy = "monolithic"
+world_collision_strategy = "hybrid"
+debug_steps = 0
 
 [physics.chunked]
 # Settings for chunked collision strategy

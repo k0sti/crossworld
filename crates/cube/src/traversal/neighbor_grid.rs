@@ -187,31 +187,31 @@ impl<'a> NeighborView<'a> {
     /// - parent_offset = (p + 1) / 2 - 1  (gives -1, 0, 0, 1)
     /// - child_pos = (p + 1) % 2          (gives 1, 0, 1, 0)
     pub fn create_child_grid(&self) -> NeighborGrid {
-        let voxels: [Rc<Cube<u8>>; 64] = std::array::from_fn(|i| {
+        let mut voxels: [Rc<Cube<u8>>; 64] = std::array::from_fn(|_| Rc::new(Cube::Solid(0)));
+
+        for i in 0..64 {
             let pos = NeighborGrid::index_to_pos(i);
 
-            // Calculate parent offset and child position using formula
+            // Calculate parent offset and child position
+            // parent_offset = (p + 1) / 2 - 1  (gives -1, 0, 0, 1)
+            // child_pos = (p + 1) % 2          (gives 1, 0, 1, 0)
             let parent_offset = (pos + 1) / 2 - 1;
             let child_pos = (pos + 1) % 2;
 
-            // Calculate parent index using dot product
+            // Calculate parent index
             let parent_idx = self.center_index as i32 + parent_offset.dot(INDEX_MUL);
-
-            // Clamp parent_idx to valid range to handle edge cases
-            let parent_idx = parent_idx.clamp(0, 63);
             let parent = &self.grid.voxels[parent_idx as usize];
 
-            // Calculate child octant index using bit manipulation
-            // child_pos components are 0 or 1, index = x + y*2 + z*4
+            // Calculate child octant index: x + y*2 + z*4
             let child_octant = (child_pos.x | (child_pos.y << 1) | (child_pos.z << 2)) as usize;
 
             // Extract child or replicate if solid
-            match &**parent {
+            voxels[i] = match &**parent {
                 Cube::Cubes(children) => children[child_octant].clone(),
                 Cube::Solid(v) => Rc::new(Cube::Solid(*v)),
                 _ => Rc::new(Cube::Solid(0)),
-            }
-        });
+            };
+        }
 
         NeighborGrid { voxels }
     }

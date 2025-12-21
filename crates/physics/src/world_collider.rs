@@ -12,7 +12,7 @@
 use crate::collider::VoxelColliderBuilder;
 use crate::collision::Aabb;
 use crate::PhysicsWorld;
-use cube::{visit_faces_in_region, Cube, RegionBounds};
+use cube::{visit_faces_in_region, visit_voxels_in_region, Cube, RegionBounds};
 use glam::{IVec3, Vec3};
 use rapier3d::prelude::*;
 use std::collections::{HashMap, HashSet};
@@ -436,9 +436,10 @@ impl WorldCollider for HybridOctreeCollider {
         let local_min = (body_aabb.min + Vec3::splat(half_world)) / self.world_size;
         let local_max = (body_aabb.max + Vec3::splat(half_world)) / self.world_size;
 
-        // Clamp to [0,1] bounds
-        let local_min = local_min.max(Vec3::ZERO);
-        let local_max = local_max.min(Vec3::ONE);
+        // Clamp to [0,1] bounds and add a small margin to catch nearby faces
+        let margin = 0.01 / self.world_size; // 1cm margin in world units
+        let local_min = (local_min - Vec3::splat(margin)).max(Vec3::ZERO);
+        let local_max = (local_max + Vec3::splat(margin)).min(Vec3::ONE);
 
         // Get region bounds for octree query
         let depth = 3; // Reasonable granularity for collision
@@ -451,40 +452,56 @@ impl WorldCollider for HybridOctreeCollider {
         // Track maximum penetration per axis to avoid over-correction from multiple faces
         let mut max_correction = Vec3::ZERO;
 
-        visit_faces_in_region(
+        visit_voxels_in_region(
             cube,
             &bounds,
-            |face_info| {
-                // Convert face to world space
-                // face_info.position is the voxel's base position in [0,1] space
-                // Face center is at voxel center + half size in normal direction
-                let face_normal = Vec3::from(face_info.face.normal());
-                let voxel_center_local = face_info.position + Vec3::splat(face_info.size * 0.5);
-                let face_offset = face_normal * face_info.size * 0.5;
-                let face_center_local = voxel_center_local + face_offset;
+            |voxel_info| {
+                // Voxel AABB in world space
+                let voxel_size_world = voxel_info.size * self.world_size;
+                let voxel_center_local = voxel_info.position + Vec3::splat(voxel_info.size * 0.5);
+                let voxel_center_world =
+                    voxel_center_local * self.world_size - Vec3::splat(half_world);
 
-                // Face center in world space
-                let face_center_world =
-                    face_center_local * self.world_size - Vec3::splat(half_world);
+                let voxel_min = voxel_center_world - Vec3::splat(voxel_size_world * 0.5);
+                let voxel_max = voxel_center_world + Vec3::splat(voxel_size_world * 0.5);
 
-                // Compute box-face penetration
-                if let Some(penetration) = box_face_penetration(
-                    body_aabb,
-                    face_center_world,
-                    face_normal,
-                    face_info.size * self.world_size,
-                ) {
-                    let correction = penetration.normal * penetration.depth;
-                    // Take maximum correction per axis (absolute value comparison)
-                    // This prevents over-correction when overlapping multiple coplanar faces
-                    if correction.x.abs() > max_correction.x.abs() {
-                        max_correction.x = correction.x;
-                    }
-                    if correction.y.abs() > max_correction.y.abs() {
-                        max_correction.y = correction.y;
-                    }
-                    if correction.z.abs() > max_correction.z.abs() {
-                        max_correction.z = correction.z;
+                // Check AABB overlap
+                let overlap_min = body_aabb.min.max(voxel_min);
+                let overlap_max = body_aabb.max.min(voxel_max);
+
+                if overlap_min.x < overlap_max.x
+                    && overlap_min.y < overlap_max.y
+                    && overlap_min.z < overlap_max.z
+                {
+                    // Calculate penetration depths (push out distances)
+                    let dx1 = voxel_max.x - body_aabb.min.x; // Distance to push positive X
+                    let dx2 = body_aabb.max.x - voxel_min.x; // Distance to push negative X
+                    let dy1 = voxel_max.y - body_aabb.min.y; // Distance to push positive Y (UP)
+                    let dy2 = body_aabb.max.y - voxel_min.y; // Distance to push negative Y (DOWN)
+                    let dz1 = voxel_max.z - body_aabb.min.z; // Distance to push positive Z
+                    let dz2 = body_aabb.max.z - voxel_min.z; // Distance to push negative Z
+
+                    // Find minimum absolute penetration axis
+                    let pen_x = if dx1 < dx2 { dx1 } else { -dx2 };
+                    let pen_y = if dy1 < dy2 { dy1 } else { -dy2 };
+                    let pen_z = if dz1 < dz2 { dz1 } else { -dz2 };
+
+                    let abs_x = pen_x.abs();
+                    let abs_y = pen_y.abs();
+                    let abs_z = pen_z.abs();
+
+                    if abs_x < abs_y && abs_x < abs_z {
+                        if abs_x > max_correction.x.abs() {
+                            max_correction.x = pen_x;
+                        }
+                    } else if abs_y < abs_z {
+                        if abs_y > max_correction.y.abs() {
+                            max_correction.y = pen_y;
+                        }
+                    } else {
+                        if abs_z > max_correction.z.abs() {
+                            max_correction.z = pen_z;
+                        }
                     }
                 }
             },
@@ -763,7 +780,11 @@ mod tests {
         let pen = penetration.unwrap();
         // Normal should push box UP (in direction of face normal, away from solid below)
         assert_eq!(pen.normal, Vec3::Y);
-        assert!((pen.depth - 0.2).abs() < 0.01, "Expected depth ~0.2, got {}", pen.depth);
+        assert!(
+            (pen.depth - 0.2).abs() < 0.01,
+            "Expected depth ~0.2, got {}",
+            pen.depth
+        );
     }
 
     #[test]
@@ -789,7 +810,10 @@ mod tests {
         // Box penetrating in Y but outside face extent in X
         let box_aabb = Aabb::new(Vec3::new(5.0, -0.2, -0.5), Vec3::new(6.0, 0.8, 0.5));
         let penetration = box_face_penetration(&box_aabb, face_center, face_normal, face_size);
-        assert!(penetration.is_none(), "Box outside face extent should not collide");
+        assert!(
+            penetration.is_none(),
+            "Box outside face extent should not collide"
+        );
     }
 
     #[test]
@@ -812,7 +836,8 @@ mod tests {
         // World top surface is at Y=50
         // Box at Y=55 (well above surface) should not penetrate
         let box_above = Aabb::new(Vec3::new(-5.0, 55.0, -5.0), Vec3::new(5.0, 65.0, 5.0));
-        let correction_above = collider.resolve_collision(RigidBodyHandle::from_raw_parts(0, 0), &box_above);
+        let correction_above =
+            collider.resolve_collision(RigidBodyHandle::from_raw_parts(0, 0), &box_above);
         assert!(
             correction_above.length() < 0.1,
             "Box above surface should not get correction, got {:?}",
@@ -823,7 +848,8 @@ mod tests {
         // Box at Y=45 to Y=55 (10 units tall, center at Y=50)
         // This should penetrate 5 units into the top surface at Y=50
         let box_penetrating = Aabb::new(Vec3::new(-5.0, 45.0, -5.0), Vec3::new(5.0, 55.0, 5.0));
-        let correction = collider.resolve_collision(RigidBodyHandle::from_raw_parts(0, 0), &box_penetrating);
+        let correction =
+            collider.resolve_collision(RigidBodyHandle::from_raw_parts(0, 0), &box_penetrating);
 
         // Correction should push upward (positive Y)
         assert!(
@@ -861,7 +887,8 @@ mod tests {
         // In world space: bottom is Y=-50, top is Y=50, ground surface is at Y=0
         // Box from Y=-5 to Y=5 should penetrate 5 units into ground
         let box_at_surface = Aabb::new(Vec3::new(-5.0, -5.0, -5.0), Vec3::new(5.0, 5.0, 5.0));
-        let correction = collider.resolve_collision(RigidBodyHandle::from_raw_parts(0, 0), &box_at_surface);
+        let correction =
+            collider.resolve_collision(RigidBodyHandle::from_raw_parts(0, 0), &box_at_surface);
 
         // Should get upward correction
         println!("Half-solid world correction: {:?}", correction);
@@ -896,7 +923,8 @@ mod tests {
         // Small object (10 units) penetrating the surface
         // Object from Y=-5 to Y=5 at world center
         let small_box = Aabb::new(Vec3::new(-5.0, -5.0, -5.0), Vec3::new(5.0, 5.0, 5.0));
-        let correction = collider.resolve_collision(RigidBodyHandle::from_raw_parts(0, 0), &small_box);
+        let correction =
+            collider.resolve_collision(RigidBodyHandle::from_raw_parts(0, 0), &small_box);
 
         println!("Large world correction: {:?}", correction);
         // With proper depth scaling, we should still detect the collision

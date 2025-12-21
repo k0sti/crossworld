@@ -13,15 +13,17 @@ pub mod world;
 // Re-export commonly used types
 pub use app::ProtoGlApp;
 pub use camera::OrbitCamera;
-pub use config::{ProtoGlConfig, WorldConfig, PhysicsConfig, SpawningConfig, RenderConfig};
-pub use models::{VoxModel, CubeObject};
+pub use config::{PhysicsConfig, ProtoGlConfig, RenderConfig, SpawningConfig, WorldConfig};
+pub use models::{CubeObject, VoxModel};
 
-use std::error::Error;
-use std::rc::Rc;
-use crossworld_physics::{rapier3d::prelude::*, PhysicsWorld, VoxelColliderBuilder};
 use config::load_config;
+use crossworld_physics::{
+    PhysicsWorld, collision::Aabb, rapier3d::prelude::*, world_collider::create_world_collider,
+};
 use models::load_vox_models;
 use physics::spawn_cube_objects;
+use std::error::Error;
+use std::rc::Rc;
 use world::generate_world;
 
 /// Run physics simulation in debug mode without graphics
@@ -38,7 +40,10 @@ pub fn run_physics_debug(iterations: u32) -> Result<(), Box<dyn Error>> {
     println!("  Gravity: {:.2}", config.physics.gravity);
     println!("  Timestep: {:.4}s", config.physics.timestep);
     println!("  Spawn count: {}", config.spawning.spawn_count);
-    println!("  Spawn height: {:.1} - {:.1}", config.spawning.min_height, config.spawning.max_height);
+    println!(
+        "  Spawn height: {:.1} - {:.1}",
+        config.spawning.min_height, config.spawning.max_height
+    );
     println!();
 
     // Generate world
@@ -49,8 +54,15 @@ pub fn run_physics_debug(iterations: u32) -> Result<(), Box<dyn Error>> {
     let half_world = config.world.half_world();
     println!("World generated:");
     println!("  Depth: {}", world_depth);
-    println!("  World size: {:.0} (2^{} units)", world_size, config.world.macro_depth + config.world.border_depth);
-    println!("  World bounds: [{:.0}, {:.0}] centered at origin", -half_world, half_world);
+    println!(
+        "  World size: {:.0} (2^{} units)",
+        world_size,
+        config.world.macro_depth + config.world.border_depth
+    );
+    println!(
+        "  World bounds: [{:.0}, {:.0}] centered at origin",
+        -half_world, half_world
+    );
     println!("  Ground surface: Y=0 (border midpoint)");
     println!();
 
@@ -58,30 +70,29 @@ pub fn run_physics_debug(iterations: u32) -> Result<(), Box<dyn Error>> {
     let gravity = glam::Vec3::new(0.0, config.physics.gravity, 0.0);
     let mut physics_world = PhysicsWorld::new(gravity);
 
-    // Create world collider (static terrain) scaled to world coordinates
-    let world_collider = VoxelColliderBuilder::from_cube_scaled(&world_cube_rc, world_depth, world_size);
+    // Create world collider using configured strategy
+    let mut world_collider = create_world_collider(
+        &config.physics.world_collision_strategy,
+        config.physics.chunked.chunk_size,
+        config.physics.chunked.load_radius,
+    );
+    world_collider.init(
+        &world_cube_rc,
+        world_size,
+        config.world.border_materials,
+        &mut physics_world,
+    );
 
     // Debug: check world collider
-    if let Some(compound) = world_collider.shape().as_compound() {
-        println!("World collider: {} shapes in compound", compound.shapes().len());
-        // Sample some shapes
-        for (i, (iso, _shape)) in compound.shapes().iter().enumerate().take(5) {
-            let pos = iso.translation;
-            println!("  Shape {}: at ({:.3}, {:.3}, {:.3})", i, pos.x, pos.y, pos.z);
-        }
-        if compound.shapes().len() > 5 {
-            println!("  ... and {} more shapes", compound.shapes().len() - 5);
-        }
-    } else if world_collider.shape().as_ball().is_some() {
-        println!("World collider: ball (empty/minimal)");
-    } else {
-        println!("World collider: unknown shape type");
-    }
+    // Note: WorldCollider trait doesn't expose shape(), so we skip detailed shape debug here.
+    // For hybrid strategy, the Rapier collider might be empty anyway.
 
-    let world_body = RigidBodyBuilder::fixed().build();
-    let world_body_handle = physics_world.add_rigid_body(world_body);
-    physics_world.add_collider(world_collider, world_body_handle);
-    println!("World collider ready (ground surface at Y=0)");
+    // Note: world_collider is already added to physics_world by init() if needed
+    // For hybrid strategy, it's NOT added to Rapier, but used manually
+    println!(
+        "World collider ready (strategy: {})",
+        world_collider.metrics().strategy_name
+    );
 
     // Load models and spawn dynamic cubes
     let models = load_vox_models(&config.spawning.models_csv, &config.spawning.models_path);
@@ -94,7 +105,10 @@ pub fn run_physics_debug(iterations: u32) -> Result<(), Box<dyn Error>> {
     for (i, obj) in objects.iter().enumerate() {
         if let Some(body) = physics_world.get_rigid_body(obj.body_handle) {
             let pos = body.translation();
-            println!("Object {}: {} at ({:.2}, {:.2}, {:.2})", i, obj.model_name, pos.x, pos.y, pos.z);
+            println!(
+                "Object {}: {} at ({:.2}, {:.2}, {:.2})",
+                i, obj.model_name, pos.x, pos.y, pos.z
+            );
         }
     }
 
@@ -116,9 +130,48 @@ pub fn run_physics_debug(iterations: u32) -> Result<(), Box<dyn Error>> {
         // Step physics
         physics_world.step(timestep);
 
+        for obj in objects.iter() {
+            // Get body position and compute AABB
+            let body = match physics_world.get_rigid_body(obj.body_handle) {
+                Some(b) => b,
+                None => continue,
+            };
+            let pos = body.translation();
+            let position = glam::Vec3::new(pos.x, pos.y, pos.z);
+
+            // Compute AABB for collision resolution (using actual model size)
+            let octree_size = (1 << obj.depth) as f32;
+            let scale_factor = 2.0_f32.powi(obj.scale_exp);
+            let base_scale = config.spawning.object_size * scale_factor;
+            let half_extent = glam::Vec3::new(
+                (obj.model_size.x as f32 / octree_size) * base_scale * 0.5,
+                (obj.model_size.y as f32 / octree_size) * base_scale * 0.5,
+                (obj.model_size.z as f32 / octree_size) * base_scale * 0.5,
+            );
+            let body_aabb = Aabb::new(position - half_extent, position + half_extent);
+
+            // Get correction from world collider
+            let correction = world_collider.resolve_collision(obj.body_handle, &body_aabb);
+
+            // Apply correction to body position
+            if correction.length_squared() > 0.0 {
+                if let Some(body) = physics_world.get_rigid_body_mut(obj.body_handle) {
+                    let new_pos = position + correction;
+                    body.set_translation(vector![new_pos.x, new_pos.y, new_pos.z], true);
+                    // Dampen velocity on collision
+                    let vel = body.linvel();
+                    body.set_linvel(vector![vel.x * 0.9, vel.y * 0.9, vel.z * 0.9], true);
+                }
+            }
+        }
+
         // Log at intervals
         if iter % log_interval == 0 || iter == iterations - 1 {
-            println!("--- Iteration {} (t = {:.3}s) ---", iter, iter as f32 * timestep);
+            println!(
+                "--- Iteration {} (t = {:.3}s) ---",
+                iter,
+                iter as f32 * timestep
+            );
 
             for (i, obj) in objects.iter().enumerate() {
                 if let Some(body) = physics_world.get_rigid_body(obj.body_handle) {
@@ -130,8 +183,12 @@ pub fn run_physics_debug(iterations: u32) -> Result<(), Box<dyn Error>> {
                         "  [{}] {} pos=({:.2}, {:.2}, {:.2}) vel=({:.2}, {:.2}, {:.2}) {}",
                         i,
                         obj.model_name,
-                        pos.x, pos.y, pos.z,
-                        vel.x, vel.y, vel.z,
+                        pos.x,
+                        pos.y,
+                        pos.z,
+                        vel.x,
+                        vel.y,
+                        vel.z,
                         if is_sleeping { "[SLEEPING]" } else { "" }
                     );
 

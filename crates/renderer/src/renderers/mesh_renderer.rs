@@ -93,28 +93,59 @@ impl MeshRenderer {
                 0, 4,  1, 5,  2, 6,  3, 7,
             ];
 
-            let vao = gl.create_vertex_array().map_err(|e| format!("Failed to create VAO: {}", e))?;
+            let vao = gl
+                .create_vertex_array()
+                .map_err(|e| format!("Failed to create VAO: {}", e))?;
             gl.bind_vertex_array(Some(vao));
 
-            let vbo = gl.create_buffer().map_err(|e| format!("Failed to create VBO: {}", e))?;
+            let vbo = gl
+                .create_buffer()
+                .map_err(|e| format!("Failed to create VBO: {}", e))?;
             gl.bind_buffer(ARRAY_BUFFER, Some(vbo));
             gl.buffer_data_u8_slice(ARRAY_BUFFER, bytemuck::cast_slice(&vertices), STATIC_DRAW);
 
             // Position attribute (location 0)
             gl.enable_vertex_attrib_array(0);
-            gl.vertex_attrib_pointer_f32(0, 3, FLOAT, false, 9 * std::mem::size_of::<f32>() as i32, 0);
+            gl.vertex_attrib_pointer_f32(
+                0,
+                3,
+                FLOAT,
+                false,
+                9 * std::mem::size_of::<f32>() as i32,
+                0,
+            );
 
             // Normal attribute (location 1)
             gl.enable_vertex_attrib_array(1);
-            gl.vertex_attrib_pointer_f32(1, 3, FLOAT, false, 9 * std::mem::size_of::<f32>() as i32, 3 * std::mem::size_of::<f32>() as i32);
+            gl.vertex_attrib_pointer_f32(
+                1,
+                3,
+                FLOAT,
+                false,
+                9 * std::mem::size_of::<f32>() as i32,
+                3 * std::mem::size_of::<f32>() as i32,
+            );
 
             // Color attribute (location 2)
             gl.enable_vertex_attrib_array(2);
-            gl.vertex_attrib_pointer_f32(2, 3, FLOAT, false, 9 * std::mem::size_of::<f32>() as i32, 6 * std::mem::size_of::<f32>() as i32);
+            gl.vertex_attrib_pointer_f32(
+                2,
+                3,
+                FLOAT,
+                false,
+                9 * std::mem::size_of::<f32>() as i32,
+                6 * std::mem::size_of::<f32>() as i32,
+            );
 
-            let ebo = gl.create_buffer().map_err(|e| format!("Failed to create EBO: {}", e))?;
+            let ebo = gl
+                .create_buffer()
+                .map_err(|e| format!("Failed to create EBO: {}", e))?;
             gl.bind_buffer(ELEMENT_ARRAY_BUFFER, Some(ebo));
-            gl.buffer_data_u8_slice(ELEMENT_ARRAY_BUFFER, bytemuck::cast_slice(&indices), STATIC_DRAW);
+            gl.buffer_data_u8_slice(
+                ELEMENT_ARRAY_BUFFER,
+                bytemuck::cast_slice(&indices),
+                STATIC_DRAW,
+            );
 
             gl.bind_vertex_array(None);
 
@@ -305,6 +336,41 @@ impl MeshRenderer {
                 position,
                 rotation,
                 scale,
+                glam::Vec3::ONE, // Default normalized_size (full octree)
+                false,           // wireframe
+                camera,
+                viewport_width,
+                viewport_height,
+            )
+        }
+    }
+
+    /// Render a mesh at given position with specified scale and normalized size (for centering)
+    ///
+    /// # Safety
+    ///
+    /// Must be called with an active GL context on the current thread.
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn render_mesh_with_normalized_size(
+        &self,
+        gl: &Context,
+        mesh_index: usize,
+        position: glam::Vec3,
+        rotation: glam::Quat,
+        scale: f32,
+        normalized_size: glam::Vec3,
+        camera: &Camera,
+        viewport_width: i32,
+        viewport_height: i32,
+    ) {
+        unsafe {
+            self.render_mesh_with_options(
+                gl,
+                mesh_index,
+                position,
+                rotation,
+                scale,
+                normalized_size,
                 false, // wireframe
                 camera,
                 viewport_width,
@@ -326,6 +392,7 @@ impl MeshRenderer {
         position: glam::Vec3,
         rotation: glam::Quat,
         scale: f32,
+        normalized_size: glam::Vec3,
         wireframe: bool,
         camera: &Camera,
         viewport_width: i32,
@@ -368,13 +435,13 @@ impl MeshRenderer {
             let view = glam::Mat4::look_at_rh(camera.position, target, up);
 
             // Mesh vertices are in [0, 1] space (visit_faces outputs normalized positions)
-            // Transform to [-0.5, 0.5] centered, then scale by the object size
-            // mesh_offset centers the mesh at origin
-            let mesh_offset = glam::Vec3::splat(-0.5);
+            // The model occupies [0, normalized_size] in octree space.
+            // To center the model at 'position', we need to offset the mesh by -normalized_size/2
+            let mesh_offset = normalized_size * -0.5;
 
             // Model matrix: translate to position, rotate, then scale mesh
             // Order of operations (right to left):
-            // 1. Offset by -0.5: [0,1] -> [-0.5, 0.5] (centered)
+            // 1. Offset to center model: [0, normalized_size] -> [-normalized_size/2, normalized_size/2]
             // 2. Scale by object scale
             // 3. Apply rotation (if any)
             // 4. Translate to world position
@@ -479,7 +546,9 @@ impl MeshRenderer {
     ) {
         unsafe {
             let Some(program) = self.program else { return };
-            let Some(ref wireframe_mesh) = self.wireframe_box else { return };
+            let Some(ref wireframe_mesh) = self.wireframe_box else {
+                return;
+            };
 
             gl.use_program(Some(program));
             gl.disable(DEPTH_TEST); // Always on top
@@ -495,18 +564,15 @@ impl MeshRenderer {
             let view = glam::Mat4::look_at_rh(camera.position, target, up);
 
             // Transform wireframe to match CubeBox position within mesh:
-            // 1. The mesh uses [0,1] space with -0.5 offset, placing octree at [-0.5, 0.5]
-            // 2. The model occupies [0, normalized_size] in octree space
-            // 3. After -0.5 offset, model is at [-0.5, normalized_size - 0.5]
-            //
-            // To render wireframe around the model:
+            // 1. The mesh uses [0, normalized_size] space with -normalized_size/2 offset
+            // 2. To render wireframe around the model:
             // - Scale unit [0,1] wireframe to normalized_size
-            // - Apply same -0.5 offset as mesh
+            // - Apply same -normalized_size/2 offset as mesh
             // - Apply world scale and transforms
             let model = glam::Mat4::from_translation(position)
                 * glam::Mat4::from_quat(rotation)
                 * glam::Mat4::from_scale(glam::Vec3::splat(scale))
-                * glam::Mat4::from_translation(glam::Vec3::splat(-0.5))
+                * glam::Mat4::from_translation(normalized_size * -0.5)
                 * glam::Mat4::from_scale(normalized_size);
 
             // Upload uniforms
@@ -734,7 +800,8 @@ impl crate::renderer::Renderer for MeshRenderer {
         for y in 0..height {
             let src_row = &rgb_pixels[(y * width * 3) as usize..((y + 1) * width * 3) as usize];
             let dst_y = height - 1 - y;
-            let dst_row = &mut flipped[(dst_y * width * 3) as usize..((dst_y + 1) * width * 3) as usize];
+            let dst_row =
+                &mut flipped[(dst_y * width * 3) as usize..((dst_y + 1) * width * 3) as usize];
             dst_row.copy_from_slice(src_row);
         }
 

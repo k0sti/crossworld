@@ -24,9 +24,10 @@ pub use axis::Axis;
 
 // Re-export traversal types
 pub use traversal::{
-    traverse_octree, visit_faces, visit_faces_in_region, CubeCoord, FaceInfo, NeighborGrid,
-    NeighborView, RegionBounds, TraversalVisitor, OFFSET_BACK, OFFSET_DOWN, OFFSET_FRONT,
-    OFFSET_LEFT, OFFSET_RIGHT, OFFSET_UP,
+    traverse_octree, traverse_region, visit_faces, visit_faces_at_coord, visit_faces_in_region,
+    visit_voxels_in_region, CubeCoord, FaceInfo, NeighborGrid, NeighborView, RegionBounds,
+    TraversalVisitor, VoxelInfo, OFFSET_BACK, OFFSET_DOWN, OFFSET_FRONT, OFFSET_LEFT, OFFSET_RIGHT,
+    OFFSET_UP,
 };
 
 // Re-export mesh types
@@ -38,7 +39,9 @@ pub use mesh::{
 // Re-export IO types
 #[allow(deprecated)]
 pub use io::load_vox_to_cube;
-pub use io::{load_vox_to_cubebox, load_vox_to_cubebox_compact, parse_csm, serialize_csm, CsmError};
+pub use io::{
+    load_vox_to_cubebox, load_vox_to_cubebox_compact, parse_csm, serialize_csm, CsmError,
+};
 
 // Re-export fabric types
 pub use fabric::{AdditiveState, FabricConfig, FabricGenerator};
