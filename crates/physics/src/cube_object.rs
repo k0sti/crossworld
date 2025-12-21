@@ -133,25 +133,31 @@ impl CubeObject {
         self.scale = scale;
     }
 
-    /// Get the local-space AABB for this cube object
+    /// Get the local-space AABB for this cube object (centered at origin)
     ///
-    /// If a CubeBox is attached, returns an AABB sized to the actual model dimensions
-    /// normalized by the octree size. For a 16x30x12 model in a depth-5 octree (32³),
-    /// returns AABB from (0,0,0) to (0.5, 0.9375, 0.375).
+    /// If a CubeBox is attached, returns a **centered** AABB sized to the actual model
+    /// dimensions normalized by the octree size. For a 16x30x12 model in a depth-5
+    /// octree (32³), returns AABB from (-0.25, -0.46875, -0.1875) to (0.25, 0.46875, 0.1875).
     ///
-    /// If no CubeBox is attached, returns the unit cube [0,1]³ as fallback.
+    /// The AABB is centered at the origin so that rotation works correctly around the
+    /// object's center point. The object's position represents its center.
+    ///
+    /// If no CubeBox is attached, returns a centered unit cube [-0.5, 0.5]³ as fallback.
     pub fn local_aabb(&self) -> Aabb {
         match &self.cube {
             Some(cubebox) => {
                 let octree_size = cubebox.octree_size() as f32;
-                let max = Vec3::new(
-                    cubebox.size.x as f32 / octree_size,
-                    cubebox.size.y as f32 / octree_size,
-                    cubebox.size.z as f32 / octree_size,
+                let half_size = Vec3::new(
+                    cubebox.size.x as f32 / octree_size * 0.5,
+                    cubebox.size.y as f32 / octree_size * 0.5,
+                    cubebox.size.z as f32 / octree_size * 0.5,
                 );
-                Aabb::new(Vec3::ZERO, max)
+                Aabb::new(-half_size, half_size)
             }
-            None => Aabb::unit(), // Fallback for objects without cube data
+            None => {
+                // Centered unit cube [-0.5, 0.5]³
+                Aabb::new(Vec3::splat(-0.5), Vec3::splat(0.5))
+            }
         }
     }
 
@@ -375,10 +381,10 @@ mod tests {
         let mut world = PhysicsWorld::new(Vec3::new(0.0, -9.81, 0.0));
         let body = CubeObject::new_dynamic(&mut world, Vec3::ZERO, 1.0);
 
-        // Without a CubeBox, falls back to unit cube
+        // Without a CubeBox, falls back to centered unit cube [-0.5, 0.5]³
         let aabb = body.local_aabb();
-        assert_eq!(aabb.min, Vec3::ZERO);
-        assert_eq!(aabb.max, Vec3::ONE);
+        assert_eq!(aabb.min, Vec3::splat(-0.5));
+        assert_eq!(aabb.max, Vec3::splat(0.5));
     }
 
     #[test]
@@ -392,11 +398,14 @@ mod tests {
         body.set_cube(Rc::new(cubebox));
 
         let aabb = body.local_aabb();
-        assert_eq!(aabb.min, Vec3::ZERO);
-        // Expected: (16/32, 30/32, 12/32) = (0.5, 0.9375, 0.375)
-        assert!((aabb.max.x - 0.5).abs() < 0.0001);
-        assert!((aabb.max.y - 0.9375).abs() < 0.0001);
-        assert!((aabb.max.z - 0.375).abs() < 0.0001);
+        // Half sizes: (16/32/2, 30/32/2, 12/32/2) = (0.25, 0.46875, 0.1875)
+        // Centered AABB: from -halfsize to +halfsize
+        assert!((aabb.min.x - (-0.25)).abs() < 0.0001);
+        assert!((aabb.min.y - (-0.46875)).abs() < 0.0001);
+        assert!((aabb.min.z - (-0.1875)).abs() < 0.0001);
+        assert!((aabb.max.x - 0.25).abs() < 0.0001);
+        assert!((aabb.max.y - 0.46875).abs() < 0.0001);
+        assert!((aabb.max.z - 0.1875).abs() < 0.0001);
     }
 
     #[test]
@@ -410,8 +419,9 @@ mod tests {
         body.set_cube(Rc::new(cubebox));
 
         let aabb = body.local_aabb();
-        assert_eq!(aabb.min, Vec3::ZERO);
-        assert_eq!(aabb.max, Vec3::ONE); // 32/32 = 1.0
+        // Centered: [-0.5, 0.5]³
+        assert_eq!(aabb.min, Vec3::splat(-0.5));
+        assert_eq!(aabb.max, Vec3::splat(0.5));
     }
 
     #[test]
@@ -419,9 +429,10 @@ mod tests {
         let mut world = PhysicsWorld::new(Vec3::new(0.0, -9.81, 0.0));
         let body = CubeObject::new_dynamic(&mut world, Vec3::ZERO, 1.0);
 
+        // Position at origin, centered unit cube: [-0.5, 0.5]³
         let aabb = body.world_aabb(&world);
-        assert_eq!(aabb.min, Vec3::ZERO);
-        assert_eq!(aabb.max, Vec3::ONE);
+        assert_eq!(aabb.min, Vec3::splat(-0.5));
+        assert_eq!(aabb.max, Vec3::splat(0.5));
     }
 
     #[test]
@@ -429,9 +440,10 @@ mod tests {
         let mut world = PhysicsWorld::new(Vec3::new(0.0, -9.81, 0.0));
         let body = CubeObject::new_dynamic(&mut world, Vec3::new(10.0, 5.0, 3.0), 1.0);
 
+        // Centered cube at position (10, 5, 3)
         let aabb = body.world_aabb(&world);
-        assert_eq!(aabb.min, Vec3::new(10.0, 5.0, 3.0));
-        assert_eq!(aabb.max, Vec3::new(11.0, 6.0, 4.0));
+        assert_eq!(aabb.min, Vec3::new(9.5, 4.5, 2.5));
+        assert_eq!(aabb.max, Vec3::new(10.5, 5.5, 3.5));
     }
 
     #[test]
@@ -440,9 +452,10 @@ mod tests {
         let mut body = CubeObject::new_dynamic(&mut world, Vec3::ZERO, 1.0);
         body.set_scale(2.0);
 
+        // Centered cube scaled 2x at origin: [-1, 1]³
         let aabb = body.world_aabb(&world);
-        assert_eq!(aabb.min, Vec3::ZERO);
-        assert_eq!(aabb.max, Vec3::splat(2.0));
+        assert_eq!(aabb.min, Vec3::splat(-1.0));
+        assert_eq!(aabb.max, Vec3::splat(1.0));
     }
 
     #[test]
@@ -461,8 +474,9 @@ mod tests {
         let mut world = PhysicsWorld::new(Vec3::new(0.0, -9.81, 0.0));
         let body = CubeObject::new_dynamic(&mut world, Vec3::ZERO, 1.0);
 
-        // Overlapping AABB
-        let overlapping = Aabb::new(Vec3::splat(0.5), Vec3::splat(1.5));
+        // Body has centered AABB [-0.5, 0.5]³ at origin
+        // Overlapping AABB (touches corner region)
+        let overlapping = Aabb::new(Vec3::splat(0.0), Vec3::splat(1.0));
         assert!(body.intersects_aabb(&world, &overlapping));
 
         // Non-overlapping AABB
@@ -482,12 +496,63 @@ mod tests {
         body.set_scale(2.0);
 
         let aabb = body.world_aabb(&world);
-        // Local AABB: (0,0,0) to (0.5, 0.9375, 0.375)
-        // Scaled: (0,0,0) to (1.0, 1.875, 0.75)
-        // Translated: (10, 0, 10) to (11.0, 1.875, 10.75)
-        assert_eq!(aabb.min, Vec3::new(10.0, 0.0, 10.0));
-        assert!((aabb.max.x - 11.0).abs() < 0.0001);
-        assert!((aabb.max.y - 1.875).abs() < 0.0001);
-        assert!((aabb.max.z - 10.75).abs() < 0.0001);
+        // Local half sizes: (0.25, 0.46875, 0.1875)
+        // Scaled half sizes: (0.5, 0.9375, 0.375)
+        // Centered at position (10, 0, 10):
+        //   min = (10 - 0.5, 0 - 0.9375, 10 - 0.375) = (9.5, -0.9375, 9.625)
+        //   max = (10 + 0.5, 0 + 0.9375, 10 + 0.375) = (10.5, 0.9375, 10.375)
+        assert!((aabb.min.x - 9.5).abs() < 0.0001);
+        assert!((aabb.min.y - (-0.9375)).abs() < 0.0001);
+        assert!((aabb.min.z - 9.625).abs() < 0.0001);
+        assert!((aabb.max.x - 10.5).abs() < 0.0001);
+        assert!((aabb.max.y - 0.9375).abs() < 0.0001);
+        assert!((aabb.max.z - 10.375).abs() < 0.0001);
+    }
+
+    #[test]
+    fn test_world_aabb_rotation_symmetry() {
+        // Test that rotation around Y axis produces symmetric AABB expansion
+        let mut world = PhysicsWorld::new(Vec3::new(0.0, -9.81, 0.0));
+        let body = CubeObject::new_dynamic(&mut world, Vec3::ZERO, 1.0);
+
+        // Get AABB without rotation
+        let aabb_no_rot = body.world_aabb(&world);
+        assert_eq!(aabb_no_rot.min, Vec3::splat(-0.5));
+        assert_eq!(aabb_no_rot.max, Vec3::splat(0.5));
+
+        // Apply 45 degree rotation around Y
+        body.set_rotation(
+            &mut world,
+            Quat::from_rotation_y(std::f32::consts::FRAC_PI_4),
+        );
+        let aabb_rot = body.world_aabb(&world);
+
+        // Rotated AABB should be symmetric around the position (origin)
+        // Because the local AABB is centered, rotation keeps the box centered
+        let center = aabb_rot.center();
+        assert!(center.x.abs() < 0.0001, "Center X should be ~0, got {}", center.x);
+        assert!(center.y.abs() < 0.0001, "Center Y should be ~0, got {}", center.y);
+        assert!(center.z.abs() < 0.0001, "Center Z should be ~0, got {}", center.z);
+
+        // Y-axis rotation should expand X and Z dimensions (sqrt(2) * original)
+        let expected_xz = 0.5 * std::f32::consts::SQRT_2;
+        assert!(
+            (aabb_rot.max.x - expected_xz).abs() < 0.01,
+            "Expected X max ~{}, got {}",
+            expected_xz,
+            aabb_rot.max.x
+        );
+        assert!(
+            (aabb_rot.max.z - expected_xz).abs() < 0.01,
+            "Expected Z max ~{}, got {}",
+            expected_xz,
+            aabb_rot.max.z
+        );
+        // Y should be unchanged
+        assert!(
+            (aabb_rot.max.y - 0.5).abs() < 0.01,
+            "Expected Y max ~0.5, got {}",
+            aabb_rot.max.y
+        );
     }
 }
