@@ -76,6 +76,8 @@ pub struct GlTracerGl {
     material_palette_texture: Option<Texture>,
     disable_lighting_location: Option<UniformLocation>,
     show_errors_location: Option<UniformLocation>,
+    near_location: Option<UniformLocation>,
+    far_location: Option<UniformLocation>,
 }
 
 /// Raycast hit result for cube intersection
@@ -361,6 +363,8 @@ impl GlTracerGl {
             let material_palette_location = gl.get_uniform_location(program, "u_material_palette");
             let disable_lighting_location = gl.get_uniform_location(program, "u_disable_lighting");
             let show_errors_location = gl.get_uniform_location(program, "u_show_errors");
+            let near_location = gl.get_uniform_location(program, "u_near");
+            let far_location = gl.get_uniform_location(program, "u_far");
 
             // Debug: Print uniform locations
             println!("[GL Tracer] Uniform locations:");
@@ -395,6 +399,8 @@ impl GlTracerGl {
                 material_palette_texture,
                 disable_lighting_location,
                 show_errors_location,
+                near_location,
+                far_location,
             })
         }
     }
@@ -440,6 +446,11 @@ impl GlTracerGl {
         }
     }
 
+    /// Near plane distance for depth buffer (matches mesh renderer)
+    pub const NEAR_PLANE: f32 = 1.0;
+    /// Far plane distance for depth buffer (matches mesh renderer)
+    pub const FAR_PLANE: f32 = 50000.0;
+
     /// Render the octree to GL framebuffer
     ///
     /// # Safety
@@ -456,11 +467,14 @@ impl GlTracerGl {
             // Set viewport
             gl.viewport(0, 0, width, height);
 
-            // Disable depth test and blending (we're rendering a fullscreen quad)
-            gl.disable(DEPTH_TEST);
+            // Enable depth test for proper depth buffer output
+            gl.enable(DEPTH_TEST);
+            gl.depth_func(LESS);
             gl.disable(BLEND);
 
-            // Note: Caller is responsible for clearing the framebuffer with BACKGROUND_COLOR
+            // Clear both color and depth buffers
+            gl.clear_color(0.4, 0.5, 0.6, 1.0);
+            gl.clear(COLOR_BUFFER_BIT | DEPTH_BUFFER_BIT);
 
             gl.use_program(Some(self.program));
             gl.bind_vertex_array(Some(self.vao));
@@ -499,6 +513,13 @@ impl GlTracerGl {
             if let Some(loc) = &self.disable_lighting_location {
                 gl.uniform_1_i32(Some(loc), if disable_lighting { 1 } else { 0 });
             }
+            // Set near/far planes for depth calculation
+            if let Some(loc) = &self.near_location {
+                gl.uniform_1_f32(Some(loc), Self::NEAR_PLANE);
+            }
+            if let Some(loc) = &self.far_location {
+                gl.uniform_1_f32(Some(loc), Self::FAR_PLANE);
+            }
 
             // Bind material palette texture to unit 1
             if let Some(texture) = self.material_palette_texture {
@@ -534,11 +555,14 @@ impl GlTracerGl {
             // Set viewport
             gl.viewport(0, 0, width, height);
 
-            // Disable depth test and blending (we're rendering a fullscreen quad)
-            gl.disable(DEPTH_TEST);
+            // Enable depth test for proper depth buffer output
+            gl.enable(DEPTH_TEST);
+            gl.depth_func(LESS);
             gl.disable(BLEND);
 
-            // Note: Caller is responsible for clearing the framebuffer with BACKGROUND_COLOR
+            // Clear both color and depth buffers
+            gl.clear_color(0.4, 0.5, 0.6, 1.0);
+            gl.clear(COLOR_BUFFER_BIT | DEPTH_BUFFER_BIT);
 
             gl.use_program(Some(self.program));
             gl.bind_vertex_array(Some(self.vao));
@@ -596,6 +620,13 @@ impl GlTracerGl {
             }
             if let Some(loc) = &self.show_errors_location {
                 gl.uniform_1_i32(Some(loc), if show_errors { 1 } else { 0 });
+            }
+            // Set near/far planes for depth calculation
+            if let Some(loc) = &self.near_location {
+                gl.uniform_1_f32(Some(loc), Self::NEAR_PLANE);
+            }
+            if let Some(loc) = &self.far_location {
+                gl.uniform_1_f32(Some(loc), Self::FAR_PLANE);
             }
 
             // Bind material palette texture to unit 1

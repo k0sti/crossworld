@@ -22,6 +22,8 @@ uniform uint u_octree_texture_width;  // Width of texture (for 2D coordinate con
 uniform sampler2D u_material_palette; // Material palette (128 entries)
 uniform bool u_disable_lighting; // If true, output pure material colors without lighting
 uniform bool u_show_errors; // If true, show error colors; if false, background color
+uniform float u_near; // Near plane for depth calculation
+uniform float u_far;  // Far plane for depth calculation
 
 // ============================================================================
 // Error Material Values (1-7 are reserved for error conditions)
@@ -917,6 +919,15 @@ HitInfo raycastBcfOctree(vec3 pos, vec3 dir) {
     return result;
 }
 
+// Convert linear depth (view-space Z) to NDC depth [0, 1]
+// Using standard perspective projection depth formula
+float linearDepthToNdc(float linearDepth, float near, float far) {
+    // For perspective projection: ndc_z = (far + near) / (far - near) + (2 * far * near) / ((far - near) * -linearDepth)
+    // Simplified for [0, 1] depth range (OpenGL ES / WebGL default):
+    // ndc_z = (far * (linearDepth - near)) / (linearDepth * (far - near))
+    return (far * (linearDepth - near)) / (linearDepth * (far - near));
+}
+
 void main() {
     // Normalized pixel coordinates in [-1, 1] range (NDC)
     vec2 ndc = (gl_FragCoord.xy - 0.5 * u_resolution) / (0.5 * u_resolution.y);
@@ -957,6 +968,9 @@ void main() {
     // Background color (matches BACKGROUND_COLOR in Rust)
     vec3 color = vec3(0.4, 0.5, 0.6);
 
+    // Default to far plane depth (background)
+    float depth = 1.0;
+
     // Raycast through BCF-encoded octree
     // The octree internally uses [-1, 1]³ space, but world coordinates are [0, 1]³
     // Transform ray origin from world space [0, 1]³ to octree space [-1, 1]³
@@ -987,10 +1001,20 @@ void main() {
             // CPU: material_color * (AMBIENT + diffuse * DIFFUSE_STRENGTH)
             color = materialColor * (ambient + diffuse * diffuseStrength);
         }
+
+        // Calculate depth from hit point
+        // Hit point is in octree space [-1, 1]³, convert back to world space
+        vec3 worldHitPoint = (octreeHit.point + 1.0) * 0.5;
+        float linearDepth = length(worldHitPoint - cameraPos);
+
+        // Convert to NDC depth using near/far planes
+        depth = linearDepthToNdc(linearDepth, u_near, u_far);
+        depth = clamp(depth, 0.0, 1.0);
     }
 
     // Gamma correction
     color = pow(color, vec3(1.0 / 2.2));
 
     FragColor = vec4(color, 1.0);
+    gl_FragDepth = depth;
 }
