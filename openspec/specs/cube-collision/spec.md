@@ -1,7 +1,11 @@
-# Cube Collision Specification
+# Capability: cube-collision
 
-## ADDED Requirements
+Provides WASM-compatible collision primitives for voxel objects.
 
+## Purpose
+
+Enable efficient collision detection between voxel cubes by providing AABB bounding volumes, intersection region calculation, and region-bounded face traversal - all fully compatible with WASM targets.
+## Requirements
 ### Requirement: WASM-Compatible Bounding Volume
 The system SHALL provide AABB (Axis-Aligned Bounding Box) types using only glam types for full WASM compatibility.
 
@@ -183,8 +187,6 @@ The documentation MUST:
 - **AND** they SHALL understand region-based face traversal
 - **AND** they SHALL understand the SDF interface design
 
-## MODIFIED Requirements
-
 ### Requirement: VoxelColliderBuilder Region Support
 The VoxelColliderBuilder SHALL support generating colliders from a bounded region.
 
@@ -205,3 +207,4 @@ The `from_cube_region()` function MUST:
 - **AND** no region specified (None)
 - **WHEN** generating collider
 - **THEN** collider SHALL contain all exposed faces
+
