@@ -161,7 +161,7 @@ impl ProtoGlApp {
             config,
             render_world: true,
             render_objects: true,
-            wireframe_objects: false,
+            wireframe_objects: true,  // Enable by default for testing CubeBox bounds
             show_debug_info: true,
             world_use_mesh: true, // Default to mesh renderer
             world_mesh_index: None,
@@ -746,11 +746,21 @@ impl ProtoGlApp {
                             size.height as i32,
                         );
                         // Render wireframe bounding box if enabled
+                        // Wireframe is around CubeBox bounds, not the full octree
                         if self.wireframe_objects {
-                            mesh_renderer.render_wireframe_box(
+                            // Calculate normalized size (model size as fraction of octree)
+                            let octree_size = (1 << obj.depth) as f32;
+                            let normalized_size = glam::Vec3::new(
+                                obj.model_size.x as f32 / octree_size,
+                                obj.model_size.y as f32 / octree_size,
+                                obj.model_size.z as f32 / octree_size,
+                            );
+
+                            mesh_renderer.render_cubebox_wireframe(
                                 gl,
                                 position,
                                 rotation,
+                                normalized_size,
                                 scale,
                                 &camera,
                                 size.width as i32,
