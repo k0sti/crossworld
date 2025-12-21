@@ -17,7 +17,8 @@ pub mod native;
 
 pub use character_controller::{CharacterController, CharacterControllerConfig, RaycastHit};
 pub use collider::{
-    create_box_collider, create_capsule_collider, create_sphere_collider, VoxelColliderBuilder,
+    create_box_collider, create_capsule_collider, create_sphere_collider, ColliderMode,
+    VoxelColliderBuilder,
 };
 pub use cube_object::CubeObject;
 pub use object::Object;
