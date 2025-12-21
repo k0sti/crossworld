@@ -151,6 +151,8 @@ pub fn spawn_cube_objects(
             depth: model.depth(),
             scale_exp: model.scale_exp,
             model_size: model.size(),
+            is_colliding_world: false,
+            collision_aabb: None,
         });
     }
 

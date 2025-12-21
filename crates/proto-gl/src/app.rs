@@ -721,7 +721,7 @@ impl ProtoGlApp {
 
             // Resolve world collisions (direct octree queries, bypasses Rapier)
             if let Some(world_collider) = &self.world_collider {
-                for (i, obj) in self.objects.iter().enumerate() {
+                for (i, obj) in self.objects.iter_mut().enumerate() {
                     // Get body position and compute AABB
                     let body = match physics_world.get_rigid_body(obj.body_handle) {
                         Some(b) => b,
@@ -731,19 +731,38 @@ impl ProtoGlApp {
                     let position = glam::Vec3::new(pos.x, pos.y, pos.z);
 
                     // Compute AABB for collision resolution (using actual model size)
+                    // Must account for rotation - rotated OBB becomes larger AABB
                     let octree_size = (1 << obj.depth) as f32;
                     let scale_factor = 2.0_f32.powi(obj.scale_exp);
                     let base_scale = self.config.spawning.object_size * scale_factor;
+
+                    // Get rotation from physics body
+                    let rot = body.rotation();
+                    let rotation = glam::Quat::from_xyzw(rot.i, rot.j, rot.k, rot.w);
+
+                    // Local AABB centered at origin
                     let half_extent = glam::Vec3::new(
                         (obj.model_size.x as f32 / octree_size) * base_scale * 0.5,
                         (obj.model_size.y as f32 / octree_size) * base_scale * 0.5,
                         (obj.model_size.z as f32 / octree_size) * base_scale * 0.5,
                     );
-                    let body_aabb = Aabb::new(position - half_extent, position + half_extent);
+                    let local_aabb = Aabb::new(-half_extent, half_extent);
+
+                    // Transform to world space with rotation
+                    let body_aabb = local_aabb.to_world(position, rotation, 1.0);
 
                     // Get correction from world collider
                     let correction =
                         world_collider.resolve_collision(obj.body_handle, &body_aabb);
+
+                    // Update collision state for visualization
+                    let is_colliding = correction.length_squared() > 0.0;
+                    obj.is_colliding_world = is_colliding;
+                    obj.collision_aabb = if is_colliding {
+                        Some(body_aabb)
+                    } else {
+                        None
+                    };
 
                     if self.config.physics.debug_steps > 0 {
                         println!(
@@ -759,7 +778,7 @@ impl ProtoGlApp {
                     }
 
                     // Apply correction to body position and dampen velocity
-                    if correction.length_squared() > 0.0 {
+                    if is_colliding {
                         if let Some(body) = physics_world.get_rigid_body_mut(obj.body_handle) {
                             // Move body out of collision
                             let new_pos = position + correction;
@@ -942,6 +961,37 @@ impl ProtoGlApp {
                                 rotation,
                                 normalized_size,
                                 scale,
+                                &camera,
+                                size.width as i32,
+                                size.height as i32,
+                            );
+
+                            // Always render collision AABB - green normally, red when colliding
+                            let aabb_color = if obj.is_colliding_world {
+                                [1.0, 0.2, 0.2] // Red when colliding
+                            } else {
+                                [0.2, 1.0, 0.2] // Green normally
+                            };
+
+                            // Compute AABB for visualization (same as physics uses)
+                            // Must account for rotation - rotated OBB becomes larger AABB
+                            let scale_factor = 2.0_f32.powi(obj.scale_exp);
+                            let base_scale =
+                                self.config.spawning.object_size * scale_factor;
+                            let half_extent = glam::Vec3::new(
+                                (obj.model_size.x as f32 / octree_size) * base_scale * 0.5,
+                                (obj.model_size.y as f32 / octree_size) * base_scale * 0.5,
+                                (obj.model_size.z as f32 / octree_size) * base_scale * 0.5,
+                            );
+                            let local_aabb =
+                                crossworld_physics::collision::Aabb::new(-half_extent, half_extent);
+                            let world_aabb = local_aabb.to_world(position, rotation, 1.0);
+
+                            mesh_renderer.render_aabb_wireframe(
+                                gl,
+                                world_aabb.min,
+                                world_aabb.max,
+                                aabb_color,
                                 &camera,
                                 size.width as i32,
                                 size.height as i32,

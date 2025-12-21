@@ -68,6 +68,10 @@ pub struct CubeObject {
     pub scale_exp: i32,
     /// Original model size in voxels (for accurate bounding box)
     pub model_size: IVec3,
+    /// Whether this object is currently colliding with the world
+    pub is_colliding_world: bool,
+    /// World AABB used for collision (updated each frame when colliding)
+    pub collision_aabb: Option<crossworld_physics::collision::Aabb>,
 }
 
 /// Load object models from CSV (models with model_type="object")
