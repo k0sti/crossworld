@@ -11,8 +11,19 @@ root_cube = "> [32 65 0 0 89 90 0 111]"
 gravity = -9.81
 timestep = 0.016666  # 60 Hz
 
+# World collision strategy: "monolithic", "chunked", or "hybrid"
+# - monolithic: Single compound collider for entire world (baseline, simple but slow for large worlds)
+# - chunked: Loads/unloads chunk colliders based on object proximity (balanced performance)
+# - hybrid: Bypasses Rapier for world collision using direct octree queries (experimental)
+world_collision_strategy = "monolithic"
+
+[physics.chunked]
+# Settings for chunked collision strategy
+chunk_size = 64.0       # World units per chunk (smaller = more granular loading)
+load_radius = 128.0     # Distance to load chunks around objects
+
 [spawning]
-spawn_count = 0
+spawn_count = 10
 models_csv = "assets/models.csv"  # CSV file with model definitions
 models_path = "assets/models/"     # Base directory for model files
 # World coordinates: origin at center, ground at y=-half_world

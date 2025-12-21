@@ -19,6 +19,8 @@ This document describes the implemented physics system for Crossworld, which int
 ```
 crates/physics/
 ├── Cargo.toml
+├── benches/
+│   └── collision.rs              # Benchmark for world collision strategies
 └── src/
     ├── lib.rs                    # Module exports
     ├── character_controller.rs   # Character physics and movement
@@ -27,6 +29,7 @@ crates/physics/
     ├── cube_object.rs            # Cube rigid body wrapper with AABB support
     ├── sdf.rs                    # SDF collision trait and implementations
     ├── world.rs                  # Physics world state
+    ├── world_collider.rs         # Configurable world collision strategies
     └── wasm.rs                   # WASM bindings for web
 ```
 
@@ -738,3 +741,202 @@ cargo run --example basic_simulation
 **Implementation Status**: Complete and integrated
 **Location**: `crates/physics/`
 **WASM Package**: `packages/wasm-physics/` (generated)
+
+---
+
+## World Collision Strategies
+
+### Overview
+
+The `world_collider` module provides configurable strategies for handling collision between dynamic objects and the static voxel world. Different strategies trade off initialization time, per-frame update cost, and memory usage.
+
+### The WorldCollider Trait
+
+All strategies implement the `WorldCollider` trait:
+
+```rust
+pub trait WorldCollider {
+    /// Initialize with world cube and physics world
+    fn init(&mut self, cube: &Rc<Cube<u8>>, world_size: f32,
+            border_materials: [u8; 4], physics: &mut PhysicsWorld);
+
+    /// Update colliders based on dynamic object positions
+    fn update(&mut self, dynamic_aabbs: &[(RigidBodyHandle, Aabb)],
+              physics: &mut PhysicsWorld);
+
+    /// Resolve world collisions (for hybrid approach)
+    fn resolve_collision(&self, body_handle: RigidBodyHandle,
+                         body_aabb: &Aabb) -> Vec3;
+
+    /// Get performance metrics
+    fn metrics(&self) -> ColliderMetrics;
+}
+```
+
+### Available Strategies
+
+#### 1. Monolithic Strategy (Baseline)
+
+Creates a single compound collider containing all exposed voxel faces from the entire world.
+
+**Characteristics:**
+- Simple implementation
+- Slow initialization for large worlds
+- Zero per-frame overhead after init
+- High memory usage (all faces always loaded)
+
+**When to use:**
+- Small worlds (< 128³ voxels)
+- Static terrain with no streaming
+- Debugging and baseline comparison
+
+```rust
+let collider = MonolithicCollider::new();
+```
+
+#### 2. Chunked Strategy
+
+Divides the world into spatial chunks and loads/unloads colliders based on object proximity.
+
+**Characteristics:**
+- Fast initialization (creates body only, no colliders)
+- Per-frame overhead for chunk management
+- Memory-efficient (only active regions loaded)
+- Configurable chunk size and load radius
+
+**When to use:**
+- Large worlds
+- Many dynamic objects in localized areas
+- Memory-constrained environments
+
+```rust
+let collider = ChunkedCollider::new(
+    64.0,   // chunk_size in world units
+    128.0   // load_radius around objects
+);
+```
+
+#### 3. Hybrid Octree Strategy (Experimental)
+
+Bypasses Rapier for world collision entirely. Uses direct octree queries to detect and resolve collisions.
+
+**Characteristics:**
+- Near-instant initialization (no colliders created)
+- Per-frame octree query cost
+- Minimal memory (just reference to world cube)
+- Custom collision resolution
+
+**When to use:**
+- Very large worlds
+- Testing octree query performance
+- Custom collision response needed
+
+```rust
+let collider = HybridOctreeCollider::new();
+```
+
+### Configuration
+
+Set the strategy in `proto-gl/config.toml`:
+
+```toml
+[physics]
+gravity = -9.81
+timestep = 0.016666
+
+# World collision strategy: "monolithic", "chunked", or "hybrid"
+world_collision_strategy = "chunked"
+
+[physics.chunked]
+chunk_size = 64.0       # World units per chunk
+load_radius = 128.0     # Distance to load chunks around objects
+```
+
+### Performance Metrics
+
+Each strategy tracks performance via `ColliderMetrics`:
+
+```rust
+pub struct ColliderMetrics {
+    pub strategy_name: &'static str,
+    pub init_time_ms: f32,        // Time to initialize
+    pub update_time_us: f32,      // Average per-frame update time
+    pub active_colliders: usize,  // Currently loaded colliders
+    pub total_faces: usize,       // Total voxel faces represented
+}
+```
+
+### Benchmarking
+
+Run the collision benchmark:
+
+```bash
+cargo bench --bench collision -p crossworld-physics
+```
+
+This measures:
+- Initialization time for each strategy
+- Per-frame update + physics step time
+- Memory usage via active collider count
+
+### Strategy Comparison
+
+| Strategy   | Init Time | Frame Time | Memory | Best For |
+|------------|-----------|------------|--------|----------|
+| Monolithic | Slow      | Zero       | High   | Small worlds |
+| Chunked    | Fast      | Low        | Medium | Large worlds, localized action |
+| Hybrid     | Instant   | Variable   | Low    | Huge worlds, custom collision |
+
+### Implementation Notes
+
+#### Chunk Coordinate System
+
+Chunked strategy divides world into grid cells:
+
+```rust
+fn world_to_chunk(&self, pos: Vec3) -> IVec3 {
+    let half_world = self.world_size / 2.0;
+    let normalized = (pos + Vec3::splat(half_world)) / self.chunk_size;
+    normalized.floor().as_ivec3()
+}
+```
+
+World centered at origin, chunks indexed from (0,0,0) at corner.
+
+#### Hybrid Collision Resolution
+
+The hybrid approach queries faces in a region and computes penetration:
+
+```rust
+fn resolve_collision(&self, body_handle: RigidBodyHandle, body_aabb: &Aabb) -> Vec3 {
+    // Convert to octree local space
+    let bounds = RegionBounds::from_local_aabb(local_min, local_max, depth)?;
+
+    // Query faces and accumulate penetration corrections
+    visit_faces_in_region(cube, &bounds, |face_info| {
+        if let Some(pen) = box_face_penetration(body_aabb, face_center, normal, size) {
+            total_correction += pen.normal * pen.depth;
+        }
+    }, border_materials);
+
+    total_correction
+}
+```
+
+#### Factory Function
+
+Use the factory for runtime strategy selection:
+
+```rust
+pub fn create_world_collider(
+    strategy: &str,     // "monolithic", "chunked", or "hybrid"
+    chunk_size: f32,    // Used by chunked strategy
+    load_radius: f32,   // Used by chunked strategy
+) -> Box<dyn WorldCollider> {
+    match strategy {
+        "chunked" => Box::new(ChunkedCollider::new(chunk_size, load_radius)),
+        "hybrid" => Box::new(HybridOctreeCollider::new()),
+        _ => Box::new(MonolithicCollider::new()),
+    }
+}
+```
