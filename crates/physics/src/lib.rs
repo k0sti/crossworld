@@ -5,6 +5,7 @@ mod cube_object;
 mod object;
 pub mod sdf;
 mod world;
+pub mod world_collider;
 
 // Only compile WASM bindings when "wasm" feature is enabled
 #[cfg(feature = "wasm")]

@@ -386,8 +386,7 @@ mod tests {
         assert!(full_collider.shape().as_compound().is_some());
 
         // Partial region (corner)
-        let bounds =
-            RegionBounds::from_local_aabb(Vec3::ZERO, Vec3::splat(0.4), 2).unwrap();
+        let bounds = RegionBounds::from_local_aabb(Vec3::ZERO, Vec3::splat(0.4), 2).unwrap();
         let partial_collider = VoxelColliderBuilder::from_cube_with_region(&cube, Some(&bounds));
 
         // Both should produce valid colliders
@@ -405,9 +404,7 @@ mod tests {
         let aabb = Aabb::new(Vec3::ZERO, Vec3::splat(0.5));
         let collider = VoxelColliderBuilder::from_cube_region(&cube, 3, Some(&aabb));
 
-        assert!(
-            collider.shape().as_compound().is_some() || collider.shape().as_ball().is_some()
-        );
+        assert!(collider.shape().as_compound().is_some() || collider.shape().as_ball().is_some());
     }
 
     #[test]
@@ -429,11 +426,7 @@ mod tests {
 
         // Full traversal
         let mut full_builder = VoxelColliderBuilder::new();
-        visit_faces(
-            &cube,
-            |f| full_builder.add_face_from_info(f),
-            [1, 1, 0, 0],
-        );
+        visit_faces(&cube, |f| full_builder.add_face_from_info(f), [1, 1, 0, 0]);
         let full_count = full_builder.face_count();
 
         // Partial region

@@ -729,8 +729,9 @@ mod tests {
         // Object at position (5, 5, 5), size 2
         let object_aabb = Aabb::new(Vec3::new(4.0, 4.0, 4.0), Vec3::new(6.0, 6.0, 6.0));
 
-        let region = CubeCollider::intersection_region(&cube_aabb, &object_aabb, cube_pos, cube_scale)
-            .unwrap();
+        let region =
+            CubeCollider::intersection_region(&cube_aabb, &object_aabb, cube_pos, cube_scale)
+                .unwrap();
 
         // Region should be in local [0.4, 0.6] range
         assert!((region.min.x - 0.4).abs() < 0.01);
@@ -766,15 +767,9 @@ mod tests {
         // Object B at (1, 1, 1), scale 2
         let aabb_b = Aabb::new(Vec3::ONE, Vec3::splat(3.0));
 
-        let (region_a, region_b) = ObjectCollider::intersection_regions(
-            &aabb_a,
-            &aabb_b,
-            Vec3::ZERO,
-            Vec3::ONE,
-            2.0,
-            2.0,
-        )
-        .unwrap();
+        let (region_a, region_b) =
+            ObjectCollider::intersection_regions(&aabb_a, &aabb_b, Vec3::ZERO, Vec3::ONE, 2.0, 2.0)
+                .unwrap();
 
         // Object A's intersection region is in [1,2] world space → [0.5, 1.0] local
         assert!((region_a.min.x - 0.5).abs() < 0.01);

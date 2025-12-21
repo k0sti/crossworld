@@ -17,7 +17,12 @@ use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::{CursorGrabMode, Window, WindowId};
 
 use cube::Cube;
-use crossworld_physics::{rapier3d::prelude::*, PhysicsWorld, VoxelColliderBuilder};
+use crossworld_physics::{
+    collision::Aabb,
+    rapier3d::prelude::*,
+    world_collider::{create_world_collider, WorldCollider},
+    PhysicsWorld,
+};
 use renderer::{CameraConfig, GlTracer, MeshRenderer, BACKGROUND_COLOR};
 
 use crate::camera::{CameraMode, FirstPersonCamera, OrbitCamera};
@@ -76,6 +81,8 @@ pub struct ProtoGlApp {
     physics_world: Option<PhysicsWorld>,
     physics_accumulator: f32,
     objects: Vec<CubeObject>,
+    /// World collider strategy
+    world_collider: Option<Box<dyn WorldCollider>>,
 
     // Timing
     last_frame: Instant,
@@ -155,6 +162,7 @@ impl ProtoGlApp {
             physics_world: None,
             physics_accumulator: 0.0,
             objects: Vec::new(),
+            world_collider: None,
             last_frame: Instant::now(),
             frame_time: 0.0,
             fps: 60.0,
@@ -312,12 +320,27 @@ impl ApplicationHandler for ProtoGlApp {
         let gravity = glam::Vec3::new(0.0, self.config.physics.gravity, 0.0);
         let mut physics_world = PhysicsWorld::new(gravity);
 
-        // Create world collider (static terrain) scaled to world coordinates
+        // Create world collider using configured strategy
         let world_size = self.config.world.world_size();
-        let world_collider = VoxelColliderBuilder::from_cube_scaled(&world_cube_rc, world_depth, world_size);
-        let world_body = RigidBodyBuilder::fixed().build();
-        let world_body_handle = physics_world.add_rigid_body(world_body);
-        physics_world.add_collider(world_collider, world_body_handle);
+        let mut world_collider = create_world_collider(
+            &self.config.physics.world_collision_strategy,
+            self.config.physics.chunked.chunk_size,
+            self.config.physics.chunked.load_radius,
+        );
+        world_collider.init(
+            &world_cube_rc,
+            world_size,
+            self.config.world.border_materials,
+            &mut physics_world,
+        );
+        let collider_metrics = world_collider.metrics();
+        println!(
+            "  World collider strategy: {} (init: {:.1}ms, {} colliders, {} faces)",
+            collider_metrics.strategy_name,
+            collider_metrics.init_time_ms,
+            collider_metrics.active_colliders,
+            collider_metrics.total_faces,
+        );
 
         // Load models and spawn dynamic cubes
         let models = load_vox_models(&self.config.spawning.models_csv, &self.config.spawning.models_path);
@@ -390,6 +413,7 @@ impl ApplicationHandler for ProtoGlApp {
         self.world_depth = world_depth;
         self.world_mesh_index = world_mesh_index;
         self.physics_world = Some(physics_world);
+        self.world_collider = Some(world_collider);
         self.camera_object = Some(camera_object);
         self.objects = objects;
     }
@@ -619,9 +643,89 @@ impl ProtoGlApp {
             self.physics_accumulator += delta;
             let timestep = self.config.physics.timestep;
 
+            // Update world collider (for chunked strategy - loads/unloads chunks)
+            if let Some(world_collider) = &mut self.world_collider {
+                // Collect AABBs from dynamic objects
+                let dynamic_aabbs: Vec<(RigidBodyHandle, Aabb)> = self
+                    .objects
+                    .iter()
+                    .filter_map(|obj| {
+                        let body = physics_world.get_rigid_body(obj.body_handle)?;
+                        let pos = body.translation();
+                        let position = glam::Vec3::new(pos.x, pos.y, pos.z);
+
+                        // Use object size for AABB (apply scale)
+                        let scale_factor = 2.0_f32.powi(obj.scale_exp);
+                        let half_size = self.config.spawning.object_size * scale_factor * 0.5;
+                        let half_extent = glam::Vec3::splat(half_size);
+
+                        Some((
+                            obj.body_handle,
+                            Aabb::new(position - half_extent, position + half_extent),
+                        ))
+                    })
+                    .collect();
+
+                world_collider.update(&dynamic_aabbs, physics_world);
+            }
+
             while self.physics_accumulator >= timestep {
                 physics_world.step(timestep);
                 self.physics_accumulator -= timestep;
+            }
+
+            // Resolve world collisions for hybrid strategy (which bypasses Rapier)
+            if let Some(world_collider) = &self.world_collider {
+                // Only resolve if strategy uses manual collision (hybrid)
+                if world_collider.metrics().strategy_name == "hybrid" {
+                    for obj in &self.objects {
+                        // Get body position and compute AABB
+                        let body = match physics_world.get_rigid_body(obj.body_handle) {
+                            Some(b) => b,
+                            None => continue,
+                        };
+                        let pos = body.translation();
+                        let position = glam::Vec3::new(pos.x, pos.y, pos.z);
+
+                        // Compute AABB for collision resolution
+                        let scale_factor = 2.0_f32.powi(obj.scale_exp);
+                        let half_size = self.config.spawning.object_size * scale_factor * 0.5;
+                        let half_extent = glam::Vec3::splat(half_size);
+                        let body_aabb = Aabb::new(position - half_extent, position + half_extent);
+
+                        // Get correction from world collider
+                        let correction =
+                            world_collider.resolve_collision(obj.body_handle, &body_aabb);
+
+                        // Apply correction to body position and dampen velocity
+                        if correction.length_squared() > 0.0 {
+                            if let Some(body) = physics_world.get_rigid_body_mut(obj.body_handle) {
+                                // Move body out of collision
+                                let new_pos = position + correction;
+                                body.set_translation(
+                                    vector![new_pos.x, new_pos.y, new_pos.z],
+                                    true,
+                                );
+
+                                // Dampen velocity in the direction of the correction
+                                // This prevents objects from continuing to fall through
+                                let correction_dir = correction.normalize();
+                                let vel = body.linvel();
+                                let velocity = glam::Vec3::new(vel.x, vel.y, vel.z);
+                                let vel_in_correction_dir = velocity.dot(correction_dir);
+                                if vel_in_correction_dir < 0.0 {
+                                    // Velocity is opposing the correction, remove that component
+                                    let dampened =
+                                        velocity - correction_dir * vel_in_correction_dir;
+                                    body.set_linvel(
+                                        vector![dampened.x, dampened.y, dampened.z],
+                                        true,
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -938,6 +1042,7 @@ impl ProtoGlApp {
         }
 
         // Clear physics
+        self.world_collider = None;
         self.physics_world = None;
         self.objects.clear();
         self.object_mesh_indices.clear();

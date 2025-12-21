@@ -104,6 +104,22 @@ impl PhysicsWorld {
             .insert_with_parent(collider, parent, &mut self.rigid_body_set)
     }
 
+    /// Remove a collider from the world
+    ///
+    /// # Arguments
+    /// * `handle` - Handle to the collider to remove
+    ///
+    /// # Returns
+    /// The removed collider, or None if not found
+    pub fn remove_collider(&mut self, handle: ColliderHandle) -> Option<Collider> {
+        self.collider_set.remove(
+            handle,
+            &mut self.island_manager,
+            &mut self.rigid_body_set,
+            true,
+        )
+    }
+
     /// Get a reference to a rigid body
     pub fn get_rigid_body(&self, handle: RigidBodyHandle) -> Option<&RigidBody> {
         self.rigid_body_set.get(handle)
