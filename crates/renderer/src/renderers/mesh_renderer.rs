@@ -419,7 +419,10 @@ impl MeshRenderer {
         }
     }
 
-    /// Render a wireframe bounding box around an object
+    /// Render a wireframe bounding box around an object (uniform scale, full octree)
+    ///
+    /// This renders a wireframe around the full octree cube. For CubeBox models
+    /// where the model only occupies part of the octree, use `render_cubebox_wireframe`.
     ///
     /// # Safety
     ///
@@ -430,6 +433,45 @@ impl MeshRenderer {
         gl: &Context,
         position: glam::Vec3,
         rotation: glam::Quat,
+        scale: f32,
+        camera: &Camera,
+        viewport_width: i32,
+        viewport_height: i32,
+    ) {
+        unsafe {
+            // Full octree: normalized_size = 1.0 on all axes
+            self.render_cubebox_wireframe(
+                gl,
+                position,
+                rotation,
+                glam::Vec3::ONE,
+                scale,
+                camera,
+                viewport_width,
+                viewport_height,
+            );
+        }
+    }
+
+    /// Render a wireframe bounding box for a CubeBox model
+    ///
+    /// This method renders a wireframe around the actual model bounds within the octree,
+    /// not the full power-of-2 octree cube.
+    ///
+    /// # Arguments
+    /// * `normalized_size` - Model size as fraction of octree (model_size / octree_size)
+    /// * `scale` - Uniform world scale applied to the mesh
+    ///
+    /// # Safety
+    ///
+    /// Must be called with an active GL context on the current thread.
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn render_cubebox_wireframe(
+        &self,
+        gl: &Context,
+        position: glam::Vec3,
+        rotation: glam::Quat,
+        normalized_size: glam::Vec3,
         scale: f32,
         camera: &Camera,
         viewport_width: i32,
@@ -452,12 +494,20 @@ impl MeshRenderer {
             let target = camera.position + forward;
             let view = glam::Mat4::look_at_rh(camera.position, target, up);
 
-            // Same transform as mesh: center the unit cube then scale
-            let mesh_offset = glam::Vec3::splat(-0.5);
+            // Transform wireframe to match CubeBox position within mesh:
+            // 1. The mesh uses [0,1] space with -0.5 offset, placing octree at [-0.5, 0.5]
+            // 2. The model occupies [0, normalized_size] in octree space
+            // 3. After -0.5 offset, model is at [-0.5, normalized_size - 0.5]
+            //
+            // To render wireframe around the model:
+            // - Scale unit [0,1] wireframe to normalized_size
+            // - Apply same -0.5 offset as mesh
+            // - Apply world scale and transforms
             let model = glam::Mat4::from_translation(position)
                 * glam::Mat4::from_quat(rotation)
                 * glam::Mat4::from_scale(glam::Vec3::splat(scale))
-                * glam::Mat4::from_translation(mesh_offset);
+                * glam::Mat4::from_translation(glam::Vec3::splat(-0.5))
+                * glam::Mat4::from_scale(normalized_size);
 
             // Upload uniforms
             let mvp = projection * view * model;

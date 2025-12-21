@@ -118,19 +118,25 @@ pub fn spawn_cube_objects(
         // Calculate effective size with scale exponent
         // actual_scale = 2^scale_exp (positive = bigger, negative = smaller)
         let scale_factor = 2.0_f32.powi(model.scale_exp);
-        let object_size = config.object_size * scale_factor;
+        let base_scale = config.object_size * scale_factor;
 
-        // Create collider - ALWAYS use simple box colliders for dynamic objects
+        // Create collider - use CubeBox dimensions for accurate bounding box
         //
         // PERFORMANCE NOTE: VoxelColliderBuilder::from_cube() generates compound colliders
         // with one cuboid per exposed voxel face. For depth 4-7 models, this creates
         // thousands of collision primitives per object. With 100 objects, this results
         // in hundreds of thousands of collision shapes, causing extremely slow physics.
         //
-        // Solution: Use simple box colliders for physics - visual detail doesn't need
-        // to match collision shape. A bounding box is sufficient for game physics.
-        let half_extent = object_size * 0.5;
-        let collider = ColliderBuilder::cuboid(half_extent, half_extent, half_extent)
+        // Solution: Use simple box colliders sized to CubeBox bounds - visual detail
+        // doesn't need to match collision shape exactly.
+        let octree_size = (1 << model.depth()) as f32;
+        let model_size = model.size();
+        let half_extents = Vec3::new(
+            (model_size.x as f32 / octree_size) * base_scale * 0.5,
+            (model_size.y as f32 / octree_size) * base_scale * 0.5,
+            (model_size.z as f32 / octree_size) * base_scale * 0.5,
+        );
+        let collider = ColliderBuilder::cuboid(half_extents.x, half_extents.y, half_extents.z)
             .density(1.0)
             .friction(0.5)
             .restitution(0.3)
@@ -138,12 +144,13 @@ pub fn spawn_cube_objects(
         let coll_handle = physics_world.add_collider(collider, rb_handle);
 
         objects.push(CubeObject {
-            cube: model.cube.clone(),
+            cube: model.cube_rc(),
             body_handle: rb_handle,
             collider_handle: coll_handle,
             model_name: model.name.clone(),
-            depth: model.depth,
+            depth: model.depth(),
             scale_exp: model.scale_exp,
+            model_size: model.size(),
         });
     }
 

@@ -487,3 +487,5 @@ veh_wagon1,vox/veh_wagon1.vox,vox,13116,,,
 veh_wagon2,vox/veh_wagon2.vox,vox,13116,,,
 veh_wagon3,vox/veh_wagon3.vox,vox,13116,,,
 veh_wagon4,vox/veh_wagon4.vox,vox,13116,,,
+alien_bot1,vox/alien_bot1.vox,vox,2144,object,0,tall alien for testing
+alien_crawl1,vox/alien_crawl1.vox,vox,1336,object,0,flat alien for testing
