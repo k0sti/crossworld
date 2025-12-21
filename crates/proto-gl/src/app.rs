@@ -320,7 +320,7 @@ impl ApplicationHandler for ProtoGlApp {
         physics_world.add_collider(world_collider, world_body_handle);
 
         // Load models and spawn dynamic cubes
-        let models = load_vox_models(&self.config.spawning.models_path);
+        let models = load_vox_models(&self.config.spawning.models_csv, &self.config.spawning.models_path);
         let objects = spawn_cube_objects(&self.config.spawning, &models, &mut physics_world);
 
         // Create camera physics object for first-person mode
@@ -730,7 +730,9 @@ impl ProtoGlApp {
 
                     // Mesh is in [0,1] space, centered to [-0.5, 0.5] by renderer
                     // object_size is the desired edge length in normalized world units
-                    let scale = self.config.spawning.object_size;
+                    // Apply per-object scale: actual_scale = object_size * 2^scale_exp
+                    let scale_factor = 2.0_f32.powi(obj.scale_exp);
+                    let scale = self.config.spawning.object_size * scale_factor;
                     unsafe {
                         // Render solid mesh
                         mesh_renderer.render_mesh_with_scale(

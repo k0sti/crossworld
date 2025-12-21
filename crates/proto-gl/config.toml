@@ -12,8 +12,9 @@ gravity = -9.81
 timestep = 0.016666  # 60 Hz
 
 [spawning]
-spawn_count = 10
-models_path = "assets/models/vox/"
+spawn_count = 0
+models_csv = "assets/models.csv"  # CSV file with model definitions
+models_path = "assets/models/"     # Base directory for model files
 # World coordinates: origin at center, ground at y=-half_world
 min_height = 10.0    # Spawn above ground level (world units)
 max_height = 100.0   # Below top of world (world units)
@@ -36,9 +37,9 @@ spawn_position = [0.0, 10.0, 0.0]  # Spawn at center, above ground
 [structures]
 # Random structure placement settings
 enabled = true                        # Enable/disable structure placement
-models_path = "assets/models/vox/"    # Directory containing .vox files
-prefix = "obj_"                       # Only load files starting with this prefix
-count = 1                            # Number of structures to place
-spawn_radius = 2000.0                 # Spawn radius from center (world units)
+models_csv = "assets/models.csv"      # CSV file with model definitions
+models_path = "assets/models/"        # Base directory for model files
+count = 1                             # Number of structures to place
+spawn_radius = 20.0                 # Spawn radius from center (world units)
 seed = 0                              # Random seed (0 = random)
-max_depth = 3                         # Max model depth (3 = 8x8x8, 4 = 16x16x16)
+max_depth = 5                         # Max model depth (3 = 8x8x8, 4 = 16x16x16, 5 = 32x32x32)

@@ -1,6 +1,6 @@
 //! Structure placement module for randomly placing vox models into the world cube.
 //!
-//! This module loads vox models with a specific prefix (e.g., "obj_") and places them
+//! This module loads vox models marked as "structure" in models.csv and places them
 //! randomly within the world cube, aligned to the ground (y < 0, at -half_world) and
 //! rotated in 90° steps. The world uses origin-centered coordinates.
 
@@ -8,9 +8,24 @@ use crate::config::StructuresConfig;
 use cube::{load_vox_to_cube, Axis, Cube};
 use glam::{IVec3, Vec3};
 use rand::prelude::*;
+use serde::Deserialize;
 use std::fs;
 use std::path::Path;
 use std::rc::Rc;
+
+/// CSV record for models.csv
+#[derive(Debug, Clone, Deserialize)]
+struct CsvModelEntry {
+    name: String,
+    path: String,
+    file_type: String,
+    #[allow(dead_code)]
+    size: u64,
+    model_type: String,
+    scale: String,
+    #[allow(dead_code)]
+    notes: String,
+}
 
 /// A structure model loaded from a .vox file, ready for placement
 pub struct StructureModel {
@@ -20,78 +35,101 @@ pub struct StructureModel {
     pub name: String,
     /// Octree depth of this model
     pub depth: u32,
+    /// Scale exponent from CSV (actual_scale = 2^scale_exp)
+    pub scale_exp: i32,
 }
 
-/// Load structure models from directory matching the prefix filter
+/// Load structure models from CSV (models with model_type="structure")
 pub fn load_structure_models(config: &StructuresConfig) -> Vec<StructureModel> {
     let mut models = Vec::new();
-    let path = Path::new(&config.models_path);
+    let csv_path = Path::new(&config.models_csv);
 
-    if !path.exists() || !path.is_dir() {
+    if !csv_path.exists() {
         eprintln!(
-            "Warning: Structures directory not found: {}",
-            config.models_path
+            "Warning: Models CSV not found: {}",
+            config.models_csv
         );
         return models;
     }
 
-    if let Ok(entries) = fs::read_dir(path) {
-        for entry in entries.flatten() {
-            let file_path = entry.path();
+    // Load CSV and filter for structure models
+    let mut reader = match csv::Reader::from_path(csv_path) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("Warning: Failed to read CSV {}: {}", config.models_csv, e);
+            return models;
+        }
+    };
 
-            // Check if it's a .vox file
-            if file_path.extension().is_none_or(|ext| ext != "vox") {
+    let structure_entries: Vec<CsvModelEntry> = reader
+        .deserialize()
+        .filter_map(|r: Result<CsvModelEntry, _>| r.ok())
+        .filter(|e| e.model_type == "structure" && e.file_type == "vox")
+        .collect();
+
+    if structure_entries.is_empty() {
+        println!("No structure models found in CSV (model_type='structure')");
+        return models;
+    }
+
+    println!("Found {} structure entries in CSV", structure_entries.len());
+
+    for entry in structure_entries {
+        // Build full path: models_path + entry.path
+        let file_path = Path::new(&config.models_path).join(&entry.path);
+
+        if !file_path.exists() {
+            eprintln!("Warning: Model file not found: {}", file_path.display());
+            continue;
+        }
+
+        // Parse scale exponent
+        let scale_exp: i32 = entry.scale.trim().parse().unwrap_or(0);
+
+        // Read and load the vox file
+        let bytes = match fs::read(&file_path) {
+            Ok(b) => b,
+            Err(e) => {
+                eprintln!("Warning: Failed to read {}: {}", file_path.display(), e);
                 continue;
             }
+        };
 
-            // Check prefix filter
-            let file_name = file_path
-                .file_stem()
-                .unwrap_or_default()
-                .to_string_lossy()
-                .to_string();
-
-            if !file_name.starts_with(&config.prefix) {
-                continue;
+        // Load with bottom alignment (align.y = 0.0 means model starts at y=0)
+        // Center on X and Z axes (0.5), align bottom on Y (0.0)
+        match load_vox_to_cube(&bytes, Vec3::new(0.5, 0.0, 0.5)) {
+            Ok(cube) => {
+                let depth = calculate_cube_depth(&cube);
+                // Filter by max_depth for performance
+                if depth <= config.max_depth {
+                    models.push(StructureModel {
+                        cube,
+                        name: entry.name.clone(),
+                        depth,
+                        scale_exp,
+                    });
+                } else {
+                    println!(
+                        "Skipping {} (depth {} > max_depth {})",
+                        entry.name, depth, config.max_depth
+                    );
+                }
             }
-
-            // Read and load the vox file
-            let bytes = match fs::read(&file_path) {
-                Ok(b) => b,
-                Err(e) => {
-                    eprintln!("Warning: Failed to read {}: {}", file_path.display(), e);
-                    continue;
-                }
-            };
-
-            // Load with bottom alignment (align.y = 0.0 means model starts at y=0)
-            // Center on X and Z axes (0.5), align bottom on Y (0.0)
-            match load_vox_to_cube(&bytes, Vec3::new(0.5, 0.0, 0.5)) {
-                Ok(cube) => {
-                    let depth = calculate_cube_depth(&cube);
-                    // Filter by max_depth for performance
-                    if depth <= config.max_depth {
-                        models.push(StructureModel {
-                            cube,
-                            name: file_name,
-                            depth,
-                        });
-                    }
-                }
-                Err(e) => {
-                    eprintln!("Warning: Failed to load {}: {}", file_path.display(), e);
-                }
+            Err(e) => {
+                eprintln!("Warning: Failed to load {}: {}", file_path.display(), e);
             }
         }
     }
 
     // Sort by depth and show stats
     models.sort_by_key(|m| m.depth);
-    let depths: Vec<u32> = models.iter().map(|m| m.depth).collect();
+    let depths: Vec<(String, u32, i32)> = models
+        .iter()
+        .map(|m| (m.name.clone(), m.depth, m.scale_exp))
+        .collect();
     println!(
-        "Loaded {} structure models with prefix '{}', depths: {:?}",
+        "Loaded {} structure models: {:?}",
         models.len(),
-        config.prefix,
         depths
     );
     models
@@ -237,13 +275,20 @@ pub fn place_structures(
         // Calculate model size at its native resolution
         let model_size = 1u32 << model.depth;
 
-        // Scale = model.depth + depth_offset means model voxels match terrain voxel size
+        // Base scale = model.depth + depth_offset means model voxels match terrain voxel size
         // A depth-2 model (4x4x4) with depth_offset=6 gets scale=8
         // This means the 4x4x4 model becomes 4*2^6 = 256 world voxels per axis
-        let scale = model.depth + depth_offset;
+        //
+        // Additional scaling from CSV: actual_scale = 2^scale_exp
+        // Positive scale_exp = larger, Negative scale_exp = smaller
+        // Final scale = base_scale + scale_exp
+        let base_scale = (model.depth + depth_offset) as i32;
+        let final_scale = (base_scale + model.scale_exp).max(0) as u32;
 
         // Calculate scaled model size in world coordinates
-        let scaled_model_size = model_size << depth_offset; // model_size * 2^depth_offset
+        // scale_exp affects the model size: if positive, model is larger
+        let effective_depth_offset = (depth_offset as i32 + model.scale_exp).max(0) as u32;
+        let scaled_model_size = model_size << effective_depth_offset;
 
         // Ensure position is within bounds
         let x = x.clamp(0, (world_size - scaled_model_size) as i32);
@@ -253,7 +298,7 @@ pub fn place_structures(
         let offset = IVec3::new(x, y, z);
 
         println!(
-            "  Placing {} at ({}, {}, {}) rotation={}° native_size={} scaled_size={} scale={}...",
+            "  Placing {} at ({}, {}, {}) rotation={}° native_size={} scaled_size={} scale={} (base={} + csv_scale={})...",
             model.name,
             x,
             y,
@@ -261,9 +306,11 @@ pub fn place_structures(
             rotation * 90,
             model_size,
             scaled_model_size,
-            scale
+            final_scale,
+            base_scale,
+            model.scale_exp
         );
-        result = result.update_depth_tree(world_depth, offset, scale, &rotated_cube);
+        result = result.update_depth_tree(world_depth, offset, final_scale, &rotated_cube);
         println!("    Done.");
     }
 

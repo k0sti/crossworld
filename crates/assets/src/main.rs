@@ -32,21 +32,26 @@ enum Commands {
     },
 }
 
+/// CSV record for models.csv
+/// Also used during directory traversal
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct ModelEntry {
+struct CsvModelEntry {
     name: String,
     path: String,
-    #[serde(rename = "type")]
-    model_type: String,
+    file_type: String,
     size: u64,
+    /// Model type: "structure" (placed in world) or "object" (spawned as physics objects)
+    /// Empty means model is not used
+    #[serde(default)]
+    model_type: String,
+    /// Scale exponent: actual_scale = 2^scale. 0 or empty = no scaling, negative = smaller
+    #[serde(default)]
+    scale: String,
+    /// Free-form notes about the model
+    #[serde(default)]
+    notes: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-struct ModelsIndex {
-    generated: String,
-    count: usize,
-    models: Vec<ModelEntry>,
-}
 
 #[derive(Debug, Serialize, Deserialize)]
 struct AvatarsIndex {
@@ -71,7 +76,7 @@ struct MaterialsData {
 fn traverse_directory(
     dir: &Path,
     base_dir: &Path,
-    models: &mut Vec<ModelEntry>,
+    models: &mut Vec<CsvModelEntry>,
 ) -> std::io::Result<()> {
     if !dir.is_dir() {
         return Ok(());
@@ -101,11 +106,14 @@ fn traverse_directory(
 
                     let metadata = fs::metadata(&path)?;
 
-                    models.push(ModelEntry {
+                    models.push(CsvModelEntry {
                         name,
                         path: relative_path,
-                        model_type: ext_str,
+                        file_type: ext_str,
                         size: metadata.len(),
+                        model_type: String::new(),
+                        scale: String::new(),
+                        notes: String::new(),
                     });
                 }
             }
@@ -118,6 +126,7 @@ fn traverse_directory(
 fn cmd_index() -> Result<(), Box<dyn std::error::Error>> {
     let assets_dir = PathBuf::from("assets");
     let models_dir = assets_dir.join("models");
+    let csv_path = assets_dir.join("models.csv");
 
     if !models_dir.exists() {
         eprintln!("Error: assets/models directory not found");
@@ -126,35 +135,81 @@ fn cmd_index() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Scanning assets/models directory...");
 
+    // Load existing CSV if it exists to preserve model_type, scale, and notes
+    let existing_entries: HashMap<String, CsvModelEntry> = if csv_path.exists() {
+        let mut reader = csv::Reader::from_path(&csv_path)?;
+        reader
+            .deserialize()
+            .filter_map(|r: Result<CsvModelEntry, _>| r.ok())
+            .map(|e| (e.name.clone(), e))
+            .collect()
+    } else {
+        HashMap::new()
+    };
+
+    if !existing_entries.is_empty() {
+        println!("Loaded {} existing entries from models.csv", existing_entries.len());
+    }
+
     let mut models = Vec::new();
     traverse_directory(&models_dir, &models_dir, &mut models)?;
 
     // Sort models by name
     models.sort_by(|a, b| a.name.cmp(&b.name));
 
-    let vox_count = models.iter().filter(|m| m.model_type == "vox").count();
-    let glb_count = models.iter().filter(|m| m.model_type == "glb").count();
+    // Merge with existing entries to preserve user-edited fields
+    let merged_models: Vec<CsvModelEntry> = models
+        .iter()
+        .map(|m| {
+            if let Some(existing) = existing_entries.get(&m.name) {
+                // Preserve user-edited fields, but update file info
+                CsvModelEntry {
+                    name: m.name.clone(),
+                    path: m.path.clone(),
+                    file_type: m.file_type.clone(),
+                    size: m.size,
+                    model_type: existing.model_type.clone(),
+                    scale: existing.scale.clone(),
+                    notes: existing.notes.clone(),
+                }
+            } else {
+                // New model - use defaults
+                CsvModelEntry {
+                    name: m.name.clone(),
+                    path: m.path.clone(),
+                    file_type: m.file_type.clone(),
+                    size: m.size,
+                    model_type: String::new(),
+                    scale: String::new(),
+                    notes: String::new(),
+                }
+            }
+        })
+        .collect();
 
-    println!("Found {} models", models.len());
+    let vox_count = merged_models.iter().filter(|m| m.file_type == "vox").count();
+    let glb_count = merged_models.iter().filter(|m| m.file_type == "glb").count();
+    let structure_count = merged_models.iter().filter(|m| m.model_type == "structure").count();
+    let object_count = merged_models.iter().filter(|m| m.model_type == "object").count();
+
+    println!("Found {} models", merged_models.len());
     println!("  - VOX: {}", vox_count);
     println!("  - GLB: {}", glb_count);
+    println!("  - Structures: {}", structure_count);
+    println!("  - Objects: {}", object_count);
 
-    // Generate models.json
-    let models_index = ModelsIndex {
-        generated: chrono::Utc::now().to_rfc3339(),
-        count: models.len(),
-        models: models.clone(),
-    };
-
-    let models_json = serde_json::to_string_pretty(&models_index)?;
-    let models_output = assets_dir.join("models.json");
-    fs::write(&models_output, models_json)?;
-    println!("\nGenerated {}", models_output.display());
+    // Write models.csv
+    let mut writer = csv::Writer::from_path(&csv_path)?;
+    for model in &merged_models {
+        writer.serialize(model)?;
+    }
+    writer.flush()?;
+    println!("\nGenerated {}", csv_path.display());
 
     // Generate avatars.json (chr_ vox models only)
-    let avatars: Vec<[String; 2]> = models
+    let avatars: Vec<[String; 2]> = merged_models
         .iter()
-        .filter(|m| m.model_type == "vox" && m.name.starts_with("chr_"))
+        .filter(|m| m.file_type == "vox" && m.name.starts_with("chr_"))
         .map(|m| {
             [
                 m.name.clone(),
