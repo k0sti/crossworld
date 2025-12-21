@@ -1,6 +1,4 @@
-use crossworld_physics::{
-    create_box_collider, glam::Vec3, CubeObject, PhysicsWorld,
-};
+use crossworld_physics::{create_box_collider, glam::Vec3, CubeObject, PhysicsWorld};
 
 fn main() {
     println!("=== Basic Physics Simulation ===\n");

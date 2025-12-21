@@ -279,7 +279,6 @@ impl CharacterController {
         world.remove_rigid_body(self.body_handle);
         // Collider is automatically removed with the rigid body
     }
-
 }
 
 /// Result of a raycast query

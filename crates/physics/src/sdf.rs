@@ -411,10 +411,18 @@ mod tests {
 
         // Normal should point outward from faces
         let normal = box_sdf.normal(Vec3::new(1.5, 0.0, 0.0));
-        assert!((normal - Vec3::X).length() < 0.1, "Expected +X, got {:?}", normal);
+        assert!(
+            (normal - Vec3::X).length() < 0.1,
+            "Expected +X, got {:?}",
+            normal
+        );
 
         let normal = box_sdf.normal(Vec3::new(-1.5, 0.0, 0.0));
-        assert!((normal - (-Vec3::X)).length() < 0.1, "Expected -X, got {:?}", normal);
+        assert!(
+            (normal - (-Vec3::X)).length() < 0.1,
+            "Expected -X, got {:?}",
+            normal
+        );
     }
 
     #[test]
