@@ -4,6 +4,7 @@
 pub mod axis;
 pub mod core;
 pub mod fabric;
+pub mod function;
 pub mod io;
 pub mod material;
 pub mod mesh;
@@ -45,6 +46,12 @@ pub use io::{
 
 // Re-export fabric types
 pub use fabric::{AdditiveState, FabricConfig, FabricGenerator};
+
+// Re-export function types
+pub use function::{
+    compile as compile_function, parse_expr, BinOpKind, BuiltinFunc, CachedCube, CompileError,
+    CpuFunction, DynamicCube, EvalContext, Expr, MatchPattern, ParseError, UnaryOpKind, VarId,
+};
 
 // Re-export render types
 pub use render::{

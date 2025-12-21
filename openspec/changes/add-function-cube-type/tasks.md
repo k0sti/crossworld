@@ -1,56 +1,56 @@
 # Tasks: Add Function Cube Type
 
-## Phase 1: Core Expression System (CPU)
+## Phase 1: Core Expression System (CPU) ✅ COMPLETE
 
 ### 1.1 AST Definition
-- [ ] Create `crates/cube/src/function/mod.rs` with module structure
-- [ ] Define `Expr` enum with all expression variants
-- [ ] Define `VarId`, `BinOpKind`, `UnaryOpKind`, `BuiltinFunc` enums
-- [ ] Implement `Display` trait for AST pretty-printing
-- [ ] Add helper methods: `contains_var()`, `contains_func()`, `estimate_complexity()`
-- [ ] Add basic unit tests for AST construction
+- [x] Create `crates/cube/src/function/mod.rs` with module structure
+- [x] Define `Expr` enum with all expression variants
+- [x] Define `VarId`, `BinOpKind`, `UnaryOpKind`, `BuiltinFunc` enums
+- [x] Implement `Display` trait for AST pretty-printing
+- [x] Add helper methods: `contains_var()`, `contains_func()`, `estimate_complexity()`
+- [x] Add basic unit tests for AST construction
 
 ### 1.2 Parser Implementation
-- [ ] Add `nom` dependency to cube crate
-- [ ] Create `crates/cube/src/function/parser.rs`
-- [ ] Implement tokenizer for numbers, identifiers, operators
-- [ ] Parse arithmetic expressions with operator precedence
-- [ ] Parse comparison and logical operators
-- [ ] Parse function calls (sin, cos, noise, etc.)
-- [ ] Parse `if-then-else` expressions
-- [ ] Parse `let` bindings
-- [ ] Parse `match` expressions
-- [ ] Parse material constants (STONE, GRASS, etc.)
-- [ ] Comprehensive parser tests with edge cases
-- [ ] Error messages with source location
+- [x] Add `nom` dependency to cube crate (already present)
+- [x] Create `crates/cube/src/function/parser.rs`
+- [x] Implement tokenizer for numbers, identifiers, operators
+- [x] Parse arithmetic expressions with operator precedence
+- [x] Parse comparison and logical operators
+- [x] Parse function calls (sin, cos, noise, etc.)
+- [x] Parse `if-then-else` expressions
+- [x] Parse `let` bindings
+- [x] Parse `match` expressions
+- [x] Parse material constants (STONE, GRASS, etc.)
+- [x] Comprehensive parser tests with edge cases
+- [x] Error messages with source location
 
 ### 1.3 fasteval Integration
-- [ ] Add `fasteval` dependency to cube crate
-- [ ] Create `crates/cube/src/function/cpu/mod.rs`
-- [ ] Create `crates/cube/src/function/cpu/fasteval.rs`
-- [ ] Implement `AstToFasteval` converter:
-  - [ ] Convert `if/then/else` to ternary
-  - [ ] Convert `match` to nested ternary
-  - [ ] Handle `let` bindings via substitution
-- [ ] Register custom functions (noise, fbm, turbulence)
-- [ ] Implement `CpuFunction` struct with `compile()` and `eval()`
-- [ ] Unit tests for CPU evaluation
+- [x] Add `fasteval` dependency to cube crate
+- [x] Create `crates/cube/src/function/cpu/mod.rs`
+- [x] Implement `AstToFasteval` converter:
+  - [x] Convert `if/then/else` to ternary (via multiplication)
+  - [x] Convert `match` to nested ternary
+  - [x] Handle `let` bindings via substitution
+- [x] Register custom functions (noise, fbm, turbulence)
+- [x] Implement `CpuFunction` struct with `compile()` and `eval()`
+- [x] Unit tests for CPU evaluation
 
 ### 1.4 CPU Noise Implementation
-- [ ] Create `crates/cube/src/function/cpu/noise.rs`
-- [ ] Implement Perlin noise 3D
-- [ ] Implement Simplex noise 3D (optional, can reuse from world crate)
-- [ ] Implement FBM (Fractal Brownian Motion)
-- [ ] Implement turbulence
-- [ ] Tests with deterministic seeds
+- [x] Create `crates/cube/src/function/cpu/noise.rs`
+- [x] Implement Value noise 3D (primary implementation)
+- [x] Implement Perlin noise 3D (available for future use)
+- [x] Implement FBM (Fractal Brownian Motion)
+- [x] Implement turbulence
+- [x] Implement ridged noise (available for future use)
+- [x] Tests with deterministic seeds
 
 ### 1.5 DynamicCube Type
-- [ ] Create `crates/cube/src/dynamic_cube.rs`
-- [ ] Define `DynamicCube` enum (Static, Function)
-- [ ] Implement `get_material()` for CPU evaluation
-- [ ] Implement `materialize()` for bulk CPU evaluation
-- [ ] Add caching for time-invariant functions
-- [ ] Integration tests
+- [x] Create `crates/cube/src/function/dynamic_cube.rs`
+- [x] Define `DynamicCube` enum (Static, Function)
+- [x] Implement `get_material()` for CPU evaluation
+- [x] Implement `materialize()` for bulk CPU evaluation
+- [x] Add caching for time-invariant functions
+- [x] Integration tests
 
 ## Phase 2: GPU Backend (WGSL)
 
@@ -172,11 +172,11 @@
 
 ## Verification Milestones
 
-### M1: Parser Works
+### M1: Parser Works ✅
 - Can parse `sin(x) + cos(y)` to valid AST
 - Error message for invalid syntax
 
-### M2: CPU Backend Works
+### M2: CPU Backend Works ✅
 - Can compile and evaluate with fasteval
 - `sin(0)` returns `0.0`
 - Noise functions return deterministic values
@@ -222,7 +222,7 @@ Phase 5 (Polish) <──┘
 
 | Phase | Tasks | Complexity | Notes |
 |-------|-------|------------|-------|
-| Phase 1 | 25 | High | Parser, fasteval integration |
+| Phase 1 | 25 | High | Parser, fasteval integration ✅ |
 | Phase 2 | 18 | High | WGSL codegen, GPU pipeline |
 | Phase 3 | 7 | Medium | Integration with existing systems |
 | Phase 4 | 6 | Low | WASM bindings |

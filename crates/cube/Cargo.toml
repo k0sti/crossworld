@@ -31,6 +31,9 @@ thiserror = "2.0"
 # Parsing
 nom = "7.1"
 
+# Expression evaluation (CPU backend)
+fasteval = "0.2"
+
 # Image loading (optional)
 image = { version = "0.25", optional = true }
 
