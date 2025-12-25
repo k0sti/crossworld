@@ -10,13 +10,7 @@ root_cube = "> [32 65 0 0 89 90 0 111]"
 [physics]
 gravity = -9.81
 timestep = 0.016666  # 60 Hz
-world_collision_strategy = "hybrid"
 debug_steps = 0
-
-[physics.chunked]
-# Settings for chunked collision strategy
-chunk_size = 64.0       # World units per chunk (smaller = more granular loading)
-load_radius = 128.0     # Distance to load chunks around objects
 
 [spawning]
 spawn_count = 50

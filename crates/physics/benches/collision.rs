@@ -1,13 +1,11 @@
-//! Benchmark for world collision strategies
+//! Benchmark for world collision
 //!
-//! Compares initialization time, per-frame update time, and physics step time
-//! for Monolithic, Chunked, and Hybrid world collision strategies.
+//! Benchmarks initialization time and per-frame resolution time for the
+//! world collision system using direct octree queries.
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use crossworld_physics::collision::Aabb;
-use crossworld_physics::world_collider::{
-    create_world_collider, ChunkedCollider, HybridOctreeCollider, MonolithicCollider, WorldCollider,
-};
+use crossworld_physics::world_collider::WorldCollider;
 use crossworld_physics::PhysicsWorld;
 use cube::{parse_csm, Cube};
 use glam::Vec3;
@@ -24,23 +22,6 @@ fn create_test_world(_depth: u32) -> Rc<Cube<u8>> {
     ]";
 
     Rc::new(parse_csm(csm).expect("Failed to parse test cube"))
-}
-
-/// Create a more complex test world with varied terrain
-#[allow(dead_code)]
-fn create_complex_world() -> Rc<Cube<u8>> {
-    // Nested structure with more detail
-    let csm = ">an [
-        [
-            [32 32 32 32 0 0 0 0]
-            [32 32 32 32 0 0 0 0]
-            [32 32 32 32 0 0 0 0]
-            [32 32 32 32 0 0 0 0]
-            0 0 0 0
-        ]
-    ]";
-
-    Rc::new(parse_csm(csm).expect("Failed to parse complex cube"))
 }
 
 /// Benchmark configuration
@@ -121,14 +102,14 @@ fn collect_aabbs(
         .collect()
 }
 
-fn bench_monolithic_init(c: &mut Criterion) {
+fn bench_world_collider_init(c: &mut Criterion) {
     let cube = create_test_world(3);
     let config = BenchConfig::default();
 
-    c.bench_function("monolithic_init", |b| {
+    c.bench_function("world_collider_init", |b| {
         b.iter(|| {
             let mut physics = PhysicsWorld::new(Vec3::new(0.0, -9.81, 0.0));
-            let mut collider = MonolithicCollider::new();
+            let mut collider = WorldCollider::new();
             collider.init(
                 &cube,
                 config.world_size,
@@ -140,51 +121,13 @@ fn bench_monolithic_init(c: &mut Criterion) {
     });
 }
 
-fn bench_chunked_init(c: &mut Criterion) {
-    let cube = create_test_world(3);
-    let config = BenchConfig::default();
-
-    c.bench_function("chunked_init", |b| {
-        b.iter(|| {
-            let mut physics = PhysicsWorld::new(Vec3::new(0.0, -9.81, 0.0));
-            let mut collider = ChunkedCollider::new(64.0, 128.0);
-            collider.init(
-                &cube,
-                config.world_size,
-                config.border_materials,
-                &mut physics,
-            );
-            black_box(collider.metrics())
-        });
-    });
-}
-
-fn bench_hybrid_init(c: &mut Criterion) {
-    let cube = create_test_world(3);
-    let config = BenchConfig::default();
-
-    c.bench_function("hybrid_init", |b| {
-        b.iter(|| {
-            let mut physics = PhysicsWorld::new(Vec3::new(0.0, -9.81, 0.0));
-            let mut collider = HybridOctreeCollider::new();
-            collider.init(
-                &cube,
-                config.world_size,
-                config.border_materials,
-                &mut physics,
-            );
-            black_box(collider.metrics())
-        });
-    });
-}
-
-fn bench_monolithic_frame(c: &mut Criterion) {
+fn bench_world_collider_frame(c: &mut Criterion) {
     let cube = create_test_world(3);
     let config = BenchConfig::default();
 
     // Setup
     let mut physics = PhysicsWorld::new(Vec3::new(0.0, -9.81, 0.0));
-    let mut collider = MonolithicCollider::new();
+    let mut collider = WorldCollider::new();
     collider.init(
         &cube,
         config.world_size,
@@ -198,74 +141,10 @@ fn bench_monolithic_frame(c: &mut Criterion) {
         config.spawn_height,
     );
 
-    c.bench_function("monolithic_frame", |b| {
-        b.iter(|| {
-            let aabbs = collect_aabbs(&physics, &handles);
-            collider.update(&aabbs, &mut physics);
-            physics.step(1.0 / 60.0);
-            black_box(())
-        });
-    });
-}
-
-fn bench_chunked_frame(c: &mut Criterion) {
-    let cube = create_test_world(3);
-    let config = BenchConfig::default();
-
-    // Setup
-    let mut physics = PhysicsWorld::new(Vec3::new(0.0, -9.81, 0.0));
-    let mut collider = ChunkedCollider::new(64.0, 128.0);
-    collider.init(
-        &cube,
-        config.world_size,
-        config.border_materials,
-        &mut physics,
-    );
-    let handles = spawn_dynamic_bodies(
-        &mut physics,
-        config.dynamic_count,
-        config.spawn_radius,
-        config.spawn_height,
-    );
-
-    // Initial chunk loading
-    let aabbs = collect_aabbs(&physics, &handles);
-    collider.update(&aabbs, &mut physics);
-
-    c.bench_function("chunked_frame", |b| {
-        b.iter(|| {
-            let aabbs = collect_aabbs(&physics, &handles);
-            collider.update(&aabbs, &mut physics);
-            physics.step(1.0 / 60.0);
-            black_box(())
-        });
-    });
-}
-
-fn bench_hybrid_frame(c: &mut Criterion) {
-    let cube = create_test_world(3);
-    let config = BenchConfig::default();
-
-    // Setup
-    let mut physics = PhysicsWorld::new(Vec3::new(0.0, -9.81, 0.0));
-    let mut collider = HybridOctreeCollider::new();
-    collider.init(
-        &cube,
-        config.world_size,
-        config.border_materials,
-        &mut physics,
-    );
-    let handles = spawn_dynamic_bodies(
-        &mut physics,
-        config.dynamic_count,
-        config.spawn_radius,
-        config.spawn_height,
-    );
-
-    c.bench_function("hybrid_frame", |b| {
+    c.bench_function("world_collider_frame", |b| {
         b.iter(|| {
             physics.step(1.0 / 60.0);
-            // Hybrid resolves collision after physics step
+            // Resolve world collision after physics step
             let aabbs = collect_aabbs(&physics, &handles);
             for (handle, aabb) in &aabbs {
                 let correction = collider.resolve_collision(*handle, aabb);
@@ -276,29 +155,17 @@ fn bench_hybrid_frame(c: &mut Criterion) {
     });
 }
 
-fn bench_factory_creation(c: &mut Criterion) {
-    c.bench_function("factory_monolithic", |b| {
-        b.iter(|| black_box(create_world_collider("monolithic", 64.0, 128.0)));
-    });
-
-    c.bench_function("factory_chunked", |b| {
-        b.iter(|| black_box(create_world_collider("chunked", 64.0, 128.0)));
-    });
-
-    c.bench_function("factory_hybrid", |b| {
-        b.iter(|| black_box(create_world_collider("hybrid", 64.0, 128.0)));
+fn bench_world_collider_creation(c: &mut Criterion) {
+    c.bench_function("world_collider_new", |b| {
+        b.iter(|| black_box(WorldCollider::new()));
     });
 }
 
 criterion_group!(
     benches,
-    bench_monolithic_init,
-    bench_chunked_init,
-    bench_hybrid_init,
-    bench_monolithic_frame,
-    bench_chunked_frame,
-    bench_hybrid_frame,
-    bench_factory_creation,
+    bench_world_collider_init,
+    bench_world_collider_frame,
+    bench_world_collider_creation,
 );
 
 criterion_main!(benches);

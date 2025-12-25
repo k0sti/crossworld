@@ -51,47 +51,9 @@ impl WorldConfig {
 pub struct PhysicsConfig {
     pub gravity: f32,
     pub timestep: f32,
-    /// World collision strategy: "monolithic", "chunked", or "hybrid"
-    #[serde(default = "default_world_collision_strategy")]
-    pub world_collision_strategy: String,
-    /// Chunked collider configuration
-    #[serde(default)]
-    pub chunked: ChunkedColliderConfig,
     /// Number of steps to run in debug mode (0 = infinite)
     #[serde(default)]
     pub debug_steps: u32,
-}
-
-fn default_world_collision_strategy() -> String {
-    "monolithic".to_string()
-}
-
-/// Configuration for chunked world collision strategy
-#[derive(Debug, Deserialize, Clone)]
-pub struct ChunkedColliderConfig {
-    /// Size of each chunk in world units
-    #[serde(default = "default_chunk_size")]
-    pub chunk_size: f32,
-    /// Distance to load chunks around objects
-    #[serde(default = "default_load_radius")]
-    pub load_radius: f32,
-}
-
-fn default_chunk_size() -> f32 {
-    64.0
-}
-
-fn default_load_radius() -> f32 {
-    128.0
-}
-
-impl Default for ChunkedColliderConfig {
-    fn default() -> Self {
-        Self {
-            chunk_size: default_chunk_size(),
-            load_radius: default_load_radius(),
-        }
-    }
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -223,8 +185,6 @@ impl Default for ProtoGlConfig {
             physics: PhysicsConfig {
                 gravity: -9.81,
                 timestep: 0.016666,
-                world_collision_strategy: default_world_collision_strategy(),
-                chunked: ChunkedColliderConfig::default(),
                 debug_steps: 0,
             },
             spawning: SpawningConfig {
