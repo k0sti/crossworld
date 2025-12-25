@@ -764,17 +764,11 @@ impl ProtoGlApp {
                         None
                     };
 
-                    if self.config.physics.debug_steps > 0 {
+                    if self.config.physics.debug_steps > 0 && position.y < 0.0 {
                         println!(
-                            "[PHYSICS] Frame {}: Obj {} at pos {:?}, correction {:?}",
-                            self.frame_count, i, position, correction
+                            "[WARNING] Obj {} FELL THROUGH GROUND! y = {:.3}",
+                            i, position.y
                         );
-                        if position.y < 0.0 {
-                            println!(
-                                "[WARNING] Obj {} FELL THROUGH GROUND! y = {:.3}",
-                                i, position.y
-                            );
-                        }
                     }
 
                     // Apply correction to body position and dampen velocity

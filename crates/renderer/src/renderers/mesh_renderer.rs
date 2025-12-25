@@ -545,6 +545,44 @@ impl MeshRenderer {
         viewport_height: i32,
     ) {
         unsafe {
+            self.render_cubebox_wireframe_colored(
+                gl,
+                position,
+                rotation,
+                normalized_size,
+                scale,
+                [1.0, 1.0, 1.0], // Default white color
+                camera,
+                viewport_width,
+                viewport_height,
+            );
+        }
+    }
+
+    /// Render a wireframe bounding box with a specific color
+    ///
+    /// # Arguments
+    /// * `normalized_size` - Model size as fraction of octree (model_size / octree_size)
+    /// * `scale` - Uniform world scale applied to the mesh
+    /// * `color` - RGB color for the wireframe [0.0-1.0]
+    ///
+    /// # Safety
+    ///
+    /// Must be called with an active GL context on the current thread.
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn render_cubebox_wireframe_colored(
+        &self,
+        gl: &Context,
+        position: glam::Vec3,
+        rotation: glam::Quat,
+        normalized_size: glam::Vec3,
+        scale: f32,
+        color: [f32; 3],
+        camera: &Camera,
+        viewport_width: i32,
+        viewport_height: i32,
+    ) {
+        unsafe {
             let Some(program) = self.program else { return };
             let Some(ref wireframe_mesh) = self.wireframe_box else {
                 return;
@@ -590,10 +628,20 @@ impl MeshRenderer {
             let diffuse_strength_loc = gl.get_uniform_location(program, "uDiffuseStrength");
             gl.uniform_1_f32(diffuse_strength_loc.as_ref(), 0.0);
 
+            // Set wireframe color via vertex color override uniform
+            let color_override_loc = gl.get_uniform_location(program, "uColorOverride");
+            gl.uniform_3_f32(color_override_loc.as_ref(), color[0], color[1], color[2]);
+
+            let use_color_override_loc = gl.get_uniform_location(program, "uUseColorOverride");
+            gl.uniform_1_i32(use_color_override_loc.as_ref(), 1);
+
             // Draw wireframe box using LINES
             gl.bind_vertex_array(Some(wireframe_mesh.vao));
             gl.draw_elements(LINES, wireframe_mesh.index_count, UNSIGNED_INT, 0);
             gl.bind_vertex_array(None);
+
+            // Disable color override
+            gl.uniform_1_i32(use_color_override_loc.as_ref(), 0);
         }
     }
 
