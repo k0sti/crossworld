@@ -58,6 +58,7 @@ impl Default for EvalContext {
 }
 
 /// Compiled CPU function for expression evaluation
+#[derive(Debug)]
 pub struct CpuFunction {
     /// The fasteval expression string (converted from AST)
     expr_string: String,

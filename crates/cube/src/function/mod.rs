@@ -67,11 +67,16 @@
 mod ast;
 mod cpu;
 mod dynamic_cube;
+mod gpu;
 mod parser;
+
+#[cfg(test)]
+mod tests;
 
 pub use ast::{BinOpKind, BuiltinFunc, Expr, MatchPattern, UnaryOpKind, VarId};
 pub use cpu::{CpuFunction, EvalContext};
 pub use dynamic_cube::{CachedCube, DynamicCube};
+pub use gpu::{GpuCompileError, GpuFunction, WgslCodegen};
 pub use parser::{parse_expr, ParseError};
 
 /// Compile an expression string to a CPU-evaluable function
@@ -89,4 +94,14 @@ pub enum CompileError {
 
     #[error("CPU compile error: {0}")]
     CpuCompile(#[from] cpu::CpuCompileError),
+
+    #[error("GPU compile error: {0}")]
+    GpuCompile(#[from] gpu::GpuCompileError),
+}
+
+/// Compile an expression string to a GPU-evaluable function
+pub fn compile_gpu(source: &str) -> Result<GpuFunction, CompileError> {
+    let ast = parse_expr(source)?;
+    let gpu_fn = GpuFunction::compile(&ast)?;
+    Ok(gpu_fn)
 }
