@@ -530,9 +530,21 @@ mod tests {
         // Rotated AABB should be symmetric around the position (origin)
         // Because the local AABB is centered, rotation keeps the box centered
         let center = aabb_rot.center();
-        assert!(center.x.abs() < 0.0001, "Center X should be ~0, got {}", center.x);
-        assert!(center.y.abs() < 0.0001, "Center Y should be ~0, got {}", center.y);
-        assert!(center.z.abs() < 0.0001, "Center Z should be ~0, got {}", center.z);
+        assert!(
+            center.x.abs() < 0.0001,
+            "Center X should be ~0, got {}",
+            center.x
+        );
+        assert!(
+            center.y.abs() < 0.0001,
+            "Center Y should be ~0, got {}",
+            center.y
+        );
+        assert!(
+            center.z.abs() < 0.0001,
+            "Center Z should be ~0, got {}",
+            center.z
+        );
 
         // Y-axis rotation should expand X and Z dimensions (sqrt(2) * original)
         let expected_xz = 0.5 * std::f32::consts::SQRT_2;

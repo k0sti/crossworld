@@ -2,49 +2,23 @@
 //!
 //! This module provides utilities for generating Rapier3D colliders from
 //! voxel octree structures. It uses the cube crate's face traversal to
-//! identify exposed faces and creates colliders from them.
+//! identify exposed faces and creates triangle mesh colliders from them.
 //!
-//! # Collider Modes
-//!
-//! Two modes are available for generating collision geometry:
-//!
-//! - **Trimesh**: Uses triangle mesh colliders (two triangles per face). This provides
-//!   accurate, infinitely thin collision surfaces with no thickness artifacts.
-//!   Best for world terrain and static geometry.
-//!
-//! - **Cuboids**: Uses thick cuboid colliders (0.5 unit shells). This is the legacy
-//!   approach, kept for compatibility. May cause tunneling or thickness artifacts.
+//! Triangle mesh colliders provide accurate, infinitely thin collision surfaces
+//! with no thickness artifacts. Best for world terrain and static geometry.
 
 use crate::collision::Aabb;
 use cube::{visit_faces, visit_faces_in_region, Cube, CubeBox, FaceInfo, RegionBounds};
-use glam::{Quat, Vec3};
+use glam::Vec3;
 use rapier3d::prelude::*;
 use std::rc::Rc;
 
-/// Collider generation mode for voxel faces
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum ColliderMode {
-    /// Use triangle mesh colliders (two triangles per face)
-    ///
-    /// Creates infinitely thin collision surfaces with accurate edge handling.
-    /// Recommended for world terrain and static geometry.
-    #[default]
-    Trimesh,
-
-    /// Use thick cuboid colliders (legacy mode)
-    ///
-    /// Creates 0.5-unit thick shell colliders for each face.
-    /// May cause thickness artifacts but compatible with older code.
-    Cuboids,
-}
-
-/// Builder for generating collision geometry from voxel cubes
+/// Builder for generating triangle mesh collision geometry from voxel cubes
 ///
 /// Uses the cube crate's face traversal to iterate through exposed voxel faces
-/// and generates colliders based on the selected mode.
+/// and generates triangle mesh colliders.
 pub struct VoxelColliderBuilder {
     rectangles: Vec<FaceRectangle>,
-    mode: ColliderMode,
 }
 
 /// Represents a face rectangle for collision generation
@@ -59,25 +33,11 @@ struct FaceRectangle {
 }
 
 impl VoxelColliderBuilder {
-    /// Create a new collider builder with default mode (Trimesh)
+    /// Create a new collider builder
     pub fn new() -> Self {
         Self {
             rectangles: Vec::new(),
-            mode: ColliderMode::default(),
         }
-    }
-
-    /// Create a new collider builder with the specified mode
-    pub fn with_mode(mode: ColliderMode) -> Self {
-        Self {
-            rectangles: Vec::new(),
-            mode,
-        }
-    }
-
-    /// Set the collider generation mode
-    pub fn set_mode(&mut self, mode: ColliderMode) {
-        self.mode = mode;
     }
 
     /// Generate a compound collider from a voxel cube
@@ -416,18 +376,13 @@ impl VoxelColliderBuilder {
     }
 
     /// Build a collider with scale and offset
-    ///
-    /// Dispatches to trimesh or cuboid generation based on the builder's mode.
     fn build_collider_with_scale(self, scale: f32, offset: Vec3) -> Collider {
         if self.rectangles.is_empty() {
             // Empty collider - just use a tiny sphere
             return ColliderBuilder::ball(0.001).build();
         }
 
-        match self.mode {
-            ColliderMode::Trimesh => self.build_trimesh_collider(scale, offset),
-            ColliderMode::Cuboids => self.build_cuboid_compound_collider(scale, offset),
-        }
+        self.build_trimesh_collider(scale, offset)
     }
 
     /// Build a triangle mesh collider from face rectangles
@@ -492,51 +447,17 @@ impl VoxelColliderBuilder {
 
         // Use FIX_INTERNAL_EDGES to improve collision quality at face boundaries
         // Fall back to regular trimesh if flags fail (shouldn't happen with valid data)
-        match ColliderBuilder::trimesh_with_flags(vertices, indices, TriMeshFlags::FIX_INTERNAL_EDGES)
-        {
+        match ColliderBuilder::trimesh_with_flags(
+            vertices,
+            indices,
+            TriMeshFlags::FIX_INTERNAL_EDGES,
+        ) {
             Ok(builder) => builder.build(),
             Err(_) => {
                 // This shouldn't happen with valid face data, but handle gracefully
                 ColliderBuilder::ball(0.001).build()
             }
         }
-    }
-
-    /// Build a compound collider using thick cuboids (legacy mode)
-    fn build_cuboid_compound_collider(self, scale: f32, offset: Vec3) -> Collider {
-        // Thickness is fixed (thin shell), face size scales with world
-        let thickness = 0.5; // Fixed thin shell thickness in world units
-        let shapes: Vec<_> = self
-            .rectangles
-            .iter()
-            .map(|rect| {
-                // rect.size is now Vec3 - use components for face dimensions
-                // The face lies on a plane perpendicular to the normal
-                // Determine which two axes form the face based on normal direction
-                let (half_width, half_height) = Self::face_dimensions(&rect.size, &rect.normal);
-                let half_width = half_width * scale / 2.0;
-                let half_height = half_height * scale / 2.0;
-
-                // Create cuboid shape
-                // The cuboid is oriented with Z as the normal direction initially
-                let shape = SharedShape::cuboid(half_width, half_height, thickness);
-
-                // Calculate rotation to align Z-axis with face normal
-                let rotation = Self::rotation_from_normal(rect.normal);
-
-                // Create isometry (position + rotation)
-                // Transform position from [0,1] to world coords
-                let pos = rect.center * scale + offset;
-                let isometry = Isometry::new(
-                    vector![pos.x, pos.y, pos.z],
-                    vector![rotation.x, rotation.y, rotation.z],
-                );
-
-                (isometry, shape)
-            })
-            .collect();
-
-        ColliderBuilder::compound(shapes).build()
     }
 
     /// Calculate tangent vectors for a face based on its normal
@@ -577,30 +498,6 @@ impl VoxelColliderBuilder {
             // Z-axis normal (Front/Back)
             (size.x, size.y)
         }
-    }
-
-    /// Calculate rotation axis-angle from a normal vector
-    ///
-    /// Rotates from Z-axis to align with the given normal
-    fn rotation_from_normal(normal: Vec3) -> Vec3 {
-        let z_axis = Vec3::Z;
-
-        // If normal is already aligned with Z, no rotation needed
-        if (normal - z_axis).length() < 0.001 {
-            return Vec3::ZERO;
-        }
-
-        // If normal is opposite to Z, rotate 180 degrees around X
-        if (normal + z_axis).length() < 0.001 {
-            return Vec3::new(std::f32::consts::PI, 0.0, 0.0);
-        }
-
-        // Calculate rotation quaternion
-        let quat = Quat::from_rotation_arc(z_axis, normal);
-
-        // Convert to axis-angle representation for Rapier
-        let (axis, angle) = quat.to_axis_angle();
-        axis * angle
     }
 
     /// Get the number of face rectangles collected
@@ -646,30 +543,14 @@ mod tests {
     use glam::IVec3;
 
     #[test]
-    fn test_collider_from_solid_cube_trimesh() {
+    fn test_collider_from_solid_cube() {
         let cube = Rc::new(Cube::Solid(1));
         let collider = VoxelColliderBuilder::from_cube(&cube, 3);
 
-        // Default mode is Trimesh - solid cube generates trimesh collider
+        // Solid cube generates trimesh collider
         assert!(
             collider.shape().as_trimesh().is_some(),
             "Expected trimesh collider for solid cube"
-        );
-    }
-
-    #[test]
-    fn test_collider_from_solid_cube_cuboids() {
-        let cube = Rc::new(Cube::Solid(1));
-
-        // Use cuboid mode explicitly
-        let mut builder = VoxelColliderBuilder::with_mode(ColliderMode::Cuboids);
-        visit_faces(&cube, |f| builder.add_face_from_info(f), [1, 1, 0, 0]);
-        let collider = builder.build_compound_collider();
-
-        // Cuboid mode generates compound collider
-        assert!(
-            collider.shape().as_compound().is_some(),
-            "Expected compound collider for cuboid mode"
         );
     }
 
@@ -680,31 +561,6 @@ mod tests {
 
         // Empty cube should generate minimal collider (ball)
         assert!(collider.shape().as_ball().is_some());
-    }
-
-    #[test]
-    fn test_collider_mode_default() {
-        // Default mode should be Trimesh
-        assert_eq!(ColliderMode::default(), ColliderMode::Trimesh);
-
-        let builder = VoxelColliderBuilder::new();
-        assert_eq!(builder.mode, ColliderMode::Trimesh);
-    }
-
-    #[test]
-    fn test_rotation_from_normal() {
-        // Test Z-axis (no rotation)
-        let rot = VoxelColliderBuilder::rotation_from_normal(Vec3::Z);
-        assert!(rot.length() < 0.01);
-
-        // Test -Z-axis (180 degree rotation)
-        let rot = VoxelColliderBuilder::rotation_from_normal(-Vec3::Z);
-        assert!((rot.length() - std::f32::consts::PI).abs() < 0.01);
-
-        // Test other axes
-        let _rot_x = VoxelColliderBuilder::rotation_from_normal(Vec3::X);
-        let _rot_y = VoxelColliderBuilder::rotation_from_normal(Vec3::Y);
-        // Just verify they don't panic
     }
 
     #[test]
@@ -749,9 +605,7 @@ mod tests {
         let aabb = Aabb::new(Vec3::ZERO, Vec3::splat(0.5));
         let collider = VoxelColliderBuilder::from_cube_region(&cube, 3, Some(&aabb));
 
-        assert!(
-            collider.shape().as_trimesh().is_some() || collider.shape().as_ball().is_some()
-        );
+        assert!(collider.shape().as_trimesh().is_some() || collider.shape().as_ball().is_some());
     }
 
     #[test]
@@ -864,7 +718,10 @@ mod tests {
         );
 
         // Same cube = same face count
-        assert_eq!(builder_uniform.face_count(), builder_nonuniform.face_count());
+        assert_eq!(
+            builder_uniform.face_count(),
+            builder_nonuniform.face_count()
+        );
     }
 
     #[test]
@@ -950,38 +807,5 @@ mod tests {
                 num_vertices
             );
         }
-    }
-
-    #[test]
-    fn test_trimesh_vs_cuboids_face_count() {
-        // Both modes should process the same number of faces when given same input
-        let cube = Rc::new(Cube::Solid(1));
-
-        let mut trimesh_builder = VoxelColliderBuilder::new();
-        visit_faces(
-            &cube,
-            |f| trimesh_builder.add_face_from_info(f),
-            [1, 1, 0, 0],
-        );
-        let trimesh_faces = trimesh_builder.face_count();
-
-        let mut cuboid_builder = VoxelColliderBuilder::with_mode(ColliderMode::Cuboids);
-        visit_faces(
-            &cube,
-            |f| cuboid_builder.add_face_from_info(f),
-            [1, 1, 0, 0],
-        );
-        let cuboid_faces = cuboid_builder.face_count();
-
-        assert_eq!(
-            trimesh_faces, cuboid_faces,
-            "Both modes should have same face count with same border materials"
-        );
-        // With [1,1,0,0] borders: solid at bottom, empty at top
-        // A solid cube should have 5 exposed faces (top + 4 sides, bottom is against solid)
-        assert!(
-            trimesh_faces >= 4,
-            "Solid cube should have at least 4 exposed faces"
-        );
     }
 }

@@ -22,7 +22,7 @@ use crossworld_physics::{
     PhysicsWorld,
     collision::Aabb,
     rapier3d::prelude::*,
-    world_collider::{WorldCollider, create_world_collider},
+    world_collider::WorldCollider,
 };
 use cube::Cube;
 use renderer::{BACKGROUND_COLOR, CameraConfig, GlTracer, MeshRenderer};
@@ -83,8 +83,8 @@ pub struct ProtoGlApp {
     physics_world: Option<PhysicsWorld>,
     physics_accumulator: f32,
     objects: Vec<CubeObject>,
-    /// World collider strategy
-    world_collider: Option<Box<dyn WorldCollider>>,
+    /// World collider
+    world_collider: Option<WorldCollider>,
 
     // Timing
     last_frame: Instant,
@@ -325,40 +325,9 @@ impl ApplicationHandler for ProtoGlApp {
         let gravity = glam::Vec3::new(0.0, self.config.physics.gravity, 0.0);
         let mut physics_world = PhysicsWorld::new(gravity);
 
-        // Create world collider using configured strategy
+        // Create world collider
         let world_size = self.config.world.world_size();
-        // Hybrid collision strategy: Manual world collision resolution
-        {
-            use std::io::Write;
-            let mut file = std::fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open("debug.log")
-                .unwrap();
-            writeln!(
-                file,
-                "DEBUG: Strategy: '{}'",
-                self.config.physics.world_collision_strategy
-            )
-            .unwrap();
-        }
-
-        if self.config.physics.world_collision_strategy == "hybrid" {
-            {
-                use std::io::Write;
-                let mut file = std::fs::OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open("debug.log")
-                    .unwrap();
-                writeln!(file, "DEBUG: Hybrid collision strategy active").unwrap();
-            }
-        }
-        let mut world_collider = create_world_collider(
-            &self.config.physics.world_collision_strategy,
-            self.config.physics.chunked.chunk_size,
-            self.config.physics.chunked.load_radius,
-        );
+        let mut world_collider = WorldCollider::new();
         world_collider.init(
             &world_cube_rc,
             world_size,
@@ -714,7 +683,7 @@ impl ProtoGlApp {
             self.physics_accumulator += delta;
             let timestep = self.config.physics.timestep;
 
-            // Update world collider (for chunked strategy - loads/unloads chunks)
+            // Update world collider
             if let Some(world_collider) = &mut self.world_collider {
                 // Collect AABBs from dynamic objects
                 let dynamic_aabbs: Vec<(RigidBodyHandle, Aabb)> = self
@@ -750,83 +719,69 @@ impl ProtoGlApp {
                 self.physics_accumulator -= timestep;
             }
 
-            // Resolve world collisions for hybrid strategy (which bypasses Rapier)
+            // Resolve world collisions (direct octree queries, bypasses Rapier)
             if let Some(world_collider) = &self.world_collider {
-                // Only resolve if strategy uses manual collision (hybrid)
-                let strategy = world_collider.metrics().strategy_name;
-                {
-                    use std::io::Write;
-                    if let Ok(mut file) = std::fs::OpenOptions::new()
-                        .create(true)
-                        .append(true)
-                        .open("debug.log")
-                    {
-                        writeln!(file, "DEBUG: Loop strategy check: '{}'", strategy).ok();
-                    }
-                }
-                if strategy == "hybrid" {
-                    for (i, obj) in self.objects.iter().enumerate() {
-                        // Get body position and compute AABB
-                        let body = match physics_world.get_rigid_body(obj.body_handle) {
-                            Some(b) => b,
-                            None => continue,
-                        };
-                        let pos = body.translation();
-                        let position = glam::Vec3::new(pos.x, pos.y, pos.z);
+                for (i, obj) in self.objects.iter().enumerate() {
+                    // Get body position and compute AABB
+                    let body = match physics_world.get_rigid_body(obj.body_handle) {
+                        Some(b) => b,
+                        None => continue,
+                    };
+                    let pos = body.translation();
+                    let position = glam::Vec3::new(pos.x, pos.y, pos.z);
 
-                        // Compute AABB for collision resolution (using actual model size)
-                        let octree_size = (1 << obj.depth) as f32;
-                        let scale_factor = 2.0_f32.powi(obj.scale_exp);
-                        let base_scale = self.config.spawning.object_size * scale_factor;
-                        let half_extent = glam::Vec3::new(
-                            (obj.model_size.x as f32 / octree_size) * base_scale * 0.5,
-                            (obj.model_size.y as f32 / octree_size) * base_scale * 0.5,
-                            (obj.model_size.z as f32 / octree_size) * base_scale * 0.5,
+                    // Compute AABB for collision resolution (using actual model size)
+                    let octree_size = (1 << obj.depth) as f32;
+                    let scale_factor = 2.0_f32.powi(obj.scale_exp);
+                    let base_scale = self.config.spawning.object_size * scale_factor;
+                    let half_extent = glam::Vec3::new(
+                        (obj.model_size.x as f32 / octree_size) * base_scale * 0.5,
+                        (obj.model_size.y as f32 / octree_size) * base_scale * 0.5,
+                        (obj.model_size.z as f32 / octree_size) * base_scale * 0.5,
+                    );
+                    let body_aabb = Aabb::new(position - half_extent, position + half_extent);
+
+                    // Get correction from world collider
+                    let correction =
+                        world_collider.resolve_collision(obj.body_handle, &body_aabb);
+
+                    if self.config.physics.debug_steps > 0 {
+                        println!(
+                            "[PHYSICS] Frame {}: Obj {} at pos {:?}, correction {:?}",
+                            self.frame_count, i, position, correction
                         );
-                        let body_aabb = Aabb::new(position - half_extent, position + half_extent);
-
-                        // Get correction from world collider
-                        let correction =
-                            world_collider.resolve_collision(obj.body_handle, &body_aabb);
-
-                        if self.config.physics.debug_steps > 0 {
+                        if position.y < 0.0 {
                             println!(
-                                "[PHYSICS] Frame {}: Obj {} at pos {:?}, correction {:?}",
-                                self.frame_count, i, position, correction
+                                "[WARNING] Obj {} FELL THROUGH GROUND! y = {:.3}",
+                                i, position.y
                             );
-                            if position.y < 0.0 {
-                                println!(
-                                    "[WARNING] Obj {} FELL THROUGH GROUND! y = {:.3}",
-                                    i, position.y
-                                );
-                            }
                         }
+                    }
 
-                        // Apply correction to body position and dampen velocity
-                        if correction.length_squared() > 0.0 {
-                            if let Some(body) = physics_world.get_rigid_body_mut(obj.body_handle) {
-                                // Move body out of collision
-                                let new_pos = position + correction;
-                                body.set_translation(
-                                    vector![new_pos.x, new_pos.y, new_pos.z],
+                    // Apply correction to body position and dampen velocity
+                    if correction.length_squared() > 0.0 {
+                        if let Some(body) = physics_world.get_rigid_body_mut(obj.body_handle) {
+                            // Move body out of collision
+                            let new_pos = position + correction;
+                            body.set_translation(
+                                vector![new_pos.x, new_pos.y, new_pos.z],
+                                true,
+                            );
+
+                            // Dampen velocity in the direction of the correction
+                            // This prevents objects from continuing to fall through
+                            let correction_dir = correction.normalize();
+                            let vel = body.linvel();
+                            let velocity = glam::Vec3::new(vel.x, vel.y, vel.z);
+                            let vel_in_correction_dir = velocity.dot(correction_dir);
+                            if vel_in_correction_dir < 0.0 {
+                                // Velocity is opposing the correction, remove that component
+                                let dampened =
+                                    velocity - correction_dir * vel_in_correction_dir;
+                                body.set_linvel(
+                                    vector![dampened.x, dampened.y, dampened.z],
                                     true,
                                 );
-
-                                // Dampen velocity in the direction of the correction
-                                // This prevents objects from continuing to fall through
-                                let correction_dir = correction.normalize();
-                                let vel = body.linvel();
-                                let velocity = glam::Vec3::new(vel.x, vel.y, vel.z);
-                                let vel_in_correction_dir = velocity.dot(correction_dir);
-                                if vel_in_correction_dir < 0.0 {
-                                    // Velocity is opposing the correction, remove that component
-                                    let dampened =
-                                        velocity - correction_dir * vel_in_correction_dir;
-                                    body.set_linvel(
-                                        vector![dampened.x, dampened.y, dampened.z],
-                                        true,
-                                    );
-                                }
                             }
                         }
                     }

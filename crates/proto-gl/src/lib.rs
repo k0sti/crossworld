@@ -18,7 +18,7 @@ pub use models::{CubeObject, VoxModel};
 
 use config::load_config;
 use crossworld_physics::{
-    PhysicsWorld, collision::Aabb, rapier3d::prelude::*, world_collider::create_world_collider,
+    PhysicsWorld, collision::Aabb, rapier3d::prelude::*, world_collider::WorldCollider,
 };
 use models::load_vox_models;
 use physics::spawn_cube_objects;
@@ -70,12 +70,8 @@ pub fn run_physics_debug(iterations: u32) -> Result<(), Box<dyn Error>> {
     let gravity = glam::Vec3::new(0.0, config.physics.gravity, 0.0);
     let mut physics_world = PhysicsWorld::new(gravity);
 
-    // Create world collider using configured strategy
-    let mut world_collider = create_world_collider(
-        &config.physics.world_collision_strategy,
-        config.physics.chunked.chunk_size,
-        config.physics.chunked.load_radius,
-    );
+    // Create world collider
+    let mut world_collider = WorldCollider::new();
     world_collider.init(
         &world_cube_rc,
         world_size,
@@ -84,11 +80,6 @@ pub fn run_physics_debug(iterations: u32) -> Result<(), Box<dyn Error>> {
     );
 
     // Debug: check world collider
-    // Note: WorldCollider trait doesn't expose shape(), so we skip detailed shape debug here.
-    // For hybrid strategy, the Rapier collider might be empty anyway.
-
-    // Note: world_collider is already added to physics_world by init() if needed
-    // For hybrid strategy, it's NOT added to Rapier, but used manually
     println!(
         "World collider ready (strategy: {})",
         world_collider.metrics().strategy_name
