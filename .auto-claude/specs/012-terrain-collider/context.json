@@ -1,0 +1,46 @@
+{
+  "task_description": "Implement VoxelTerrainCollider using TypedCompositeShape trait for efficient on-demand terrain collision geometry generation.",
+  "scoped_services": ["physics", "cube"],
+  "files_to_modify": [
+    "crates/physics/src/lib.rs",
+    "crates/cube/src/traversal/visit_faces.rs"
+  ],
+  "files_to_create": [
+    "crates/physics/src/terrain/mod.rs",
+    "crates/physics/src/terrain/region_id.rs",
+    "crates/physics/src/terrain/triangle_gen.rs",
+    "crates/physics/src/terrain/region_cache.rs",
+    "crates/physics/src/terrain/collider.rs",
+    "crates/physics/src/terrain/active_region.rs",
+    "crates/physics/src/terrain/shape_impl.rs"
+  ],
+  "files_to_reference": [
+    "crates/cube/src/traversal/visit_faces.rs",
+    "crates/physics/src/collision.rs",
+    "crates/physics/src/world_collider.rs",
+    "doc/architecture/cubeworld-collision.md"
+  ],
+  "patterns": {
+    "region_id_encoding": "TerrainPartId u64 encoding: [depth:4][x:16][y:16][z:16][tri_idx:12]",
+    "triangle_generation": "face_to_triangles() converts FaceInfo to [Triangle; 2] with correct winding",
+    "composite_shape": "TypedCompositeShape trait with PartShape = Triangle"
+  },
+  "existing_infrastructure": {
+    "face_traversal": "visit_faces_in_region() in crates/cube/src/traversal/visit_faces.rs",
+    "region_bounds": "cube::RegionBounds for octree coordinate mapping",
+    "collision_primitives": "Aabb, IntersectionRegion in crates/physics/src/collision.rs"
+  },
+  "key_decisions": [
+    "Uses Rapier/Parry 0.25 APIs (Bvh instead of Qbvh, TypedCompositeShape instead of TypedSimdCompositeShape)",
+    "Lazy on-demand triangle generation during narrowphase only",
+    "Two-level QBVH: coarse region-level + fine triangle-level for active regions",
+    "from_world_aabb() returns Vec<RegionId> instead of iterator due to lifetime constraints",
+    "Triangle winding uses Face::vertices() for consistent counter-clockwise winding"
+  ],
+  "api_notes": [
+    "Parry 0.25 renamed Qbvh to Bvh",
+    "TypedCompositeShape simplified from TypedSimdCompositeShape",
+    "CompositeShape trait added for untyped access"
+  ],
+  "created_at": "2025-12-26T00:00:00.000Z"
+}
