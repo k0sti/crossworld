@@ -1,0 +1,52 @@
+{
+  "project_root": "/home/k0/work/crossworld/main-cw",
+  "project_type": "monorepo",
+  "services": {
+    "renderer": {
+      "name": "renderer",
+      "path": "/home/k0/work/crossworld/main-cw/crates/renderer",
+      "language": "Rust",
+      "framework": "egui",
+      "type": "library",
+      "build_tool": "cargo",
+      "key_directories": {
+        "src": {
+          "path": "src",
+          "purpose": "Source code"
+        },
+        "shaders": {
+          "path": "src/shaders",
+          "purpose": "GLSL/WGSL shader files"
+        }
+      },
+      "entry_point": "src/lib.rs",
+      "key_files": {
+        "cpu_tracer": "src/cpu_tracer.rs",
+        "gl_tracer": "src/gl_tracer.rs",
+        "gpu_tracer": "src/gpu_tracer.rs",
+        "shader_utils": "src/shader_utils.rs",
+        "egui_app": "src/egui_app.rs"
+      }
+    },
+    "cube": {
+      "name": "cube",
+      "path": "/home/k0/work/crossworld/main-cw/crates/cube",
+      "language": "Rust",
+      "type": "library",
+      "build_tool": "cargo",
+      "key_files": {
+        "raycast": "src/raycast.rs"
+      },
+      "purpose": "Octree voxel data structure with raycast support"
+    }
+  },
+  "infrastructure": {
+    "ci": "GitHub Actions",
+    "ci_workflows": []
+  },
+  "conventions": {
+    "shader_naming": "*.comp for compute shaders, *.vert/*.frag for vertex/fragment",
+    "tracer_interface": "init_gl(), render_to_gl(), render_to_gl_with_camera(), destroy_gl()",
+    "testing": "raycast_octree() method for CPU-side validation"
+  }
+}

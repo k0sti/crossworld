@@ -1,0 +1,36 @@
+{
+  "task_description": "Implement GPU-based raytracer with shader-based octree traversal for high-performance voxel rendering, matching functionality of CPU raytracer but optimized for parallel GPU execution.",
+  "workflow_type": "feature",
+  "source": {
+    "openspec_change": "implement-gpu-raytracer",
+    "migrated_from": "openspec/changes/implement-gpu-raytracer/",
+    "migration_date": "2025-12-26"
+  },
+  "priority": "high",
+  "status_summary": {
+    "total_tasks": 43,
+    "completed": 36,
+    "pending": 7,
+    "completion_percentage": 84
+  },
+  "completed_work": [
+    "Phase 1: WebGL 2.0 Fragment Shader Implementation (9/9 complete)",
+    "Phase 2: WebGL 2.0 Tracer Integration (7/7 complete)",
+    "Phase 3: Architecture Refactoring - 3-Tracer System (8/8 complete)",
+    "Phase 4: Testing and Validation (5/8 complete - basic validation done)",
+    "Phase 5: Code Quality (5/5 complete)",
+    "Phase 6: GPU Tracer Phase 1 - Basic Ray-Cube Intersection (12/14 complete)",
+    "Phase 7: CPU-Side Raycast Testing (6/6 complete)"
+  ],
+  "pending_work": [
+    "Phase 4.6: Add performance benchmarks",
+    "Phase 4.7: Test various octree depths (0, 1, 2, 3+)",
+    "Phase 4.8: Test edge cases (empty octrees, single voxels, etc.)",
+    "Phase 6.13: Test GPU tracer in egui app (integration pending)",
+    "Phase 6.14: Verify ray-cube hit detection working"
+  ],
+  "affected_crates": [
+    "crates/renderer"
+  ],
+  "created_at": "2025-12-26T00:00:00.000Z"
+}

@@ -1,0 +1,41 @@
+{
+  "task_description": "Complete remaining GPU raytracer tasks: egui integration, comprehensive testing, and performance benchmarks.",
+  "scoped_services": ["renderer"],
+  "files_to_modify": [
+    "crates/renderer/src/gpu_tracer.rs",
+    "crates/renderer/src/egui_app.rs"
+  ],
+  "files_to_create": [],
+  "files_to_reference": [
+    "crates/renderer/src/cpu_tracer.rs",
+    "crates/renderer/src/gl_tracer.rs",
+    "crates/renderer/src/shader_utils.rs",
+    "crates/renderer/src/shaders/basic_raycast.comp",
+    "crates/cube/src/raycast.rs"
+  ],
+  "patterns": {
+    "tracer_architecture": "3-tracer system: CPU, GL (fragment shader), GPU (compute shader)",
+    "shader_compilation": "Shared utilities in shader_utils.rs",
+    "ui_layout": "2x2 grid with CPU | GL | GPU | Diff views",
+    "camera_support": "Time-based orbit + explicit quaternion rotation"
+  },
+  "existing_infrastructure": {
+    "cpu_tracer": "Uses cube::Cube::raycast() for reference implementation",
+    "gl_tracer": "WebGL 2.0 fragment shader with 3D texture octree",
+    "gpu_tracer": "Compute shader with slab method ray-box intersection",
+    "test_framework": "raycast_octree() methods on all tracers for CPU-side testing"
+  },
+  "key_decisions": [
+    "3-tracer architecture allows side-by-side comparison",
+    "Compute shader uses 8x8 work groups for dispatch",
+    "Blit shader uses fullscreen triangle for texture display",
+    "All 16 raycast tests pass for all 3 tracers"
+  ],
+  "implementation_notes": [
+    "GPU tracer Phase 1 complete: basic ray-cube bounding box intersection",
+    "Phase 2 pending: full octree traversal in compute shader",
+    "Camera supports time-based orbit and explicit quaternion rotation",
+    "Proper resource management with init, render, destroy lifecycle"
+  ],
+  "created_at": "2025-12-26T00:00:00.000Z"
+}

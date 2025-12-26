@@ -1,0 +1,1038 @@
+{
+  "feature": "Implement GPU Raytracer with Cube Raytracing",
+  "workflow_type": "feature",
+  "workflow_rationale": "GPU-based raytracer implementation for high-performance voxel rendering. Mostly complete - WebGL fragment shader and compute shader implementations done, pending egui integration, comprehensive testing, and benchmarks.",
+  "source": {
+    "openspec_change": "implement-gpu-raytracer",
+    "migrated_from": "openspec/changes/implement-gpu-raytracer/",
+    "migration_date": "2025-12-26"
+  },
+  "phases": [
+    {
+      "id": "phase-1",
+      "name": "WebGL 2.0 Fragment Shader Implementation",
+      "type": "implementation",
+      "description": "Create raycast shader with octree traversal in GLSL, moved to gl_tracer.rs",
+      "depends_on": [],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-1-1",
+          "description": "Create shader directory structure (crates/renderer/src/shaders/)",
+          "service": "renderer",
+          "files_to_modify": [],
+          "files_to_create": ["crates/renderer/src/shaders/"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "test -d crates/renderer/src/shaders && echo 'exists'",
+            "expected": "exists"
+          },
+          "status": "completed",
+          "notes": "Shader directory created"
+        },
+        {
+          "id": "subtask-1-2",
+          "description": "Implement octree data structure in shader",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/shaders/"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Octree represented as 3D texture"
+        },
+        {
+          "id": "subtask-1-3",
+          "description": "Port DDA octree traversal algorithm to GLSL",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/gl_tracer.rs"],
+          "files_to_create": [],
+          "patterns_from": ["crates/cube/src/raycast.rs"],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "DDA algorithm ported to GLSL fragment shader"
+        },
+        {
+          "id": "subtask-1-4",
+          "description": "Implement voxel value lookup in shader",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/gl_tracer.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Voxel lookup via 3D texture sampling"
+        },
+        {
+          "id": "subtask-1-5",
+          "description": "Add empty space detection (voxel value == 0)",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/gl_tracer.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Empty voxels detected and skipped"
+        },
+        {
+          "id": "subtask-1-6",
+          "description": "Calculate surface normals from entry face",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/gl_tracer.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Normals computed from ray entry direction"
+        },
+        {
+          "id": "subtask-1-7",
+          "description": "Add coordinate space transformations (world space <-> normalized [0,1]^3)",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/gl_tracer.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "World to normalized space transformations implemented"
+        },
+        {
+          "id": "subtask-1-8",
+          "description": "Implement depth limiting for traversal",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/gl_tracer.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Configurable max depth for octree traversal"
+        },
+        {
+          "id": "subtask-1-9",
+          "description": "Add shader compilation and validation",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/shader_utils.rs"],
+          "files_to_create": ["crates/renderer/src/shader_utils.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Shader compilation utilities in shader_utils.rs"
+        }
+      ]
+    },
+    {
+      "id": "phase-2",
+      "name": "WebGL 2.0 Tracer Integration",
+      "type": "implementation",
+      "description": "Integrate fragment shader implementation into gl_tracer.rs",
+      "depends_on": ["phase-1"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-2-1",
+          "description": "Refactor fragment shader implementation into gl_tracer.rs",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/gl_tracer.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "GL tracer uses fragment shader raytracing"
+        },
+        {
+          "id": "subtask-2-2",
+          "description": "Setup shader program initialization",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/gl_tracer.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Shader program created in init_gl()"
+        },
+        {
+          "id": "subtask-2-3",
+          "description": "Implement octree data upload to GPU (3D texture)",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/gl_tracer.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Octree data uploaded as 3D texture"
+        },
+        {
+          "id": "subtask-2-4",
+          "description": "Create framebuffer for raycast output",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/gl_tracer.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Framebuffer for off-screen rendering"
+        },
+        {
+          "id": "subtask-2-5",
+          "description": "Implement ray generation from camera",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/gl_tracer.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Rays generated from camera position and direction"
+        },
+        {
+          "id": "subtask-2-6",
+          "description": "Add lighting calculations (matching CPU tracer)",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/gl_tracer.rs"],
+          "files_to_create": [],
+          "patterns_from": ["crates/renderer/src/cpu_tracer.rs"],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Blinn-Phong lighting matches CPU implementation"
+        },
+        {
+          "id": "subtask-2-7",
+          "description": "Add render loop integration",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/gl_tracer.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Render loop with render_to_gl() and render_to_gl_with_camera()"
+        }
+      ]
+    },
+    {
+      "id": "phase-3",
+      "name": "Architecture Refactoring (3-Tracer System)",
+      "type": "refactoring",
+      "description": "Redesign into 3-tracer architecture with shared utilities and 2x2 grid UI",
+      "depends_on": ["phase-2"],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-3-1",
+          "description": "Create shader_utils.rs for shared shader compilation",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/lib.rs"],
+          "files_to_create": ["crates/renderer/src/shader_utils.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Shared shader compilation utilities extracted"
+        },
+        {
+          "id": "subtask-3-2",
+          "description": "Refactor gl_tracer.rs as WebGL 2.0 fragment shader tracer",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/gl_tracer.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "GL tracer uses fragment shader approach"
+        },
+        {
+          "id": "subtask-3-3",
+          "description": "Reimplement gpu_tracer.rs as compute shader stub",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/gpu_tracer.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "GPU tracer uses compute shader approach"
+        },
+        {
+          "id": "subtask-3-4",
+          "description": "Update cpu_tracer.rs to use cube.raycast() directly",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/cpu_tracer.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "CPU tracer calls cube::Cube::raycast()"
+        },
+        {
+          "id": "subtask-3-5",
+          "description": "Redesign egui_app.rs with 2x2 grid layout",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/egui_app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "2x2 grid: CPU | GL | GPU | Diff"
+        },
+        {
+          "id": "subtask-3-6",
+          "description": "Add dropdown ComboBoxes for diff source selection",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/egui_app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Dropdown selects which tracers to compare"
+        },
+        {
+          "id": "subtask-3-7",
+          "description": "Implement camera controls for all views",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/egui_app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Synchronized camera across all tracer views"
+        },
+        {
+          "id": "subtask-3-8",
+          "description": "Display performance metrics for each renderer",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/egui_app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Frame time and FPS displayed per tracer"
+        }
+      ]
+    },
+    {
+      "id": "phase-4",
+      "name": "Testing and Validation",
+      "type": "testing",
+      "description": "Create test scenes and validate GPU vs CPU output",
+      "depends_on": ["phase-3"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-4-1",
+          "description": "Create test scene with octa cube (2x2x2 octree)",
+          "service": "renderer",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Test scene with octa cube created"
+        },
+        {
+          "id": "subtask-4-2",
+          "description": "Render scene with CPU, GL, and GPU tracers",
+          "service": "renderer",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "All three tracers rendering simultaneously"
+        },
+        {
+          "id": "subtask-4-3",
+          "description": "Implement pixel diff comparison with 10x amplification",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/egui_app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Diff view amplifies differences for visibility"
+        },
+        {
+          "id": "subtask-4-4",
+          "description": "Add dropdown selection for diff comparison sources",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/egui_app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Can select any pair of tracers for diff"
+        },
+        {
+          "id": "subtask-4-5",
+          "description": "Test in single-frame mode (verified working)",
+          "service": "renderer",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Single-frame mode verified working"
+        },
+        {
+          "id": "subtask-4-6",
+          "description": "Add performance benchmarks (basic metrics displayed)",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/egui_app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Comprehensive benchmarks beyond basic timing"
+        },
+        {
+          "id": "subtask-4-7",
+          "description": "Test various octree depths (0, 1, 2, 3+)",
+          "service": "renderer",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo test -p crossworld-renderer octree_depth",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Test different octree depths for correctness"
+        },
+        {
+          "id": "subtask-4-8",
+          "description": "Test edge cases (empty octrees, single voxels, etc.)",
+          "service": "renderer",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo test -p crossworld-renderer edge_cases",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Edge case testing for robustness"
+        }
+      ]
+    },
+    {
+      "id": "phase-5",
+      "name": "Code Quality",
+      "type": "cleanup",
+      "description": "Run clippy, fmt, and add documentation",
+      "depends_on": ["phase-3"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-5-1",
+          "description": "Run cargo clippy and fix warnings",
+          "service": "renderer",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo clippy -p crossworld-renderer -- -D warnings",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "No clippy warnings"
+        },
+        {
+          "id": "subtask-5-2",
+          "description": "Run cargo fmt",
+          "service": "renderer",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo fmt -p crossworld-renderer -- --check",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Code formatted"
+        },
+        {
+          "id": "subtask-5-3",
+          "description": "Add code documentation",
+          "service": "renderer",
+          "files_to_modify": [
+            "crates/renderer/src/cpu_tracer.rs",
+            "crates/renderer/src/gl_tracer.rs",
+            "crates/renderer/src/gpu_tracer.rs"
+          ],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo doc -p crossworld-renderer --no-deps",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Documentation added"
+        },
+        {
+          "id": "subtask-5-4",
+          "description": "Update relevant comments",
+          "service": "renderer",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Comments updated"
+        },
+        {
+          "id": "subtask-5-5",
+          "description": "Create git commit with changes",
+          "service": "renderer",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "git log -1 --oneline",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Commit 6c2f590"
+        }
+      ]
+    },
+    {
+      "id": "phase-6",
+      "name": "GPU Tracer Phase 1: Basic Ray-Cube Intersection",
+      "type": "implementation",
+      "description": "Implement basic compute shader with ray-cube bounding box intersection",
+      "depends_on": ["phase-3"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-6-1",
+          "description": "Create basic compute shader (basic_raycast.comp)",
+          "service": "renderer",
+          "files_to_modify": [],
+          "files_to_create": ["crates/renderer/src/shaders/basic_raycast.comp"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "test -f crates/renderer/src/shaders/basic_raycast.comp && echo 'exists'",
+            "expected": "exists"
+          },
+          "status": "completed",
+          "notes": "Compute shader created"
+        },
+        {
+          "id": "subtask-6-2",
+          "description": "Implement ray-box intersection using slab method",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/shaders/basic_raycast.comp"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Slab method for ray-AABB intersection"
+        },
+        {
+          "id": "subtask-6-3",
+          "description": "Add Blinn-Phong lighting calculation",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/shaders/basic_raycast.comp"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Blinn-Phong shading in compute shader"
+        },
+        {
+          "id": "subtask-6-4",
+          "description": "Support time-based orbit camera",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/gpu_tracer.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Orbit camera with time uniform"
+        },
+        {
+          "id": "subtask-6-5",
+          "description": "Support explicit camera with quaternion rotation",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/gpu_tracer.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Quaternion-based camera orientation"
+        },
+        {
+          "id": "subtask-6-6",
+          "description": "Create blit shader for displaying compute shader output",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/gpu_tracer.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Fullscreen triangle blit shader"
+        },
+        {
+          "id": "subtask-6-7",
+          "description": "Implement GpuTracerGl struct with compute shader resources",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/gpu_tracer.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "GpuTracerGl struct with GL resources"
+        },
+        {
+          "id": "subtask-6-8",
+          "description": "Implement init_gl() for shader compilation and texture creation",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/gpu_tracer.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "init_gl() creates shaders and textures"
+        },
+        {
+          "id": "subtask-6-9",
+          "description": "Implement render_to_gl() for compute shader dispatch",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/gpu_tracer.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "8x8 work groups for compute dispatch"
+        },
+        {
+          "id": "subtask-6-10",
+          "description": "Implement render_to_gl_with_camera() for explicit camera",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/gpu_tracer.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Camera parameters passed as uniforms"
+        },
+        {
+          "id": "subtask-6-11",
+          "description": "Implement blit_texture_to_screen() for display",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/gpu_tracer.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Blit to screen using fullscreen triangle"
+        },
+        {
+          "id": "subtask-6-12",
+          "description": "Implement destroy_gl() for resource cleanup",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/gpu_tracer.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Proper GL resource cleanup"
+        },
+        {
+          "id": "subtask-6-13",
+          "description": "Test GPU tracer in egui app (integration pending)",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/egui_app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo run -p crossworld-renderer --example egui_app",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Integration into egui app pending"
+        },
+        {
+          "id": "subtask-6-14",
+          "description": "Verify ray-cube hit detection working",
+          "service": "renderer",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo test -p crossworld-renderer ray_cube",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Visual verification of ray-cube hits"
+        }
+      ]
+    },
+    {
+      "id": "phase-7",
+      "name": "CPU-Side Raycast Testing",
+      "type": "testing",
+      "description": "Wire up all three tracers to comprehensive raycast test framework",
+      "depends_on": ["phase-6"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-7-1",
+          "description": "Add raycast_octree() method to GlCubeTracer using cube.raycast_debug()",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/gl_tracer.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "GL tracer exposes raycast_octree() for testing"
+        },
+        {
+          "id": "subtask-7-2",
+          "description": "Add raycast_octree() method to GpuTracer using cube.raycast_debug()",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/gpu_tracer.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "GPU tracer exposes raycast_octree() for testing"
+        },
+        {
+          "id": "subtask-7-3",
+          "description": "Update raycast test report to use real tracer implementations",
+          "service": "renderer",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo test -p crossworld-renderer raycast",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Test report uses actual tracer implementations"
+        },
+        {
+          "id": "subtask-7-4",
+          "description": "Wire up all three tracers (CPU, GL, GPU) to test framework",
+          "service": "renderer",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo test -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "All tracers wired to test framework"
+        },
+        {
+          "id": "subtask-7-5",
+          "description": "Verify all 16 raycast tests pass for all 3 tracers",
+          "service": "renderer",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo test -p crossworld-renderer raycast",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "All 16 tests pass for CPU, GL, GPU"
+        },
+        {
+          "id": "subtask-7-6",
+          "description": "Update test report summary to show results for all tracers",
+          "service": "renderer",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo test -p crossworld-renderer raycast -- --nocapture",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Test report shows results for all three tracers"
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "total_phases": 7,
+    "total_subtasks": 43,
+    "completed_subtasks": 36,
+    "pending_subtasks": 7,
+    "services_involved": ["renderer"],
+    "parallelism": {
+      "max_parallel_phases": 3,
+      "parallel_groups": [
+        {
+          "phases": ["phase-4", "phase-5", "phase-6"],
+          "reason": "Testing, cleanup, and GPU Phase 1 can proceed after architecture is stable"
+        }
+      ],
+      "recommended_workers": 1,
+      "speedup_estimate": "Single-crate work, limited parallelism benefit"
+    },
+    "startup_command": "cargo check -p crossworld-renderer && cargo test -p crossworld-renderer"
+  },
+  "verification_strategy": {
+    "risk_level": "medium",
+    "skip_validation": false,
+    "test_creation_phase": "phase-4",
+    "test_types_required": ["unit", "integration", "visual"],
+    "security_scanning_required": false,
+    "staging_deployment_required": false,
+    "acceptance_criteria": [
+      "GPU tracer produces identical output to CPU tracer (verified by diff)",
+      "Performance improvement of 10x or more for typical scenes",
+      "Handles all octree depths correctly",
+      "Correctly renders empty spaces (voxel value == 0)",
+      "All shader code passes validation",
+      "Code passes clippy with no warnings"
+    ],
+    "verification_steps": [
+      {
+        "name": "Renderer Build",
+        "command": "cargo check -p crossworld-renderer",
+        "expected_outcome": "Successful build",
+        "type": "command",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Unit Tests",
+        "command": "cargo test -p crossworld-renderer",
+        "expected_outcome": "All tests pass",
+        "type": "command",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Visual Verification",
+        "command": "cargo run -p crossworld-renderer --example egui_app",
+        "expected_outcome": "2x2 grid shows matching renders",
+        "type": "command",
+        "required": false,
+        "blocking": false
+      }
+    ],
+    "reasoning": "Medium risk due to shader complexity and GPU compatibility. Visual verification ensures correctness, diff comparison catches discrepancies."
+  },
+  "qa_acceptance": {
+    "unit_tests": {
+      "required": true,
+      "commands": ["cargo test -p crossworld-renderer"],
+      "minimum_coverage": null
+    },
+    "integration_tests": {
+      "required": true,
+      "commands": ["cargo test -p crossworld-renderer raycast"],
+      "services_to_test": ["renderer"]
+    },
+    "e2e_tests": {
+      "required": false,
+      "commands": [],
+      "flows": []
+    },
+    "browser_verification": {
+      "required": false,
+      "pages": []
+    },
+    "database_verification": {
+      "required": false,
+      "checks": []
+    },
+    "performance_verification": {
+      "required": true,
+      "checks": [
+        "GPU tracer 10x faster than CPU tracer",
+        "GL tracer matches CPU output pixel-for-pixel",
+        "Frame time under 16ms at 1080p"
+      ]
+    }
+  },
+  "qa_signoff": null,
+  "last_updated": "2025-12-26T00:00:00.000Z"
+}
