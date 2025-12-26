@@ -1,0 +1,33 @@
+{
+  "task_description": "Fix mesh renderer quality issues (camera sync, face culling), add mesh caching, rename DualRenderer to CubeRenderer, and update documentation for the renderer crate.",
+  "workflow_type": "feature",
+  "source": {
+    "openspec_change": "improve-renderer-quality",
+    "migrated_from": "openspec/changes/improve-renderer-quality/",
+    "migration_date": "2025-12-26"
+  },
+  "priority": "high",
+  "status_summary": {
+    "total_tasks": 27,
+    "completed": 18,
+    "pending": 9,
+    "completion_percentage": 67
+  },
+  "completed_work": [
+    "Phase 1: Investigation and Diagnosis (3/3 complete)",
+    "Phase 2: Fix Camera Synchronization (1/2 complete - camera fixed, validation test deferred)",
+    "Phase 3: Fix Face Rendering (1/2 complete - culling fixed, lighting validation deferred)",
+    "Phase 4: Implement Mesh Caching (4/4 complete)",
+    "Phase 7: Validation and Testing (3/3 complete)"
+  ],
+  "pending_work": [
+    "Phase 2.2: Add camera sync validation test (deferred)",
+    "Phase 3.2: Validate lighting consistency (deferred)",
+    "Phase 5: Rename DualRenderer to CubeRenderer (3 tasks)",
+    "Phase 6: Update Documentation (4 tasks)"
+  ],
+  "affected_crates": [
+    "crates/renderer"
+  ],
+  "created_at": "2025-12-26T00:00:00.000Z"
+}
