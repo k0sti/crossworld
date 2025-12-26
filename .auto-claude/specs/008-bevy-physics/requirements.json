@@ -1,0 +1,40 @@
+{
+  "task_description": "Create Bevy Physics Prototype - a standalone native physics application to validate Rapier3D integration with voxel colliders, character controllers, and optimized collision detection before integrating into the web application.",
+  "workflow_type": "feature",
+  "source": {
+    "openspec_change": "create-bevy-physics-prototype",
+    "migrated_from": "openspec/changes/create-bevy-physics-prototype/",
+    "migration_date": "2025-12-26"
+  },
+  "priority": "high",
+  "status_summary": {
+    "total_tasks": 59,
+    "completed": 34,
+    "pending": 25,
+    "completion_percentage": 58
+  },
+  "completed_work": [
+    "Phase 1: Project Setup (5/5 complete) - crate structure, dependencies, config",
+    "Phase 2: Enhanced Physics Collider System (7/7 complete) - bevy feature, native module, spatial filtering",
+    "Phase 3: Application Scaffold (7/7 complete) - Bevy app, plugins, camera, debug overlay",
+    "Phase 4: World Generation (3/5 partial) - WorldCube mesh generation, pending collider integration",
+    "Phase 11: Documentation (4/6 partial) - README, config docs, algorithm docs"
+  ],
+  "pending_work": [
+    "Phase 4.4-4.5: World collision with VoxelColliderBuilder, dev environment verification",
+    "Phase 5: Voxel Object System (6 tasks) - .vox loading, mesh conversion",
+    "Phase 6: Dynamic Cube Spawning (6 tasks) - spawn system, physics bodies",
+    "Phase 7: Optimized Collision Integration (7 tasks) - AABB overlap, spatial filtering",
+    "Phase 8: Player Character System (8 tasks) - PlayerCube, character controller, camera follow",
+    "Phase 9: Physics Simulation (8 tasks) - gravity, collisions, parameter tuning",
+    "Phase 10: Testing and Validation (8 tasks) - performance benchmarks, edge cases",
+    "Phase 11.3, 11.6: Example configs, CLAUDE.md update"
+  ],
+  "affected_crates": [
+    "crates/proto",
+    "crates/physics",
+    "crates/cube",
+    "crates/world"
+  ],
+  "created_at": "2025-12-26T00:00:00.000Z"
+}

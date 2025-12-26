@@ -1,0 +1,1302 @@
+{
+  "feature": "Bevy Physics Prototype",
+  "workflow_type": "feature",
+  "workflow_rationale": "Create standalone Bevy-based physics prototype for validating Rapier3D voxel collider integration, character controllers, and optimized collision detection. Most setup work complete - pending voxel objects, spawning, player system, and testing.",
+  "source": {
+    "openspec_change": "create-bevy-physics-prototype",
+    "migrated_from": "openspec/changes/create-bevy-physics-prototype/",
+    "migration_date": "2025-12-26"
+  },
+  "phases": [
+    {
+      "id": "phase-1",
+      "name": "Project Setup",
+      "type": "implementation",
+      "description": "Create crates/proto directory structure with dependencies",
+      "depends_on": [],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-1-1",
+          "description": "Create crates/proto directory structure",
+          "service": "proto",
+          "files_to_modify": [],
+          "files_to_create": ["crates/proto/"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "test -d crates/proto && echo 'exists'",
+            "expected": "exists"
+          },
+          "status": "completed",
+          "notes": "Directory structure created"
+        },
+        {
+          "id": "subtask-1-2",
+          "description": "Add crates/proto/Cargo.toml with dependencies (bevy, bevy_rapier3d, cube, world, crossworld-physics, toml, glam)",
+          "service": "proto",
+          "files_to_modify": [],
+          "files_to_create": ["crates/proto/Cargo.toml"],
+          "patterns_from": ["crates/editor/Cargo.toml"],
+          "verification": {
+            "type": "command",
+            "command": "test -f crates/proto/Cargo.toml && echo 'exists'",
+            "expected": "exists"
+          },
+          "status": "completed",
+          "notes": "Cargo.toml with all dependencies"
+        },
+        {
+          "id": "subtask-1-3",
+          "description": "Create crates/proto/config.toml with default configuration (seed, macro_depth, micro_depth, spawn_count, models_path)",
+          "service": "proto",
+          "files_to_modify": [],
+          "files_to_create": ["crates/proto/config.toml"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "test -f crates/proto/config.toml && echo 'exists'",
+            "expected": "exists"
+          },
+          "status": "completed",
+          "notes": "Default config with world, physics, models settings"
+        },
+        {
+          "id": "subtask-1-4",
+          "description": "Add proto crate to workspace in root Cargo.toml",
+          "service": "proto",
+          "files_to_modify": ["Cargo.toml"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "grep -q 'proto' Cargo.toml && echo 'found'",
+            "expected": "found"
+          },
+          "status": "completed",
+          "notes": "Added to workspace members"
+        },
+        {
+          "id": "subtask-1-5",
+          "description": "Add just proto task to justfile for running the prototype",
+          "service": "proto",
+          "files_to_modify": ["justfile"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "grep -q 'proto' justfile && echo 'found'",
+            "expected": "found"
+          },
+          "status": "completed",
+          "notes": "just proto runs the prototype"
+        }
+      ]
+    },
+    {
+      "id": "phase-2",
+      "name": "Enhanced Physics Collider System",
+      "type": "implementation",
+      "description": "Add bevy feature flag and optimized voxel collider generation",
+      "depends_on": ["phase-1"],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-2-1",
+          "description": "Add bevy feature flag to crates/physics/Cargo.toml for native-only code",
+          "service": "physics",
+          "files_to_modify": ["crates/physics/Cargo.toml"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "grep -q 'bevy' crates/physics/Cargo.toml && echo 'found'",
+            "expected": "found"
+          },
+          "status": "completed",
+          "notes": "bevy feature flag added"
+        },
+        {
+          "id": "subtask-2-2",
+          "description": "Create crates/physics/src/native.rs module for Bevy-specific physics utilities",
+          "service": "physics",
+          "files_to_modify": ["crates/physics/src/lib.rs"],
+          "files_to_create": ["crates/physics/src/native.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "test -f crates/physics/src/native.rs && echo 'exists'",
+            "expected": "exists"
+          },
+          "status": "completed",
+          "notes": "Native module for Bevy integration"
+        },
+        {
+          "id": "subtask-2-3",
+          "description": "Implement optimized VoxelColliderBuilder::from_cube_region() that accepts AABB bounds for spatial filtering",
+          "service": "physics",
+          "files_to_modify": ["crates/physics/src/collision.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "grep -q 'from_cube_region' crates/physics/src/collision.rs && echo 'found'",
+            "expected": "found"
+          },
+          "status": "completed",
+          "notes": "from_cube_region with AABB bounds"
+        },
+        {
+          "id": "subtask-2-4",
+          "description": "Add spatial filtering to traverse only faces within overlap region",
+          "service": "physics",
+          "files_to_modify": ["crates/physics/src/collision.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-physics",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Spatial filtering integrated into from_cube_region"
+        },
+        {
+          "id": "subtask-2-5",
+          "description": "Write unit tests for spatial filtering collision generation",
+          "service": "physics",
+          "files_to_modify": ["crates/physics/src/collision.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo test -p crossworld-physics",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Unit tests pass"
+        },
+        {
+          "id": "subtask-2-6",
+          "description": "Add documentation for optimized collider generation API",
+          "service": "physics",
+          "files_to_modify": ["crates/physics/src/collision.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo doc -p crossworld-physics --no-deps",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "API documented"
+        },
+        {
+          "id": "subtask-2-7",
+          "description": "Fix Cube<i32> type inconsistency in NeighborGrid (revert from commit 58e3427)",
+          "service": "cube",
+          "files_to_modify": ["crates/cube/src/traversal/neighbor_grid.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p cube",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Type inconsistency fixed"
+        }
+      ]
+    },
+    {
+      "id": "phase-3",
+      "name": "Application Scaffold",
+      "type": "implementation",
+      "description": "Create main.rs with Bevy app initialization",
+      "depends_on": ["phase-1"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-3-1",
+          "description": "Create crates/proto/src/main.rs with Bevy app initialization",
+          "service": "proto",
+          "files_to_modify": [],
+          "files_to_create": ["crates/proto/src/main.rs"],
+          "patterns_from": ["crates/editor/src/main.rs"],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Bevy app created"
+        },
+        {
+          "id": "subtask-3-2",
+          "description": "Add Bevy default plugins and RapierPhysicsPlugin",
+          "service": "proto",
+          "files_to_modify": ["crates/proto/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Plugins added"
+        },
+        {
+          "id": "subtask-3-3",
+          "description": "Implement config loading from config.toml",
+          "service": "proto",
+          "files_to_modify": ["crates/proto/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Config loading implemented"
+        },
+        {
+          "id": "subtask-3-4",
+          "description": "Create startup system to initialize world, camera, and lighting",
+          "service": "proto",
+          "files_to_modify": ["crates/proto/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": ["crates/editor/src/main.rs"],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Startup system ready"
+        },
+        {
+          "id": "subtask-3-5",
+          "description": "Add camera orbit/free-fly controls (reuse patterns from editor)",
+          "service": "proto",
+          "files_to_modify": ["crates/proto/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": ["crates/editor/src/main.rs"],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Camera controls added"
+        },
+        {
+          "id": "subtask-3-6",
+          "description": "Implement debug info overlay (FPS, entity count, physics stats)",
+          "service": "proto",
+          "files_to_modify": ["crates/proto/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Debug overlay implemented"
+        },
+        {
+          "id": "subtask-3-7",
+          "description": "Create flake.nix for NixOS development environment",
+          "service": "proto",
+          "files_to_modify": [],
+          "files_to_create": ["crates/proto/flake.nix"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "test -f crates/proto/flake.nix && echo 'exists'",
+            "expected": "exists"
+          },
+          "status": "completed",
+          "notes": "NixOS flake created"
+        }
+      ]
+    },
+    {
+      "id": "phase-4",
+      "name": "World Generation",
+      "type": "implementation",
+      "description": "Create WorldCube and generate world mesh with collision",
+      "depends_on": ["phase-2", "phase-3"],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-4-1",
+          "description": "Create WorldCube from config parameters (macro_depth, micro_depth, seed)",
+          "service": "proto",
+          "files_to_modify": ["crates/proto/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "WorldCube creation from config"
+        },
+        {
+          "id": "subtask-4-2",
+          "description": "Generate world mesh using generate_mesh()",
+          "service": "proto",
+          "files_to_modify": ["crates/proto/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Mesh generation implemented"
+        },
+        {
+          "id": "subtask-4-3",
+          "description": "Spawn world as static Bevy entity with mesh component",
+          "service": "proto",
+          "files_to_modify": ["crates/proto/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "World entity spawned"
+        },
+        {
+          "id": "subtask-4-4",
+          "description": "Use VoxelColliderBuilder::from_cube() for world collision",
+          "service": "proto",
+          "files_to_modify": ["crates/proto/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": ["crates/physics/src/collision.rs"],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Add world collider"
+        },
+        {
+          "id": "subtask-4-5",
+          "description": "Verify world renders correctly in dev environment",
+          "service": "proto",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Run cargo run -p proto and verify world renders"
+          },
+          "status": "pending",
+          "notes": "Visual verification"
+        }
+      ]
+    },
+    {
+      "id": "phase-5",
+      "name": "Voxel Object System",
+      "type": "implementation",
+      "description": "Implement .vox file loading and mesh conversion",
+      "depends_on": ["phase-4"],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-5-1",
+          "description": "Implement system to load .vox files from packages/app/dist/assets/models/vox/",
+          "service": "proto",
+          "files_to_modify": ["crates/proto/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Load .vox from assets"
+        },
+        {
+          "id": "subtask-5-2",
+          "description": "Create VoxelObject component with Cube data and metadata",
+          "service": "proto",
+          "files_to_modify": ["crates/proto/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "VoxelObject component"
+        },
+        {
+          "id": "subtask-5-3",
+          "description": "Implement random .vox model selection from directory",
+          "service": "proto",
+          "files_to_modify": ["crates/proto/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Random model selection"
+        },
+        {
+          "id": "subtask-5-4",
+          "description": "Create helper function to convert Cube to Bevy Mesh (reuse editor pattern)",
+          "service": "proto",
+          "files_to_modify": ["crates/proto/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": ["crates/editor/src/main.rs"],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Cube to Bevy Mesh"
+        },
+        {
+          "id": "subtask-5-5",
+          "description": "Add material/color conversion for voxel rendering",
+          "service": "proto",
+          "files_to_modify": ["crates/proto/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Material conversion"
+        },
+        {
+          "id": "subtask-5-6",
+          "description": "Test .vox loading with 3-5 different models",
+          "service": "proto",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Verify different .vox models load correctly"
+          },
+          "status": "pending",
+          "notes": "Model loading tests"
+        }
+      ]
+    },
+    {
+      "id": "phase-6",
+      "name": "Dynamic Cube Spawning",
+      "type": "implementation",
+      "description": "Create spawn system to place cubes at random positions",
+      "depends_on": ["phase-5"],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-6-1",
+          "description": "Create spawn system to place cubes at random positions in air",
+          "service": "proto",
+          "files_to_modify": ["crates/proto/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Spawn system"
+        },
+        {
+          "id": "subtask-6-2",
+          "description": "Generate random Y positions (e.g., 20-50 units above ground) and X/Z within world bounds",
+          "service": "proto",
+          "files_to_modify": ["crates/proto/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Random position generation"
+        },
+        {
+          "id": "subtask-6-3",
+          "description": "Add random rotation for visual variety",
+          "service": "proto",
+          "files_to_modify": ["crates/proto/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Random rotation"
+        },
+        {
+          "id": "subtask-6-4",
+          "description": "Spawn specified count from config (spawn_count parameter)",
+          "service": "proto",
+          "files_to_modify": ["crates/proto/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Config-driven spawn count"
+        },
+        {
+          "id": "subtask-6-5",
+          "description": "Attach RigidBody (Dynamic), Collider, and Mesh to each cube entity",
+          "service": "proto",
+          "files_to_modify": ["crates/proto/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Physics components attached"
+        },
+        {
+          "id": "subtask-6-6",
+          "description": "Verify spawn_count cubes appear in scene",
+          "service": "proto",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Visual verification of spawned cubes"
+          },
+          "status": "pending",
+          "notes": "Visual verification"
+        }
+      ]
+    },
+    {
+      "id": "phase-7",
+      "name": "Optimized Collision Integration",
+      "type": "implementation",
+      "description": "Integrate optimized collision with spatial filtering",
+      "depends_on": ["phase-6"],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-7-1",
+          "description": "Integrate VoxelColliderBuilder::from_cube_region() for cube objects",
+          "service": "proto",
+          "files_to_modify": ["crates/proto/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": ["crates/physics/src/collision.rs"],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Region-based colliders"
+        },
+        {
+          "id": "subtask-7-2",
+          "description": "Initially use full collision (no optimization) as baseline",
+          "service": "proto",
+          "files_to_modify": ["crates/proto/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Baseline full collision"
+        },
+        {
+          "id": "subtask-7-3",
+          "description": "Implement AABB calculation for each cube entity",
+          "service": "proto",
+          "files_to_modify": ["crates/proto/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "AABB calculation"
+        },
+        {
+          "id": "subtask-7-4",
+          "description": "Add system to detect potential collisions via AABB overlap",
+          "service": "proto",
+          "files_to_modify": ["crates/proto/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "AABB overlap detection"
+        },
+        {
+          "id": "subtask-7-5",
+          "description": "Apply spatial filtering: only generate collider faces in overlap region",
+          "service": "proto",
+          "files_to_modify": ["crates/proto/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Spatial filtering applied"
+        },
+        {
+          "id": "subtask-7-6",
+          "description": "Benchmark performance difference (full vs. optimized collision)",
+          "service": "proto",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Compare FPS and collision face counts"
+          },
+          "status": "pending",
+          "notes": "Performance benchmark"
+        },
+        {
+          "id": "subtask-7-7",
+          "description": "Log collision face count reduction in debug overlay",
+          "service": "proto",
+          "files_to_modify": ["crates/proto/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Face count in overlay"
+        }
+      ]
+    },
+    {
+      "id": "phase-8",
+      "name": "Player Character System",
+      "type": "implementation",
+      "description": "Create player character with movement and camera follow",
+      "depends_on": ["phase-6"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-8-1",
+          "description": "Create PlayerCube component to mark player entity",
+          "service": "proto",
+          "files_to_modify": ["crates/proto/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "PlayerCube component"
+        },
+        {
+          "id": "subtask-8-2",
+          "description": "Load a specific .vox model for player (or use simple colored cube)",
+          "service": "proto",
+          "files_to_modify": ["crates/proto/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Player model"
+        },
+        {
+          "id": "subtask-8-3",
+          "description": "Implement character controller using Rapier's KinematicCharacterController",
+          "service": "proto",
+          "files_to_modify": ["crates/proto/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Character controller"
+        },
+        {
+          "id": "subtask-8-4",
+          "description": "Add WASD movement controls",
+          "service": "proto",
+          "files_to_modify": ["crates/proto/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "WASD movement"
+        },
+        {
+          "id": "subtask-8-5",
+          "description": "Add jump with spacebar",
+          "service": "proto",
+          "files_to_modify": ["crates/proto/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Jump control"
+        },
+        {
+          "id": "subtask-8-6",
+          "description": "Apply gravity to character controller",
+          "service": "proto",
+          "files_to_modify": ["crates/proto/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Player gravity"
+        },
+        {
+          "id": "subtask-8-7",
+          "description": "Add camera follow system (orbit around player or first-person)",
+          "service": "proto",
+          "files_to_modify": ["crates/proto/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Camera follow"
+        },
+        {
+          "id": "subtask-8-8",
+          "description": "Prevent player from falling through world",
+          "service": "proto",
+          "files_to_modify": ["crates/proto/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Verify player stays on world surface"
+          },
+          "status": "pending",
+          "notes": "Collision verification"
+        }
+      ]
+    },
+    {
+      "id": "phase-9",
+      "name": "Physics Simulation",
+      "type": "implementation",
+      "description": "Configure physics and verify simulation behavior",
+      "depends_on": ["phase-7", "phase-8"],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-9-1",
+          "description": "Configure RapierPhysicsPlugin with appropriate timestep",
+          "service": "proto",
+          "files_to_modify": ["crates/proto/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Physics timestep"
+        },
+        {
+          "id": "subtask-9-2",
+          "description": "Verify cubes fall with gravity",
+          "service": "proto",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Cubes should fall when simulation starts"
+          },
+          "status": "pending",
+          "notes": "Gravity verification"
+        },
+        {
+          "id": "subtask-9-3",
+          "description": "Test cube-to-cube collisions (stacking behavior)",
+          "service": "proto",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Cubes should stack on each other"
+          },
+          "status": "pending",
+          "notes": "Cube stacking"
+        },
+        {
+          "id": "subtask-9-4",
+          "description": "Test cube-to-world collisions (landing on terrain)",
+          "service": "proto",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Cubes should land on world surface"
+          },
+          "status": "pending",
+          "notes": "World collision"
+        },
+        {
+          "id": "subtask-9-5",
+          "description": "Test player-to-cube collisions",
+          "service": "proto",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Player should collide with cubes"
+          },
+          "status": "pending",
+          "notes": "Player-cube collision"
+        },
+        {
+          "id": "subtask-9-6",
+          "description": "Test player-to-world collisions",
+          "service": "proto",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Player should walk on world terrain"
+          },
+          "status": "pending",
+          "notes": "Player-world collision"
+        },
+        {
+          "id": "subtask-9-7",
+          "description": "Add restitution/friction parameters to colliders",
+          "service": "proto",
+          "files_to_modify": ["crates/proto/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Physics materials"
+        },
+        {
+          "id": "subtask-9-8",
+          "description": "Tune physics parameters for realistic behavior",
+          "service": "proto",
+          "files_to_modify": ["crates/proto/config.toml"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Physics should feel natural"
+          },
+          "status": "pending",
+          "notes": "Parameter tuning"
+        }
+      ]
+    },
+    {
+      "id": "phase-10",
+      "name": "Testing and Validation",
+      "type": "testing",
+      "description": "Test with various configurations and measure performance",
+      "depends_on": ["phase-9"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-10-1",
+          "description": "Run with 10 cubes and verify stable 60 FPS",
+          "service": "proto",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Verify 60 FPS with 10 cubes"
+          },
+          "status": "pending",
+          "notes": "10 cube performance"
+        },
+        {
+          "id": "subtask-10-2",
+          "description": "Run with 50 cubes and measure performance",
+          "service": "proto",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Measure FPS with 50 cubes"
+          },
+          "status": "pending",
+          "notes": "50 cube performance"
+        },
+        {
+          "id": "subtask-10-3",
+          "description": "Test with different world depths (3-7)",
+          "service": "proto",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Test with various macro_depth values"
+          },
+          "status": "pending",
+          "notes": "World depth testing"
+        },
+        {
+          "id": "subtask-10-4",
+          "description": "Test with different .vox model sizes (small/medium/large)",
+          "service": "proto",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Test with various model complexities"
+          },
+          "status": "pending",
+          "notes": "Model size testing"
+        },
+        {
+          "id": "subtask-10-5",
+          "description": "Verify character can walk on fallen cubes",
+          "service": "proto",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Player should walk on cube stacks"
+          },
+          "status": "pending",
+          "notes": "Walking on cubes"
+        },
+        {
+          "id": "subtask-10-6",
+          "description": "Verify character can navigate world terrain",
+          "service": "proto",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Player navigates terrain correctly"
+          },
+          "status": "pending",
+          "notes": "Terrain navigation"
+        },
+        {
+          "id": "subtask-10-7",
+          "description": "Test edge cases (cubes spawned at world boundary)",
+          "service": "proto",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Test boundary conditions"
+          },
+          "status": "pending",
+          "notes": "Edge case testing"
+        },
+        {
+          "id": "subtask-10-8",
+          "description": "Document performance characteristics in README",
+          "service": "documentation",
+          "files_to_modify": ["crates/proto/README.md"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "grep -q 'performance' crates/proto/README.md || echo 'ok'",
+            "expected": "ok"
+          },
+          "status": "pending",
+          "notes": "Performance docs"
+        }
+      ]
+    },
+    {
+      "id": "phase-11",
+      "name": "Documentation",
+      "type": "documentation",
+      "description": "Create README and document usage",
+      "depends_on": ["phase-3"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-11-1",
+          "description": "Create crates/proto/README.md with overview and usage",
+          "service": "documentation",
+          "files_to_modify": [],
+          "files_to_create": ["crates/proto/README.md"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "test -f crates/proto/README.md && echo 'exists'",
+            "expected": "exists"
+          },
+          "status": "completed",
+          "notes": "README created"
+        },
+        {
+          "id": "subtask-11-2",
+          "description": "Document config.toml parameters",
+          "service": "documentation",
+          "files_to_modify": ["crates/proto/README.md"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "grep -q 'config' crates/proto/README.md && echo 'found'",
+            "expected": "found"
+          },
+          "status": "completed",
+          "notes": "Config documented"
+        },
+        {
+          "id": "subtask-11-3",
+          "description": "Add example configurations (minimal, stress-test, demo)",
+          "service": "documentation",
+          "files_to_modify": ["crates/proto/README.md"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "grep -q 'example' crates/proto/README.md || echo 'pending'",
+            "expected": "pending"
+          },
+          "status": "pending",
+          "notes": "Example configs"
+        },
+        {
+          "id": "subtask-11-4",
+          "description": "Document optimized collision algorithm in physics crate",
+          "service": "documentation",
+          "files_to_modify": ["crates/physics/src/collision.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo doc -p crossworld-physics --no-deps",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Collision algorithm documented"
+        },
+        {
+          "id": "subtask-11-5",
+          "description": "Add inline code comments for complex systems",
+          "service": "documentation",
+          "files_to_modify": ["crates/proto/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Code comments added"
+        },
+        {
+          "id": "subtask-11-6",
+          "description": "Update root CLAUDE.md with proto information",
+          "service": "documentation",
+          "files_to_modify": ["CLAUDE.md"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "grep -q 'proto' CLAUDE.md && echo 'found'",
+            "expected": "found"
+          },
+          "status": "pending",
+          "notes": "CLAUDE.md update"
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "total_phases": 11,
+    "total_subtasks": 59,
+    "completed_subtasks": 34,
+    "pending_subtasks": 25,
+    "services_involved": ["proto", "physics", "cube", "world", "documentation"],
+    "parallelism": {
+      "max_parallel_phases": 2,
+      "parallel_groups": [
+        {
+          "phases": ["phase-7", "phase-8"],
+          "reason": "Optimized collision and player system can be developed in parallel"
+        },
+        {
+          "phases": ["phase-10", "phase-11"],
+          "reason": "Testing and documentation can proceed in parallel"
+        }
+      ],
+      "recommended_workers": 2,
+      "speedup_estimate": "Phases 7-8 and 10-11 parallelizable"
+    },
+    "startup_command": "cargo build -p proto && cargo run -p proto"
+  },
+  "verification_strategy": {
+    "risk_level": "low",
+    "skip_validation": false,
+    "test_creation_phase": "phase-10",
+    "test_types_required": ["manual", "integration"],
+    "security_scanning_required": false,
+    "staging_deployment_required": false,
+    "acceptance_criteria": [
+      "Application launches with Bevy window",
+      "WorldCube renders as static mesh with collision",
+      ".vox models load and spawn as dynamic physics bodies",
+      "Cubes fall with gravity and collide realistically",
+      "Player character navigates world with WASD + jump",
+      "Optimized collision reduces face count in overlap regions",
+      "Debug overlay shows FPS and physics stats",
+      "Configuration via TOML works for all parameters"
+    ],
+    "verification_steps": [
+      {
+        "name": "Proto Build",
+        "command": "cargo build -p proto",
+        "expected_outcome": "Successful build",
+        "type": "command",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Physics Tests",
+        "command": "cargo test -p crossworld-physics",
+        "expected_outcome": "All tests pass",
+        "type": "command",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Visual Verification",
+        "command": "cargo run -p proto",
+        "expected_outcome": "Application runs with physics",
+        "type": "manual",
+        "required": true,
+        "blocking": false
+      }
+    ],
+    "reasoning": "Low risk new feature. Uses existing cube, world, and physics crates. Verification is primarily visual/manual testing of physics behavior."
+  },
+  "qa_acceptance": {
+    "unit_tests": {
+      "required": true,
+      "commands": ["cargo test -p crossworld-physics"],
+      "minimum_coverage": null
+    },
+    "integration_tests": {
+      "required": false,
+      "commands": [],
+      "services_to_test": []
+    },
+    "e2e_tests": {
+      "required": false,
+      "commands": [],
+      "flows": []
+    },
+    "browser_verification": {
+      "required": false,
+      "pages": []
+    },
+    "database_verification": {
+      "required": false,
+      "checks": []
+    },
+    "performance_verification": {
+      "required": true,
+      "checks": [
+        "60 FPS with 50+ cubes",
+        "Responsive player controls",
+        "Collision face reduction visible in debug overlay"
+      ]
+    }
+  },
+  "qa_signoff": null,
+  "last_updated": "2025-12-26T00:00:00.000Z"
+}
