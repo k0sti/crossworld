@@ -1,0 +1,433 @@
+{
+  "feature": "Add Function Cube Type",
+  "workflow_type": "feature",
+  "workflow_rationale": "Dynamic material evaluation from user-defined expressions with CPU (fasteval) and GPU (WGSL) backends. Phase 1 and partial Phase 2 complete - remaining work is GPU pipeline setup, integration, and polish.",
+  "source": {
+    "openspec_change": "add-function-cube-type",
+    "migrated_from": "openspec/changes/add-function-cube-type/",
+    "migration_date": "2025-12-26"
+  },
+  "phases": [
+    {
+      "id": "phase-1",
+      "name": "Core Expression System (CPU)",
+      "type": "implementation",
+      "description": "AST definition, parser, fasteval integration, noise functions, DynamicCube type",
+      "depends_on": [],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-1-1",
+          "description": "Create function module with AST definition (Expr enum, VarId, BinOpKind, etc.)",
+          "service": "cube",
+          "files_to_modify": ["crates/cube/src/lib.rs"],
+          "files_to_create": ["crates/cube/src/function/mod.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p cube",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Expr enum with all variants, Display trait, helper methods."
+        },
+        {
+          "id": "subtask-1-2",
+          "description": "Implement nom-based parser for expression language",
+          "service": "cube",
+          "files_to_modify": [],
+          "files_to_create": ["crates/cube/src/function/parser.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo test -p cube parser",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Tokenizer, operator precedence, if/then/else, match, let bindings."
+        },
+        {
+          "id": "subtask-1-3",
+          "description": "Implement fasteval integration for CPU evaluation",
+          "service": "cube",
+          "files_to_modify": [],
+          "files_to_create": ["crates/cube/src/function/cpu/mod.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo test -p cube cpu",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "AstToFasteval converter, CpuFunction struct, custom functions."
+        },
+        {
+          "id": "subtask-1-4",
+          "description": "Implement CPU noise functions (Value, Perlin, FBM, turbulence)",
+          "service": "cube",
+          "files_to_modify": [],
+          "files_to_create": ["crates/cube/src/function/cpu/noise.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo test -p cube noise",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Value noise 3D, Perlin noise 3D, FBM, turbulence, ridged noise."
+        },
+        {
+          "id": "subtask-1-5",
+          "description": "Implement DynamicCube type with caching for time-invariant functions",
+          "service": "cube",
+          "files_to_modify": [],
+          "files_to_create": ["crates/cube/src/function/dynamic_cube.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo test -p cube dynamic",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "DynamicCube enum (Static, Function), get_material(), materialize()."
+        }
+      ]
+    },
+    {
+      "id": "phase-2",
+      "name": "GPU Backend (WGSL)",
+      "type": "implementation",
+      "description": "WGSL code generator, GPU pipeline, octree construction, backend selection",
+      "depends_on": ["phase-1"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-2-1",
+          "description": "Implement WGSL code generator from AST",
+          "service": "cube",
+          "files_to_modify": [],
+          "files_to_create": ["crates/cube/src/function/gpu/mod.rs", "crates/cube/src/function/gpu/wgsl.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo test -p cube wgsl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "WgslCodegen struct, noise function library, uniforms, workgroup setup."
+        },
+        {
+          "id": "subtask-2-2",
+          "description": "Implement GPU pipeline setup with wgpu (optional feature)",
+          "service": "cube",
+          "files_to_modify": ["crates/cube/Cargo.toml"],
+          "files_to_create": ["crates/cube/src/function/gpu/pipeline.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p cube --features gpu",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "wgpu dependency, GpuFunction::eval_batch(), compute pipeline, buffer management."
+        },
+        {
+          "id": "subtask-2-3",
+          "description": "Implement octree construction from GPU output (flat_to_octree)",
+          "service": "cube",
+          "files_to_modify": ["crates/cube/src/function/gpu/mod.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p cube --features gpu",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "flat_to_octree(), recursive octree builder with simplified() calls."
+        },
+        {
+          "id": "subtask-2-4",
+          "description": "Implement backend selection heuristic (CompiledFunction)",
+          "service": "cube",
+          "files_to_modify": [],
+          "files_to_create": ["crates/cube/src/function/compiled.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p cube",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Voxel count threshold, uses_time check, complexity analysis, WebGPU availability."
+        },
+        {
+          "id": "subtask-2-5",
+          "description": "Implement CPU/GPU parity tests",
+          "service": "cube",
+          "files_to_modify": [],
+          "files_to_create": ["crates/cube/src/function/tests.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo test -p cube function",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Tests for arithmetic, conditionals, noise, match, let, time/world coords."
+        }
+      ]
+    },
+    {
+      "id": "phase-3",
+      "name": "Integration",
+      "type": "integration",
+      "description": "Mesh generation, world integration, time-based animation",
+      "depends_on": ["phase-2"],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-3-1",
+          "description": "Modify visit_faces to accept DynamicCube and pass EvalContext",
+          "service": "cube",
+          "files_to_modify": ["crates/cube/src/traversal/visit_faces.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p cube",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Evaluate function at each voxel position during mesh generation."
+        },
+        {
+          "id": "subtask-3-2",
+          "description": "Add DynamicCube support to WorldCube for procedural terrain layers",
+          "service": "cube",
+          "files_to_modify": ["crates/cube/src/core/world_cube.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p cube",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Noise-based grass/stone distribution, procedural world generation."
+        },
+        {
+          "id": "subtask-3-3",
+          "description": "Implement frame-by-frame re-evaluation for uses_time functions",
+          "service": "cube",
+          "files_to_modify": ["crates/cube/src/function/dynamic_cube.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo test -p cube animation",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Cache management, LOD-aware evaluation."
+        }
+      ]
+    },
+    {
+      "id": "phase-4",
+      "name": "WASM Bindings",
+      "type": "implementation",
+      "description": "WASM exports for parser, compiler, evaluation",
+      "depends_on": ["phase-3"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-4-1",
+          "description": "Add wasm-bindgen exports for parser and compiler",
+          "service": "cube",
+          "files_to_modify": ["crates/cube/Cargo.toml"],
+          "files_to_create": ["crates/cube/src/function/wasm.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p cube --target wasm32-unknown-unknown",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "WASM API, TypeScript type definitions, GPU context from JavaScript."
+        },
+        {
+          "id": "subtask-4-2",
+          "description": "Create FunctionCube TypeScript class with expression validation",
+          "service": "cube",
+          "files_to_modify": [],
+          "files_to_create": ["crates/cube/js/FunctionCube.ts"],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "command": "Build and test TypeScript bindings",
+            "expected": "TypeScript compiles without errors"
+          },
+          "status": "pending",
+          "notes": "JavaScript integration, error handling and display."
+        }
+      ]
+    },
+    {
+      "id": "phase-5",
+      "name": "Polish and Optimization",
+      "type": "testing",
+      "description": "Error handling, performance optimization, documentation",
+      "depends_on": ["phase-4"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-5-1",
+          "description": "Create FunctionError enum with source location tracking",
+          "service": "cube",
+          "files_to_modify": ["crates/cube/src/function/mod.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p cube",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Error types, user-friendly messages, shader compilation error handling."
+        },
+        {
+          "id": "subtask-5-2",
+          "description": "Profile and optimize CPU/GPU evaluation hot paths",
+          "service": "cube",
+          "files_to_modify": ["crates/cube/src/function/cpu/mod.rs", "crates/cube/src/function/gpu/pipeline.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo bench -p cube function",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Stack operations, noise optimization, async GPU dispatch."
+        },
+        {
+          "id": "subtask-5-3",
+          "description": "Add doc comments and expression language reference",
+          "service": "cube",
+          "files_to_modify": ["crates/cube/src/function/mod.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo doc -p cube --no-deps",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Doc comments, example expressions, GPU requirements documentation."
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "total_phases": 5,
+    "total_subtasks": 18,
+    "completed_subtasks": 7,
+    "pending_subtasks": 11,
+    "services_involved": ["cube"],
+    "parallelism": {
+      "max_parallel_phases": 2,
+      "parallel_groups": [
+        {
+          "phases": ["phase-4", "phase-5"],
+          "reason": "WASM bindings and polish can be parallelized after integration"
+        }
+      ],
+      "recommended_workers": 1,
+      "speedup_estimate": "Phases 4-5 parallelizable after phase 3 complete"
+    },
+    "startup_command": "cargo test -p cube function && cargo check -p cube"
+  },
+  "verification_strategy": {
+    "risk_level": "medium",
+    "skip_validation": false,
+    "test_creation_phase": "phase-2",
+    "test_types_required": ["unit", "integration"],
+    "security_scanning_required": false,
+    "staging_deployment_required": false,
+    "acceptance_criteria": [
+      "Parser correctly handles all expression language constructs",
+      "CPU backend evaluates expressions via fasteval",
+      "GPU backend generates valid WGSL shaders",
+      "CPU and GPU produce identical results for same inputs",
+      "Backend selection heuristic chooses optimal path",
+      "DynamicCube integrates with existing cube traversal"
+    ],
+    "verification_steps": [
+      {
+        "name": "Parser Tests",
+        "command": "cargo test -p cube parser",
+        "expected_outcome": "All parser tests pass",
+        "type": "command",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "CPU Backend Tests",
+        "command": "cargo test -p cube cpu",
+        "expected_outcome": "All CPU evaluation tests pass",
+        "type": "command",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "WGSL Codegen Tests",
+        "command": "cargo test -p cube wgsl",
+        "expected_outcome": "WGSL generation tests pass",
+        "type": "command",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Function Cube Build",
+        "command": "cargo check -p cube",
+        "expected_outcome": "Successful build",
+        "type": "command",
+        "required": true,
+        "blocking": true
+      }
+    ],
+    "reasoning": "Medium risk due to dual backend complexity. Unit tests verify parsing and evaluation, parity tests ensure CPU/GPU consistency."
+  },
+  "qa_acceptance": {
+    "unit_tests": {
+      "required": true,
+      "commands": ["cargo test -p cube function"],
+      "minimum_coverage": null
+    },
+    "integration_tests": {
+      "required": true,
+      "commands": ["cargo test --workspace"],
+      "services_to_test": ["cube"]
+    },
+    "e2e_tests": {
+      "required": false,
+      "commands": [],
+      "flows": []
+    },
+    "browser_verification": {
+      "required": false,
+      "pages": []
+    },
+    "database_verification": {
+      "required": false,
+      "checks": []
+    },
+    "performance_verification": {
+      "required": false,
+      "checks": []
+    }
+  },
+  "qa_signoff": null,
+  "last_updated": "2025-12-26T00:00:00.000Z"
+}

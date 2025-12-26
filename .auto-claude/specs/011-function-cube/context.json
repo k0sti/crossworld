@@ -1,0 +1,47 @@
+{
+  "task_description": "Add function cube type for dynamic material evaluation from user-defined expressions with CPU (fasteval) and GPU (WGSL) backends.",
+  "scoped_services": ["cube"],
+  "files_to_modify": [
+    "crates/cube/src/lib.rs"
+  ],
+  "files_to_create": [
+    "crates/cube/src/function/mod.rs",
+    "crates/cube/src/function/parser.rs",
+    "crates/cube/src/function/cpu/mod.rs",
+    "crates/cube/src/function/cpu/noise.rs",
+    "crates/cube/src/function/gpu/mod.rs",
+    "crates/cube/src/function/gpu/wgsl.rs",
+    "crates/cube/src/function/dynamic_cube.rs",
+    "crates/cube/src/function/tests.rs"
+  ],
+  "files_to_reference": [
+    "crates/cube/src/core/cube.rs",
+    "crates/cube/src/fabric/mod.rs"
+  ],
+  "patterns": {
+    "expression_language": "if/then/else, match, let bindings with GPU-compatible constructs",
+    "cpu_backend": "fasteval for compiled expression evaluation",
+    "gpu_backend": "WGSL compute shaders with 8x8x8 workgroups",
+    "noise_functions": "Value noise, Perlin noise, FBM, turbulence",
+    "dual_backend": "Shared AST compiles to both fasteval (CPU) and WGSL (GPU)"
+  },
+  "existing_infrastructure": {
+    "cube_structure": "Cube<T> octree in crates/cube/src/core/cube.rs",
+    "fabric_module": "Quaternion field interpolation in crates/cube/src/fabric/",
+    "traversal": "Cube traversal and face visiting in crates/cube/src/traversal/"
+  },
+  "key_decisions": [
+    "Use fasteval for CPU evaluation (10x faster than interpreted)",
+    "Generate WGSL code for GPU compute shaders",
+    "Shared AST parsed with nom enables both backends",
+    "Expression inputs: x,y,z (local), wx,wy,wz (world), time, depth, seed",
+    "Backend selection heuristic based on voxel count and expression complexity"
+  ],
+  "algorithms": {
+    "expression_parsing": "nom-based parser for expression language → AST",
+    "cpu_evaluation": "AST → fasteval compiled expression",
+    "gpu_codegen": "AST → WGSL shader source",
+    "backend_selection": "Voxel count > 4096 or uses_time → GPU"
+  },
+  "created_at": "2025-12-26T00:00:00.000Z"
+}

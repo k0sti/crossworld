@@ -1,0 +1,52 @@
+{
+  "project_root": "/home/k0/work/crossworld/main-cw",
+  "project_type": "monorepo",
+  "services": {
+    "cube": {
+      "name": "cube",
+      "path": "/home/k0/work/crossworld/main-cw/crates/cube",
+      "language": "Rust",
+      "framework": null,
+      "type": "library",
+      "package_manager": "cargo",
+      "key_directories": {
+        "src": {
+          "path": "src",
+          "purpose": "Source code"
+        },
+        "core": {
+          "path": "src/core",
+          "purpose": "Core cube/octree structures"
+        },
+        "function": {
+          "path": "src/function",
+          "purpose": "Function cube expression evaluation (CPU + GPU)"
+        },
+        "fabric": {
+          "path": "src/fabric",
+          "purpose": "Fabric model generation (quaternion fields)"
+        },
+        "traversal": {
+          "path": "src/traversal",
+          "purpose": "Cube traversal and iteration"
+        }
+      },
+      "entry_point": "src/lib.rs",
+      "dependencies": [
+        "glam",
+        "serde",
+        "nom",
+        "fasteval"
+      ]
+    }
+  },
+  "infrastructure": {
+    "ci": "GitHub Actions",
+    "ci_workflows": []
+  },
+  "conventions": {
+    "rust_style": "Standard Rust conventions with cargo fmt/clippy",
+    "config_format": "RON (Rusty Object Notation) for configuration files",
+    "module_structure": "Separate files for types, implementation, and tests"
+  }
+}
