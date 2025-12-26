@@ -1,0 +1,38 @@
+{
+  "task_description": "Implement and benchmark three world collision strategies (Monolithic, Chunked, Hybrid Octree) with a common WorldCollider trait interface for performance comparison and strategy selection.",
+  "workflow_type": "feature",
+  "source": {
+    "openspec_change": "optimize-world-collision",
+    "migrated_from": "openspec/changes/optimize-world-collision/",
+    "migration_date": "2025-12-26"
+  },
+  "priority": "high",
+  "status_summary": {
+    "total_tasks": 35,
+    "completed": 23,
+    "pending": 12,
+    "completion_percentage": 66
+  },
+  "completed_work": [
+    "Phase 1: WorldCollider Trait and Infrastructure (3/3 complete)",
+    "Phase 2: Monolithic Strategy (3/3 complete)",
+    "Phase 3: Chunked Strategy (4/6 complete - structure, position calc, generate, update)",
+    "Phase 4: Hybrid Octree Strategy (5/6 complete - struct, resolve, penetration, integration, tests)",
+    "Phase 5: Configuration Integration (3/3 complete)",
+    "Phase 6: Proto-GL Integration (3/5 complete - refactor, collect_aabbs, resolve)"
+  ],
+  "pending_work": [
+    "Phase 3.5-3.6: Chunked strategy unit tests (objects approach/leave)",
+    "Phase 4.6: Octree query efficiency unit test",
+    "Phase 6.3: Call update() before physics step",
+    "Phase 6.5: Display metrics in debug overlay",
+    "Phase 7: Benchmarking (4 tasks)",
+    "Phase 8: Documentation (2 tasks)",
+    "Phase 9: Cleanup and Polish (4 tasks)"
+  ],
+  "affected_crates": [
+    "crates/physics",
+    "crates/proto-gl"
+  ],
+  "created_at": "2025-12-26T00:00:00.000Z"
+}
