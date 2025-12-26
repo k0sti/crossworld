@@ -1,0 +1,58 @@
+{
+  "project_root": "/home/k0/work/crossworld/main-cw",
+  "project_type": "monorepo",
+  "services": {
+    "editor": {
+      "name": "editor",
+      "path": "/home/k0/work/crossworld/main-cw/crates/editor",
+      "language": "Rust",
+      "framework": "Bevy 0.17.3",
+      "type": "binary",
+      "binary_name": "planet",
+      "build_tool": "cargo",
+      "dev_command": "just planet",
+      "key_directories": {
+        "src": {
+          "path": "src",
+          "purpose": "Source code"
+        }
+      },
+      "entry_point": "src/main.rs",
+      "dependencies": [
+        "cube",
+        "crossworld-world",
+        "bevy",
+        "bevy_egui",
+        "glam",
+        "serde",
+        "serde_json",
+        "rfd"
+      ]
+    },
+    "cube": {
+      "name": "cube",
+      "path": "/home/k0/work/crossworld/main-cw/crates/cube",
+      "language": "Rust",
+      "type": "library",
+      "purpose": "Voxel data structures, octree, CSM parsing, mesh generation, .vox loading"
+    },
+    "world": {
+      "name": "crossworld-world",
+      "path": "/home/k0/work/crossworld/main-cw/crates/world",
+      "language": "Rust",
+      "type": "library",
+      "purpose": "WorldCube wrapper, terrain generation, voxel editing API"
+    }
+  },
+  "infrastructure": {
+    "build_system": "cargo + just",
+    "ci": "GitHub Actions",
+    "dev_environment": "NixOS flake (crates/editor/flake.nix)",
+    "linker": "mold (Linux)"
+  },
+  "conventions": {
+    "rust_edition": "2021",
+    "formatting": "cargo fmt",
+    "linting": "cargo clippy"
+  }
+}
