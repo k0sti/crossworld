@@ -1,0 +1,1464 @@
+{
+  "feature": "Proto-GL Physics Viewer",
+  "workflow_type": "feature",
+  "workflow_rationale": "Create lightweight physics viewer with egui+GL rendering stack for fast iteration. Replaces Bevy rendering while maintaining physics validation goals. Most infrastructure complete - pending physics integration, testing, and documentation.",
+  "source": {
+    "openspec_change": "create-proto-gl-physics-viewer",
+    "migrated_from": "openspec/changes/create-proto-gl-physics-viewer/",
+    "migration_date": "2025-12-26"
+  },
+  "phases": [
+    {
+      "id": "phase-1",
+      "name": "Project Setup",
+      "type": "implementation",
+      "description": "Create crates/proto-gl directory structure with dependencies",
+      "depends_on": [],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-1-1",
+          "description": "Create crates/proto-gl directory structure",
+          "service": "proto-gl",
+          "files_to_modify": [],
+          "files_to_create": ["crates/proto-gl/"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "test -d crates/proto-gl && echo 'exists'",
+            "expected": "exists"
+          },
+          "status": "completed",
+          "notes": "Directory structure created"
+        },
+        {
+          "id": "subtask-1-2",
+          "description": "Add crates/proto-gl/Cargo.toml with dependencies (glow, glutin, winit, egui stack, cube, crossworld-physics, toml, glam, rand)",
+          "service": "proto-gl",
+          "files_to_modify": [],
+          "files_to_create": ["crates/proto-gl/Cargo.toml"],
+          "patterns_from": ["crates/renderer/Cargo.toml"],
+          "verification": {
+            "type": "command",
+            "command": "test -f crates/proto-gl/Cargo.toml && echo 'exists'",
+            "expected": "exists"
+          },
+          "status": "completed",
+          "notes": "Cargo.toml with all dependencies"
+        },
+        {
+          "id": "subtask-1-3",
+          "description": "Create crates/proto-gl/config.toml with default configuration",
+          "service": "proto-gl",
+          "files_to_modify": [],
+          "files_to_create": ["crates/proto-gl/config.toml"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "test -f crates/proto-gl/config.toml && echo 'exists'",
+            "expected": "exists"
+          },
+          "status": "completed",
+          "notes": "Default config with world, physics, models settings"
+        },
+        {
+          "id": "subtask-1-4",
+          "description": "Add proto-gl crate to workspace in root Cargo.toml",
+          "service": "proto-gl",
+          "files_to_modify": ["Cargo.toml"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "grep -q 'proto-gl' Cargo.toml && echo 'found'",
+            "expected": "found"
+          },
+          "status": "completed",
+          "notes": "Added to workspace members"
+        },
+        {
+          "id": "subtask-1-5",
+          "description": "Add just proto-gl task to justfile for running the viewer",
+          "service": "proto-gl",
+          "files_to_modify": ["justfile"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "grep -q 'proto-gl' justfile && echo 'found'",
+            "expected": "found"
+          },
+          "status": "completed",
+          "notes": "just proto-gl runs the viewer"
+        },
+        {
+          "id": "subtask-1-6",
+          "description": "Verify clean build completes in < 20 seconds",
+          "service": "proto-gl",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo build -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Build time verified"
+        }
+      ]
+    },
+    {
+      "id": "phase-2",
+      "name": "Application Scaffold",
+      "type": "implementation",
+      "description": "Create main.rs with winit event loop, OpenGL context, egui integration",
+      "depends_on": ["phase-1"],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-2-1",
+          "description": "Create crates/proto-gl/src/main.rs with winit event loop",
+          "service": "proto-gl",
+          "files_to_modify": [],
+          "files_to_create": ["crates/proto-gl/src/main.rs"],
+          "patterns_from": ["crates/renderer/src/main.rs"],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Winit event loop implemented"
+        },
+        {
+          "id": "subtask-2-2",
+          "description": "Initialize OpenGL context using glutin (copy pattern from crates/renderer)",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": ["crates/renderer/src/main.rs"],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Glutin GL context setup"
+        },
+        {
+          "id": "subtask-2-3",
+          "description": "Setup egui integration (egui-glow)",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": ["crates/renderer/src/main.rs"],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "egui-glow integration"
+        },
+        {
+          "id": "subtask-2-4",
+          "description": "Create basic window with title 'Proto-GL Physics Viewer'",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Window title set"
+        },
+        {
+          "id": "subtask-2-5",
+          "description": "Implement config loading from config.toml with fallback to defaults",
+          "service": "proto-gl",
+          "files_to_modify": [],
+          "files_to_create": ["crates/proto-gl/src/config.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Config loading with defaults"
+        },
+        {
+          "id": "subtask-2-6",
+          "description": "Add ProtoGlConfig struct matching design.md structure",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/src/config.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Config struct with serde"
+        },
+        {
+          "id": "subtask-2-7",
+          "description": "Verify application launches and shows empty window",
+          "service": "proto-gl",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Run cargo run -p proto-gl and verify window appears"
+          },
+          "status": "completed",
+          "notes": "Window appears correctly"
+        }
+      ]
+    },
+    {
+      "id": "phase-3",
+      "name": "Rendering Integration",
+      "type": "implementation",
+      "description": "Integrate GlCubeTracer from crates/renderer with orbit camera",
+      "depends_on": ["phase-2"],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-3-1",
+          "description": "Add renderer crate as dependency",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/Cargo.toml"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "crossworld-renderer added"
+        },
+        {
+          "id": "subtask-3-2",
+          "description": "Create ProtoGlRenderer struct wrapping GlCubeTracer",
+          "service": "proto-gl",
+          "files_to_modify": [],
+          "files_to_create": ["crates/proto-gl/src/app.rs"],
+          "patterns_from": ["crates/renderer/src/main.rs"],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Wrapper for GL rendering"
+        },
+        {
+          "id": "subtask-3-3",
+          "description": "Implement OrbitCamera struct with view matrix calculation",
+          "service": "proto-gl",
+          "files_to_modify": [],
+          "files_to_create": ["crates/proto-gl/src/camera.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Orbit camera with view matrix"
+        },
+        {
+          "id": "subtask-3-4",
+          "description": "Add mouse controls for camera orbit (right-click drag)",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/src/camera.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Right-click drag orbit"
+        },
+        {
+          "id": "subtask-3-5",
+          "description": "Add mouse wheel zoom",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/src/camera.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Scroll wheel zoom"
+        },
+        {
+          "id": "subtask-3-6",
+          "description": "Create render loop that clears and presents frame",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/src/app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Frame clear and present"
+        },
+        {
+          "id": "subtask-3-7",
+          "description": "Verify camera controls work smoothly",
+          "service": "proto-gl",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Test orbit and zoom controls"
+          },
+          "status": "completed",
+          "notes": "Smooth camera controls"
+        }
+      ]
+    },
+    {
+      "id": "phase-4",
+      "name": "World Generation and Rendering",
+      "type": "implementation",
+      "description": "Parse CSM, generate mesh, render world cube",
+      "depends_on": ["phase-3"],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-4-1",
+          "description": "Parse CSM from config.root_cube using cube::parse_csm()",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/src/app.rs"],
+          "files_to_create": [],
+          "patterns_from": ["crates/proto/src/main.rs"],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "CSM parsing implemented"
+        },
+        {
+          "id": "subtask-4-2",
+          "description": "Implement add_border_layers() function (copy from crates/proto)",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/src/app.rs"],
+          "files_to_create": [],
+          "patterns_from": ["crates/proto/src/main.rs"],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Border layers function"
+        },
+        {
+          "id": "subtask-4-3",
+          "description": "Apply border layers based on config.border_depth",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/src/app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Border depth configurable"
+        },
+        {
+          "id": "subtask-4-4",
+          "description": "Generate mesh from cube using generate_face_mesh()",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/src/app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Face mesh generation"
+        },
+        {
+          "id": "subtask-4-5",
+          "description": "Render world cube in GL viewport using GlCubeTracer",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/src/app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "GL rendering of world"
+        },
+        {
+          "id": "subtask-4-6",
+          "description": "Scale vertices to world coordinates",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/src/app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "World coordinate scaling"
+        },
+        {
+          "id": "subtask-4-7",
+          "description": "Verify world renders correctly in viewport",
+          "service": "proto-gl",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Visual verification of world rendering"
+          },
+          "status": "completed",
+          "notes": "World visible"
+        },
+        {
+          "id": "subtask-4-8",
+          "description": "Fix shader compilation error (bvec3 logical operations)",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/renderer/src/renderers/gl_tracer.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Shader fix applied"
+        },
+        {
+          "id": "subtask-4-9",
+          "description": "Initialize GL tracer with init_gl() call and add camera position/rotation calculation methods",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/src/app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "GL init and camera methods"
+        }
+      ]
+    },
+    {
+      "id": "phase-5",
+      "name": "Physics World Setup",
+      "type": "implementation",
+      "description": "Initialize Rapier3D physics world with world collider",
+      "depends_on": ["phase-4"],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-5-1",
+          "description": "Initialize Rapier3D physics world with gravity from config",
+          "service": "proto-gl",
+          "files_to_modify": [],
+          "files_to_create": ["crates/proto-gl/src/physics.rs"],
+          "patterns_from": ["crates/physics/src/lib.rs"],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Rapier3D initialized"
+        },
+        {
+          "id": "subtask-5-2",
+          "description": "Create PhysicsWorld struct (RigidBodySet, ColliderSet, etc.)",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/src/physics.rs"],
+          "files_to_create": [],
+          "patterns_from": ["crates/physics/src/lib.rs"],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "PhysicsWorld struct"
+        },
+        {
+          "id": "subtask-5-3",
+          "description": "Generate world collider using VoxelColliderBuilder::from_cube()",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/src/app.rs"],
+          "files_to_create": [],
+          "patterns_from": ["crates/proto/src/main.rs"],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "VoxelColliderBuilder used"
+        },
+        {
+          "id": "subtask-5-4",
+          "description": "Add world as Fixed rigid body to physics world",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/src/app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Fixed world body"
+        },
+        {
+          "id": "subtask-5-5",
+          "description": "Implement fixed timestep accumulator (60 Hz)",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/src/app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "60Hz fixed timestep"
+        },
+        {
+          "id": "subtask-5-6",
+          "description": "Add physics step to main loop",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Physics step in loop"
+        }
+      ]
+    },
+    {
+      "id": "phase-6",
+      "name": "CubeObject System",
+      "type": "implementation",
+      "description": "Create CubeObject struct and .vox model loading",
+      "depends_on": ["phase-5"],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-6-1",
+          "description": "Create CubeObject struct with cube, handles, metadata",
+          "service": "proto-gl",
+          "files_to_modify": [],
+          "files_to_create": ["crates/proto-gl/src/models.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "CubeObject struct"
+        },
+        {
+          "id": "subtask-6-2",
+          "description": "Implement .vox file loading from config.models_path",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/src/models.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": ".vox loading implemented"
+        },
+        {
+          "id": "subtask-6-3",
+          "description": "Create VoxModel struct (cube, name, depth)",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/src/models.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "VoxModel struct"
+        },
+        {
+          "id": "subtask-6-4",
+          "description": "Implement directory scanning for .vox files",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/src/models.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Directory scanning"
+        },
+        {
+          "id": "subtask-6-5",
+          "description": "Add random model selection logic",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/src/models.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Random selection"
+        },
+        {
+          "id": "subtask-6-6",
+          "description": "Handle missing models directory gracefully (fallback to simple cubes)",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/src/models.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Fallback handling"
+        },
+        {
+          "id": "subtask-6-7",
+          "description": "Verify .vox models load correctly",
+          "service": "proto-gl",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Test with sample .vox files"
+          },
+          "status": "completed",
+          "notes": "Model loading verified"
+        }
+      ]
+    },
+    {
+      "id": "phase-7",
+      "name": "Dynamic Cube Spawning",
+      "type": "implementation",
+      "description": "Spawn dynamic cubes with physics bodies",
+      "depends_on": ["phase-6"],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-7-1",
+          "description": "Implement spawn_cube_objects() function",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/src/app.rs"],
+          "files_to_create": [],
+          "patterns_from": ["crates/proto/src/main.rs"],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Spawn function implemented"
+        },
+        {
+          "id": "subtask-7-2",
+          "description": "Generate random positions (x, y, z) within configured bounds",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/src/app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Random positions"
+        },
+        {
+          "id": "subtask-7-3",
+          "description": "Create RigidBody::Dynamic for each cube",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/src/app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Dynamic rigid bodies"
+        },
+        {
+          "id": "subtask-7-4",
+          "description": "Generate collider using VoxelColliderBuilder::from_cube()",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/src/app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Colliders generated"
+        },
+        {
+          "id": "subtask-7-5",
+          "description": "Store CubeObjects in application state",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/src/app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Objects stored in state"
+        },
+        {
+          "id": "subtask-7-6",
+          "description": "Add cubes to physics world with random rotations",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/src/app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Random rotations for variety"
+        },
+        {
+          "id": "subtask-7-7",
+          "description": "Verify spawn_count cubes appear in scene",
+          "service": "proto-gl",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Visual verification of spawned cubes"
+          },
+          "status": "pending",
+          "notes": "Cubes should be visible"
+        }
+      ]
+    },
+    {
+      "id": "phase-8",
+      "name": "Physics Simulation",
+      "type": "implementation",
+      "description": "Complete physics simulation with transform extraction and rendering",
+      "depends_on": ["phase-7"],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-8-1",
+          "description": "Implement physics step in main loop (fixed timestep)",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/src/app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Fixed timestep step"
+        },
+        {
+          "id": "subtask-8-2",
+          "description": "Extract rigid body transforms (position, rotation)",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/src/app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Get position/rotation from physics"
+        },
+        {
+          "id": "subtask-8-3",
+          "description": "Update cube render positions from physics state",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/src/app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Sync render with physics"
+        },
+        {
+          "id": "subtask-8-4",
+          "description": "Render dynamic cubes at their physics positions",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/src/app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Render cubes at correct positions"
+        },
+        {
+          "id": "subtask-8-5",
+          "description": "Verify cubes fall with gravity",
+          "service": "proto-gl",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Cubes should fall when simulation starts"
+          },
+          "status": "pending",
+          "notes": "Gravity affects cubes"
+        },
+        {
+          "id": "subtask-8-6",
+          "description": "Test cube-to-world collisions (landing)",
+          "service": "proto-gl",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Cubes should land on world surface"
+          },
+          "status": "pending",
+          "notes": "Collision with world"
+        },
+        {
+          "id": "subtask-8-7",
+          "description": "Test cube-to-cube collisions (stacking)",
+          "service": "proto-gl",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Cubes should stack on each other"
+          },
+          "status": "pending",
+          "notes": "Cube-cube collision"
+        },
+        {
+          "id": "subtask-8-8",
+          "description": "Tune physics parameters for realistic behavior",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/config.toml"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Physics should feel natural"
+          },
+          "status": "pending",
+          "notes": "Parameter tuning"
+        }
+      ]
+    },
+    {
+      "id": "phase-9",
+      "name": "UI Panel",
+      "type": "implementation",
+      "description": "Create egui side panel with controls and metrics",
+      "depends_on": ["phase-2"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-9-1",
+          "description": "Create egui side panel with controls",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/src/app.rs"],
+          "files_to_create": [],
+          "patterns_from": ["crates/renderer/src/main.rs"],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Side panel created"
+        },
+        {
+          "id": "subtask-9-2",
+          "description": "Display FPS counter (calculate from frame delta)",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/src/app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "FPS counter displayed"
+        },
+        {
+          "id": "subtask-9-3",
+          "description": "Display object count",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/src/app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Object count shown"
+        },
+        {
+          "id": "subtask-9-4",
+          "description": "Display configuration values (world depth, gravity, etc.)",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/src/app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Config values displayed"
+        },
+        {
+          "id": "subtask-9-5",
+          "description": "Add 'Reset Scene' button",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/src/app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Reset button added"
+        },
+        {
+          "id": "subtask-9-6",
+          "description": "Implement scene reset (respawn cubes)",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/src/app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Reset respawns cubes"
+        },
+        {
+          "id": "subtask-9-7",
+          "description": "Style UI panel for readability",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/src/app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "UI styled"
+        },
+        {
+          "id": "subtask-9-8",
+          "description": "Add pause/resume controls",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/src/app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Pause controls"
+        }
+      ]
+    },
+    {
+      "id": "phase-10",
+      "name": "Testing and Validation",
+      "type": "testing",
+      "description": "Test with various configurations and measure performance",
+      "depends_on": ["phase-8", "phase-9"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-10-1",
+          "description": "Test with 5, 10, 20, 50 cubes and measure FPS",
+          "service": "proto-gl",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Run with different spawn_count values"
+          },
+          "status": "pending",
+          "notes": "Performance at different counts"
+        },
+        {
+          "id": "subtask-10-2",
+          "description": "Verify build time < 15 seconds (clean build)",
+          "service": "proto-gl",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "time cargo build -p proto-gl --release",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Build time measurement"
+        },
+        {
+          "id": "subtask-10-3",
+          "description": "Test with different world depths (3-7)",
+          "service": "proto-gl",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Test with various border_depth values"
+          },
+          "status": "pending",
+          "notes": "Different world sizes"
+        },
+        {
+          "id": "subtask-10-4",
+          "description": "Test with different .vox model sizes",
+          "service": "proto-gl",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Test with various model complexities"
+          },
+          "status": "pending",
+          "notes": "Model size impact"
+        },
+        {
+          "id": "subtask-10-5",
+          "description": "Test edge cases (zero cubes, huge spawn_radius)",
+          "service": "proto-gl",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Test with edge case configs"
+          },
+          "status": "pending",
+          "notes": "Edge case handling"
+        },
+        {
+          "id": "subtask-10-6",
+          "description": "Test config file missing/invalid scenarios",
+          "service": "proto-gl",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Test with missing or broken config"
+          },
+          "status": "pending",
+          "notes": "Config error handling"
+        },
+        {
+          "id": "subtask-10-7",
+          "description": "Document performance characteristics in README",
+          "service": "proto-gl",
+          "files_to_modify": [],
+          "files_to_create": ["crates/proto-gl/README.md"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "test -f crates/proto-gl/README.md && echo 'exists'",
+            "expected": "exists"
+          },
+          "status": "pending",
+          "notes": "Performance docs"
+        }
+      ]
+    },
+    {
+      "id": "phase-11",
+      "name": "Documentation",
+      "type": "documentation",
+      "description": "Create README and document usage",
+      "depends_on": ["phase-10"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-11-1",
+          "description": "Create crates/proto-gl/README.md with overview",
+          "service": "documentation",
+          "files_to_modify": [],
+          "files_to_create": ["crates/proto-gl/README.md"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "test -f crates/proto-gl/README.md && echo 'exists'",
+            "expected": "exists"
+          },
+          "status": "pending",
+          "notes": "README with overview"
+        },
+        {
+          "id": "subtask-11-2",
+          "description": "Document config.toml parameters",
+          "service": "documentation",
+          "files_to_modify": ["crates/proto-gl/README.md"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "grep -q 'config' crates/proto-gl/README.md && echo 'found'",
+            "expected": "found"
+          },
+          "status": "pending",
+          "notes": "Config documentation"
+        },
+        {
+          "id": "subtask-11-3",
+          "description": "Add usage instructions (just proto-gl)",
+          "service": "documentation",
+          "files_to_modify": ["crates/proto-gl/README.md"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "grep -q 'just proto-gl' crates/proto-gl/README.md && echo 'found'",
+            "expected": "found"
+          },
+          "status": "pending",
+          "notes": "Usage instructions"
+        },
+        {
+          "id": "subtask-11-4",
+          "description": "Document camera controls",
+          "service": "documentation",
+          "files_to_modify": ["crates/proto-gl/README.md"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "grep -q 'camera' crates/proto-gl/README.md && echo 'found'",
+            "expected": "found"
+          },
+          "status": "pending",
+          "notes": "Camera control docs"
+        },
+        {
+          "id": "subtask-11-5",
+          "description": "Add example configurations",
+          "service": "documentation",
+          "files_to_modify": ["crates/proto-gl/README.md"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "grep -q 'toml' crates/proto-gl/README.md && echo 'found'",
+            "expected": "found"
+          },
+          "status": "pending",
+          "notes": "Example configs"
+        },
+        {
+          "id": "subtask-11-6",
+          "description": "Note differences from crates/proto",
+          "service": "documentation",
+          "files_to_modify": ["crates/proto-gl/README.md"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "grep -q 'proto' crates/proto-gl/README.md && echo 'found'",
+            "expected": "found"
+          },
+          "status": "pending",
+          "notes": "Comparison with Bevy proto"
+        }
+      ]
+    },
+    {
+      "id": "phase-12",
+      "name": "Integration Testing",
+      "type": "testing",
+      "description": "Compare with Bevy proto and update CLAUDE.md",
+      "depends_on": ["phase-10"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-12-1",
+          "description": "Compare physics behavior with crates/proto (Bevy version)",
+          "service": "proto-gl",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Run both and compare physics behavior"
+          },
+          "status": "pending",
+          "notes": "Behavior comparison"
+        },
+        {
+          "id": "subtask-12-2",
+          "description": "Verify collision accuracy matches VoxelColliderBuilder tests",
+          "service": "proto-gl",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo test -p crossworld-physics",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Physics tests pass"
+        },
+        {
+          "id": "subtask-12-3",
+          "description": "Test with same configs as Bevy proto",
+          "service": "proto-gl",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Use matching configurations"
+          },
+          "status": "pending",
+          "notes": "Same config testing"
+        },
+        {
+          "id": "subtask-12-4",
+          "description": "Document any behavioral differences",
+          "service": "documentation",
+          "files_to_modify": ["crates/proto-gl/README.md"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "grep -q 'difference' crates/proto-gl/README.md || echo 'ok'",
+            "expected": "ok"
+          },
+          "status": "pending",
+          "notes": "Document differences"
+        },
+        {
+          "id": "subtask-12-5",
+          "description": "Update root CLAUDE.md with proto-gl information",
+          "service": "documentation",
+          "files_to_modify": ["CLAUDE.md"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "grep -q 'proto-gl' CLAUDE.md && echo 'found'",
+            "expected": "found"
+          },
+          "status": "pending",
+          "notes": "Add to project docs"
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "total_phases": 12,
+    "total_subtasks": 72,
+    "completed_subtasks": 54,
+    "pending_subtasks": 18,
+    "services_involved": ["proto-gl", "physics", "renderer", "cube", "documentation"],
+    "parallelism": {
+      "max_parallel_phases": 3,
+      "parallel_groups": [
+        {
+          "phases": ["phase-9"],
+          "reason": "UI panel can be developed in parallel with physics integration"
+        },
+        {
+          "phases": ["phase-10", "phase-11", "phase-12"],
+          "reason": "Testing and documentation can proceed in parallel"
+        }
+      ],
+      "recommended_workers": 2,
+      "speedup_estimate": "Phases 10-12 parallelizable (testing, docs, integration)"
+    },
+    "startup_command": "cargo build -p proto-gl && cargo run -p proto-gl"
+  },
+  "verification_strategy": {
+    "risk_level": "low",
+    "skip_validation": false,
+    "test_creation_phase": "phase-10",
+    "test_types_required": ["manual", "integration"],
+    "security_scanning_required": false,
+    "staging_deployment_required": false,
+    "acceptance_criteria": [
+      "Application launches and displays 3D viewport",
+      "World cube renders correctly from CSM",
+      "Dynamic cubes spawn and fall with physics",
+      "Cubes collide with world and each other",
+      "Build time < 15 seconds",
+      "Configuration via TOML works",
+      "Camera controls (orbit, zoom) work smoothly",
+      "UI panel shows metrics and controls"
+    ],
+    "verification_steps": [
+      {
+        "name": "Proto-GL Build",
+        "command": "cargo build -p proto-gl",
+        "expected_outcome": "Successful build",
+        "type": "command",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Physics Tests",
+        "command": "cargo test -p crossworld-physics",
+        "expected_outcome": "All tests pass",
+        "type": "command",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Visual Verification",
+        "command": "cargo run -p proto-gl",
+        "expected_outcome": "Application runs with physics",
+        "type": "manual",
+        "required": true,
+        "blocking": false
+      }
+    ],
+    "reasoning": "Low risk new feature. Most infrastructure already exists in dependent crates. Verification is primarily visual/manual testing of physics behavior."
+  },
+  "qa_acceptance": {
+    "unit_tests": {
+      "required": false,
+      "commands": [],
+      "minimum_coverage": null
+    },
+    "integration_tests": {
+      "required": true,
+      "commands": ["cargo test -p crossworld-physics"],
+      "services_to_test": ["physics"]
+    },
+    "e2e_tests": {
+      "required": false,
+      "commands": [],
+      "flows": []
+    },
+    "browser_verification": {
+      "required": false,
+      "pages": []
+    },
+    "database_verification": {
+      "required": false,
+      "checks": []
+    },
+    "performance_verification": {
+      "required": true,
+      "checks": [
+        "Build time < 15 seconds (clean)",
+        "60 FPS with 50+ cubes",
+        "Responsive camera controls"
+      ]
+    }
+  },
+  "qa_signoff": null,
+  "last_updated": "2025-12-26T00:00:00.000Z"
+}
