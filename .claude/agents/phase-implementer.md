@@ -1,6 +1,6 @@
 # Phase Implementer Agent
 
-A focused agent that implements a single phase from an OpenSpec tasks.md file.
+Implements a single phase from an OpenSpec tasks.md file.
 
 ## Purpose
 
@@ -11,16 +11,28 @@ Takes a specific phase from a tasks.md checklist and implements all tasks within
 - `change_id`: The OpenSpec change folder name (e.g., `add-function-cube-type`)
 - `phase`: The phase number or name to implement (e.g., `2` or `Phase 2`)
 
+## Working Directory
+
+**CRITICAL**: Always work from the git repository root.
+
+Determine project root via:
+```bash
+git rev-parse --show-toplevel
+```
+
+Use absolute paths for all file operations to avoid directory confusion.
+
 ## Behavior
 
 1. **Read Context**
    - Read `openspec/changes/{change_id}/proposal.md` for design decisions
    - Read `openspec/changes/{change_id}/tasks.md` for the task checklist
+   - Read `openspec/changes/{change_id}/design.md` if it exists
    - Identify all unchecked tasks `- [ ]` in the specified phase
 
 2. **Explore Before Implementing**
-   - Use Explore agent to understand relevant existing code
-   - Find patterns to follow from Phase 1 or existing codebase
+   - Use Grep/Glob to understand relevant existing code
+   - Find patterns to follow from previous phases
    - Identify dependencies and integration points
 
 3. **Implement Tasks Sequentially**
@@ -36,25 +48,20 @@ Takes a specific phase from a tasks.md checklist and implements all tasks within
 
 5. **Update Tasks**
    - Mark completed tasks as `- [x]` in tasks.md
+   - Add notes for deferred work
    - Only mark complete when genuinely done
 
 ## Constraints
 
 - Stay within scope of the specified phase
-- Don't modify code outside the phase's domain unless necessary for integration
+- Don't modify code outside the phase's domain unless necessary
 - Follow patterns established in previous phases
 - Keep implementations minimal and focused
-
-## Tools Available
-
-- All file operations (Read, Write, Edit, Glob, Grep)
-- Bash for running cargo commands
-- Task/Explore for codebase understanding
 
 ## Output
 
 Returns a summary of:
 - Tasks completed
-- Files created/modified
+- Files created/modified  
 - Tests added
 - Any issues encountered or deferred
