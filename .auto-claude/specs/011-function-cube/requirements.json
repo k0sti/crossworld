@@ -1,0 +1,42 @@
+{
+  "task_description": "Add a new Cube::Function variant that evaluates material values dynamically from user-defined expressions. Expressions compile to a shared AST that can target both CPU (fasteval) and GPU (WGSL compute shaders) backends.",
+  "workflow_type": "feature",
+  "source": {
+    "openspec_change": "add-function-cube-type",
+    "migrated_from": "openspec/changes/add-function-cube-type/",
+    "migration_date": "2025-12-26"
+  },
+  "priority": "high",
+  "status_summary": {
+    "total_tasks": 52,
+    "completed": 29,
+    "pending": 23,
+    "completion_percentage": 56
+  },
+  "completed_work": [
+    "Phase 1: Core Expression System (CPU) - AST Definition (1.1)",
+    "Phase 1: Core Expression System (CPU) - Parser Implementation (1.2)",
+    "Phase 1: Core Expression System (CPU) - fasteval Integration (1.3)",
+    "Phase 1: Core Expression System (CPU) - CPU Noise Implementation (1.4)",
+    "Phase 1: Core Expression System (CPU) - DynamicCube Type (1.5)",
+    "Phase 2: GPU Backend (WGSL) - WGSL Code Generator (2.1)",
+    "Phase 2: GPU Backend (WGSL) - CPU/GPU Parity Tests (2.5)"
+  ],
+  "pending_work": [
+    "Phase 2: GPU Backend (WGSL) - GPU Pipeline Setup (2.2)",
+    "Phase 2: GPU Backend (WGSL) - Octree Construction from GPU Output (2.3)",
+    "Phase 2: GPU Backend (WGSL) - Backend Selection (2.4)",
+    "Phase 3: Integration - Mesh Generation Integration (3.1)",
+    "Phase 3: Integration - World Integration (3.2)",
+    "Phase 3: Integration - Time-based Animation (3.3)",
+    "Phase 4: WASM Bindings - WASM API (4.1)",
+    "Phase 4: WASM Bindings - JavaScript Integration (4.2)",
+    "Phase 5: Polish and Optimization - Error Handling (5.1)",
+    "Phase 5: Polish and Optimization - Performance Optimization (5.2)",
+    "Phase 5: Polish and Optimization - Documentation (5.3)"
+  ],
+  "affected_crates": [
+    "crates/cube"
+  ],
+  "created_at": "2025-12-26T00:00:00.000Z"
+}
