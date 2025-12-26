@@ -1,0 +1,48 @@
+{
+  "task_description": "Complete remaining Proto-GL Physics Viewer tasks: physics simulation integration, scene reset, testing, and documentation.",
+  "scoped_services": ["proto-gl", "physics", "renderer", "cube"],
+  "files_to_modify": [
+    "crates/proto-gl/src/app.rs",
+    "crates/proto-gl/src/main.rs",
+    "crates/proto-gl/config.toml"
+  ],
+  "files_to_create": [
+    "crates/proto-gl/README.md"
+  ],
+  "files_to_reference": [
+    "crates/proto/src/main.rs",
+    "crates/renderer/src/renderers/gl_tracer.rs",
+    "crates/physics/src/lib.rs",
+    "crates/physics/src/collision.rs",
+    "crates/cube/src/lib.rs"
+  ],
+  "patterns": {
+    "physics_integration": "Rapier3D with VoxelColliderBuilder for world collision",
+    "rendering": "GlCubeTracer for voxel rendering, MeshRenderer for dynamic objects",
+    "ui": "egui side panels with controls and metrics",
+    "camera": "Orbit camera with mouse controls",
+    "config": "TOML configuration with serde deserialization"
+  },
+  "existing_infrastructure": {
+    "gl_rendering": "GlCubeTracer from crates/renderer handles octree raytracing",
+    "physics": "PhysicsWorld from crates/physics with Rapier3D integration",
+    "collision": "VoxelColliderBuilder generates compound colliders from Cube",
+    "mesh_generation": "generate_face_mesh() from crates/cube for voxel faces",
+    "vox_loading": ".vox file loading for dynamic cube models"
+  },
+  "key_decisions": [
+    "Use egui+GL instead of Bevy for faster build times",
+    "Direct Rapier3D integration without Bevy ECS",
+    "No player/character system - focus on physics validation",
+    "Orbit camera controlled by mouse (right-click drag, scroll zoom)",
+    "Config-driven spawning and physics parameters"
+  ],
+  "implementation_notes": [
+    "Proto-gl already has working rendering and physics setup",
+    "Need to complete transform extraction from physics state",
+    "Dynamic cubes need to be rendered at their physics positions",
+    "Scene reset should respawn cubes at random positions",
+    "Testing should verify physics behavior matches expectations"
+  ],
+  "created_at": "2025-12-26T00:00:00.000Z"
+}

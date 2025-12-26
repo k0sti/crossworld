@@ -1,0 +1,42 @@
+{
+  "task_description": "Create Proto-GL Physics Viewer - a lightweight egui+GL based physics prototype with fast build times, replacing Bevy rendering while maintaining physics validation goals.",
+  "workflow_type": "feature",
+  "source": {
+    "openspec_change": "create-proto-gl-physics-viewer",
+    "migrated_from": "openspec/changes/create-proto-gl-physics-viewer/",
+    "migration_date": "2025-12-26"
+  },
+  "priority": "high",
+  "status_summary": {
+    "total_tasks": 72,
+    "completed": 54,
+    "pending": 18,
+    "completion_percentage": 75
+  },
+  "completed_work": [
+    "Phase 1: Project Setup (6/6 complete) - crate structure, dependencies, config",
+    "Phase 2: Application Scaffold (7/7 complete) - winit, glutin, egui setup",
+    "Phase 3: Rendering Integration (7/7 complete) - GlCubeTracer, orbit camera",
+    "Phase 4: World Generation and Rendering (9/9 complete) - CSM parsing, mesh, GL rendering",
+    "Phase 5: Physics World Setup (6/6 complete) - Rapier3D, VoxelColliderBuilder",
+    "Phase 6: CubeObject System (7/7 complete) - .vox loading, model management",
+    "Phase 7: Dynamic Cube Spawning (5/7 partial) - spawn logic implemented",
+    "Phase 8: Physics Simulation (2/8 partial) - fixed timestep implemented",
+    "Phase 9: UI Panel (7/8 partial) - egui panels, controls"
+  ],
+  "pending_work": [
+    "Phase 7.6-7.7: Complete cube spawning with random rotations and scene verification",
+    "Phase 8.2-8.8: Extract physics transforms, update render positions, verify collisions",
+    "Phase 9.6: Implement scene reset functionality",
+    "Phase 10: Testing and Validation (7 tasks)",
+    "Phase 11: Documentation (6 tasks)",
+    "Phase 12: Integration Testing (5 tasks)"
+  ],
+  "affected_crates": [
+    "crates/proto-gl",
+    "crates/cube",
+    "crates/physics",
+    "crates/renderer"
+  ],
+  "created_at": "2025-12-26T00:00:00.000Z"
+}

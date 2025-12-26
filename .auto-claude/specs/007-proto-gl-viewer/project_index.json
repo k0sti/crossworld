@@ -1,0 +1,74 @@
+{
+  "project_root": "/home/k0/work/crossworld/main-cw",
+  "project_type": "monorepo",
+  "services": {
+    "proto-gl": {
+      "name": "proto-gl",
+      "path": "/home/k0/work/crossworld/main-cw/crates/proto-gl",
+      "language": "Rust",
+      "framework": "egui + glow",
+      "type": "binary",
+      "build_tool": "cargo",
+      "dev_command": "just proto-gl",
+      "key_directories": {
+        "src": {
+          "path": "src",
+          "purpose": "Source code"
+        }
+      },
+      "entry_point": "src/main.rs",
+      "dependencies": [
+        "cube",
+        "crossworld-physics",
+        "crossworld-renderer",
+        "glow",
+        "glutin",
+        "winit",
+        "egui",
+        "egui-glow",
+        "glam",
+        "rand",
+        "toml",
+        "serde"
+      ]
+    },
+    "cube": {
+      "name": "cube",
+      "path": "/home/k0/work/crossworld/main-cw/crates/cube",
+      "language": "Rust",
+      "type": "library",
+      "purpose": "Voxel data structures, CSM parsing, mesh generation"
+    },
+    "physics": {
+      "name": "crossworld-physics",
+      "path": "/home/k0/work/crossworld/main-cw/crates/physics",
+      "language": "Rust",
+      "type": "library",
+      "purpose": "Physics world, Rapier3D integration, collision"
+    },
+    "renderer": {
+      "name": "crossworld-renderer",
+      "path": "/home/k0/work/crossworld/main-cw/crates/renderer",
+      "language": "Rust",
+      "type": "library",
+      "purpose": "GL rendering, GlCubeTracer, MeshRenderer"
+    },
+    "proto": {
+      "name": "proto",
+      "path": "/home/k0/work/crossworld/main-cw/crates/proto",
+      "language": "Rust",
+      "framework": "Bevy",
+      "type": "binary",
+      "purpose": "Bevy-based physics prototype (reference for patterns)"
+    }
+  },
+  "infrastructure": {
+    "build_system": "cargo + just",
+    "ci": "GitHub Actions"
+  },
+  "conventions": {
+    "rust_edition": "2021",
+    "formatting": "cargo fmt",
+    "linting": "cargo clippy"
+  }
+}
