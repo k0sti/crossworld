@@ -1,0 +1,2079 @@
+{
+  "feature": "Bevy Voxel Editor",
+  "workflow_type": "feature",
+  "workflow_rationale": "Create standalone Bevy-based voxel editor application for content creators. Core editing infrastructure complete - pending brush system, UI panels, file I/O, undo/redo, and polish.",
+  "source": {
+    "openspec_change": "create-bevy-voxel-editor",
+    "migrated_from": "openspec/changes/create-bevy-voxel-editor/",
+    "migration_date": "2025-12-26"
+  },
+  "phases": [
+    {
+      "id": "phase-0",
+      "name": "Build Environment Setup",
+      "type": "infrastructure",
+      "description": "Configure build optimizations and development environment",
+      "depends_on": [],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-0-1",
+          "description": "Create .cargo/config.toml in project root",
+          "service": "editor",
+          "files_to_modify": [],
+          "files_to_create": [".cargo/config.toml"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "test -f .cargo/config.toml && echo 'exists'",
+            "expected": "exists"
+          },
+          "status": "completed",
+          "notes": "Created with mold linker configuration"
+        },
+        {
+          "id": "subtask-0-2",
+          "description": "Configure mold linker for Linux",
+          "service": "editor",
+          "files_to_modify": [".cargo/config.toml"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "grep -q 'mold' .cargo/config.toml && echo 'found'",
+            "expected": "found"
+          },
+          "status": "completed",
+          "notes": "Mold linker configured for x86_64-unknown-linux-gnu"
+        },
+        {
+          "id": "subtask-0-3",
+          "description": "Configure cranelift for nightly debug builds",
+          "service": "editor",
+          "files_to_modify": [".cargo/config.toml"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "grep -q 'codegen-backend' .cargo/config.toml && echo 'found'",
+            "expected": "found"
+          },
+          "status": "completed",
+          "notes": "Cranelift backend configured under [unstable]"
+        },
+        {
+          "id": "subtask-0-4",
+          "description": "Add profile configurations for fast debug builds",
+          "service": "editor",
+          "files_to_modify": [".cargo/config.toml"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "grep -q 'profile' .cargo/config.toml || echo 'ok'",
+            "expected": "ok"
+          },
+          "status": "completed",
+          "notes": "Debug profile optimizations configured"
+        },
+        {
+          "id": "subtask-0-5",
+          "description": "Test that mold is used (check build output)",
+          "service": "editor",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Run cargo build and check for mold in output"
+          },
+          "status": "pending",
+          "notes": "Manual verification required"
+        },
+        {
+          "id": "subtask-0-6",
+          "description": "Create flake.nix in crates/editor with Bevy dependencies",
+          "service": "editor",
+          "files_to_modify": [],
+          "files_to_create": ["crates/editor/flake.nix"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "test -f crates/editor/flake.nix && echo 'exists'",
+            "expected": "exists"
+          },
+          "status": "completed",
+          "notes": "NixOS flake with all Bevy Linux dependencies"
+        },
+        {
+          "id": "subtask-0-7",
+          "description": "Test with nix develop and verify cargo build works",
+          "service": "editor",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Run nix develop crates/editor && cargo build -p editor"
+          },
+          "status": "pending",
+          "notes": "Manual verification on NixOS"
+        },
+        {
+          "id": "subtask-0-8",
+          "description": "Add just planet command to justfile",
+          "service": "editor",
+          "files_to_modify": ["justfile"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "grep -q 'planet' justfile && echo 'found'",
+            "expected": "found"
+          },
+          "status": "completed",
+          "notes": "just planet runs cargo run --bin planet"
+        },
+        {
+          "id": "subtask-0-9",
+          "description": "Add just planet-release for optimized builds",
+          "service": "editor",
+          "files_to_modify": ["justfile"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "grep -q 'planet-release' justfile && echo 'found'",
+            "expected": "found"
+          },
+          "status": "completed",
+          "notes": "just planet-release for release builds"
+        }
+      ]
+    },
+    {
+      "id": "phase-1",
+      "name": "Project Setup and Scaffold",
+      "type": "implementation",
+      "description": "Create editor crate with Bevy app and cube integration",
+      "depends_on": ["phase-0"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-1-1",
+          "description": "Create crates/editor/ directory",
+          "service": "editor",
+          "files_to_modify": [],
+          "files_to_create": ["crates/editor/"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "test -d crates/editor && echo 'exists'",
+            "expected": "exists"
+          },
+          "status": "completed",
+          "notes": "Directory structure created"
+        },
+        {
+          "id": "subtask-1-2",
+          "description": "Create Cargo.toml with dependencies (bevy, bevy_egui, cube, world, serde, rfd)",
+          "service": "editor",
+          "files_to_modify": [],
+          "files_to_create": ["crates/editor/Cargo.toml"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "test -f crates/editor/Cargo.toml && echo 'exists'",
+            "expected": "exists"
+          },
+          "status": "completed",
+          "notes": "All dependencies configured"
+        },
+        {
+          "id": "subtask-1-3",
+          "description": "Configure binary name in Cargo.toml: [[bin]] name = planet",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/Cargo.toml"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "grep -q 'planet' crates/editor/Cargo.toml && echo 'found'",
+            "expected": "found"
+          },
+          "status": "completed",
+          "notes": "Binary named planet"
+        },
+        {
+          "id": "subtask-1-4",
+          "description": "Add editor to workspace Cargo.toml",
+          "service": "editor",
+          "files_to_modify": ["Cargo.toml"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "grep -q 'editor' Cargo.toml && echo 'found'",
+            "expected": "found"
+          },
+          "status": "completed",
+          "notes": "Added to workspace members"
+        },
+        {
+          "id": "subtask-1-5",
+          "description": "Create src/main.rs with basic Bevy app setup",
+          "service": "editor",
+          "files_to_modify": [],
+          "files_to_create": ["crates/editor/src/main.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Bevy app initialized"
+        },
+        {
+          "id": "subtask-1-6",
+          "description": "Initialize Bevy 0.17.3 app with DefaultPlugins",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "DefaultPlugins added"
+        },
+        {
+          "id": "subtask-1-7",
+          "description": "Set window title to Crossworld Voxel Editor",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "grep -q 'Crossworld Voxel Editor' crates/editor/src/main.rs && echo 'found'",
+            "expected": "found"
+          },
+          "status": "completed",
+          "notes": "Window title configured"
+        },
+        {
+          "id": "subtask-1-8",
+          "description": "Configure window size (1280x720 default)",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Default window size set"
+        },
+        {
+          "id": "subtask-1-9",
+          "description": "Add bevy_egui plugin",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "grep -q 'bevy_egui' crates/editor/src/main.rs && echo 'found'",
+            "expected": "found"
+          },
+          "status": "completed",
+          "notes": "EguiPlugin added"
+        },
+        {
+          "id": "subtask-1-10",
+          "description": "Create test 3D scene with camera and light",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Camera and directional light"
+        },
+        {
+          "id": "subtask-1-11",
+          "description": "Create a simple Cube instance in startup system",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Cube integration tested"
+        },
+        {
+          "id": "subtask-1-12",
+          "description": "Generate mesh via generate_face_mesh()",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Mesh generation working"
+        },
+        {
+          "id": "subtask-1-13",
+          "description": "Convert mesh data to Bevy Mesh format",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Bevy Mesh conversion implemented"
+        },
+        {
+          "id": "subtask-1-14",
+          "description": "Spawn entity with mesh and material",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Mesh entity spawned"
+        },
+        {
+          "id": "subtask-1-15",
+          "description": "Create crates/editor/README.md with usage instructions",
+          "service": "documentation",
+          "files_to_modify": [],
+          "files_to_create": ["crates/editor/README.md"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "test -f crates/editor/README.md && echo 'exists'",
+            "expected": "exists"
+          },
+          "status": "completed",
+          "notes": "README created"
+        }
+      ]
+    },
+    {
+      "id": "phase-2",
+      "name": "Camera Controls",
+      "type": "implementation",
+      "description": "Implement orbit camera system with keyboard shortcuts",
+      "depends_on": ["phase-1"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-2-1",
+          "description": "Create src/camera.rs module",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/main.rs"],
+          "files_to_create": ["crates/editor/src/camera.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "test -f crates/editor/src/camera.rs && echo 'exists'",
+            "expected": "exists"
+          },
+          "status": "completed",
+          "notes": "Camera module created"
+        },
+        {
+          "id": "subtask-2-2",
+          "description": "Define OrbitCamera component with target, distance, angles",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/camera.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "grep -q 'OrbitCamera' crates/editor/src/camera.rs && echo 'found'",
+            "expected": "found"
+          },
+          "status": "completed",
+          "notes": "OrbitCamera component defined"
+        },
+        {
+          "id": "subtask-2-3",
+          "description": "Implement camera controller system (right-click rotate, scroll zoom)",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/camera.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Camera controls: right-click rotate, scroll zoom (pan disabled)"
+        },
+        {
+          "id": "subtask-2-4",
+          "description": "Add camera distance limits (min: 1.0, max: 100.0)",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/camera.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Distance limits configured"
+        },
+        {
+          "id": "subtask-2-5",
+          "description": "Add smooth interpolation for camera movement",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/camera.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Smoothing factor: 0.5 for responsive camera"
+        },
+        {
+          "id": "subtask-2-6",
+          "description": "Implement F key to frame scene (fit all voxels)",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/camera.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "F key frames scene"
+        },
+        {
+          "id": "subtask-2-7",
+          "description": "Add numpad shortcuts for orthographic views (1=front, 3=side, 7=top)",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/camera.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Numpad view shortcuts implemented"
+        },
+        {
+          "id": "subtask-2-8",
+          "description": "Add camera reset to default position (Home key)",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/camera.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Home key resets camera"
+        }
+      ]
+    },
+    {
+      "id": "phase-3",
+      "name": "Voxel Scene Management",
+      "type": "implementation",
+      "description": "Create VoxelScene resource and mesh synchronization",
+      "depends_on": ["phase-1"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-3-1",
+          "description": "Create src/voxel_scene.rs module",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/main.rs"],
+          "files_to_create": ["crates/editor/src/voxel_scene.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "test -f crates/editor/src/voxel_scene.rs && echo 'exists'",
+            "expected": "exists"
+          },
+          "status": "completed",
+          "notes": "VoxelScene module created"
+        },
+        {
+          "id": "subtask-3-2",
+          "description": "Define VoxelScene resource wrapping WorldCube (with ThreadSafeWorldCube)",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/voxel_scene.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "grep -q 'VoxelScene' crates/editor/src/voxel_scene.rs && echo 'found'",
+            "expected": "found"
+          },
+          "status": "completed",
+          "notes": "ThreadSafeWorldCube wrapper implemented"
+        },
+        {
+          "id": "subtask-3-3",
+          "description": "Add mesh_dirty flag for tracking changes",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/voxel_scene.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "grep -q 'mesh_dirty' crates/editor/src/voxel_scene.rs && echo 'found'",
+            "expected": "found"
+          },
+          "status": "completed",
+          "notes": "Dirty flag pattern implemented"
+        },
+        {
+          "id": "subtask-3-4",
+          "description": "Initialize default scene in startup system (macro_depth 3, micro_depth 5, border_depth 1)",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Default WorldCube parameters"
+        },
+        {
+          "id": "subtask-3-5",
+          "description": "Create src/mesh_sync.rs module",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/main.rs"],
+          "files_to_create": ["crates/editor/src/mesh_sync.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "test -f crates/editor/src/mesh_sync.rs && echo 'exists'",
+            "expected": "exists"
+          },
+          "status": "completed",
+          "notes": "MeshSync module created"
+        },
+        {
+          "id": "subtask-3-6",
+          "description": "Implement system that checks mesh_dirty flag",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/mesh_sync.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Dirty flag check system"
+        },
+        {
+          "id": "subtask-3-7",
+          "description": "Call generate_frame() when dirty (via WorldCube.lock())",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/mesh_sync.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Mesh regeneration on dirty"
+        },
+        {
+          "id": "subtask-3-8",
+          "description": "Convert GeometryData to Bevy Mesh with vertex colors",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/mesh_sync.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "GeometryData to Bevy Mesh conversion"
+        },
+        {
+          "id": "subtask-3-9",
+          "description": "Spawn/despawn mesh entities as needed",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/mesh_sync.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Entity management implemented"
+        },
+        {
+          "id": "subtask-3-10",
+          "description": "Reset mesh_dirty flag after update",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/mesh_sync.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Dirty flag reset after sync"
+        }
+      ]
+    },
+    {
+      "id": "phase-4",
+      "name": "Raycasting and Cursor System",
+      "type": "implementation",
+      "description": "Implement raycasting for voxel selection and cursor visualization",
+      "depends_on": ["phase-3"],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-4-1",
+          "description": "Create src/raycast.rs module",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/main.rs"],
+          "files_to_create": ["crates/editor/src/raycast.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "test -f crates/editor/src/raycast.rs && echo 'exists'",
+            "expected": "exists"
+          },
+          "status": "completed",
+          "notes": "Raycast module created"
+        },
+        {
+          "id": "subtask-4-2",
+          "description": "Define RaycastResult struct (hit_position, face_normal, distance, voxel_coord)",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/raycast.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "grep -q 'RaycastResult' crates/editor/src/raycast.rs && echo 'found'",
+            "expected": "found"
+          },
+          "status": "completed",
+          "notes": "RaycastResult defined"
+        },
+        {
+          "id": "subtask-4-3",
+          "description": "Implement system that casts ray from camera through mouse cursor",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/raycast.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Raycast from camera"
+        },
+        {
+          "id": "subtask-4-4",
+          "description": "Convert window coordinates to world-space ray (Camera::viewport_to_world)",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/raycast.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Viewport to world ray conversion"
+        },
+        {
+          "id": "subtask-4-5",
+          "description": "Implement temporary plane raycast (TODO: integrate cube::raycast)",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/raycast.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Plane raycast implemented"
+        },
+        {
+          "id": "subtask-4-6",
+          "description": "Store RaycastResult in EditorRaycast resource",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/raycast.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "grep -q 'EditorRaycast' crates/editor/src/raycast.rs && echo 'found'",
+            "expected": "found"
+          },
+          "status": "completed",
+          "notes": "EditorRaycast resource created"
+        },
+        {
+          "id": "subtask-4-7",
+          "description": "Create src/cursor.rs module",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/main.rs"],
+          "files_to_create": ["crates/editor/src/cursor.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "test -f crates/editor/src/cursor.rs && echo 'exists'",
+            "expected": "exists"
+          },
+          "status": "completed",
+          "notes": "Cursor module created"
+        },
+        {
+          "id": "subtask-4-8",
+          "description": "Define CubeCursor struct (position, size, valid flag)",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/cursor.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "grep -q 'CubeCursor' crates/editor/src/cursor.rs && echo 'found'",
+            "expected": "found"
+          },
+          "status": "completed",
+          "notes": "CubeCursor defined"
+        },
+        {
+          "id": "subtask-4-9",
+          "description": "Add cursor to EditorState resource",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/cursor.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "grep -q 'EditorState' crates/editor/src/cursor.rs && echo 'found'",
+            "expected": "found"
+          },
+          "status": "completed",
+          "notes": "EditorState resource created"
+        },
+        {
+          "id": "subtask-4-10",
+          "description": "Implement update_cursor system that positions cursor based on raycast",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/cursor.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Cursor update system"
+        },
+        {
+          "id": "subtask-4-11",
+          "description": "Define FocusMode enum (Near, Far) in EditorState",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/cursor.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "grep -q 'FocusMode' crates/editor/src/cursor.rs && echo 'found'",
+            "expected": "found"
+          },
+          "status": "completed",
+          "notes": "FocusMode enum defined"
+        },
+        {
+          "id": "subtask-4-12",
+          "description": "Implement Near mode (cursor at hit position for removal)",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/cursor.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Near mode for removal"
+        },
+        {
+          "id": "subtask-4-13",
+          "description": "Implement Far mode (cursor at hit position + face normal for placement)",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/cursor.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Far mode for placement"
+        },
+        {
+          "id": "subtask-4-14",
+          "description": "Add Tab key binding to toggle focus mode",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/cursor.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Tab toggles focus mode"
+        },
+        {
+          "id": "subtask-4-15",
+          "description": "Use Bevy Gizmos to draw wireframe cube at cursor position",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/cursor.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Gizmo wireframe cube"
+        },
+        {
+          "id": "subtask-4-16",
+          "description": "Color gizmo red for Near mode (removal), green for Far mode (placement)",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/cursor.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Color-coded gizmo"
+        },
+        {
+          "id": "subtask-4-17",
+          "description": "Implement [ key binding to decrease cursor size (min 1)",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/cursor.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "[ decreases size"
+        },
+        {
+          "id": "subtask-4-18",
+          "description": "Implement ] key binding to increase cursor size (max 16)",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/cursor.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "] increases size"
+        },
+        {
+          "id": "subtask-4-19",
+          "description": "Implement Shift+scroll wheel for cursor size adjustment",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/cursor.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Shift+scroll size adjustment"
+        }
+      ]
+    },
+    {
+      "id": "phase-5",
+      "name": "Paint Modes and Brush System",
+      "type": "implementation",
+      "description": "Implement paint modes and brush system for .vox file brushes",
+      "depends_on": ["phase-4"],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-5-1",
+          "description": "Create src/paint_mode.rs module",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/main.rs"],
+          "files_to_create": ["crates/editor/src/paint_mode.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "test -f crates/editor/src/paint_mode.rs && echo 'exists'",
+            "expected": "exists"
+          },
+          "status": "pending",
+          "notes": "Paint mode module"
+        },
+        {
+          "id": "subtask-5-2",
+          "description": "Define PaintMode enum (Single, Brush)",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/paint_mode.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "grep -q 'PaintMode' crates/editor/src/paint_mode.rs && echo 'found'",
+            "expected": "found"
+          },
+          "status": "pending",
+          "notes": "PaintMode enum"
+        },
+        {
+          "id": "subtask-5-3",
+          "description": "Add paint_mode to EditorState",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/cursor.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "PaintMode in EditorState"
+        },
+        {
+          "id": "subtask-5-4",
+          "description": "Implement M key binding to toggle paint mode",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/paint_mode.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "M toggles mode"
+        },
+        {
+          "id": "subtask-5-5",
+          "description": "Create src/brush.rs module",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/main.rs"],
+          "files_to_create": ["crates/editor/src/brush.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "test -f crates/editor/src/brush.rs && echo 'exists'",
+            "expected": "exists"
+          },
+          "status": "pending",
+          "notes": "Brush module"
+        },
+        {
+          "id": "subtask-5-6",
+          "description": "Define VoxelBrush struct (name, cube, scale_depth, preview_mesh)",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/brush.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "grep -q 'VoxelBrush' crates/editor/src/brush.rs && echo 'found'",
+            "expected": "found"
+          },
+          "status": "pending",
+          "notes": "VoxelBrush struct"
+        },
+        {
+          "id": "subtask-5-7",
+          "description": "Implement brush loading from .vox files",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/brush.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Load from .vox"
+        },
+        {
+          "id": "subtask-5-8",
+          "description": "Scan assets/avatars/ and assets/models/ for .vox files at startup",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/brush.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Auto-scan asset directories"
+        },
+        {
+          "id": "subtask-5-9",
+          "description": "Store loaded brushes in BrushLibrary resource",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/brush.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "grep -q 'BrushLibrary' crates/editor/src/brush.rs && echo 'found'",
+            "expected": "found"
+          },
+          "status": "pending",
+          "notes": "BrushLibrary resource"
+        },
+        {
+          "id": "subtask-5-10",
+          "description": "Generate preview meshes for each brush",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/brush.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Preview mesh generation"
+        },
+        {
+          "id": "subtask-5-11",
+          "description": "Implement scale_depth parameter (0-4, default 0)",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/brush.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Scale depth parameter"
+        },
+        {
+          "id": "subtask-5-12",
+          "description": "Calculate scaled size: base_size * 2^scale_depth",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/brush.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Scale calculation"
+        },
+        {
+          "id": "subtask-5-13",
+          "description": "Apply scale when stamping brush into scene",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/brush.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Scaled brush stamping"
+        },
+        {
+          "id": "subtask-5-14",
+          "description": "Implement Ctrl+C key binding for copy brush from content",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/brush.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Copy brush from content"
+        },
+        {
+          "id": "subtask-5-15",
+          "description": "Extract voxels within cursor volume at current position",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/brush.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Extract voxels for brush"
+        },
+        {
+          "id": "subtask-5-16",
+          "description": "Create temporary VoxelBrush from extracted voxels",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/brush.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Temporary brush creation"
+        }
+      ]
+    },
+    {
+      "id": "phase-6",
+      "name": "Voxel Editing",
+      "type": "implementation",
+      "description": "Implement voxel placement and removal systems",
+      "depends_on": ["phase-4"],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-6-1",
+          "description": "Create src/editing.rs module",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/main.rs"],
+          "files_to_create": ["crates/editor/src/editing.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "test -f crates/editor/src/editing.rs && echo 'exists'",
+            "expected": "exists"
+          },
+          "status": "completed",
+          "notes": "Editing module created"
+        },
+        {
+          "id": "subtask-6-2",
+          "description": "Extend EditorState with selected_material, continuous_paint, last_paint_position",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/cursor.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "EditorState extended"
+        },
+        {
+          "id": "subtask-6-3",
+          "description": "Detect left-click or left-click-hold on mouse button input",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/editing.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Mouse input detection"
+        },
+        {
+          "id": "subtask-6-4",
+          "description": "Implement single material placement for cursor volume",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/editing.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Material placement implemented"
+        },
+        {
+          "id": "subtask-6-5",
+          "description": "Mark mesh_dirty = true after placement",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/editing.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Dirty flag set after edit"
+        },
+        {
+          "id": "subtask-6-6",
+          "description": "Implement 0-9 key bindings to select materials",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/editing.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Material selection shortcuts"
+        },
+        {
+          "id": "subtask-6-7",
+          "description": "Track continuous paint state during left mouse hold",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/editing.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Continuous paint tracking"
+        },
+        {
+          "id": "subtask-6-8",
+          "description": "Prevent duplicate paints at same coordinate during continuous paint",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/editing.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Duplicate prevention"
+        },
+        {
+          "id": "subtask-6-9",
+          "description": "Detect Shift+left-click or Delete key for removal",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/editing.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Removal input detection"
+        },
+        {
+          "id": "subtask-6-10",
+          "description": "Implement voxel removal (sets voxels to air)",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/editing.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Voxel removal implemented"
+        }
+      ]
+    },
+    {
+      "id": "phase-7",
+      "name": "Camera Mode System",
+      "type": "implementation",
+      "description": "Implement LookAt and Free camera modes",
+      "depends_on": ["phase-2"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-7-1",
+          "description": "Define CameraMode enum (LookAt, Free)",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/camera.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "grep -q 'CameraMode' crates/editor/src/camera.rs && echo 'found'",
+            "expected": "found"
+          },
+          "status": "pending",
+          "notes": "CameraMode enum"
+        },
+        {
+          "id": "subtask-7-2",
+          "description": "Add camera_mode to EditorState",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/cursor.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "CameraMode in EditorState"
+        },
+        {
+          "id": "subtask-7-3",
+          "description": "Implement C key binding to toggle camera mode",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/camera.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "C toggles camera mode"
+        },
+        {
+          "id": "subtask-7-4",
+          "description": "Calculate scene center from voxel bounding box for LookAt mode",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/camera.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Scene center calculation"
+        },
+        {
+          "id": "subtask-7-5",
+          "description": "Implement in-place camera rotation for Free mode",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/camera.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Free camera rotation"
+        }
+      ]
+    },
+    {
+      "id": "phase-8",
+      "name": "Material and Brush UI",
+      "type": "implementation",
+      "description": "Create egui panels for material palette and brush selection",
+      "depends_on": ["phase-5"],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-8-1",
+          "description": "Create src/materials.rs module",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/main.rs"],
+          "files_to_create": ["crates/editor/src/materials.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "test -f crates/editor/src/materials.rs && echo 'exists'",
+            "expected": "exists"
+          },
+          "status": "pending",
+          "notes": "Materials module"
+        },
+        {
+          "id": "subtask-8-2",
+          "description": "Define Material struct (id, name, color, transparent)",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/materials.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "grep -q 'Material' crates/editor/src/materials.rs && echo 'found'",
+            "expected": "found"
+          },
+          "status": "pending",
+          "notes": "Material struct"
+        },
+        {
+          "id": "subtask-8-3",
+          "description": "Load materials from assets/materials.json at startup",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/materials.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Material loading"
+        },
+        {
+          "id": "subtask-8-4",
+          "description": "Store in MaterialPalette resource",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/materials.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "grep -q 'MaterialPalette' crates/editor/src/materials.rs && echo 'found'",
+            "expected": "found"
+          },
+          "status": "pending",
+          "notes": "MaterialPalette resource"
+        },
+        {
+          "id": "subtask-8-5",
+          "description": "Create src/ui/mod.rs with UiPlugin",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/main.rs"],
+          "files_to_create": ["crates/editor/src/ui/mod.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "test -f crates/editor/src/ui/mod.rs && echo 'exists'",
+            "expected": "exists"
+          },
+          "status": "pending",
+          "notes": "UI plugin module"
+        },
+        {
+          "id": "subtask-8-6",
+          "description": "Create src/ui/palette.rs for material palette panel",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/ui/mod.rs"],
+          "files_to_create": ["crates/editor/src/ui/palette.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "test -f crates/editor/src/ui/palette.rs && echo 'exists'",
+            "expected": "exists"
+          },
+          "status": "pending",
+          "notes": "Palette panel"
+        },
+        {
+          "id": "subtask-8-7",
+          "description": "Render egui panel with scrollable grid of color swatches",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/ui/palette.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Palette grid UI"
+        },
+        {
+          "id": "subtask-8-8",
+          "description": "Create src/ui/brush_selector.rs for brush selection panel",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/ui/mod.rs"],
+          "files_to_create": ["crates/editor/src/ui/brush_selector.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "test -f crates/editor/src/ui/brush_selector.rs && echo 'exists'",
+            "expected": "exists"
+          },
+          "status": "pending",
+          "notes": "Brush selector panel"
+        },
+        {
+          "id": "subtask-8-9",
+          "description": "Render egui panel with scrollable grid of brush thumbnails",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/ui/brush_selector.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Brush thumbnail grid"
+        }
+      ]
+    },
+    {
+      "id": "phase-10",
+      "name": "File I/O",
+      "type": "implementation",
+      "description": "Implement file operations for CSM and .vox formats",
+      "depends_on": ["phase-3"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-10-1",
+          "description": "Create src/file_io.rs module",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/main.rs"],
+          "files_to_create": ["crates/editor/src/file_io.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "test -f crates/editor/src/file_io.rs && echo 'exists'",
+            "expected": "exists"
+          },
+          "status": "pending",
+          "notes": "File I/O module"
+        },
+        {
+          "id": "subtask-10-2",
+          "description": "Use rfd crate for native file dialogs",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/file_io.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Native file dialogs"
+        },
+        {
+          "id": "subtask-10-3",
+          "description": "Implement new_scene() function",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/file_io.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "New scene function"
+        },
+        {
+          "id": "subtask-10-4",
+          "description": "Show file open dialog filtered to .csm files",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/file_io.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Open CSM dialog"
+        },
+        {
+          "id": "subtask-10-5",
+          "description": "Parse CSM via cube crate API",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/file_io.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "CSM parsing"
+        },
+        {
+          "id": "subtask-10-6",
+          "description": "Implement save_scene() function for CSM export",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/file_io.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Save CSM function"
+        },
+        {
+          "id": "subtask-10-7",
+          "description": "Implement .vox file import",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/file_io.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "VOX import"
+        },
+        {
+          "id": "subtask-10-8",
+          "description": "Implement .vox file export",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/file_io.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "VOX export"
+        }
+      ]
+    },
+    {
+      "id": "phase-17",
+      "name": "Undo/Redo System",
+      "type": "implementation",
+      "description": "Implement command-based undo/redo history",
+      "depends_on": ["phase-6"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-17-1",
+          "description": "Create src/history.rs module",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/main.rs"],
+          "files_to_create": ["crates/editor/src/history.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "test -f crates/editor/src/history.rs && echo 'exists'",
+            "expected": "exists"
+          },
+          "status": "pending",
+          "notes": "History module"
+        },
+        {
+          "id": "subtask-17-2",
+          "description": "Define EditorCommand trait with execute() and undo() methods",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/history.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "grep -q 'EditorCommand' crates/editor/src/history.rs && echo 'found'",
+            "expected": "found"
+          },
+          "status": "pending",
+          "notes": "Command trait"
+        },
+        {
+          "id": "subtask-17-3",
+          "description": "Define CommandHistory resource with Vec<Box<dyn EditorCommand>>",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/history.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "grep -q 'CommandHistory' crates/editor/src/history.rs && echo 'found'",
+            "expected": "found"
+          },
+          "status": "pending",
+          "notes": "History resource"
+        },
+        {
+          "id": "subtask-17-4",
+          "description": "Implement PlaceVoxelsCommand struct (batch support)",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/history.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Place command"
+        },
+        {
+          "id": "subtask-17-5",
+          "description": "Implement RemoveVoxelsCommand struct (batch support)",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/history.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Remove command"
+        },
+        {
+          "id": "subtask-17-6",
+          "description": "Implement undo_system triggered by Ctrl+Z",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/history.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Undo system"
+        },
+        {
+          "id": "subtask-17-7",
+          "description": "Implement redo_system triggered by Ctrl+Y",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/history.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Redo system"
+        },
+        {
+          "id": "subtask-17-8",
+          "description": "Implement history depth limit (e.g., 500 commands)",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/history.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "History limit"
+        }
+      ]
+    },
+    {
+      "id": "phase-12",
+      "name": "Keyboard Shortcuts",
+      "type": "implementation",
+      "description": "Comprehensive keyboard input handling",
+      "depends_on": ["phase-6", "phase-10", "phase-17"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-12-1",
+          "description": "Create src/input.rs module",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/main.rs"],
+          "files_to_create": ["crates/editor/src/input.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "test -f crates/editor/src/input.rs && echo 'exists'",
+            "expected": "exists"
+          },
+          "status": "pending",
+          "notes": "Input module"
+        },
+        {
+          "id": "subtask-12-2",
+          "description": "Define keyboard_shortcut_system",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/input.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Shortcut system"
+        },
+        {
+          "id": "subtask-12-3",
+          "description": "Handle Ctrl+N for new scene",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/input.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "New scene shortcut"
+        },
+        {
+          "id": "subtask-12-4",
+          "description": "Handle Ctrl+O for open file",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/input.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Open file shortcut"
+        },
+        {
+          "id": "subtask-12-5",
+          "description": "Handle Ctrl+S for save file",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/input.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p editor",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Save file shortcut"
+        },
+        {
+          "id": "subtask-12-6",
+          "description": "Create src/ui/shortcuts.rs for shortcuts help panel",
+          "service": "editor",
+          "files_to_modify": ["crates/editor/src/ui/mod.rs"],
+          "files_to_create": ["crates/editor/src/ui/shortcuts.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "test -f crates/editor/src/ui/shortcuts.rs && echo 'exists'",
+            "expected": "exists"
+          },
+          "status": "pending",
+          "notes": "Shortcuts help panel"
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "total_phases": 12,
+    "total_subtasks": 119,
+    "completed_subtasks": 58,
+    "pending_subtasks": 61,
+    "services_involved": ["editor", "cube", "world", "documentation"],
+    "parallelism": {
+      "max_parallel_phases": 3,
+      "parallel_groups": [
+        {
+          "phases": ["phase-2", "phase-3"],
+          "reason": "Camera controls and voxel scene management are independent"
+        },
+        {
+          "phases": ["phase-7", "phase-10", "phase-17"],
+          "reason": "Camera modes, file I/O, and undo/redo can proceed in parallel"
+        }
+      ],
+      "recommended_workers": 2,
+      "speedup_estimate": "Phases 2-3, 7/10/17 parallelizable"
+    },
+    "startup_command": "just planet"
+  },
+  "verification_strategy": {
+    "risk_level": "low",
+    "skip_validation": false,
+    "test_creation_phase": null,
+    "test_types_required": ["manual"],
+    "security_scanning_required": false,
+    "staging_deployment_required": false,
+    "acceptance_criteria": [
+      "Application launches with Bevy window titled Crossworld Voxel Editor",
+      "Orbit camera with right-click rotate and scroll zoom",
+      "Cursor gizmo shows placement/removal position",
+      "Left-click places voxels, Shift+click removes",
+      "Material selection with 0-9 keys",
+      "Cursor size adjustment with [ and ]",
+      "Focus mode toggle with Tab",
+      "CSM and .vox file import/export works",
+      "Undo/redo with Ctrl+Z/Ctrl+Y"
+    ],
+    "verification_steps": [
+      {
+        "name": "Editor Build",
+        "command": "cargo build -p editor",
+        "expected_outcome": "Successful build",
+        "type": "command",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Editor Check",
+        "command": "cargo check -p editor",
+        "expected_outcome": "No errors",
+        "type": "command",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Visual Verification",
+        "command": "just planet",
+        "expected_outcome": "Application runs with voxel editing",
+        "type": "manual",
+        "required": true,
+        "blocking": false
+      }
+    ],
+    "reasoning": "Low risk native application. Uses existing cube and world crates. Verification is primarily visual/manual testing of editor functionality."
+  },
+  "qa_acceptance": {
+    "unit_tests": {
+      "required": false,
+      "commands": [],
+      "minimum_coverage": null
+    },
+    "integration_tests": {
+      "required": false,
+      "commands": [],
+      "services_to_test": []
+    },
+    "e2e_tests": {
+      "required": false,
+      "commands": [],
+      "flows": []
+    },
+    "browser_verification": {
+      "required": false,
+      "pages": []
+    },
+    "database_verification": {
+      "required": false,
+      "checks": []
+    },
+    "performance_verification": {
+      "required": true,
+      "checks": [
+        "Responsive cursor movement",
+        "Smooth camera controls",
+        "Fast mesh regeneration on edits"
+      ]
+    }
+  },
+  "qa_signoff": null,
+  "last_updated": "2025-12-26T00:00:00.000Z"
+}

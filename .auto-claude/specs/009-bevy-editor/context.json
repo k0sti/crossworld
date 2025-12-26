@@ -1,0 +1,64 @@
+{
+  "task_description": "Complete Bevy Voxel Editor: paint modes, brush system, camera modes, material/brush UI, file I/O, undo/redo, keyboard shortcuts, preferences, polish, and testing.",
+  "scoped_services": ["editor", "cube", "world"],
+  "files_to_modify": [
+    "crates/editor/src/main.rs",
+    "crates/editor/src/camera.rs",
+    "crates/editor/src/cursor.rs",
+    "crates/editor/src/raycast.rs",
+    "crates/editor/src/voxel_scene.rs",
+    "crates/editor/src/mesh_sync.rs"
+  ],
+  "files_to_create": [
+    "crates/editor/src/paint_mode.rs",
+    "crates/editor/src/brush.rs",
+    "crates/editor/src/materials.rs",
+    "crates/editor/src/file_io.rs",
+    "crates/editor/src/history.rs",
+    "crates/editor/src/input.rs",
+    "crates/editor/src/ui/mod.rs",
+    "crates/editor/src/ui/toolbar.rs",
+    "crates/editor/src/ui/status.rs",
+    "crates/editor/src/ui/inspector.rs",
+    "crates/editor/src/ui/palette.rs",
+    "crates/editor/src/ui/brush_selector.rs",
+    "crates/editor/src/ui/shortcuts.rs"
+  ],
+  "files_to_reference": [
+    "crates/cube/src/lib.rs",
+    "crates/world/src/world_cube/mod.rs",
+    "packages/app/dist/assets/models/vox/",
+    "packages/app/dist/assets/avatars/"
+  ],
+  "patterns": {
+    "bevy_app": "Bevy 0.17.3 with DefaultPlugins and bevy_egui",
+    "rendering": "Bevy PBR rendering with ECS components",
+    "camera": "Orbit camera with keyboard shortcuts for views",
+    "voxel_scene": "ThreadSafeWorldCube wrapper for WorldCube",
+    "mesh_sync": "Dirty flag pattern for mesh regeneration",
+    "ui": "bevy_egui for immediate-mode UI panels"
+  },
+  "existing_infrastructure": {
+    "editor_crate": "crates/editor with Bevy 0.17.3 app",
+    "cube_crate": "Cube<i32> octree with mesh generation",
+    "world_crate": "WorldCube with generate_frame()",
+    "camera": "OrbitCamera component with controller system",
+    "voxel_scene": "VoxelScene resource with mesh_dirty flag",
+    "cursor": "CubeCursor with FocusMode and size controls"
+  },
+  "key_decisions": [
+    "Use Bevy 0.17.3 with bevy_egui for native UI",
+    "Reuse cube and world crates for voxel operations",
+    "Binary name: planet (via cargo run --bin planet)",
+    "Build optimizations: mold linker, cranelift codegen on Linux",
+    "File formats: CSM text format and .vox (MagicaVoxel)"
+  ],
+  "implementation_notes": [
+    "Phases 0-4 and 6 largely complete with core editing functionality",
+    "Orbit camera with right-click rotation and scroll zoom",
+    "Cursor gizmo visualization with Near/Far focus modes",
+    "Left-click placement, Shift+click removal",
+    "Pending: brush system, file I/O, undo/redo, full UI panels"
+  ],
+  "created_at": "2025-12-26T00:00:00.000Z"
+}
