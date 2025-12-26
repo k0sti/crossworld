@@ -1,0 +1,78 @@
+{
+  "project_root": "/home/k0/work/crossworld/main-cw",
+  "project_type": "monorepo",
+  "services": {
+    "physics": {
+      "name": "crossworld-physics",
+      "path": "/home/k0/work/crossworld/main-cw/crates/physics",
+      "language": "Rust",
+      "framework": "Rapier3D",
+      "type": "library",
+      "package_manager": "cargo",
+      "key_directories": {
+        "src": {
+          "path": "src",
+          "purpose": "Source code"
+        },
+        "terrain": {
+          "path": "src/terrain",
+          "purpose": "Terrain collision module"
+        }
+      },
+      "entry_point": "src/lib.rs",
+      "dependencies": [
+        "rapier3d",
+        "parry3d",
+        "nalgebra",
+        "glam",
+        "cube"
+      ]
+    },
+    "cube": {
+      "name": "cube",
+      "path": "/home/k0/work/crossworld/main-cw/crates/cube",
+      "language": "Rust",
+      "framework": null,
+      "type": "library",
+      "package_manager": "cargo",
+      "key_directories": {
+        "src": {
+          "path": "src",
+          "purpose": "Source code"
+        },
+        "traversal": {
+          "path": "src/traversal",
+          "purpose": "Octree traversal functions"
+        }
+      },
+      "entry_point": "src/lib.rs",
+      "dependencies": [
+        "glam"
+      ]
+    }
+  },
+  "infrastructure": {
+    "ci": "GitHub Actions",
+    "ci_workflows": []
+  },
+  "conventions": {
+    "rust": {
+      "edition": "2021",
+      "formatting": "cargo fmt",
+      "linting": "cargo clippy"
+    }
+  },
+  "key_files": {
+    "terrain_module": "crates/physics/src/terrain/mod.rs",
+    "region_id": "crates/physics/src/terrain/region_id.rs",
+    "triangle_gen": "crates/physics/src/terrain/triangle_gen.rs",
+    "region_cache": "crates/physics/src/terrain/region_cache.rs",
+    "collider": "crates/physics/src/terrain/collider.rs",
+    "active_region": "crates/physics/src/terrain/active_region.rs",
+    "shape_impl": "crates/physics/src/terrain/shape_impl.rs",
+    "visit_faces": "crates/cube/src/traversal/visit_faces.rs"
+  },
+  "related_docs": {
+    "architecture": "doc/architecture/cubeworld-collision.md"
+  }
+}

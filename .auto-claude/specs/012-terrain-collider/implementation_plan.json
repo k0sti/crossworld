@@ -1,0 +1,562 @@
+{
+  "feature": "Add Terrain Composite Collider",
+  "workflow_type": "feature",
+  "workflow_rationale": "Implement TypedCompositeShape terrain collider for lazy on-demand triangle generation. Most core implementation complete, pending integration examples and profiling.",
+  "source": {
+    "openspec_change": "add-terrain-composite-collider",
+    "migrated_from": "openspec/changes/add-terrain-composite-collider/",
+    "migration_date": "2025-12-26"
+  },
+  "phases": [
+    {
+      "id": "phase-1",
+      "name": "Core Data Types",
+      "type": "implementation",
+      "description": "Create terrain module with RegionId and TerrainPartId compact encodings",
+      "depends_on": [],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-1-1",
+          "description": "Create crates/physics/src/terrain/mod.rs with module exports",
+          "service": "physics",
+          "files_to_modify": ["crates/physics/src/lib.rs"],
+          "files_to_create": ["crates/physics/src/terrain/mod.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-physics",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Module structure created with all submodule exports."
+        },
+        {
+          "id": "subtask-1-2",
+          "description": "Implement RegionId with corner-based coordinates (IVec3 + depth), to_region_bounds(), local_aabb(), from_world_aabb()",
+          "service": "physics",
+          "files_to_modify": [],
+          "files_to_create": ["crates/physics/src/terrain/region_id.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-physics",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "from_world_aabb() returns Vec<RegionId> instead of iterator due to closure lifetime constraints."
+        },
+        {
+          "id": "subtask-1-3",
+          "description": "Implement TerrainPartId with u64 encoding [depth:4][x:16][y:16][z:16][tri_idx:12] and accessor methods",
+          "service": "physics",
+          "files_to_modify": ["crates/physics/src/terrain/region_id.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-physics",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Includes new(), region(), triangle_idx(), face_idx(), triangle_in_face() methods."
+        }
+      ]
+    },
+    {
+      "id": "phase-2",
+      "name": "Triangle Generation",
+      "type": "implementation",
+      "description": "Convert FaceInfo to Rapier Triangle shapes with correct winding",
+      "depends_on": ["phase-1"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-2-1",
+          "description": "Implement face_to_triangles() converting FaceInfo to [Triangle; 2] with correct winding for all 6 directions",
+          "service": "physics",
+          "files_to_modify": [],
+          "files_to_create": ["crates/physics/src/terrain/triangle_gen.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-physics",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Uses Face::vertices() from cube crate for consistent counter-clockwise winding."
+        },
+        {
+          "id": "subtask-2-2",
+          "description": "Implement face_to_triangle() single-triangle variant for index-based access",
+          "service": "physics",
+          "files_to_modify": ["crates/physics/src/terrain/triangle_gen.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-physics",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Returns Triangle for specific index (0 or 1) within a face."
+        },
+        {
+          "id": "subtask-2-3",
+          "description": "Add unit tests for triangle generation: each face direction, winding order, world-space transformation",
+          "service": "physics",
+          "files_to_modify": ["crates/physics/src/terrain/triangle_gen.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo test -p crossworld-physics triangle",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Tests verify outward normals for all face directions."
+        }
+      ]
+    },
+    {
+      "id": "phase-3",
+      "name": "Region Cache",
+      "type": "implementation",
+      "description": "Per-region cache for faces queried via visit_faces_in_region()",
+      "depends_on": ["phase-1"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-3-1",
+          "description": "Implement RegionCollisionData with from_octree(), triangle_count(), get_triangle(), get_triangle_aabb()",
+          "service": "physics",
+          "files_to_modify": [],
+          "files_to_create": ["crates/physics/src/terrain/region_cache.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-physics",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Uses visit_faces_in_region() for octree traversal. triangle_count() = faces.len() * 2."
+        },
+        {
+          "id": "subtask-3-2",
+          "description": "Add unit tests for region cache: empty region, solid region, triangle retrieval by index",
+          "service": "physics",
+          "files_to_modify": ["crates/physics/src/terrain/region_cache.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo test -p crossworld-physics region",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Tests cover empty regions, solid voxels, and triangle indexing."
+        }
+      ]
+    },
+    {
+      "id": "phase-4",
+      "name": "Main Collider Structure",
+      "type": "implementation",
+      "description": "VoxelTerrainCollider struct with BVH and region cache management",
+      "depends_on": ["phase-2", "phase-3"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-4-1",
+          "description": "Implement VoxelTerrainCollider struct with triangle_bvh, cube, world_size, border_materials, region_depth, region_cache, global_aabb",
+          "service": "physics",
+          "files_to_modify": [],
+          "files_to_create": ["crates/physics/src/terrain/collider.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-physics",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Main terrain collider struct with new() constructor."
+        },
+        {
+          "id": "subtask-4-2",
+          "description": "Implement on_terrain_modified() to invalidate affected regions in cache",
+          "service": "physics",
+          "files_to_modify": ["crates/physics/src/terrain/collider.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-physics",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Clears cache for regions intersecting modified AABB."
+        },
+        {
+          "id": "subtask-4-3",
+          "description": "Implement update_triangle_bvh() to find regions intersecting active AABB, populate cache, build BVH",
+          "service": "physics",
+          "files_to_modify": ["crates/physics/src/terrain/collider.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-physics",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Builds triangle BVH from cached faces in active regions."
+        }
+      ]
+    },
+    {
+      "id": "phase-5",
+      "name": "Active Region Tracking",
+      "type": "implementation",
+      "description": "Track active regions near dynamic bodies with hysteresis",
+      "depends_on": ["phase-4"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-5-1",
+          "description": "Implement ActiveRegionTracker with new(margin), update() returning Option<Aabb> if changed",
+          "service": "physics",
+          "files_to_modify": [],
+          "files_to_create": ["crates/physics/src/terrain/active_region.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-physics",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Margin-based hysteresis to avoid thrashing on small movements."
+        },
+        {
+          "id": "subtask-5-2",
+          "description": "Add unit tests: region expansion triggers rebuild, small movements don't trigger, empty dynamics returns None",
+          "service": "physics",
+          "files_to_modify": ["crates/physics/src/terrain/active_region.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo test -p crossworld-physics active_region",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Tests verify hysteresis behavior."
+        }
+      ]
+    },
+    {
+      "id": "phase-6",
+      "name": "Shape Trait Implementation",
+      "type": "implementation",
+      "description": "Implement CompositeShape and TypedCompositeShape traits for VoxelTerrainCollider",
+      "depends_on": ["phase-4", "phase-5"],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-6-1",
+          "description": "Implement CompositeShape trait with map_part_at() and bvh() methods",
+          "service": "physics",
+          "files_to_modify": [],
+          "files_to_create": ["crates/physics/src/terrain/shape_impl.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-physics",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "map_part_at() looks up triangle by index, bvh() returns &triangle_bvh."
+        },
+        {
+          "id": "subtask-6-2",
+          "description": "Implement TypedCompositeShape trait with PartShape = Triangle and map_typed_part_at()",
+          "service": "physics",
+          "files_to_modify": ["crates/physics/src/terrain/shape_impl.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-physics",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "PartNormalConstraints = (), includes map_untyped_part_at() for dynamic dispatch."
+        },
+        {
+          "id": "subtask-6-3",
+          "description": "Add integration test: create terrain collider, query triangles via trait methods, verify positions",
+          "service": "physics",
+          "files_to_modify": ["crates/physics/src/terrain/shape_impl.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo test -p crossworld-physics terrain_collider",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Integration test verifies trait methods return expected triangles."
+        }
+      ]
+    },
+    {
+      "id": "phase-7",
+      "name": "Cube Crate Enhancement (Optional)",
+      "type": "implementation",
+      "description": "Optional optimization: collect_faces_with_aabbs() for combined face + AABB retrieval",
+      "depends_on": [],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-7-1",
+          "description": "Add collect_faces_with_aabbs() to visit_faces.rs returning Vec<(FaceInfo, Aabb)>",
+          "service": "cube",
+          "files_to_modify": ["crates/cube/src/traversal/visit_faces.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p cube",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Optional optimization - computes face AABB during traversal."
+        }
+      ]
+    },
+    {
+      "id": "phase-8",
+      "name": "Integration",
+      "type": "integration",
+      "description": "Export terrain module and add integration examples and documentation",
+      "depends_on": ["phase-6"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-8-1",
+          "description": "Export terrain module from crates/physics/src/lib.rs",
+          "service": "physics",
+          "files_to_modify": ["crates/physics/src/lib.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-physics",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "pub mod terrain added to lib.rs."
+        },
+        {
+          "id": "subtask-8-2",
+          "description": "Add integration example: create VoxelTerrainCollider from WorldCube, use with ColliderSet, active region tracking",
+          "service": "physics",
+          "files_to_modify": [],
+          "files_to_create": ["crates/physics/examples/terrain_collider.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check --example terrain_collider -p crossworld-physics",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Example showing full integration pattern."
+        },
+        {
+          "id": "subtask-8-3",
+          "description": "Update doc/architecture/cubeworld-collision.md with implementation notes",
+          "service": "documentation",
+          "files_to_modify": ["doc/architecture/cubeworld-collision.md"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "test -f doc/architecture/cubeworld-collision.md && echo 'exists'",
+            "expected": "exists"
+          },
+          "status": "pending",
+          "notes": "Document API differences from design (Bvh vs Qbvh, trait changes)."
+        }
+      ]
+    },
+    {
+      "id": "phase-9",
+      "name": "Testing and Validation",
+      "type": "testing",
+      "description": "Run full test suite, clippy, and profiling",
+      "depends_on": ["phase-8"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-9-1",
+          "description": "Run cargo test --workspace to verify all tests pass",
+          "service": "physics",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo test --workspace",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "All workspace tests pass."
+        },
+        {
+          "id": "subtask-9-2",
+          "description": "Run cargo clippy --workspace -- -D warnings",
+          "service": "physics",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo clippy --workspace -- -D warnings",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "No clippy warnings."
+        },
+        {
+          "id": "subtask-9-3",
+          "description": "Run cargo check --workspace to verify compilation",
+          "service": "physics",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check --workspace",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Workspace compiles successfully."
+        },
+        {
+          "id": "subtask-9-4",
+          "description": "Profile triangle generation and QBVH rebuild times",
+          "service": "physics",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "command": null,
+            "expected": "profiling results documented"
+          },
+          "status": "pending",
+          "notes": "Benchmark triangle generation and BVH rebuild performance."
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "total_phases": 9,
+    "total_subtasks": 23,
+    "completed_subtasks": 18,
+    "pending_subtasks": 5,
+    "services_involved": ["physics", "cube", "documentation"],
+    "parallelism": {
+      "max_parallel_phases": 2,
+      "parallel_groups": [
+        {
+          "phases": ["phase-2", "phase-3"],
+          "reason": "Triangle generation and region cache are independent after phase-1"
+        },
+        {
+          "phases": ["phase-7"],
+          "reason": "Cube crate enhancement is independent (optional optimization)"
+        }
+      ],
+      "recommended_workers": 2,
+      "speedup_estimate": "Phases 2-3 parallelizable, Phase 7 independent"
+    },
+    "startup_command": "cargo test -p crossworld-physics && cargo check --workspace"
+  },
+  "verification_strategy": {
+    "risk_level": "medium",
+    "skip_validation": false,
+    "test_creation_phase": "phase-2",
+    "test_types_required": ["unit", "integration"],
+    "security_scanning_required": false,
+    "staging_deployment_required": false,
+    "acceptance_criteria": [
+      "TypedCompositeShape trait correctly implemented",
+      "Triangle generation produces correct outward-facing normals",
+      "Region cache avoids redundant octree traversal",
+      "Active region tracking prevents thrashing",
+      "Integration with Rapier ColliderSet works correctly"
+    ],
+    "verification_steps": [
+      {
+        "name": "Unit Tests",
+        "command": "cargo test -p crossworld-physics terrain",
+        "expected_outcome": "All terrain tests pass",
+        "type": "command",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Workspace Build",
+        "command": "cargo check --workspace",
+        "expected_outcome": "Successful build",
+        "type": "command",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Clippy",
+        "command": "cargo clippy -p crossworld-physics -- -D warnings",
+        "expected_outcome": "No warnings",
+        "type": "command",
+        "required": true,
+        "blocking": false
+      }
+    ],
+    "reasoning": "Medium risk due to Rapier trait implementation complexity. Unit tests verify correctness of triangle generation and trait methods."
+  },
+  "qa_acceptance": {
+    "unit_tests": {
+      "required": true,
+      "commands": ["cargo test -p crossworld-physics terrain"],
+      "minimum_coverage": null
+    },
+    "integration_tests": {
+      "required": true,
+      "commands": ["cargo test -p crossworld-physics terrain_collider"],
+      "services_to_test": ["physics"]
+    },
+    "e2e_tests": {
+      "required": false,
+      "commands": [],
+      "flows": []
+    },
+    "browser_verification": {
+      "required": false,
+      "pages": []
+    },
+    "database_verification": {
+      "required": false,
+      "checks": []
+    },
+    "performance_verification": {
+      "required": true,
+      "checks": [
+        "Triangle generation is efficient",
+        "BVH rebuild time is acceptable for real-time use",
+        "Region cache reduces octree traversal"
+      ]
+    }
+  },
+  "qa_signoff": null,
+  "last_updated": "2025-12-26T00:00:00.000Z"
+}
