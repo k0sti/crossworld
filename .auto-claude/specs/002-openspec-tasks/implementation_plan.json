@@ -1,0 +1,482 @@
+{
+  "feature": "Migrate OpenSpec Changes to Auto-Claude Task System",
+  "workflow_type": "migration",
+  "workflow_rationale": "Content migration task moving 10 active OpenSpec change proposals to the new auto-claude task system. Follows migration workflow: Prepare (read source), Execute (create tasks), Verify (validate completeness), Cleanup (deprecate old).",
+  "phases": [
+    {
+      "id": "phase-1-prepare",
+      "name": "Analyze Source Changes",
+      "type": "setup",
+      "description": "Read and analyze all 10 active OpenSpec changes to understand scope, status, and content structure",
+      "depends_on": [],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-1-1",
+          "description": "Catalog all active OpenSpec changes and their task completion status",
+          "service": "documentation",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": ["openspec/changes/*/tasks.md"],
+          "verification": {
+            "type": "command",
+            "command": "ls -la /home/k0/work/crossworld/main-cw/openspec/changes/ | grep -v archive | wc -l",
+            "expected": "11"
+          },
+          "status": "pending",
+          "notes": "Read all 10 active changes: optimize-world-collision, improve-renderer-quality, implement-gpu-raytracer, refactor-renderer-interface, create-proto-gl-physics-viewer, create-bevy-physics-prototype, create-bevy-voxel-editor, add-fabric-model-generation, add-function-cube-type, add-terrain-composite-collider. Count pending vs completed tasks in each."
+        }
+      ]
+    },
+    {
+      "id": "phase-2-execute",
+      "name": "Create Auto-Claude Task Directories",
+      "type": "implementation",
+      "description": "Create new task directories in .auto-claude/specs/ for each active OpenSpec change with proper JSON structure",
+      "depends_on": ["phase-1-prepare"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-2-1",
+          "description": "Create task 003-world-collision-optimization from optimize-world-collision",
+          "service": "documentation",
+          "files_to_modify": [],
+          "files_to_create": [
+            ".auto-claude/specs/003-world-collision-optimization/requirements.json",
+            ".auto-claude/specs/003-world-collision-optimization/implementation_plan.json",
+            ".auto-claude/specs/003-world-collision-optimization/spec.md",
+            ".auto-claude/specs/003-world-collision-optimization/context.json",
+            ".auto-claude/specs/003-world-collision-optimization/project_index.json"
+          ],
+          "patterns_from": [
+            ".auto-claude/specs/001-physics-optimization/implementation_plan.json",
+            "openspec/changes/optimize-world-collision/proposal.md",
+            "openspec/changes/optimize-world-collision/tasks.md"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "python3 -c \"import json; json.load(open('.auto-claude/specs/003-world-collision-optimization/implementation_plan.json')); print('VALID')\"",
+            "expected": "VALID"
+          },
+          "status": "pending",
+          "notes": "Partial completion change - extract only pending tasks. Completed tasks: Phase 1-2 (infrastructure), Phase 4 (hybrid). Pending: Phase 3 (chunked tests), Phase 6-9 (integration, benchmarking, docs, cleanup)."
+        },
+        {
+          "id": "subtask-2-2",
+          "description": "Create task 004-renderer-quality from improve-renderer-quality",
+          "service": "documentation",
+          "files_to_modify": [],
+          "files_to_create": [
+            ".auto-claude/specs/004-renderer-quality/requirements.json",
+            ".auto-claude/specs/004-renderer-quality/implementation_plan.json",
+            ".auto-claude/specs/004-renderer-quality/spec.md",
+            ".auto-claude/specs/004-renderer-quality/context.json",
+            ".auto-claude/specs/004-renderer-quality/project_index.json"
+          ],
+          "patterns_from": [
+            ".auto-claude/specs/001-physics-optimization/implementation_plan.json",
+            "openspec/changes/improve-renderer-quality/proposal.md",
+            "openspec/changes/improve-renderer-quality/tasks.md"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "python3 -c \"import json; json.load(open('.auto-claude/specs/004-renderer-quality/implementation_plan.json')); print('VALID')\"",
+            "expected": "VALID"
+          },
+          "status": "pending",
+          "notes": "Partial completion change. Completed: Phases 1-4, 7. Pending: Phase 5 (rename DualRenderer), Phase 6 (docs)."
+        },
+        {
+          "id": "subtask-2-3",
+          "description": "Create task 005-gpu-raytracer from implement-gpu-raytracer",
+          "service": "documentation",
+          "files_to_modify": [],
+          "files_to_create": [
+            ".auto-claude/specs/005-gpu-raytracer/requirements.json",
+            ".auto-claude/specs/005-gpu-raytracer/implementation_plan.json",
+            ".auto-claude/specs/005-gpu-raytracer/spec.md",
+            ".auto-claude/specs/005-gpu-raytracer/context.json",
+            ".auto-claude/specs/005-gpu-raytracer/project_index.json"
+          ],
+          "patterns_from": [
+            ".auto-claude/specs/001-physics-optimization/implementation_plan.json",
+            "openspec/changes/implement-gpu-raytracer/proposal.md",
+            "openspec/changes/implement-gpu-raytracer/tasks.md"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "python3 -c \"import json; json.load(open('.auto-claude/specs/005-gpu-raytracer/implementation_plan.json')); print('VALID')\"",
+            "expected": "VALID"
+          },
+          "status": "pending",
+          "notes": "Active change - GPU shader-based octree raytracing implementation."
+        },
+        {
+          "id": "subtask-2-4",
+          "description": "Create task 006-renderer-interface from refactor-renderer-interface",
+          "service": "documentation",
+          "files_to_modify": [],
+          "files_to_create": [
+            ".auto-claude/specs/006-renderer-interface/requirements.json",
+            ".auto-claude/specs/006-renderer-interface/implementation_plan.json",
+            ".auto-claude/specs/006-renderer-interface/spec.md",
+            ".auto-claude/specs/006-renderer-interface/context.json",
+            ".auto-claude/specs/006-renderer-interface/project_index.json"
+          ],
+          "patterns_from": [
+            ".auto-claude/specs/001-physics-optimization/implementation_plan.json",
+            "openspec/changes/refactor-renderer-interface/proposal.md",
+            "openspec/changes/refactor-renderer-interface/tasks.md"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "python3 -c \"import json; json.load(open('.auto-claude/specs/006-renderer-interface/implementation_plan.json')); print('VALID')\"",
+            "expected": "VALID"
+          },
+          "status": "pending",
+          "notes": "Active change - unified renderer trait interface refactoring."
+        },
+        {
+          "id": "subtask-2-5",
+          "description": "Create task 007-proto-gl-viewer from create-proto-gl-physics-viewer",
+          "service": "documentation",
+          "files_to_modify": [],
+          "files_to_create": [
+            ".auto-claude/specs/007-proto-gl-viewer/requirements.json",
+            ".auto-claude/specs/007-proto-gl-viewer/implementation_plan.json",
+            ".auto-claude/specs/007-proto-gl-viewer/spec.md",
+            ".auto-claude/specs/007-proto-gl-viewer/context.json",
+            ".auto-claude/specs/007-proto-gl-viewer/project_index.json"
+          ],
+          "patterns_from": [
+            ".auto-claude/specs/001-physics-optimization/implementation_plan.json",
+            "openspec/changes/create-proto-gl-physics-viewer/proposal.md",
+            "openspec/changes/create-proto-gl-physics-viewer/tasks.md"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "python3 -c \"import json; json.load(open('.auto-claude/specs/007-proto-gl-viewer/implementation_plan.json')); print('VALID')\"",
+            "expected": "VALID"
+          },
+          "status": "pending",
+          "notes": "Active change - lightweight egui+GL physics viewer. May be superseded by Bevy prototypes."
+        },
+        {
+          "id": "subtask-2-6",
+          "description": "Create task 008-bevy-physics from create-bevy-physics-prototype",
+          "service": "documentation",
+          "files_to_modify": [],
+          "files_to_create": [
+            ".auto-claude/specs/008-bevy-physics/requirements.json",
+            ".auto-claude/specs/008-bevy-physics/implementation_plan.json",
+            ".auto-claude/specs/008-bevy-physics/spec.md",
+            ".auto-claude/specs/008-bevy-physics/context.json",
+            ".auto-claude/specs/008-bevy-physics/project_index.json"
+          ],
+          "patterns_from": [
+            ".auto-claude/specs/001-physics-optimization/implementation_plan.json",
+            "openspec/changes/create-bevy-physics-prototype/proposal.md",
+            "openspec/changes/create-bevy-physics-prototype/tasks.md"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "python3 -c \"import json; json.load(open('.auto-claude/specs/008-bevy-physics/implementation_plan.json')); print('VALID')\"",
+            "expected": "VALID"
+          },
+          "status": "pending",
+          "notes": "Active change - standalone Bevy physics validation application."
+        },
+        {
+          "id": "subtask-2-7",
+          "description": "Create task 009-bevy-editor from create-bevy-voxel-editor",
+          "service": "documentation",
+          "files_to_modify": [],
+          "files_to_create": [
+            ".auto-claude/specs/009-bevy-editor/requirements.json",
+            ".auto-claude/specs/009-bevy-editor/implementation_plan.json",
+            ".auto-claude/specs/009-bevy-editor/spec.md",
+            ".auto-claude/specs/009-bevy-editor/context.json",
+            ".auto-claude/specs/009-bevy-editor/project_index.json"
+          ],
+          "patterns_from": [
+            ".auto-claude/specs/001-physics-optimization/implementation_plan.json",
+            "openspec/changes/create-bevy-voxel-editor/proposal.md",
+            "openspec/changes/create-bevy-voxel-editor/tasks.md"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "python3 -c \"import json; json.load(open('.auto-claude/specs/009-bevy-editor/implementation_plan.json')); print('VALID')\"",
+            "expected": "VALID"
+          },
+          "status": "pending",
+          "notes": "Active change - native Bevy-based voxel editor."
+        },
+        {
+          "id": "subtask-2-8",
+          "description": "Create task 010-fabric-model from add-fabric-model-generation",
+          "service": "documentation",
+          "files_to_modify": [],
+          "files_to_create": [
+            ".auto-claude/specs/010-fabric-model/requirements.json",
+            ".auto-claude/specs/010-fabric-model/implementation_plan.json",
+            ".auto-claude/specs/010-fabric-model/spec.md",
+            ".auto-claude/specs/010-fabric-model/context.json",
+            ".auto-claude/specs/010-fabric-model/project_index.json"
+          ],
+          "patterns_from": [
+            ".auto-claude/specs/001-physics-optimization/implementation_plan.json",
+            "openspec/changes/add-fabric-model-generation/proposal.md",
+            "openspec/changes/add-fabric-model-generation/tasks.md"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "python3 -c \"import json; json.load(open('.auto-claude/specs/010-fabric-model/implementation_plan.json')); print('VALID')\"",
+            "expected": "VALID"
+          },
+          "status": "pending",
+          "notes": "Mostly complete change - only validation and documentation pending (Phase 10.3-10.4). Procedural voxel generation with quaternion fields."
+        },
+        {
+          "id": "subtask-2-9",
+          "description": "Create task 011-function-cube from add-function-cube-type",
+          "service": "documentation",
+          "files_to_modify": [],
+          "files_to_create": [
+            ".auto-claude/specs/011-function-cube/requirements.json",
+            ".auto-claude/specs/011-function-cube/implementation_plan.json",
+            ".auto-claude/specs/011-function-cube/spec.md",
+            ".auto-claude/specs/011-function-cube/context.json",
+            ".auto-claude/specs/011-function-cube/project_index.json"
+          ],
+          "patterns_from": [
+            ".auto-claude/specs/001-physics-optimization/implementation_plan.json",
+            "openspec/changes/add-function-cube-type/proposal.md",
+            "openspec/changes/add-function-cube-type/tasks.md"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "python3 -c \"import json; json.load(open('.auto-claude/specs/011-function-cube/implementation_plan.json')); print('VALID')\"",
+            "expected": "VALID"
+          },
+          "status": "pending",
+          "notes": "Partial completion - Phases 1-2 (CPU/GPU backends) complete. Pending: Phase 3 (integration), 4 (WASM), 5 (polish)."
+        },
+        {
+          "id": "subtask-2-10",
+          "description": "Create task 012-terrain-collider from add-terrain-composite-collider",
+          "service": "documentation",
+          "files_to_modify": [],
+          "files_to_create": [
+            ".auto-claude/specs/012-terrain-collider/requirements.json",
+            ".auto-claude/specs/012-terrain-collider/implementation_plan.json",
+            ".auto-claude/specs/012-terrain-collider/spec.md",
+            ".auto-claude/specs/012-terrain-collider/context.json",
+            ".auto-claude/specs/012-terrain-collider/project_index.json"
+          ],
+          "patterns_from": [
+            ".auto-claude/specs/001-physics-optimization/implementation_plan.json",
+            "openspec/changes/add-terrain-composite-collider/proposal.md",
+            "openspec/changes/add-terrain-composite-collider/tasks.md"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "python3 -c \"import json; json.load(open('.auto-claude/specs/012-terrain-collider/implementation_plan.json')); print('VALID')\"",
+            "expected": "VALID"
+          },
+          "status": "pending",
+          "notes": "Active change - TypedSimdCompositeShape for terrain collision optimization."
+        }
+      ]
+    },
+    {
+      "id": "phase-3-verify",
+      "name": "Verify Migration Completeness",
+      "type": "integration",
+      "description": "Validate all tasks were created correctly with proper status mapping and content preservation",
+      "depends_on": ["phase-2-execute"],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-3-1",
+          "description": "Verify all 10 task directories created with valid JSON",
+          "service": "documentation",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "ls -d .auto-claude/specs/0*/ 2>/dev/null | wc -l",
+            "expected": "12"
+          },
+          "status": "pending",
+          "notes": "Should have 12 directories total: 001 (existing), 002 (this task), 003-012 (10 migrated tasks)."
+        },
+        {
+          "id": "subtask-3-2",
+          "description": "Verify JSON validity for all new implementation_plan.json files",
+          "service": "documentation",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "for f in .auto-claude/specs/0*/implementation_plan.json; do python3 -c \"import json; json.load(open('$f'))\" 2>&1 && echo \"$f: OK\" || echo \"$f: FAIL\"; done | grep -c OK",
+            "expected": "12"
+          },
+          "status": "pending",
+          "notes": "All 12 implementation_plan.json files must be valid JSON."
+        },
+        {
+          "id": "subtask-3-3",
+          "description": "Verify status mapping accuracy for partial completion changes",
+          "service": "documentation",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Manually compare status in new tasks vs openspec checkboxes for: 003-world-collision-optimization, 004-renderer-quality, 010-fabric-model, 011-function-cube. Verify [x] -> completed, [ ] -> pending."
+          },
+          "status": "pending",
+          "notes": "Critical for partially complete changes to preserve accurate status."
+        }
+      ]
+    },
+    {
+      "id": "phase-4-cleanup",
+      "name": "Deprecate OpenSpec Changes",
+      "type": "cleanup",
+      "description": "Mark or move old OpenSpec files after successful migration verification",
+      "depends_on": ["phase-3-verify"],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-4-1",
+          "description": "Create migration record documenting what was migrated",
+          "service": "documentation",
+          "files_to_modify": [],
+          "files_to_create": ["openspec/MIGRATION_COMPLETE.md"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "test -f openspec/MIGRATION_COMPLETE.md && echo 'EXISTS' || echo 'MISSING'",
+            "expected": "EXISTS"
+          },
+          "status": "pending",
+          "notes": "Document the migration with mapping table and date. This serves as a record before any cleanup."
+        },
+        {
+          "id": "subtask-4-2",
+          "description": "Move active changes to archive (preserve for reference)",
+          "service": "documentation",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "ls openspec/changes/ | grep -v archive | wc -l",
+            "expected": "0"
+          },
+          "status": "pending",
+          "notes": "Move all 10 active changes to openspec/changes/archive/migrated-to-autoclaude/. Do NOT delete - archive for reference."
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "total_phases": 4,
+    "total_subtasks": 16,
+    "services_involved": ["documentation"],
+    "parallelism": {
+      "max_parallel_phases": 1,
+      "parallel_groups": [
+        {
+          "phases": ["phase-2-execute"],
+          "reason": "All 10 task creations in Phase 2 are independent and can be done in parallel within the phase"
+        }
+      ],
+      "recommended_workers": 1,
+      "speedup_estimate": "Sequential execution - each subtask is documentation work, parallelism within phase possible"
+    },
+    "startup_command": "source auto-claude/.venv/bin/activate && python auto-claude/run.py --spec 002 --parallel 1"
+  },
+  "verification_strategy": {
+    "risk_level": "low",
+    "skip_validation": false,
+    "test_creation_phase": "none",
+    "test_types_required": [],
+    "security_scanning_required": false,
+    "staging_deployment_required": false,
+    "acceptance_criteria": [
+      "All 10 OpenSpec changes have corresponding .auto-claude/specs/ directories",
+      "All JSON files are valid and parseable",
+      "Status mapping is accurate for partial completion changes",
+      "Spec.md files contain meaningful context from proposals",
+      "Old openspec changes archived (not deleted)",
+      "MIGRATION_COMPLETE.md documents the migration"
+    ],
+    "verification_steps": [
+      {
+        "name": "Count Task Directories",
+        "command": "ls -d .auto-claude/specs/0*/ | wc -l",
+        "expected_outcome": "12 directories (001, 002, 003-012)",
+        "type": "command",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Validate JSON Files",
+        "command": "for f in .auto-claude/specs/0*/implementation_plan.json; do python3 -c \"import json; json.load(open('$f'))\" || exit 1; done && echo OK",
+        "expected_outcome": "OK",
+        "type": "command",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Verify Archive Complete",
+        "command": "ls openspec/changes/ | grep -v archive | wc -l",
+        "expected_outcome": "0",
+        "type": "command",
+        "required": true,
+        "blocking": false
+      }
+    ],
+    "reasoning": "Low risk documentation migration with no functional code changes. Verification ensures content preservation and accurate status mapping. Git provides natural backup."
+  },
+  "qa_acceptance": {
+    "unit_tests": {
+      "required": false,
+      "commands": [],
+      "minimum_coverage": null
+    },
+    "integration_tests": {
+      "required": false,
+      "commands": [],
+      "services_to_test": []
+    },
+    "e2e_tests": {
+      "required": false,
+      "commands": [],
+      "flows": []
+    },
+    "browser_verification": {
+      "required": false,
+      "pages": []
+    },
+    "database_verification": {
+      "required": false,
+      "checks": []
+    },
+    "content_verification": {
+      "required": true,
+      "checks": [
+        "All 10 active OpenSpec changes migrated",
+        "JSON files are valid",
+        "Status mapping preserves [x]/[ ] accurately",
+        "Proposal context captured in spec.md",
+        "Migration documented in MIGRATION_COMPLETE.md"
+      ]
+    }
+  },
+  "qa_signoff": null
+}
