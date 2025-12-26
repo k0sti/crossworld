@@ -1,0 +1,59 @@
+{
+  "task_description": "Optimize proto-gl terrain collision system - currently functional but slow due to frequent BVH rebuilds and excessive allocations",
+  "scoped_services": ["physics", "proto-gl"],
+  "files_to_modify": {
+    "physics": [
+      "crates/physics/src/terrain/collider.rs",
+      "crates/physics/src/terrain/region_cache.rs",
+      "crates/physics/src/terrain/active_region.rs",
+      "crates/physics/src/terrain/triangle_gen.rs",
+      "crates/physics/benches/collision.rs"
+    ],
+    "proto-gl": [
+      "crates/proto-gl/src/app.rs"
+    ]
+  },
+  "files_to_reference": [
+    "crates/physics/src/world_collider.rs",
+    "crates/physics/src/terrain/shape_impl.rs",
+    "crates/physics/src/terrain/region_id.rs",
+    "crates/physics/src/terrain/mod.rs"
+  ],
+  "patterns": {
+    "bvh_construction": "Bvh::from_leaves(BvhBuildStrategy::Binned, &aabbs) - rebuilds full BVH from leaves",
+    "region_caching": "HashMap<RegionId, RegionCollisionData> with or_insert_with for lazy population",
+    "triangle_generation": "face_to_triangle() computes Triangle from FaceInfo on each call",
+    "active_region_tracking": "ActiveRegionTracker::update() returns Some(Aabb) when rebuild needed"
+  },
+  "existing_implementations": {
+    "description": "Two-level BVH system with region and triangle indexing. Region cache stores faces from visit_faces_in_region() but triangles computed on-demand.",
+    "relevant_files": [
+      "crates/physics/src/terrain/collider.rs",
+      "crates/physics/src/terrain/region_cache.rs"
+    ]
+  },
+  "bottlenecks_identified": [
+    {
+      "location": "collider.rs:170-171",
+      "issue": "Vec::new() allocations every frame for aabbs and part_ids",
+      "fix": "Reuse pre-allocated buffers with clear()"
+    },
+    {
+      "location": "collider.rs:209",
+      "issue": "Full BVH rebuild via from_leaves() even for small changes",
+      "fix": "Implement incremental update or dirty region tracking"
+    },
+    {
+      "location": "region_cache.rs:15-24",
+      "issue": "Triangles computed on-demand, not cached",
+      "fix": "Pre-compute and cache triangles alongside faces"
+    },
+    {
+      "location": "active_region.rs:45-74",
+      "issue": "Basic hysteresis - frequent rebuilds on boundary crossings",
+      "fix": "Add movement prediction and larger buffer zones"
+    }
+  ],
+  "created_at": "2025-12-26T17:51:50.912233",
+  "updated_at": "2025-12-26T18:00:00.000000"
+}

@@ -1,0 +1,84 @@
+{
+  "project_root": "/home/k0/work/crossworld/main-cw",
+  "project_type": "monorepo",
+  "services": {
+    "physics": {
+      "name": "crossworld-physics",
+      "path": "crates/physics",
+      "language": "Rust",
+      "framework": "Rapier3d",
+      "type": "library",
+      "package_manager": "cargo",
+      "default_port": null,
+      "test_command": "cargo test -p crossworld-physics",
+      "bench_command": "cargo bench --bench collision -p crossworld-physics",
+      "build_command": "cargo build -p crossworld-physics",
+      "key_directories": {
+        "src/terrain": {
+          "path": "src/terrain",
+          "purpose": "Terrain collision system - primary optimization target"
+        },
+        "benches": {
+          "path": "benches",
+          "purpose": "Criterion benchmarks for performance validation"
+        }
+      },
+      "entry_point": "src/lib.rs",
+      "dependencies": [
+        "rapier3d",
+        "cube",
+        "glam"
+      ]
+    },
+    "proto-gl": {
+      "name": "proto-gl",
+      "path": "crates/proto-gl",
+      "language": "Rust",
+      "framework": "glow/glutin/egui",
+      "type": "application",
+      "package_manager": "cargo",
+      "default_port": null,
+      "dev_command": "cargo run -p proto-gl",
+      "build_command": "cargo build -p proto-gl",
+      "key_directories": {
+        "src": {
+          "path": "src",
+          "purpose": "Application code with physics integration"
+        }
+      },
+      "entry_point": "src/main.rs",
+      "dependencies": [
+        "crossworld-physics",
+        "cube",
+        "renderer"
+      ]
+    },
+    "cube": {
+      "name": "cube",
+      "path": "crates/cube",
+      "language": "Rust",
+      "framework": null,
+      "type": "library",
+      "package_manager": "cargo",
+      "test_command": "cargo test -p cube",
+      "key_directories": {
+        "src": {
+          "path": "src",
+          "purpose": "Octree voxel data structures"
+        }
+      },
+      "entry_point": "src/lib.rs"
+    }
+  },
+  "infrastructure": {
+    "ci": "GitHub Actions",
+    "docker": false,
+    "database": null
+  },
+  "conventions": {
+    "linter": "clippy",
+    "formatter": "rustfmt",
+    "testing": "cargo test + criterion benchmarks",
+    "rust_edition": "2021"
+  }
+}

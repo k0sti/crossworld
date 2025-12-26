@@ -1,0 +1,75 @@
+=== AUTO-BUILD PROGRESS ===
+
+Project: Terrain Collision System Optimization
+Spec: 001-physics-optimization
+Workspace: /home/k0/work/crossworld/main-cw
+Started: 2025-12-26
+
+Workflow Type: feature (optimization work)
+Rationale: Performance optimization of existing, working terrain collision system.
+           Requires profiling, implementing improvements, and validating with benchmarks.
+
+Session 1 (Planner):
+- Created implementation_plan.json
+- Phases: 6
+- Total subtasks: 14
+- Created init.sh
+- Updated project_index.json with Rust crate info
+- Updated context.json with detailed bottleneck analysis
+
+Phase Summary:
+- Phase 1 (Baseline): 2 subtasks - Establish performance benchmarks
+- Phase 2 (Allocation): 2 subtasks - Reduce per-frame allocations [parallel with Phase 3]
+- Phase 3 (Triangle Cache): 3 subtasks - Cache pre-computed triangles [parallel with Phase 2]
+- Phase 4 (Active Region): 3 subtasks - Optimize region tracking [depends on 2,3]
+- Phase 5 (Inline): 1 subtask - Hot path micro-optimizations
+- Phase 6 (Validation): 3 subtasks - Final testing and benchmarking
+
+Services Involved:
+- physics (primary): Rust crate containing terrain collision system
+- proto-gl (integration): OpenGL prototype application for visual verification
+
+Key Files to Modify:
+- crates/physics/src/terrain/collider.rs - VoxelTerrainCollider BVH updates
+- crates/physics/src/terrain/region_cache.rs - Triangle caching
+- crates/physics/src/terrain/active_region.rs - Rebuild hysteresis
+- crates/physics/src/terrain/triangle_gen.rs - Inline hints
+- crates/physics/benches/collision.rs - Granular benchmarks
+
+Identified Bottlenecks:
+1. Vec::new() allocations every frame in update_triangle_bvh()
+2. Full BVH rebuild even for small active region changes
+3. Triangles computed on-demand, not cached
+4. Basic hysteresis triggers frequent rebuilds
+
+Optimization Strategy:
+1. Reuse buffers with clear() instead of new()
+2. Pre-compute and cache triangles in RegionCollisionData
+3. Add velocity-based prediction to reduce rebuild frequency
+4. Add dirty region tracking for incremental updates
+5. Add #[inline] hints to hot path functions
+
+Parallelism Analysis:
+- Max parallel phases: 2 (phases 2 and 3 can run together)
+- Recommended workers: 1 (sequential execution recommended)
+- Reason: Phases have dependencies; limited parallelization benefit
+
+Success Criteria:
+- 50%+ reduction in update_triangle_bvh() time
+- Stable 60 FPS in proto-gl with 50 objects
+- All existing physics tests pass
+- Objects collide correctly with terrain
+
+=== STARTUP COMMAND ===
+
+To continue building this spec, run:
+
+  cd /home/k0/work/crossworld/main-cw
+  source auto-claude/.venv/bin/activate && python auto-claude/run.py --spec 001 --parallel 1
+
+Or to run init.sh first:
+
+  chmod +x .auto-claude/specs/001-physics-optimization/init.sh
+  ./.auto-claude/specs/001-physics-optimization/init.sh
+
+=== END SESSION 1 ===
