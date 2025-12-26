@@ -171,6 +171,56 @@ impl PhysicsWorld {
         self.cast_ray_with_exclusion(origin, direction, max_distance, solid_only, None)
     }
 
+    /// Add a static collider (no parent body, fixed in place)
+    ///
+    /// Creates a fixed rigid body at the origin and attaches the collider to it.
+    /// Useful for terrain and other immovable world geometry.
+    ///
+    /// # Arguments
+    /// * `collider` - The collider to add
+    ///
+    /// # Returns
+    /// Tuple of (RigidBodyHandle, ColliderHandle)
+    pub fn add_static_collider(&mut self, collider: Collider) -> (RigidBodyHandle, ColliderHandle) {
+        let body = RigidBodyBuilder::fixed().build();
+        let body_handle = self.rigid_body_set.insert(body);
+        let collider_handle = self
+            .collider_set
+            .insert_with_parent(collider, body_handle, &mut self.rigid_body_set);
+        (body_handle, collider_handle)
+    }
+
+    /// Update a terrain collider with new geometry
+    ///
+    /// Removes the old collider and adds a new one with the updated shape.
+    /// The rigid body remains unchanged.
+    ///
+    /// # Arguments
+    /// * `body_handle` - Handle to the fixed terrain body
+    /// * `old_collider` - Handle to the old collider to remove
+    /// * `new_collider` - New collider with updated geometry
+    ///
+    /// # Returns
+    /// Handle to the new collider
+    pub fn update_terrain_collider(
+        &mut self,
+        body_handle: RigidBodyHandle,
+        old_collider: ColliderHandle,
+        new_collider: Collider,
+    ) -> ColliderHandle {
+        // Remove old collider
+        self.collider_set.remove(
+            old_collider,
+            &mut self.island_manager,
+            &mut self.rigid_body_set,
+            true,
+        );
+
+        // Add new collider to same body
+        self.collider_set
+            .insert_with_parent(new_collider, body_handle, &mut self.rigid_body_set)
+    }
+
     /// Perform a raycast through the physics world with an optional collider exclusion
     ///
     /// # Arguments

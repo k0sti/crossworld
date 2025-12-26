@@ -262,6 +262,37 @@ impl VoxelTerrainCollider {
     pub fn active_triangle_count(&self) -> usize {
         self.part_id_map.len()
     }
+
+    /// Generate a TriMesh shape from current active triangles
+    ///
+    /// Returns None if there are no active triangles.
+    /// The TriMesh can be used to create a Rapier collider.
+    pub fn to_trimesh(&self) -> Option<rapier3d::prelude::SharedShape> {
+        use rapier3d::prelude::*;
+
+        if self.part_id_map.is_empty() {
+            return None;
+        }
+
+        let mut vertices = Vec::with_capacity(self.part_id_map.len() * 3);
+        let mut indices = Vec::with_capacity(self.part_id_map.len());
+
+        for (tri_idx, &part_id) in self.part_id_map.iter().enumerate() {
+            if let Some(triangle) = self.get_triangle(part_id) {
+                let base_idx = (tri_idx * 3) as u32;
+                vertices.push(triangle.a);
+                vertices.push(triangle.b);
+                vertices.push(triangle.c);
+                indices.push([base_idx, base_idx + 1, base_idx + 2]);
+            }
+        }
+
+        if vertices.is_empty() {
+            return None;
+        }
+
+        SharedShape::trimesh(vertices, indices).ok()
+    }
 }
 
 impl Clone for VoxelTerrainCollider {
