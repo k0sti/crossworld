@@ -1,0 +1,72 @@
+{
+  "project_root": "/home/k0/work/crossworld/main-cw",
+  "project_type": "monorepo",
+  "services": {
+    "proto": {
+      "name": "proto",
+      "path": "/home/k0/work/crossworld/main-cw/crates/proto",
+      "language": "Rust",
+      "framework": "Bevy 0.17.3",
+      "type": "binary",
+      "build_tool": "cargo",
+      "dev_command": "just proto",
+      "key_directories": {
+        "src": {
+          "path": "src",
+          "purpose": "Source code"
+        }
+      },
+      "entry_point": "src/main.rs",
+      "dependencies": [
+        "cube",
+        "world",
+        "crossworld-physics",
+        "bevy",
+        "bevy_rapier3d",
+        "glam",
+        "rand",
+        "toml",
+        "serde"
+      ]
+    },
+    "physics": {
+      "name": "crossworld-physics",
+      "path": "/home/k0/work/crossworld/main-cw/crates/physics",
+      "language": "Rust",
+      "type": "library",
+      "purpose": "Physics world, Rapier3D integration, VoxelColliderBuilder"
+    },
+    "cube": {
+      "name": "cube",
+      "path": "/home/k0/work/crossworld/main-cw/crates/cube",
+      "language": "Rust",
+      "type": "library",
+      "purpose": "Voxel data structures, octree, CSM parsing, mesh generation, .vox loading"
+    },
+    "world": {
+      "name": "world",
+      "path": "/home/k0/work/crossworld/main-cw/crates/world",
+      "language": "Rust",
+      "type": "library",
+      "purpose": "WorldCube wrapper, terrain generation"
+    },
+    "editor": {
+      "name": "editor",
+      "path": "/home/k0/work/crossworld/main-cw/crates/editor",
+      "language": "Rust",
+      "framework": "Bevy",
+      "type": "binary",
+      "purpose": "Bevy-based voxel editor (reference for camera patterns)"
+    }
+  },
+  "infrastructure": {
+    "build_system": "cargo + just",
+    "ci": "GitHub Actions",
+    "dev_environment": "NixOS flake (flake.nix)"
+  },
+  "conventions": {
+    "rust_edition": "2021",
+    "formatting": "cargo fmt",
+    "linting": "cargo clippy"
+  }
+}

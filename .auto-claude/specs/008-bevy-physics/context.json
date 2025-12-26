@@ -1,0 +1,50 @@
+{
+  "task_description": "Complete Bevy Physics Prototype: voxel object loading, dynamic cube spawning, optimized collision, player character system, physics simulation, and testing.",
+  "scoped_services": ["proto", "physics", "cube", "world"],
+  "files_to_modify": [
+    "crates/proto/src/main.rs",
+    "crates/proto/config.toml",
+    "crates/physics/src/lib.rs",
+    "crates/physics/src/native.rs",
+    "crates/physics/Cargo.toml"
+  ],
+  "files_to_create": [
+    "crates/proto/README.md"
+  ],
+  "files_to_reference": [
+    "crates/cube/src/lib.rs",
+    "crates/cube/src/traversal/neighbor_grid.rs",
+    "crates/world/src/world_cube/mod.rs",
+    "crates/physics/src/collision.rs",
+    "packages/app/dist/assets/models/vox/"
+  ],
+  "patterns": {
+    "physics_integration": "bevy_rapier3d plugin with VoxelColliderBuilder for world collision",
+    "rendering": "Bevy PBR rendering with ECS components",
+    "camera": "Orbit/free-fly camera controls reused from editor",
+    "config": "TOML configuration with serde deserialization",
+    "vox_loading": ".vox file loading from cube crate"
+  },
+  "existing_infrastructure": {
+    "bevy_app": "crates/proto with Bevy 0.17.3 app initialization",
+    "physics": "crossworld-physics with Rapier3D and VoxelColliderBuilder",
+    "world": "WorldCube from crates/world for terrain generation",
+    "cube": "Cube<i32> types with octree traversal and mesh generation",
+    "editor_patterns": "Camera controls from crates/editor"
+  },
+  "key_decisions": [
+    "Use Bevy 0.17.3 with bevy_rapier3d for physics",
+    "Reuse cube and world crates for voxel data",
+    "Implement optimized face-based collision with spatial filtering",
+    "TOML configuration for world parameters and physics settings",
+    "Character controller using Rapier KinematicCharacterController"
+  ],
+  "implementation_notes": [
+    "Phase 2 complete: spatial filtering API in VoxelColliderBuilder::from_cube_region()",
+    "Phase 3 complete: Bevy app with camera, debug overlay, NixOS flake",
+    "WorldCube mesh generation updated to use i32 API",
+    "NeighborGrid type inconsistency fixed in crates/cube",
+    "Pending: .vox model loading and dynamic cube spawning"
+  ],
+  "created_at": "2025-12-26T00:00:00.000Z"
+}
