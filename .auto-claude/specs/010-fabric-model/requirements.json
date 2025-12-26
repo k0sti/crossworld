@@ -1,0 +1,37 @@
+{
+  "task_description": "Implement procedural voxel world generation using quaternion field interpolation (fabric approach) that generates continuous surfaces by evaluating quaternion values at octree nodes and detecting sign changes for surface extraction.",
+  "workflow_type": "feature",
+  "source": {
+    "openspec_change": "add-fabric-model-generation",
+    "migrated_from": "openspec/changes/add-fabric-model-generation/",
+    "migration_date": "2025-12-26"
+  },
+  "priority": "high",
+  "status_summary": {
+    "total_tasks": 47,
+    "completed": 45,
+    "pending": 2,
+    "completion_percentage": 96
+  },
+  "completed_work": [
+    "Phase 1: Pre-Requirements - Cube Value Extension (3/3 complete)",
+    "Phase 2: Fabric Module Foundation (5/5 complete)",
+    "Phase 3: Quaternion Interpolation Implementation (7/7 complete)",
+    "Phase 4: Fabric Cube Generator (5/5 complete)",
+    "Phase 5: Surface Detection and Normals (5/5 complete)",
+    "Phase 6: Max Depth Rendering Support (5/5 complete)",
+    "Phase 7: Renderer Configuration Refactor (7/7 complete)",
+    "Phase 8: Model Selector Page UI (7/7 complete)",
+    "Phase 9: Fabric Model Integration (5/5 complete)",
+    "Phase 10: Validation and Documentation (3/5 complete)"
+  ],
+  "pending_work": [
+    "Phase 10.3: Test fabric rendering with various additive state configurations (manual)",
+    "Phase 10.4: Verify model selector UI works correctly (manual)"
+  ],
+  "affected_crates": [
+    "crates/cube",
+    "crates/renderer"
+  ],
+  "created_at": "2025-12-26T00:00:00.000Z"
+}
