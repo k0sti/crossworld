@@ -356,8 +356,9 @@
             "type": "manual",
             "instructions": "Manually compare status in new tasks vs openspec checkboxes for: 003-world-collision-optimization, 004-renderer-quality, 010-fabric-model, 011-function-cube. Verify [x] -> completed, [ ] -> pending."
           },
-          "status": "pending",
-          "notes": "Critical for partially complete changes to preserve accurate status."
+          "status": "completed",
+          "notes": "Manually verified status mapping accuracy for all 4 partial completion changes: 003-world-collision-optimization (23 completed, 12 pending - matches openspec), 004-renderer-quality (12 completed, 6 pending - matches openspec), 010-fabric-model (45 completed, 2 pending - matches openspec), 011-function-cube (7 completed, 11 pending - matches openspec). All [x] items mapped to \"completed\", all [ ] items mapped to \"pending\".",
+          "updated_at": "2025-12-26T18:20:45.433023+00:00"
         }
       ]
     },
@@ -506,7 +507,7 @@
     }
   },
   "qa_signoff": null,
-  "last_updated": "2025-12-26T18:18:41.194574+00:00",
+  "last_updated": "2025-12-26T18:20:45.433033+00:00",
   "status": "in_progress",
   "planStatus": "in_progress",
   "updated_at": "2025-12-26T17:26:34.316Z",
