@@ -1,0 +1,161 @@
+{
+  "project_root": "/home/k0/work/crossworld/main-cw",
+  "project_type": "monorepo",
+  "services": {
+    "app": {
+      "name": "app",
+      "path": "/home/k0/work/crossworld/main-cw/packages/app",
+      "language": "TypeScript",
+      "framework": "React",
+      "type": "frontend",
+      "package_manager": "npm",
+      "default_port": 3000,
+      "build_tool": "Vite",
+      "styling": "Emotion",
+      "dev_command": "npm run dev",
+      "key_directories": {
+        "src": {
+          "path": "src",
+          "purpose": "Source code"
+        }
+      },
+      "entry_point": "src/App.tsx",
+      "dependencies": [
+        "@chakra-ui/icons",
+        "@chakra-ui/react",
+        "@crossworld/common",
+        "@crossworld/editor",
+        "@emotion/react",
+        "@emotion/styled",
+        "@kixelated/hang",
+        "@kixelated/moq",
+        "@kixelated/signals",
+        "@peculiar/x509",
+        "applesauce-accounts",
+        "applesauce-core",
+        "applesauce-react",
+        "applesauce-relay",
+        "applesauce-signers",
+        "cube",
+        "crossworld-physics",
+        "crossworld-world",
+        "framer-motion",
+        "nostr-tools"
+      ],
+      "dev_dependencies": [
+        "@types/node",
+        "@types/react",
+        "@types/react-dom",
+        "@types/three",
+        "@vitejs/plugin-react",
+        "typescript",
+        "vite"
+      ]
+    },
+    "common": {
+      "name": "common",
+      "path": "/home/k0/work/crossworld/main-cw/packages/common",
+      "language": "TypeScript",
+      "framework": "React",
+      "type": "frontend",
+      "package_manager": "npm",
+      "default_port": 3000,
+      "styling": "Emotion",
+      "key_directories": {
+        "src": {
+          "path": "src",
+          "purpose": "Source code"
+        }
+      },
+      "entry_point": "src/index.ts",
+      "dependencies": [
+        "@chakra-ui/react",
+        "@emotion/react",
+        "@emotion/styled",
+        "applesauce-accounts",
+        "applesauce-core",
+        "applesauce-react",
+        "applesauce-relay",
+        "applesauce-signers",
+        "nostr-tools",
+        "react",
+        "react-dom",
+        "react-icons"
+      ],
+      "dev_dependencies": [
+        "@types/react",
+        "@types/react-dom",
+        "typescript"
+      ]
+    },
+    "wasm-physics": {
+      "name": "wasm-physics",
+      "path": "/home/k0/work/crossworld/main-cw/packages/wasm-physics",
+      "language": "JavaScript",
+      "framework": null,
+      "type": "unknown",
+      "package_manager": "npm",
+      "dependencies": [],
+      "dev_dependencies": []
+    },
+    "wasm-world": {
+      "name": "wasm-world",
+      "path": "/home/k0/work/crossworld/main-cw/packages/wasm-world",
+      "language": "JavaScript",
+      "framework": null,
+      "type": "unknown",
+      "package_manager": "npm",
+      "dependencies": [],
+      "dev_dependencies": []
+    },
+    "wasm-cube": {
+      "name": "wasm-cube",
+      "path": "/home/k0/work/crossworld/main-cw/packages/wasm-cube",
+      "language": "JavaScript",
+      "framework": null,
+      "type": "unknown",
+      "package_manager": "npm",
+      "dependencies": [],
+      "dev_dependencies": []
+    },
+    "editor": {
+      "name": "editor",
+      "path": "/home/k0/work/crossworld/main-cw/packages/editor",
+      "language": "TypeScript",
+      "framework": "React",
+      "type": "frontend",
+      "package_manager": "npm",
+      "default_port": 3000,
+      "styling": "Emotion",
+      "key_directories": {
+        "src": {
+          "path": "src",
+          "purpose": "Source code"
+        }
+      },
+      "entry_point": "src/index.ts",
+      "dependencies": [
+        "@chakra-ui/react",
+        "@emotion/react",
+        "@emotion/styled",
+        "@crossworld/common",
+        "cube",
+        "react",
+        "react-dom",
+        "react-icons",
+        "three"
+      ],
+      "dev_dependencies": [
+        "@types/react",
+        "@types/react-dom",
+        "@types/three",
+        "typescript"
+      ]
+    }
+  },
+  "infrastructure": {
+    "ci": "GitHub Actions",
+    "ci_workflows": []
+  },
+  "conventions": {}
+}

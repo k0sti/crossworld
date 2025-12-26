@@ -1,0 +1,40 @@
+{
+  "task_description": "Complete remaining world collision optimization tasks: chunked tests, benchmarking, documentation, and cleanup.",
+  "scoped_services": ["physics", "proto-gl"],
+  "files_to_modify": [
+    "crates/physics/src/world_collider.rs",
+    "crates/proto-gl/src/app.rs",
+    "crates/proto-gl/config.toml"
+  ],
+  "files_to_create": [
+    "crates/physics/tests/collision_benchmark.rs",
+    "doc/architecture/physics.md"
+  ],
+  "files_to_reference": [
+    "crates/physics/src/collision.rs",
+    "crates/cube/src/traversal/visit_faces.rs",
+    "crates/physics/src/lib.rs"
+  ],
+  "patterns": {
+    "world_collider_trait": "WorldCollider with init(), update(), resolve_collision(), metrics() methods",
+    "strategy_implementations": "MonolithicCollider, ChunkedCollider, HybridOctreeCollider",
+    "config_selection": "world_collision_strategy field in PhysicsConfig"
+  },
+  "existing_infrastructure": {
+    "collision_primitives": "Aabb, IntersectionRegion, RegionBounds in crates/physics/src/collision.rs",
+    "face_traversal": "visit_faces_in_region() in crates/cube/src/traversal/visit_faces.rs",
+    "region_builder": "VoxelColliderBuilder::from_cube_with_region_scaled()"
+  },
+  "key_decisions": [
+    "Three strategies implemented: Monolithic (baseline), Chunked (dynamic loading), Hybrid (octree query)",
+    "Hybrid approach bypasses Rapier for world collision, uses direct octree queries",
+    "Velocity dampening added to prevent continuous falling in hybrid mode",
+    "Face center position bug fixed - now uses actual face surface position"
+  ],
+  "bugs_fixed": [
+    "Face center computed as voxel center instead of face surface position",
+    "Corrections from coplanar faces were summed instead of taking max per axis",
+    "Penetration direction was inverted - now correctly pushes in direction of face normal"
+  ],
+  "created_at": "2025-12-26T00:00:00.000Z"
+}

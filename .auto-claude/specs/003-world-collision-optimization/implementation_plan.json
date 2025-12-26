@@ -1,0 +1,742 @@
+{
+  "feature": "Optimize World Collision Performance",
+  "workflow_type": "feature",
+  "workflow_rationale": "Performance optimization implementing three world collision strategies with benchmarking framework. Partially complete - infrastructure and implementations done, pending tests, benchmarks, and documentation.",
+  "source": {
+    "openspec_change": "optimize-world-collision",
+    "migrated_from": "openspec/changes/optimize-world-collision/",
+    "migration_date": "2025-12-26"
+  },
+  "phases": [
+    {
+      "id": "phase-1",
+      "name": "WorldCollider Trait and Infrastructure",
+      "type": "implementation",
+      "description": "Create WorldCollider trait with init(), update(), resolve_collision(), metrics() methods",
+      "depends_on": [],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-1-1",
+          "description": "Create crates/physics/src/world_collider.rs module with WorldCollider trait and ColliderMetrics struct",
+          "service": "physics",
+          "files_to_modify": ["crates/physics/src/lib.rs"],
+          "files_to_create": ["crates/physics/src/world_collider.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-physics",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "WorldCollider trait defined with init(), update(), resolve_collision(), metrics() methods. Exported from lib.rs."
+        },
+        {
+          "id": "subtask-1-2",
+          "description": "Add remove_collider() method to PhysicsWorld for chunk unloading",
+          "service": "physics",
+          "files_to_modify": ["crates/physics/src/lib.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-physics",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Wrapped collider_set.remove() with proper cleanup."
+        },
+        {
+          "id": "subtask-1-3",
+          "description": "Add count_compound_shapes() helper for metrics collection",
+          "service": "physics",
+          "files_to_modify": ["crates/physics/src/world_collider.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo test -p crossworld-physics test_count_compound_shapes",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Added test_count_compound_shapes test."
+        }
+      ]
+    },
+    {
+      "id": "phase-2",
+      "name": "Monolithic Strategy (Baseline)",
+      "type": "implementation",
+      "description": "Implement MonolithicCollider wrapping existing VoxelColliderBuilder logic",
+      "depends_on": ["phase-1"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-2-1",
+          "description": "Implement MonolithicCollider struct with WorldCollider trait",
+          "service": "physics",
+          "files_to_modify": ["crates/physics/src/world_collider.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-physics",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Wraps VoxelColliderBuilder::from_cube_scaled() with WorldCollider trait."
+        },
+        {
+          "id": "subtask-2-2",
+          "description": "Add init timing measurement using std::time::Instant",
+          "service": "physics",
+          "files_to_modify": ["crates/physics/src/world_collider.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-physics",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Init duration stored in metrics."
+        },
+        {
+          "id": "subtask-2-3",
+          "description": "Unit test: monolithic creates expected collider count",
+          "service": "physics",
+          "files_to_modify": ["crates/physics/src/world_collider.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo test -p crossworld-physics test_monolithic_metrics",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Added test_monolithic_metrics test."
+        }
+      ]
+    },
+    {
+      "id": "phase-3",
+      "name": "Chunked Strategy",
+      "type": "implementation",
+      "description": "Implement ChunkedCollider with spatial chunk loading/unloading",
+      "depends_on": ["phase-1"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-3-1",
+          "description": "Implement ChunkedCollider struct with chunk_size, load_radius, active chunks HashMap",
+          "service": "physics",
+          "files_to_modify": ["crates/physics/src/world_collider.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-physics",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Fields: cube, world_size, chunk_size, load_radius, HashMap<IVec3, ChunkData>."
+        },
+        {
+          "id": "subtask-3-2",
+          "description": "Implement world_to_chunk() and chunks_in_aabb() position calculations",
+          "service": "physics",
+          "files_to_modify": ["crates/physics/src/world_collider.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo test -p crossworld-physics test_chunked",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Added test_chunked_world_to_chunk, test_chunked_chunks_in_aabb tests."
+        },
+        {
+          "id": "subtask-3-3",
+          "description": "Implement generate_chunk() using VoxelColliderBuilder::from_cube_with_region_scaled()",
+          "service": "physics",
+          "files_to_modify": ["crates/physics/src/world_collider.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-physics",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Converts chunk position to world AABB, then to octree local space."
+        },
+        {
+          "id": "subtask-3-4",
+          "description": "Implement update() for chunk loading/unloading with metrics tracking",
+          "service": "physics",
+          "files_to_modify": ["crates/physics/src/world_collider.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-physics",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Tracks chunks_loaded, chunks_unloaded, faces_generated per frame."
+        },
+        {
+          "id": "subtask-3-5",
+          "description": "Unit test: chunks load when objects approach",
+          "service": "physics",
+          "files_to_modify": ["crates/physics/src/world_collider.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo test -p crossworld-physics test_chunked_load",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Create object at known position, verify expected chunks loaded."
+        },
+        {
+          "id": "subtask-3-6",
+          "description": "Unit test: chunks unload when objects leave",
+          "service": "physics",
+          "files_to_modify": ["crates/physics/src/world_collider.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo test -p crossworld-physics test_chunked_unload",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Move object away from loaded chunks, verify unloading."
+        }
+      ]
+    },
+    {
+      "id": "phase-4",
+      "name": "Hybrid Octree Strategy",
+      "type": "implementation",
+      "description": "Implement HybridOctreeCollider bypassing Rapier for world collision with direct octree queries",
+      "depends_on": ["phase-1"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-4-1",
+          "description": "Implement HybridOctreeCollider struct with cube, world_size, border_materials",
+          "service": "physics",
+          "files_to_modify": ["crates/physics/src/world_collider.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-physics",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "No Rapier colliders for world."
+        },
+        {
+          "id": "subtask-4-2",
+          "description": "Implement resolve_collision() using visit_faces_in_region() for octree queries",
+          "service": "physics",
+          "files_to_modify": ["crates/physics/src/world_collider.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-physics",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Fixed bug: face center was computed as voxel center, not actual face surface position. Fixed bug: corrections from multiple coplanar faces were summed, now takes max per axis."
+        },
+        {
+          "id": "subtask-4-3",
+          "description": "Implement box_face_penetration() for all 6 face orientations",
+          "service": "physics",
+          "files_to_modify": ["crates/physics/src/world_collider.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo test -p crossworld-physics test_box_face_penetration",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Fixed bug: penetration direction was inverted, now correctly pushes in direction of face normal."
+        },
+        {
+          "id": "subtask-4-4",
+          "description": "Integrate resolution into physics loop after physics.step()",
+          "service": "physics",
+          "files_to_modify": ["crates/proto-gl/src/app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Added velocity dampening to prevent continuous falling."
+        },
+        {
+          "id": "subtask-4-5",
+          "description": "Unit tests: penetration detection and integration tests",
+          "service": "physics",
+          "files_to_modify": ["crates/physics/src/world_collider.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo test -p crossworld-physics test_hybrid",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Added test_box_face_penetration_upward_facing, test_box_face_penetration_no_overlap, test_box_face_penetration_outside_face_extent, test_hybrid_resolve_collision_with_solid_cube, test_hybrid_with_half_solid_world, test_hybrid_query_depth_scaling, test_face_info_position_debug."
+        },
+        {
+          "id": "subtask-4-6",
+          "description": "Unit test: octree query efficiency comparison",
+          "service": "physics",
+          "files_to_modify": ["crates/physics/src/world_collider.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo test -p crossworld-physics test_octree_query_efficiency",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Compare face count from region query vs full traversal, verify significant reduction."
+        }
+      ]
+    },
+    {
+      "id": "phase-5",
+      "name": "Configuration Integration",
+      "type": "implementation",
+      "description": "Add physics config for strategy selection in proto-gl",
+      "depends_on": ["phase-2", "phase-3", "phase-4"],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-5-1",
+          "description": "Add world_collision_strategy and ChunkedConfig to PhysicsConfig",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/src/config.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Added world_collision_strategy: String, ChunkedConfig { chunk_size, load_radius }."
+        },
+        {
+          "id": "subtask-5-2",
+          "description": "Create strategy factory function create_world_collider()",
+          "service": "physics",
+          "files_to_modify": ["crates/physics/src/world_collider.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo test -p crossworld-physics test_create_world_collider",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Returns appropriate implementation based on config."
+        },
+        {
+          "id": "subtask-5-3",
+          "description": "Update config.toml with strategy configuration and documentation",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/config.toml"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "test -f crates/proto-gl/config.toml && echo 'exists'",
+            "expected": "exists"
+          },
+          "status": "completed",
+          "notes": "Documented all strategy options and chunked parameters."
+        }
+      ]
+    },
+    {
+      "id": "phase-6",
+      "name": "Proto-GL Integration",
+      "type": "integration",
+      "description": "Integrate WorldCollider into proto-gl application",
+      "depends_on": ["phase-5"],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-6-1",
+          "description": "Refactor App::init() to use WorldCollider instead of direct VoxelColliderBuilder",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/src/app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Stores Box<dyn WorldCollider> in App state."
+        },
+        {
+          "id": "subtask-6-2",
+          "description": "Add collect_dynamic_aabbs() helper to extract body handles and AABBs",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/src/app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Iterates CubeObjects, queries positions, computes AABBs."
+        },
+        {
+          "id": "subtask-6-3",
+          "description": "Call update() before physics step in main loop",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/src/app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Pass dynamic AABBs after input handling."
+        },
+        {
+          "id": "subtask-6-4",
+          "description": "Call resolve_collision() after physics step for HybridOctreeCollider",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/src/app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Applied corrections to body positions."
+        },
+        {
+          "id": "subtask-6-5",
+          "description": "Display metrics in debug overlay with toggle key",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/src/app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Show active_colliders, total_faces, update_time."
+        }
+      ]
+    },
+    {
+      "id": "phase-7",
+      "name": "Benchmarking",
+      "type": "testing",
+      "description": "Create benchmark framework to compare collision strategies",
+      "depends_on": ["phase-6"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-7-1",
+          "description": "Create benchmark test in crates/physics/tests/collision_benchmark.rs",
+          "service": "physics",
+          "files_to_modify": [],
+          "files_to_create": ["crates/physics/tests/collision_benchmark.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "test -f crates/physics/tests/collision_benchmark.rs && echo 'exists'",
+            "expected": "exists"
+          },
+          "status": "pending",
+          "notes": "Generate test world (depth 10 terrain), spawn 100 dynamic bodies, run 300 frames per strategy."
+        },
+        {
+          "id": "subtask-7-2",
+          "description": "Implement benchmark harness with init time and per-frame measurements",
+          "service": "physics",
+          "files_to_modify": ["crates/physics/tests/collision_benchmark.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo test -p crossworld-physics --test collision_benchmark",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Measure init time, per-frame update + step time, aggregate metrics."
+        },
+        {
+          "id": "subtask-7-3",
+          "description": "Format benchmark output with strategy comparison table",
+          "service": "physics",
+          "files_to_modify": ["crates/physics/tests/collision_benchmark.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo test -p crossworld-physics --test collision_benchmark -- --nocapture",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Table with strategy name, init_time, avg_frame_time, speedup."
+        },
+        {
+          "id": "subtask-7-4",
+          "description": "Add cargo bench integration with criterion",
+          "service": "physics",
+          "files_to_modify": ["crates/physics/Cargo.toml"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo bench --bench collision -p crossworld-physics",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Enable cargo bench --bench collision."
+        }
+      ]
+    },
+    {
+      "id": "phase-8",
+      "name": "Documentation",
+      "type": "documentation",
+      "description": "Document world collision strategies and usage",
+      "depends_on": ["phase-6"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-8-1",
+          "description": "Update doc/architecture/physics.md with collision strategies section",
+          "service": "documentation",
+          "files_to_modify": [],
+          "files_to_create": ["doc/architecture/physics.md"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "grep -q 'WorldCollider' doc/architecture/physics.md && echo 'documented'",
+            "expected": "documented"
+          },
+          "status": "pending",
+          "notes": "Add section explaining when to use each strategy, document performance characteristics."
+        },
+        {
+          "id": "subtask-8-2",
+          "description": "Add inline documentation to WorldCollider trait and implementations",
+          "service": "physics",
+          "files_to_modify": ["crates/physics/src/world_collider.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo doc -p crossworld-physics --no-deps",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Document trait, strategy design rationale, configuration options."
+        }
+      ]
+    },
+    {
+      "id": "phase-9",
+      "name": "Cleanup and Polish",
+      "type": "cleanup",
+      "description": "Final cleanup, linting, and verification",
+      "depends_on": ["phase-7", "phase-8"],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-9-1",
+          "description": "Run cargo clippy and fix warnings",
+          "service": "physics",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo clippy -p crossworld-physics -- -D warnings",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": ""
+        },
+        {
+          "id": "subtask-9-2",
+          "description": "Run cargo fmt",
+          "service": "physics",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo fmt -p crossworld-physics -- --check",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": ""
+        },
+        {
+          "id": "subtask-9-3",
+          "description": "Verify all tests pass",
+          "service": "physics",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo test --workspace",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": ""
+        },
+        {
+          "id": "subtask-9-4",
+          "description": "Build in release mode and verify performance gains",
+          "service": "physics",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo build --release -p proto-gl",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Target: 5-10x improvement over monolithic approach."
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "total_phases": 9,
+    "total_subtasks": 35,
+    "completed_subtasks": 23,
+    "pending_subtasks": 12,
+    "services_involved": ["physics", "proto-gl", "documentation"],
+    "parallelism": {
+      "max_parallel_phases": 3,
+      "parallel_groups": [
+        {
+          "phases": ["phase-2", "phase-3", "phase-4"],
+          "reason": "Strategy implementations are independent after phase-1"
+        },
+        {
+          "phases": ["phase-7", "phase-8"],
+          "reason": "Benchmarking and documentation can proceed in parallel"
+        }
+      ],
+      "recommended_workers": 2,
+      "speedup_estimate": "Phases 2-4 parallelizable (3 strategies), Phases 7-8 parallelizable"
+    },
+    "startup_command": "cargo test -p crossworld-physics && cargo check -p proto-gl"
+  },
+  "verification_strategy": {
+    "risk_level": "medium",
+    "skip_validation": false,
+    "test_creation_phase": "phase-7",
+    "test_types_required": ["unit", "integration", "benchmark"],
+    "security_scanning_required": false,
+    "staging_deployment_required": false,
+    "acceptance_criteria": [
+      "All three collision strategies pass unit tests",
+      "Chunked strategy loads/unloads chunks correctly",
+      "Hybrid strategy resolves penetration correctly",
+      "Benchmarks show measurable improvement over monolithic",
+      "Configuration allows strategy selection at runtime"
+    ],
+    "verification_steps": [
+      {
+        "name": "Unit Tests",
+        "command": "cargo test -p crossworld-physics",
+        "expected_outcome": "All tests pass",
+        "type": "command",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Proto-GL Build",
+        "command": "cargo build -p proto-gl",
+        "expected_outcome": "Successful build",
+        "type": "command",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Benchmark Execution",
+        "command": "cargo test -p crossworld-physics --test collision_benchmark",
+        "expected_outcome": "Benchmark completes with results",
+        "type": "command",
+        "required": false,
+        "blocking": false
+      }
+    ],
+    "reasoning": "Medium risk due to physics performance implications. Unit tests verify correctness, benchmarks verify performance gains."
+  },
+  "qa_acceptance": {
+    "unit_tests": {
+      "required": true,
+      "commands": ["cargo test -p crossworld-physics"],
+      "minimum_coverage": null
+    },
+    "integration_tests": {
+      "required": true,
+      "commands": ["cargo test -p proto-gl"],
+      "services_to_test": ["physics", "proto-gl"]
+    },
+    "e2e_tests": {
+      "required": false,
+      "commands": [],
+      "flows": []
+    },
+    "browser_verification": {
+      "required": false,
+      "pages": []
+    },
+    "database_verification": {
+      "required": false,
+      "checks": []
+    },
+    "performance_verification": {
+      "required": true,
+      "checks": [
+        "Chunked strategy reduces active collider count",
+        "Hybrid strategy avoids Rapier broad-phase for world",
+        "5-10x improvement over monolithic baseline"
+      ]
+    }
+  },
+  "qa_signoff": null,
+  "last_updated": "2025-12-26T00:00:00.000Z"
+}
