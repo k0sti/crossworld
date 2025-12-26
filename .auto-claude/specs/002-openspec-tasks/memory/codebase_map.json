@@ -1,10 +1,15 @@
 {
   "discovered_files": {
-    "openspec/changes/": {
-      "description": "10 active OpenSpec changes identified: optimize-world-collision (partial), improve-renderer-quality (partial), implement-gpu-raytracer (mostly complete), refactor-renderer-interface (mostly complete), create-proto-gl-physics-viewer (partial), create-bevy-physics-prototype (partial), create-bevy-voxel-editor (partial), add-fabric-model-generation (near complete), add-function-cube-type (partial), add-terrain-composite-collider (mostly complete)",
-      "category": "openspec-migration",
-      "discovered_at": "2025-12-26T16:26:19.314371+00:00"
+    ".auto-claude/specs/": {
+      "description": "All 12 task directories (001-012) now exist with valid JSON. 001-physics-optimization was copied from main repo as reference pattern. Migration created 10 new tasks from OpenSpec (003-012).",
+      "category": "migration",
+      "discovered_at": "2025-12-26T18:17:26.825622+00:00"
+    },
+    ".auto-claude/specs/002-openspec-tasks/implementation_plan.json": {
+      "description": "Status mapping verification complete: All 4 partial completion specs (003, 004, 010, 011) have accurate [x] -> completed and [ ] -> pending mappings.",
+      "category": "verification",
+      "discovered_at": "2025-12-26T18:21:11.715245+00:00"
     }
   },
-  "last_updated": "2025-12-26T16:26:19.314386+00:00"
+  "last_updated": "2025-12-26T18:21:11.715265+00:00"
 }
