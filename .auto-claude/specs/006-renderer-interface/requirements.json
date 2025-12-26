@@ -1,0 +1,36 @@
+{
+  "task_description": "Refactor renderer interface for cross-crate usability with unified Renderer trait, module reorganization, and GL lifecycle management.",
+  "workflow_type": "refactoring",
+  "source": {
+    "openspec_change": "refactor-renderer-interface",
+    "migrated_from": "openspec/changes/refactor-renderer-interface/",
+    "migration_date": "2025-12-26"
+  },
+  "priority": "medium",
+  "status_summary": {
+    "total_tasks": 51,
+    "completed": 42,
+    "pending": 9,
+    "completion_percentage": 82
+  },
+  "completed_work": [
+    "Phase 1: Core Interface Design (4/4 complete)",
+    "Phase 2: Module Reorganization (8/8 complete)",
+    "Phase 3: Implement Extended Renderer Trait (5/5 complete)",
+    "Phase 4: GL Lifecycle Implementation (6/6 complete)",
+    "Phase 5: File Output Implementation (7/8 complete)",
+    "Phase 6: Library Exports and Backward Compatibility (4/4 complete)",
+    "Phase 7: Update proto-gl Integration (4/5 complete - 1 N/A)"
+  ],
+  "pending_work": [
+    "Phase 5.8: Add tests for file output from all renderer types",
+    "Phase 8: Documentation and Examples (0/6 complete)",
+    "Phase 9.4: Add integration test using Renderer trait polymorphically",
+    "Phase 9.5: Test file output from all renderer types (software and GL)"
+  ],
+  "affected_crates": [
+    "crates/renderer",
+    "crates/proto-gl"
+  ],
+  "created_at": "2025-12-26T00:00:00.000Z"
+}

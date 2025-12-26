@@ -1,0 +1,61 @@
+{
+  "project_root": "/home/k0/work/crossworld/main-cw",
+  "project_type": "monorepo",
+  "services": {
+    "renderer": {
+      "name": "renderer",
+      "path": "/home/k0/work/crossworld/main-cw/crates/renderer",
+      "language": "Rust",
+      "framework": "glow (OpenGL)",
+      "type": "library",
+      "build_tool": "cargo",
+      "key_directories": {
+        "src": {
+          "path": "src",
+          "purpose": "Source code"
+        },
+        "renderers": {
+          "path": "src/renderers",
+          "purpose": "Renderer implementations (moved from top-level)"
+        },
+        "shaders": {
+          "path": "src/shaders",
+          "purpose": "GLSL shader files"
+        }
+      },
+      "entry_point": "src/lib.rs",
+      "key_files": {
+        "renderer_trait": "src/renderer.rs",
+        "camera": "src/camera.rs",
+        "lighting": "src/lighting.rs",
+        "renderers_mod": "src/renderers/mod.rs",
+        "cpu_tracer": "src/renderers/cpu_tracer.rs",
+        "bcf_cpu_tracer": "src/renderers/bcf_cpu_tracer.rs",
+        "gl_tracer": "src/renderers/gl_tracer.rs",
+        "gpu_tracer": "src/renderers/gpu_tracer.rs",
+        "mesh_renderer": "src/renderers/mesh_renderer.rs"
+      }
+    },
+    "proto-gl": {
+      "name": "proto-gl",
+      "path": "/home/k0/work/crossworld/main-cw/crates/proto-gl",
+      "language": "Rust",
+      "framework": "egui + glow",
+      "type": "application",
+      "build_tool": "cargo",
+      "key_files": {
+        "app": "src/app.rs"
+      },
+      "purpose": "Physics visualization application using renderer crate"
+    }
+  },
+  "infrastructure": {
+    "ci": "GitHub Actions",
+    "ci_workflows": []
+  },
+  "conventions": {
+    "renderer_interface": "Renderer trait with init_gl(), render(), destroy_gl() lifecycle",
+    "module_organization": "Implementations in renderers/, traits at crate root",
+    "backward_compatibility": "Re-exports at crate root preserve existing imports"
+  }
+}

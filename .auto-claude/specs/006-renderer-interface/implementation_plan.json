@@ -1,0 +1,981 @@
+{
+  "feature": "Refactor Renderer Interface for Cross-Crate Usability",
+  "workflow_type": "refactoring",
+  "workflow_rationale": "Unify renderer interface with consistent trait implementation, GL lifecycle management, and module reorganization. Most implementation complete - pending documentation and tests.",
+  "source": {
+    "openspec_change": "refactor-renderer-interface",
+    "migrated_from": "openspec/changes/refactor-renderer-interface/",
+    "migration_date": "2025-12-26"
+  },
+  "phases": [
+    {
+      "id": "phase-1",
+      "name": "Core Interface Design",
+      "type": "implementation",
+      "description": "Extend Renderer trait with GL lifecycle methods and capability queries",
+      "depends_on": [],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-1-1",
+          "description": "Extend Renderer trait with GL lifecycle methods (init_gl, destroy_gl, render_to_framebuffer)",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/renderer.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "GL lifecycle methods added with default implementations"
+        },
+        {
+          "id": "subtask-1-2",
+          "description": "Add capability query methods (supports_gl, supports_image_output)",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/renderer.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Capability queries added to trait"
+        },
+        {
+          "id": "subtask-1-3",
+          "description": "Split renderer.rs into focused modules: renderer.rs (trait), camera.rs, lighting.rs",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/renderer.rs", "crates/renderer/src/lib.rs"],
+          "files_to_create": ["crates/renderer/src/camera.rs", "crates/renderer/src/lighting.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Modules split for better organization"
+        },
+        {
+          "id": "subtask-1-4",
+          "description": "Keep helper types in renderer.rs (Ray, CubeBounds, HitInfo, lighting calculation helpers)",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/renderer.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Helper types retained in renderer.rs"
+        }
+      ]
+    },
+    {
+      "id": "phase-2",
+      "name": "Module Reorganization",
+      "type": "refactoring",
+      "description": "Move all renderer implementations to src/renderers/ module",
+      "depends_on": ["phase-1"],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-2-1",
+          "description": "Create src/renderers/ directory",
+          "service": "renderer",
+          "files_to_modify": [],
+          "files_to_create": ["crates/renderer/src/renderers/"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "test -d crates/renderer/src/renderers && echo 'exists'",
+            "expected": "exists"
+          },
+          "status": "completed",
+          "notes": "Directory created"
+        },
+        {
+          "id": "subtask-2-2",
+          "description": "Move cpu_tracer.rs to renderers/cpu_tracer.rs",
+          "service": "renderer",
+          "files_to_modify": [],
+          "files_to_create": ["crates/renderer/src/renderers/cpu_tracer.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "test -f crates/renderer/src/renderers/cpu_tracer.rs && echo 'exists'",
+            "expected": "exists"
+          },
+          "status": "completed",
+          "notes": "CpuTracer moved"
+        },
+        {
+          "id": "subtask-2-3",
+          "description": "Move bcf_cpu_tracer.rs to renderers/bcf_cpu_tracer.rs",
+          "service": "renderer",
+          "files_to_modify": [],
+          "files_to_create": ["crates/renderer/src/renderers/bcf_cpu_tracer.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "test -f crates/renderer/src/renderers/bcf_cpu_tracer.rs && echo 'exists'",
+            "expected": "exists"
+          },
+          "status": "completed",
+          "notes": "BcfTracer moved"
+        },
+        {
+          "id": "subtask-2-4",
+          "description": "Move gl_tracer.rs to renderers/gl_tracer.rs",
+          "service": "renderer",
+          "files_to_modify": [],
+          "files_to_create": ["crates/renderer/src/renderers/gl_tracer.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "test -f crates/renderer/src/renderers/gl_tracer.rs && echo 'exists'",
+            "expected": "exists"
+          },
+          "status": "completed",
+          "notes": "GlTracer moved"
+        },
+        {
+          "id": "subtask-2-5",
+          "description": "Move gpu_tracer.rs to renderers/gpu_tracer.rs",
+          "service": "renderer",
+          "files_to_modify": [],
+          "files_to_create": ["crates/renderer/src/renderers/gpu_tracer.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "test -f crates/renderer/src/renderers/gpu_tracer.rs && echo 'exists'",
+            "expected": "exists"
+          },
+          "status": "completed",
+          "notes": "GpuTracer moved"
+        },
+        {
+          "id": "subtask-2-6",
+          "description": "Move mesh_renderer.rs to renderers/mesh_renderer.rs",
+          "service": "renderer",
+          "files_to_modify": [],
+          "files_to_create": ["crates/renderer/src/renderers/mesh_renderer.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "test -f crates/renderer/src/renderers/mesh_renderer.rs && echo 'exists'",
+            "expected": "exists"
+          },
+          "status": "completed",
+          "notes": "MeshRenderer moved"
+        },
+        {
+          "id": "subtask-2-7",
+          "description": "Create renderers/mod.rs with public exports",
+          "service": "renderer",
+          "files_to_modify": [],
+          "files_to_create": ["crates/renderer/src/renderers/mod.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "test -f crates/renderer/src/renderers/mod.rs && echo 'exists'",
+            "expected": "exists"
+          },
+          "status": "completed",
+          "notes": "mod.rs created with exports"
+        },
+        {
+          "id": "subtask-2-8",
+          "description": "Update module paths in all moved files",
+          "service": "renderer",
+          "files_to_modify": [
+            "crates/renderer/src/renderers/cpu_tracer.rs",
+            "crates/renderer/src/renderers/bcf_cpu_tracer.rs",
+            "crates/renderer/src/renderers/gl_tracer.rs",
+            "crates/renderer/src/renderers/gpu_tracer.rs",
+            "crates/renderer/src/renderers/mesh_renderer.rs"
+          ],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Module paths updated"
+        }
+      ]
+    },
+    {
+      "id": "phase-3",
+      "name": "Implement Extended Renderer Trait",
+      "type": "implementation",
+      "description": "Update all renderers to implement new Renderer trait methods",
+      "depends_on": ["phase-2"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-3-1",
+          "description": "Update CpuTracer to implement new Renderer methods",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/renderers/cpu_tracer.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "CpuTracer implements extended trait"
+        },
+        {
+          "id": "subtask-3-2",
+          "description": "Update BcfTracer to implement new Renderer methods",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/renderers/bcf_cpu_tracer.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "BcfTracer implements extended trait"
+        },
+        {
+          "id": "subtask-3-3",
+          "description": "Update GlTracer to implement new Renderer methods",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/renderers/gl_tracer.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "GlTracer implements extended trait"
+        },
+        {
+          "id": "subtask-3-4",
+          "description": "Update ComputeTracer to implement new Renderer methods",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/renderers/gpu_tracer.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "ComputeTracer implements extended trait"
+        },
+        {
+          "id": "subtask-3-5",
+          "description": "Implement Renderer trait for MeshRenderer (currently missing)",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/renderers/mesh_renderer.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "MeshRenderer now implements Renderer trait"
+        }
+      ]
+    },
+    {
+      "id": "phase-4",
+      "name": "GL Lifecycle Implementation",
+      "type": "implementation",
+      "description": "Ensure GL-based renderers have proper lifecycle management",
+      "depends_on": ["phase-3"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-4-1",
+          "description": "Ensure GlTracer init_gl() creates all GL resources properly",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/renderers/gl_tracer.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "GlTracer init_gl() working"
+        },
+        {
+          "id": "subtask-4-2",
+          "description": "Ensure GlTracer destroy_gl() cleans up all resources",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/renderers/gl_tracer.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "GlTracer destroy_gl() working"
+        },
+        {
+          "id": "subtask-4-3",
+          "description": "Add render_to_framebuffer() to GlTracer",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/renderers/gl_tracer.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "render_to_framebuffer() implemented"
+        },
+        {
+          "id": "subtask-4-4",
+          "description": "Implement same for ComputeTracer",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/renderers/gpu_tracer.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "ComputeTracer GL lifecycle implemented"
+        },
+        {
+          "id": "subtask-4-5",
+          "description": "Implement same for MeshRenderer",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/renderers/mesh_renderer.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "MeshRenderer GL lifecycle implemented"
+        },
+        {
+          "id": "subtask-4-6",
+          "description": "Add capability queries to all renderers",
+          "service": "renderer",
+          "files_to_modify": [
+            "crates/renderer/src/renderers/cpu_tracer.rs",
+            "crates/renderer/src/renderers/bcf_cpu_tracer.rs",
+            "crates/renderer/src/renderers/gl_tracer.rs",
+            "crates/renderer/src/renderers/gpu_tracer.rs",
+            "crates/renderer/src/renderers/mesh_renderer.rs"
+          ],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Capability queries added to all renderers"
+        }
+      ]
+    },
+    {
+      "id": "phase-5",
+      "name": "File Output Implementation",
+      "type": "implementation",
+      "description": "Add save_to_file() capability to all renderers",
+      "depends_on": ["phase-4"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-5-1",
+          "description": "Add save_to_file() method to Renderer trait with default implementation",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/renderer.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "save_to_file() added to trait"
+        },
+        {
+          "id": "subtask-5-2",
+          "description": "Implement file saving for CpuTracer (use existing image buffer)",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/renderers/cpu_tracer.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "CpuTracer save_to_file() using image buffer"
+        },
+        {
+          "id": "subtask-5-3",
+          "description": "Implement file saving for BcfTracer (use existing image buffer)",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/renderers/bcf_cpu_tracer.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "BcfTracer save_to_file() using image buffer"
+        },
+        {
+          "id": "subtask-5-4",
+          "description": "Implement framebuffer readback helper function for GL renderers",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/renderer.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Framebuffer readback helper implemented"
+        },
+        {
+          "id": "subtask-5-5",
+          "description": "Implement file saving for GlTracer using framebuffer readback",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/renderers/gl_tracer.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "GlTracer save_to_file() using framebuffer readback"
+        },
+        {
+          "id": "subtask-5-6",
+          "description": "Implement file saving for ComputeTracer using framebuffer readback",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/renderers/gpu_tracer.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "ComputeTracer save_to_file() using framebuffer readback"
+        },
+        {
+          "id": "subtask-5-7",
+          "description": "Implement file saving for MeshRenderer using framebuffer readback",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/renderers/mesh_renderer.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "MeshRenderer save_to_file() using framebuffer readback"
+        },
+        {
+          "id": "subtask-5-8",
+          "description": "Add tests for file output from all renderer types",
+          "service": "renderer",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo test -p crossworld-renderer file_output",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Tests for file output pending"
+        }
+      ]
+    },
+    {
+      "id": "phase-6",
+      "name": "Library Exports and Backward Compatibility",
+      "type": "implementation",
+      "description": "Update lib.rs exports for backward compatibility",
+      "depends_on": ["phase-5"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-6-1",
+          "description": "Update src/lib.rs to export renderer, camera, lighting, and renderers modules",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/lib.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Module exports added"
+        },
+        {
+          "id": "subtask-6-2",
+          "description": "Add backward-compatible re-exports at crate root for all renderer types",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/lib.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Re-exports for renderer types"
+        },
+        {
+          "id": "subtask-6-3",
+          "description": "Add backward-compatible re-exports for CameraConfig, Renderer, and lighting constants",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/lib.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Re-exports for CameraConfig, Renderer, lighting"
+        },
+        {
+          "id": "subtask-6-4",
+          "description": "Verify existing tests still compile and pass (library tests pass; integration test failures pre-exist)",
+          "service": "renderer",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo test -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Library tests pass; integration test failures pre-exist"
+        }
+      ]
+    },
+    {
+      "id": "phase-7",
+      "name": "Update proto-gl Integration",
+      "type": "integration",
+      "description": "Update proto-gl to use unified renderer interface",
+      "depends_on": ["phase-6"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-7-1",
+          "description": "Update proto-gl to use renderer::renderers::GlTracer (backward-compatible imports work)",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/src/app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Backward-compatible imports work"
+        },
+        {
+          "id": "subtask-7-2",
+          "description": "Update proto-gl to use renderer::renderers::MeshRenderer (backward-compatible imports work)",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/src/app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Backward-compatible imports work"
+        },
+        {
+          "id": "subtask-7-3",
+          "description": "Use unified init_gl() / destroy_gl() lifecycle methods (already using trait methods)",
+          "service": "proto-gl",
+          "files_to_modify": ["crates/proto-gl/src/app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Already using trait methods"
+        },
+        {
+          "id": "subtask-7-4",
+          "description": "Use render_to_framebuffer() for rendering operations (not applicable - proto-gl needs direct GL rendering)",
+          "service": "proto-gl",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "N/A - proto-gl uses direct GL rendering"
+          },
+          "status": "completed",
+          "notes": "Not applicable - proto-gl needs direct GL rendering"
+        },
+        {
+          "id": "subtask-7-5",
+          "description": "Remove any renderer-specific workarounds (none needed)",
+          "service": "proto-gl",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "None needed"
+        }
+      ]
+    },
+    {
+      "id": "phase-8",
+      "name": "Documentation and Examples",
+      "type": "documentation",
+      "description": "Add module-level documentation and usage examples",
+      "depends_on": ["phase-7"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-8-1",
+          "description": "Add module-level documentation to renderers/mod.rs",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/renderers/mod.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo doc -p crossworld-renderer --no-deps",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Documentation pending"
+        },
+        {
+          "id": "subtask-8-2",
+          "description": "Add module-level documentation to renderer.rs, camera.rs, lighting.rs",
+          "service": "renderer",
+          "files_to_modify": [
+            "crates/renderer/src/renderer.rs",
+            "crates/renderer/src/camera.rs",
+            "crates/renderer/src/lighting.rs"
+          ],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo doc -p crossworld-renderer --no-deps",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Documentation pending"
+        },
+        {
+          "id": "subtask-8-3",
+          "description": "Update renderer struct documentation with trait implementation notes",
+          "service": "renderer",
+          "files_to_modify": [
+            "crates/renderer/src/renderers/cpu_tracer.rs",
+            "crates/renderer/src/renderers/bcf_cpu_tracer.rs",
+            "crates/renderer/src/renderers/gl_tracer.rs",
+            "crates/renderer/src/renderers/gpu_tracer.rs",
+            "crates/renderer/src/renderers/mesh_renderer.rs"
+          ],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo doc -p crossworld-renderer --no-deps",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Documentation pending"
+        },
+        {
+          "id": "subtask-8-4",
+          "description": "Add example of using Renderer trait generically in documentation",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/renderer.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo doc -p crossworld-renderer --no-deps",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Example pending"
+        },
+        {
+          "id": "subtask-8-5",
+          "description": "Document file output capability and usage patterns",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/renderer.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo doc -p crossworld-renderer --no-deps",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Documentation pending"
+        },
+        {
+          "id": "subtask-8-6",
+          "description": "Document architecture (cube = data, physics = entities, renderer = rendering)",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/lib.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo doc -p crossworld-renderer --no-deps",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Architecture documentation pending"
+        }
+      ]
+    },
+    {
+      "id": "phase-9",
+      "name": "Testing and Validation",
+      "type": "testing",
+      "description": "Verify all renderers work correctly with unified interface",
+      "depends_on": ["phase-7"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-9-1",
+          "description": "Verify all renderer tests still pass (library tests pass; integration tests have pre-existing failures)",
+          "service": "renderer",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo test -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Library tests pass; integration tests have pre-existing failures"
+        },
+        {
+          "id": "subtask-9-2",
+          "description": "Verify proto-gl builds and runs correctly",
+          "service": "proto-gl",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo build -p proto-gl",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "proto-gl builds correctly"
+        },
+        {
+          "id": "subtask-9-3",
+          "description": "Verify backward compatibility with existing renderer usage",
+          "service": "renderer",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check --workspace",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Backward compatibility verified"
+        },
+        {
+          "id": "subtask-9-4",
+          "description": "Add integration test using Renderer trait polymorphically",
+          "service": "renderer",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo test -p crossworld-renderer polymorphic",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Integration test pending"
+        },
+        {
+          "id": "subtask-9-5",
+          "description": "Test file output from all renderer types (software and GL)",
+          "service": "renderer",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo test -p crossworld-renderer file_output",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "File output tests pending"
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "total_phases": 9,
+    "total_subtasks": 51,
+    "completed_subtasks": 42,
+    "pending_subtasks": 9,
+    "services_involved": ["renderer", "proto-gl"],
+    "parallelism": {
+      "max_parallel_phases": 2,
+      "parallel_groups": [
+        {
+          "phases": ["phase-8", "phase-9"],
+          "reason": "Documentation and testing can proceed in parallel after integration complete"
+        }
+      ],
+      "recommended_workers": 1,
+      "speedup_estimate": "Sequential work - documentation and testing are parallel-safe"
+    },
+    "startup_command": "cargo check -p crossworld-renderer && cargo test -p crossworld-renderer"
+  },
+  "verification_strategy": {
+    "risk_level": "low",
+    "skip_validation": false,
+    "test_creation_phase": "phase-9",
+    "test_types_required": ["unit", "integration"],
+    "security_scanning_required": false,
+    "staging_deployment_required": false,
+    "acceptance_criteria": [
+      "All renderers implement unified Renderer trait",
+      "GL lifecycle (init, render, destroy) works consistently",
+      "File output works for all renderer types",
+      "Backward compatibility maintained via re-exports",
+      "proto-gl uses unified interface",
+      "Code passes clippy with no warnings"
+    ],
+    "verification_steps": [
+      {
+        "name": "Renderer Build",
+        "command": "cargo check -p crossworld-renderer",
+        "expected_outcome": "Successful build",
+        "type": "command",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Unit Tests",
+        "command": "cargo test -p crossworld-renderer",
+        "expected_outcome": "All tests pass",
+        "type": "command",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "proto-gl Build",
+        "command": "cargo check -p proto-gl",
+        "expected_outcome": "Successful build",
+        "type": "command",
+        "required": true,
+        "blocking": true
+      }
+    ],
+    "reasoning": "Low risk refactoring with backward compatibility. Most implementation complete, pending work is documentation and tests."
+  },
+  "qa_acceptance": {
+    "unit_tests": {
+      "required": true,
+      "commands": ["cargo test -p crossworld-renderer"],
+      "minimum_coverage": null
+    },
+    "integration_tests": {
+      "required": true,
+      "commands": ["cargo test -p crossworld-renderer"],
+      "services_to_test": ["renderer", "proto-gl"]
+    },
+    "e2e_tests": {
+      "required": false,
+      "commands": [],
+      "flows": []
+    },
+    "browser_verification": {
+      "required": false,
+      "pages": []
+    },
+    "database_verification": {
+      "required": false,
+      "checks": []
+    },
+    "performance_verification": {
+      "required": false,
+      "checks": []
+    }
+  },
+  "qa_signoff": null,
+  "last_updated": "2025-12-26T00:00:00.000Z"
+}
