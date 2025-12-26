@@ -4,6 +4,7 @@ pub mod collision;
 mod cube_object;
 mod object;
 pub mod sdf;
+pub mod terrain;
 mod world;
 pub mod world_collider;
 
