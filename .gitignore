@@ -18,3 +18,6 @@ output/
 # Asset work files
 assets/scratch/
 .direnv/
+
+.auto-claude
+.worktrees
