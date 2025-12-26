@@ -1,0 +1,52 @@
+{
+  "task_description": "Migrate 10 active OpenSpec changes to Auto-Claude task system, then deprecate old files.",
+  "scoped_services": ["documentation"],
+  "files_to_modify": [],
+  "files_to_create": [
+    ".auto-claude/specs/003-world-collision-optimization/",
+    ".auto-claude/specs/004-renderer-quality/",
+    ".auto-claude/specs/005-gpu-raytracer/",
+    ".auto-claude/specs/006-renderer-interface/",
+    ".auto-claude/specs/007-proto-gl-viewer/",
+    ".auto-claude/specs/008-bevy-physics/",
+    ".auto-claude/specs/009-bevy-editor/",
+    ".auto-claude/specs/010-fabric-model/",
+    ".auto-claude/specs/011-function-cube/",
+    ".auto-claude/specs/012-terrain-collider/",
+    "openspec/MIGRATION_COMPLETE.md"
+  ],
+  "files_to_reference": [
+    ".auto-claude/specs/001-physics-optimization/implementation_plan.json",
+    ".auto-claude/project_index.json"
+  ],
+  "patterns": {
+    "task_id_format": "NNN-kebab-case-name (e.g., 003-world-collision-optimization)",
+    "task_directory_structure": "requirements.json, implementation_plan.json, spec.md, context.json, project_index.json",
+    "status_mapping": "OpenSpec '- [x]' -> JSON 'status: completed', '- [ ]' -> 'status: pending'",
+    "phase_structure": "Group subtasks by OpenSpec phase headings (## Phase N)",
+    "proposal_extraction": "Migrate proposal.md Why/What/Impact to spec.md",
+    "design_integration": "Merge design.md content into spec.md, not separate file"
+  },
+  "source_files": {
+    "openspec_changes": [
+      "openspec/changes/optimize-world-collision/",
+      "openspec/changes/improve-renderer-quality/",
+      "openspec/changes/implement-gpu-raytracer/",
+      "openspec/changes/refactor-renderer-interface/",
+      "openspec/changes/create-proto-gl-physics-viewer/",
+      "openspec/changes/create-bevy-physics-prototype/",
+      "openspec/changes/create-bevy-voxel-editor/",
+      "openspec/changes/add-fabric-model-generation/",
+      "openspec/changes/add-function-cube-type/",
+      "openspec/changes/add-terrain-composite-collider/"
+    ],
+    "file_types": ["proposal.md", "tasks.md", "design.md"]
+  },
+  "partial_completion_status": {
+    "optimize-world-collision": "Phases 1-2, 4 complete. Pending: 3 (tests), 6-9 (integration, benchmarks, docs, cleanup).",
+    "improve-renderer-quality": "Phases 1-4, 7 complete. Pending: Phase 5 (rename), Phase 6 (docs).",
+    "add-fabric-model-generation": "Phases 1-9 complete. Pending: Phase 10.3-10.4 (validation, UI test).",
+    "add-function-cube-type": "Phases 1-2 complete. Pending: Phases 3-5 (integration, WASM, polish)."
+  },
+  "created_at": "2025-12-26T18:00:00.000Z"
+}

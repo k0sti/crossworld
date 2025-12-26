@@ -1,0 +1,10 @@
+{
+  "discovered_files": {
+    "openspec/changes/": {
+      "description": "10 active OpenSpec changes identified: optimize-world-collision (partial), improve-renderer-quality (partial), implement-gpu-raytracer (mostly complete), refactor-renderer-interface (mostly complete), create-proto-gl-physics-viewer (partial), create-bevy-physics-prototype (partial), create-bevy-voxel-editor (partial), add-fabric-model-generation (near complete), add-function-cube-type (partial), add-terrain-composite-collider (mostly complete)",
+      "category": "openspec-migration",
+      "discovered_at": "2025-12-26T16:26:19.314371+00:00"
+    }
+  },
+  "last_updated": "2025-12-26T16:26:19.314386+00:00"
+}

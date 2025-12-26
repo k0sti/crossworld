@@ -1,0 +1,86 @@
+{
+  "complexity": "standard",
+  "workflow_type": "migration",
+  "confidence": 0.90,
+  "reasoning": "Content migration task moving planning documentation from legacy openspec/ folder to new auto-claude task system. Clear source (117 files in openspec/) and target (auto-claude/specs/) with established patterns. 10 active change proposals to convert to new tasks. No external integrations or infrastructure changes required.",
+
+  "analysis": {
+    "scope": {
+      "estimated_files": 40,
+      "estimated_services": 1,
+      "is_cross_cutting": false,
+      "notes": "Read ~30-50 openspec files (10 active changes with proposals, tasks, specs), create ~10-15 new task specifications in auto-claude system, then cleanup old folder"
+    },
+    "integrations": {
+      "external_services": [],
+      "new_dependencies": [],
+      "research_needed": false,
+      "notes": "Pure documentation/content migration. No external APIs or new libraries involved"
+    },
+    "infrastructure": {
+      "docker_changes": false,
+      "database_changes": false,
+      "config_changes": false,
+      "notes": "No infrastructure changes - just markdown file reorganization"
+    },
+    "knowledge": {
+      "patterns_exist": true,
+      "research_required": false,
+      "unfamiliar_tech": [],
+      "notes": "Both openspec and auto-claude task formats are markdown-based with clear structure. Patterns visible in existing specs like 001-physics-optimization"
+    },
+    "risk": {
+      "level": "low",
+      "concerns": [
+        "Must preserve all meaningful information before deleting old files",
+        "Need to verify new tasks capture all actionable items from old specs"
+      ],
+      "notes": "Low risk as this is content migration with backups possible via git. Old files only removed after verification"
+    }
+  },
+
+  "recommended_phases": [
+    "discovery",
+    "requirements",
+    "context",
+    "spec_writing",
+    "planning",
+    "validation"
+  ],
+
+  "flags": {
+    "needs_research": false,
+    "needs_self_critique": false,
+    "needs_infrastructure_setup": false
+  },
+
+  "validation_recommendations": {
+    "risk_level": "low",
+    "skip_validation": false,
+    "minimal_mode": true,
+    "test_types_required": [],
+    "security_scan_required": false,
+    "staging_deployment_required": false,
+    "reasoning": "Documentation migration with no functional code changes. Validation should verify new tasks are complete and capture all actionable items from old specs before cleanup. Git provides natural backup."
+  },
+
+  "source_analysis": {
+    "active_changes": [
+      "implement-gpu-raytracer",
+      "create-bevy-voxel-editor",
+      "refactor-renderer-interface",
+      "improve-renderer-quality",
+      "add-terrain-composite-collider",
+      "create-bevy-physics-prototype",
+      "create-proto-gl-physics-viewer",
+      "optimize-world-collision",
+      "add-fabric-model-generation",
+      "add-function-cube-type"
+    ],
+    "archived_changes_count": 16,
+    "total_files": 117,
+    "file_types": ["proposal.md", "tasks.md", "design.md", "spec.md", "IMPLEMENTATION.md"]
+  },
+
+  "created_at": "2025-12-26T10:00:00Z"
+}
