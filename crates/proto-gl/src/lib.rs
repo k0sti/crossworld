@@ -17,11 +17,16 @@ pub use config::{PhysicsConfig, ProtoGlConfig, RenderConfig, SpawningConfig, Wor
 pub use models::{SpawnedObject, VoxModel};
 
 use config::load_config;
-use crossworld_physics::{PhysicsWorld, world_collider::WorldCollider};
+use crossworld_physics::{
+    PhysicsWorld,
+    collision::Aabb,
+    rapier3d::parry::bounding_volume::Aabb as RapierAabb,
+    terrain::{ActiveRegionTracker, VoxelTerrainCollider},
+};
 use models::load_vox_models;
 use physics::spawn_cube_objects;
 use std::error::Error;
-use std::rc::Rc;
+use std::sync::Arc;
 use world::generate_world;
 
 /// Run physics simulation in debug mode without graphics
@@ -46,7 +51,7 @@ pub fn run_physics_debug(iterations: u32) -> Result<(), Box<dyn Error>> {
 
     // Generate world
     let (world_cube, world_depth) = generate_world(&config.world);
-    let world_cube_rc = Rc::new(world_cube);
+    let world_cube_arc = Arc::new(world_cube);
 
     let world_size = config.world.world_size();
     let half_world = config.world.half_world();
@@ -68,19 +73,18 @@ pub fn run_physics_debug(iterations: u32) -> Result<(), Box<dyn Error>> {
     let gravity = glam::Vec3::new(0.0, config.physics.gravity, 0.0);
     let mut physics_world = PhysicsWorld::new(gravity);
 
-    // Create world collider
-    let mut world_collider = WorldCollider::new();
-    world_collider.init(
-        &world_cube_rc,
+    // Create terrain collider using TypedCompositeShape
+    let mut terrain_collider = VoxelTerrainCollider::new(
+        world_cube_arc,
         world_size,
+        3, // region_depth
         config.world.border_materials,
-        &mut physics_world,
     );
+    let mut active_region_tracker = ActiveRegionTracker::new(10.0);
 
-    // Debug: check world collider
     println!(
-        "World collider ready (strategy: {})",
-        world_collider.metrics().strategy_name
+        "Terrain collider ready (region_depth: {})",
+        terrain_collider.region_depth()
     );
 
     // Load models and spawn dynamic cubes
@@ -114,15 +118,34 @@ pub fn run_physics_debug(iterations: u32) -> Result<(), Box<dyn Error>> {
     let log_interval = (iterations / 10).max(1); // Log 10 times during simulation
 
     for iter in 0..iterations {
+        // Update terrain collider BVH based on dynamic object positions
+        let rapier_aabbs: Vec<RapierAabb> = objects
+            .iter()
+            .map(|obj| {
+                let aabb = obj.physics.world_aabb(&physics_world);
+                RapierAabb::new(
+                    [aabb.min.x, aabb.min.y, aabb.min.z].into(),
+                    [aabb.max.x, aabb.max.y, aabb.max.z].into(),
+                )
+            })
+            .collect();
+
+        if let Some(active_aabb) = active_region_tracker.update(&rapier_aabbs) {
+            terrain_collider.update_triangle_bvh(&active_aabb);
+        }
+
         // Step physics
         physics_world.step(timestep);
 
+        // Resolve terrain collisions
         for obj in objects.iter() {
-            // Use physics crate's world_aabb for accurate AABB calculation
             let body_aabb = obj.physics.world_aabb(&physics_world);
+            let rapier_aabb = RapierAabb::new(
+                [body_aabb.min.x, body_aabb.min.y, body_aabb.min.z].into(),
+                [body_aabb.max.x, body_aabb.max.y, body_aabb.max.z].into(),
+            );
 
-            // Get correction from world collider and apply collision response
-            let correction = world_collider.resolve_collision(obj.physics.body_handle(), &body_aabb);
+            let correction = resolve_terrain_collision(&terrain_collider, &rapier_aabb, &body_aabb);
             obj.physics.apply_collision_response(&mut physics_world, correction);
         }
 
@@ -196,4 +219,119 @@ pub fn run_physics_debug(iterations: u32) -> Result<(), Box<dyn Error>> {
     }
 
     Ok(())
+}
+
+/// Resolve terrain collision for an object AABB using the terrain collider's BVH
+fn resolve_terrain_collision(
+    terrain_collider: &VoxelTerrainCollider,
+    rapier_aabb: &RapierAabb,
+    body_aabb: &Aabb,
+) -> glam::Vec3 {
+    let bvh = terrain_collider.triangle_bvh();
+    let mut max_correction = glam::Vec3::ZERO;
+
+    for leaf_idx in bvh.intersect_aabb(rapier_aabb) {
+        if let Some(triangle) = terrain_collider.get_triangle_by_index(leaf_idx) {
+            let correction = compute_aabb_triangle_correction(body_aabb, &triangle);
+            if correction.length_squared() > max_correction.length_squared() {
+                max_correction = correction;
+            }
+        }
+    }
+
+    max_correction
+}
+
+/// Compute penetration correction for AABB-triangle intersection
+fn compute_aabb_triangle_correction(
+    aabb: &Aabb,
+    triangle: &crossworld_physics::rapier3d::parry::shape::Triangle,
+) -> glam::Vec3 {
+    use glam::Vec3;
+
+    let a = Vec3::new(triangle.a.x, triangle.a.y, triangle.a.z);
+    let b = Vec3::new(triangle.b.x, triangle.b.y, triangle.b.z);
+    let c = Vec3::new(triangle.c.x, triangle.c.y, triangle.c.z);
+
+    let edge1 = b - a;
+    let edge2 = c - a;
+    let normal = edge1.cross(edge2);
+    let normal_len = normal.length();
+    if normal_len < 1e-6 {
+        return Vec3::ZERO;
+    }
+    let normal = normal / normal_len;
+
+    let tri_min = a.min(b).min(c);
+    let tri_max = a.max(b).max(c);
+
+    if aabb.max.x < tri_min.x
+        || aabb.min.x > tri_max.x
+        || aabb.max.y < tri_min.y
+        || aabb.min.y > tri_max.y
+        || aabb.max.z < tri_min.z
+        || aabb.min.z > tri_max.z
+    {
+        return Vec3::ZERO;
+    }
+
+    let aabb_corner = Vec3::new(
+        if normal.x > 0.0 { aabb.min.x } else { aabb.max.x },
+        if normal.y > 0.0 { aabb.min.y } else { aabb.max.y },
+        if normal.z > 0.0 { aabb.min.z } else { aabb.max.z },
+    );
+
+    let d = normal.dot(a);
+    let dist = normal.dot(aabb_corner) - d;
+
+    if dist < 0.0 {
+        let center = (aabb.min + aabb.max) * 0.5;
+        let proj = center - normal * (normal.dot(center) - d);
+
+        if point_in_triangle_2d(&proj, &a, &b, &c, &normal) {
+            return normal * (-dist);
+        }
+    }
+
+    Vec3::ZERO
+}
+
+fn point_in_triangle_2d(
+    p: &glam::Vec3,
+    a: &glam::Vec3,
+    b: &glam::Vec3,
+    c: &glam::Vec3,
+    normal: &glam::Vec3,
+) -> bool {
+    let abs_normal = normal.abs();
+    let (u_idx, v_idx) = if abs_normal.x >= abs_normal.y && abs_normal.x >= abs_normal.z {
+        (1, 2)
+    } else if abs_normal.y >= abs_normal.z {
+        (0, 2)
+    } else {
+        (0, 1)
+    };
+
+    let get_uv = |v: &glam::Vec3| -> (f32, f32) {
+        let arr = [v.x, v.y, v.z];
+        (arr[u_idx], arr[v_idx])
+    };
+
+    let (pu, pv) = get_uv(p);
+    let (au, av) = get_uv(a);
+    let (bu, bv) = get_uv(b);
+    let (cu, cv) = get_uv(c);
+
+    let sign = |p1: (f32, f32), p2: (f32, f32), p3: (f32, f32)| -> f32 {
+        (p1.0 - p3.0) * (p2.1 - p3.1) - (p2.0 - p3.0) * (p1.1 - p3.1)
+    };
+
+    let d1 = sign((pu, pv), (au, av), (bu, bv));
+    let d2 = sign((pu, pv), (bu, bv), (cu, cv));
+    let d3 = sign((pu, pv), (cu, cv), (au, av));
+
+    let has_neg = d1 < 0.0 || d2 < 0.0 || d3 < 0.0;
+    let has_pos = d1 > 0.0 || d2 > 0.0 || d3 > 0.0;
+
+    !(has_neg && has_pos)
 }

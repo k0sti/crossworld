@@ -21,8 +21,11 @@ use winit::window::{CursorGrabMode, Window, WindowId};
 use crossworld_physics::{
     PhysicsWorld,
     collision::Aabb,
-    rapier3d::prelude::*,
-    world_collider::WorldCollider,
+    rapier3d::{
+        self,
+        parry::bounding_volume::Aabb as RapierAabb,
+    },
+    terrain::{ActiveRegionTracker, VoxelTerrainCollider},
 };
 use cube::Cube;
 use renderer::{BACKGROUND_COLOR, CameraConfig, GlTracer, MeshRenderer};
@@ -92,8 +95,10 @@ pub struct ProtoGlApp {
     physics_world: Option<PhysicsWorld>,
     physics_accumulator: f32,
     objects: Vec<SpawnedObject>,
-    /// World collider
-    world_collider: Option<WorldCollider>,
+    /// Terrain collider using TypedCompositeShape
+    terrain_collider: Option<VoxelTerrainCollider>,
+    /// Active region tracker for terrain BVH updates
+    active_region_tracker: ActiveRegionTracker,
 
     // Timing
     last_frame: Instant,
@@ -173,7 +178,8 @@ impl ProtoGlApp {
             physics_world: None,
             physics_accumulator: 0.0,
             objects: Vec::new(),
-            world_collider: None,
+            terrain_collider: None,
+            active_region_tracker: ActiveRegionTracker::new(10.0), // 10 unit margin
             last_frame: Instant::now(),
             frame_time: 0.0,
             fps: 60.0,
@@ -334,22 +340,18 @@ impl ApplicationHandler for ProtoGlApp {
         let gravity = glam::Vec3::new(0.0, self.config.physics.gravity, 0.0);
         let mut physics_world = PhysicsWorld::new(gravity);
 
-        // Create world collider
+        // Create terrain collider using TypedCompositeShape
         let world_size = self.config.world.world_size();
-        let mut world_collider = WorldCollider::new();
-        world_collider.init(
-            &world_cube_rc,
+        let terrain_collider = VoxelTerrainCollider::new(
+            Arc::new((*world_cube_rc).clone()),
             world_size,
+            3, // region_depth: 3 gives 8^3 = 512 regions
             self.config.world.border_materials,
-            &mut physics_world,
         );
-        let collider_metrics = world_collider.metrics();
         println!(
-            "  World collider strategy: {} (init: {:.1}ms, {} colliders, {} faces)",
-            collider_metrics.strategy_name,
-            collider_metrics.init_time_ms,
-            collider_metrics.active_colliders,
-            collider_metrics.total_faces,
+            "  Terrain collider: world_size={}, region_depth={}",
+            world_size,
+            terrain_collider.region_depth(),
         );
 
         // Load models and spawn dynamic cubes
@@ -441,7 +443,7 @@ impl ApplicationHandler for ProtoGlApp {
         self.world_depth = world_depth;
         self.world_mesh_index = world_mesh_index;
         self.physics_world = Some(physics_world);
-        self.world_collider = Some(world_collider);
+        self.terrain_collider = Some(terrain_collider);
         self.camera_object = Some(camera_object);
         self.objects = objects;
     }
@@ -701,20 +703,25 @@ impl ProtoGlApp {
             self.physics_accumulator += delta;
             let timestep = self.config.physics.timestep;
 
-            // Update world collider
-            if let Some(world_collider) = &mut self.world_collider {
-                // Collect AABBs from dynamic objects using physics CubeObject's world_aabb
-                let dynamic_aabbs: Vec<(RigidBodyHandle, Aabb)> = self
+            // Update terrain collider BVH based on dynamic object positions
+            if let Some(terrain_collider) = &mut self.terrain_collider {
+                // Collect AABBs as Rapier Aabb for active region tracking
+                let rapier_aabbs: Vec<RapierAabb> = self
                     .objects
                     .iter()
-                    .filter_map(|obj| {
-                        // Use physics crate's world_aabb for accurate AABB calculation
+                    .map(|obj| {
                         let aabb = obj.physics.world_aabb(physics_world);
-                        Some((obj.physics.body_handle(), aabb))
+                        RapierAabb::new(
+                            [aabb.min.x, aabb.min.y, aabb.min.z].into(),
+                            [aabb.max.x, aabb.max.y, aabb.max.z].into(),
+                        )
                     })
                     .collect();
 
-                world_collider.update(&dynamic_aabbs, physics_world);
+                // Check if BVH rebuild is needed
+                if let Some(active_aabb) = self.active_region_tracker.update(&rapier_aabbs) {
+                    terrain_collider.update_triangle_bvh(&active_aabb);
+                }
             }
 
             while self.physics_accumulator >= timestep {
@@ -722,16 +729,25 @@ impl ProtoGlApp {
                 self.physics_accumulator -= timestep;
             }
 
-            // Resolve world collisions (direct octree queries, bypasses Rapier)
-            if let Some(world_collider) = &self.world_collider {
+            // Resolve terrain collisions using triangle BVH
+            if let Some(terrain_collider) = &self.terrain_collider {
                 for (i, obj) in self.objects.iter_mut().enumerate() {
-                    // Use physics crate's world_aabb (handles rotation automatically)
+                    // Get object's world AABB
                     let body_aabb = obj.physics.world_aabb(physics_world);
                     let position = obj.physics.position(physics_world);
 
-                    // Get correction from world collider
-                    let correction =
-                        world_collider.resolve_collision(obj.physics.body_handle(), &body_aabb);
+                    // Convert to Rapier AABB for BVH query
+                    let rapier_aabb = RapierAabb::new(
+                        [body_aabb.min.x, body_aabb.min.y, body_aabb.min.z].into(),
+                        [body_aabb.max.x, body_aabb.max.y, body_aabb.max.z].into(),
+                    );
+
+                    // Query BVH for potentially intersecting triangles and compute correction
+                    let correction = resolve_terrain_collision(
+                        terrain_collider,
+                        &rapier_aabb,
+                        &body_aabb,
+                    );
 
                     // Update collision state for visualization
                     let is_colliding = correction.length_squared() > 0.0;
@@ -1077,7 +1093,7 @@ impl ProtoGlApp {
         }
 
         // Clear physics
-        self.world_collider = None;
+        self.terrain_collider = None;
         self.physics_world = None;
         self.objects.clear();
         self.object_mesh_indices.clear();
@@ -1095,4 +1111,141 @@ impl ProtoGlApp {
 
         println!("[DEBUG] Cleanup complete");
     }
+}
+
+/// Resolve terrain collision for an object AABB using the terrain collider's BVH
+///
+/// Queries the triangle BVH for potentially intersecting triangles and computes
+/// the penetration correction vector.
+fn resolve_terrain_collision(
+    terrain_collider: &VoxelTerrainCollider,
+    rapier_aabb: &RapierAabb,
+    body_aabb: &Aabb,
+) -> glam::Vec3 {
+    let bvh = terrain_collider.triangle_bvh();
+    let mut max_correction = glam::Vec3::ZERO;
+
+    // Use BVH's intersect_aabb to find potentially colliding triangles
+    for leaf_idx in bvh.intersect_aabb(rapier_aabb) {
+        if let Some(triangle) = terrain_collider.get_triangle_by_index(leaf_idx) {
+            // Compute AABB-triangle penetration
+            let correction = compute_aabb_triangle_correction(body_aabb, &triangle);
+            if correction.length_squared() > max_correction.length_squared() {
+                max_correction = correction;
+            }
+        }
+    }
+
+    max_correction
+}
+
+/// Compute penetration correction for AABB-triangle intersection
+///
+/// Uses a simplified approach: checks if the AABB center is below the triangle plane
+/// and computes the pushout distance along the triangle normal.
+fn compute_aabb_triangle_correction(
+    aabb: &Aabb,
+    triangle: &rapier3d::parry::shape::Triangle,
+) -> glam::Vec3 {
+    use glam::Vec3;
+
+    // Get triangle vertices as Vec3
+    let a = Vec3::new(triangle.a.x, triangle.a.y, triangle.a.z);
+    let b = Vec3::new(triangle.b.x, triangle.b.y, triangle.b.z);
+    let c = Vec3::new(triangle.c.x, triangle.c.y, triangle.c.z);
+
+    // Compute triangle normal (CCW winding = outward normal)
+    let edge1 = b - a;
+    let edge2 = c - a;
+    let normal = edge1.cross(edge2);
+    let normal_len = normal.length();
+    if normal_len < 1e-6 {
+        return Vec3::ZERO; // Degenerate triangle
+    }
+    let normal = normal / normal_len;
+
+    // Triangle bounding box for quick rejection
+    let tri_min = a.min(b).min(c);
+    let tri_max = a.max(b).max(c);
+
+    // AABB-triangle bounding box overlap check
+    if aabb.max.x < tri_min.x
+        || aabb.min.x > tri_max.x
+        || aabb.max.y < tri_min.y
+        || aabb.min.y > tri_max.y
+        || aabb.max.z < tri_min.z
+        || aabb.min.z > tri_max.z
+    {
+        return Vec3::ZERO;
+    }
+
+    // Find AABB corner closest to triangle in normal direction
+    let aabb_corner = Vec3::new(
+        if normal.x > 0.0 { aabb.min.x } else { aabb.max.x },
+        if normal.y > 0.0 { aabb.min.y } else { aabb.max.y },
+        if normal.z > 0.0 { aabb.min.z } else { aabb.max.z },
+    );
+
+    // Signed distance from corner to triangle plane
+    let d = normal.dot(a); // plane constant
+    let dist = normal.dot(aabb_corner) - d;
+
+    // If corner is behind the plane (negative distance), we have penetration
+    if dist < 0.0 {
+        // Check if projection falls within triangle bounds (approximate)
+        let center = (aabb.min + aabb.max) * 0.5;
+        let proj = center - normal * (normal.dot(center) - d);
+
+        // Simple containment check using barycentric coordinates
+        if point_in_triangle_2d(&proj, &a, &b, &c, &normal) {
+            // Correction = push out along normal by penetration depth
+            return normal * (-dist);
+        }
+    }
+
+    Vec3::ZERO
+}
+
+/// Check if a point (projected to triangle plane) is inside the triangle
+/// Uses 2D projection along the dominant axis of the normal
+fn point_in_triangle_2d(
+    p: &glam::Vec3,
+    a: &glam::Vec3,
+    b: &glam::Vec3,
+    c: &glam::Vec3,
+    normal: &glam::Vec3,
+) -> bool {
+    // Find dominant axis to project
+    let abs_normal = normal.abs();
+    let (u_idx, v_idx) = if abs_normal.x >= abs_normal.y && abs_normal.x >= abs_normal.z {
+        (1, 2) // Project to YZ plane
+    } else if abs_normal.y >= abs_normal.z {
+        (0, 2) // Project to XZ plane
+    } else {
+        (0, 1) // Project to XY plane
+    };
+
+    let get_uv = |v: &glam::Vec3| -> (f32, f32) {
+        let arr = [v.x, v.y, v.z];
+        (arr[u_idx], arr[v_idx])
+    };
+
+    let (pu, pv) = get_uv(p);
+    let (au, av) = get_uv(a);
+    let (bu, bv) = get_uv(b);
+    let (cu, cv) = get_uv(c);
+
+    // Barycentric coordinate check using edge functions
+    let sign = |p1: (f32, f32), p2: (f32, f32), p3: (f32, f32)| -> f32 {
+        (p1.0 - p3.0) * (p2.1 - p3.1) - (p2.0 - p3.0) * (p1.1 - p3.1)
+    };
+
+    let d1 = sign((pu, pv), (au, av), (bu, bv));
+    let d2 = sign((pu, pv), (bu, bv), (cu, cv));
+    let d3 = sign((pu, pv), (cu, cv), (au, av));
+
+    let has_neg = d1 < 0.0 || d2 < 0.0 || d3 < 0.0;
+    let has_pos = d1 > 0.0 || d2 > 0.0 || d3 > 0.0;
+
+    !(has_neg && has_pos)
 }
