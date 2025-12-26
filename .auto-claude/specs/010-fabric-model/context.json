@@ -1,0 +1,50 @@
+{
+  "task_description": "Implement procedural voxel generation using quaternion field interpolation for continuous surface extraction.",
+  "scoped_services": ["cube", "renderer"],
+  "files_to_modify": [
+    "crates/cube/src/lib.rs",
+    "crates/cube/src/core/cube.rs",
+    "crates/renderer/src/egui_app.rs",
+    "crates/renderer/src/scenes/model_config.rs",
+    "crates/renderer/src/cpu_tracer/trace.rs",
+    "crates/renderer/src/bcf_tracer/trace.rs"
+  ],
+  "files_to_create": [
+    "crates/cube/src/fabric/mod.rs",
+    "crates/cube/src/fabric/types.rs",
+    "crates/cube/src/fabric/interpolation.rs",
+    "crates/cube/src/fabric/generator.rs",
+    "crates/cube/src/fabric/surface.rs",
+    "crates/renderer/config.ron"
+  ],
+  "files_to_reference": [
+    "crates/cube/src/core/cube.rs",
+    "crates/renderer/src/scenes/model_config.rs",
+    "crates/renderer/src/cpu_tracer/trace.rs"
+  ],
+  "patterns": {
+    "quaternion_interpolation": "Non-normalizing LERP preserves magnitude for SDF fields",
+    "surface_detection": "Surface emerges where |Q| crosses 1.0 threshold",
+    "octant_rotation": "Position encoding via cumulative rotation per octant descent",
+    "config_structure": "Unified RendererConfig with SingleCubeConfig, FabricConfig, RenderingConfig sections"
+  },
+  "existing_infrastructure": {
+    "cube_structure": "Cube<T> octree in crates/cube/src/core/cube.rs",
+    "traversal": "Cube traversal and face visiting in crates/cube/src/traversal/",
+    "model_config": "Model configuration in crates/renderer/src/scenes/model_config.rs",
+    "raytracing": "CPU and BCF tracers in crates/renderer/src/"
+  },
+  "key_decisions": [
+    "Use non-normalizing LERP to preserve magnitude as implicit SDF",
+    "Surface threshold at |Q| = 1.0 for spherical isosurface generation",
+    "Additive states per depth for terrain variation without noise functions",
+    "max_depth parameter for LOD control during rendering",
+    "Unified config.ron replaces models.ron for all renderer settings"
+  ],
+  "algorithms": {
+    "magnitude_from_distance": "t = distance / surface_radius; magnitude = lerp(root_mag, boundary_mag, t)",
+    "is_surface": "(current_mag - 1.0) * (neighbor_mag - 1.0) < 0.0 (sign change detection)",
+    "calculate_child_quaternion": "rotation = parent * octant_rotation; Q = normalize(rotation) * magnitude"
+  },
+  "created_at": "2025-12-26T00:00:00.000Z"
+}

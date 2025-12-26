@@ -1,0 +1,1006 @@
+{
+  "feature": "Add Fabric Model Generation System",
+  "workflow_type": "feature",
+  "workflow_rationale": "Procedural voxel world generation using quaternion field interpolation. Most tasks complete - remaining work is final validation testing.",
+  "source": {
+    "openspec_change": "add-fabric-model-generation",
+    "migrated_from": "openspec/changes/add-fabric-model-generation/",
+    "migration_date": "2025-12-26"
+  },
+  "phases": [
+    {
+      "id": "phase-1",
+      "name": "Pre-Requirements: Cube Value Extension",
+      "type": "implementation",
+      "description": "Add value getter method to Cube<T> for all node types",
+      "depends_on": [],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-1-1",
+          "description": "Add fn value(&self) -> Option<&T> method to Cube<T> in crates/cube/src/core/cube.rs",
+          "service": "cube",
+          "files_to_modify": ["crates/cube/src/core/cube.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p cube",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Method implemented for value retrieval on all Cube variants."
+        },
+        {
+          "id": "subtask-1-2",
+          "description": "Implement default value behavior for Cube::Cubes variant (return None or first child's value)",
+          "service": "cube",
+          "files_to_modify": ["crates/cube/src/core/cube.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p cube",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Default value behavior implemented."
+        },
+        {
+          "id": "subtask-1-3",
+          "description": "Add tests for value retrieval on all Cube variants",
+          "service": "cube",
+          "files_to_modify": ["crates/cube/src/core/cube.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo test -p cube test_value",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Tests added for value retrieval."
+        }
+      ]
+    },
+    {
+      "id": "phase-2",
+      "name": "Fabric Module Foundation",
+      "type": "implementation",
+      "description": "Create fabric module with types and interpolation",
+      "depends_on": ["phase-1"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-2-1",
+          "description": "Create crates/cube/src/fabric/mod.rs with module structure",
+          "service": "cube",
+          "files_to_modify": ["crates/cube/src/lib.rs"],
+          "files_to_create": ["crates/cube/src/fabric/mod.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p cube",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Module structure created."
+        },
+        {
+          "id": "subtask-2-2",
+          "description": "Create crates/cube/src/fabric/types.rs with FabricConfig and AdditiveState structs",
+          "service": "cube",
+          "files_to_modify": [],
+          "files_to_create": ["crates/cube/src/fabric/types.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p cube",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "FabricConfig with root_magnitude, boundary_magnitude, surface_radius, additive_states, max_depth."
+        },
+        {
+          "id": "subtask-2-3",
+          "description": "Create crates/cube/src/fabric/interpolation.rs with non-normalizing LERP for quaternion blending",
+          "service": "cube",
+          "files_to_modify": [],
+          "files_to_create": ["crates/cube/src/fabric/interpolation.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p cube",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Non-normalizing LERP implemented."
+        },
+        {
+          "id": "subtask-2-4",
+          "description": "Add fabric module to crates/cube/src/lib.rs exports",
+          "service": "cube",
+          "files_to_modify": ["crates/cube/src/lib.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p cube",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Module exported."
+        },
+        {
+          "id": "subtask-2-5",
+          "description": "Add glam quaternion dependency verification (already present via glam crate)",
+          "service": "cube",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p cube",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "glam already present in dependencies."
+        }
+      ]
+    },
+    {
+      "id": "phase-3",
+      "name": "Quaternion Interpolation Implementation",
+      "type": "implementation",
+      "description": "Implement quaternion interpolation functions",
+      "depends_on": ["phase-2"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-3-1",
+          "description": "Implement lerp_quaternion(q1, q2, t) non-normalizing linear interpolation",
+          "service": "cube",
+          "files_to_modify": ["crates/cube/src/fabric/interpolation.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p cube",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Non-normalizing LERP preserves magnitude for SDF fields."
+        },
+        {
+          "id": "subtask-3-2",
+          "description": "Implement octant_rotation(octant_index) -> Quat returning +/-90 deg per axis based on octant bits",
+          "service": "cube",
+          "files_to_modify": ["crates/cube/src/fabric/interpolation.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p cube",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Octant rotation encodes position."
+        },
+        {
+          "id": "subtask-3-3",
+          "description": "Implement octant_offset(octant_index) -> Vec3 returning position offset for child center",
+          "service": "cube",
+          "files_to_modify": ["crates/cube/src/fabric/interpolation.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p cube",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Returns position offset for child center."
+        },
+        {
+          "id": "subtask-3-4",
+          "description": "Implement magnitude_from_distance(distance, config) -> f32 using surface_radius interpolation",
+          "service": "cube",
+          "files_to_modify": ["crates/cube/src/fabric/interpolation.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p cube",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "t = distance / surface_radius, magnitude = lerp(root_magnitude, boundary_magnitude, t)."
+        },
+        {
+          "id": "subtask-3-5",
+          "description": "Implement calculate_child_quaternion(parent_rotation, world_pos, config)",
+          "service": "cube",
+          "files_to_modify": ["crates/cube/src/fabric/interpolation.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p cube",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "rotation = parent_rotation * octant_rotation[octant], magnitude = magnitude_from_distance()."
+        },
+        {
+          "id": "subtask-3-6",
+          "description": "Implement apply_additive_state(base_quat, additive_state, position) with rotation and magnitude noise",
+          "service": "cube",
+          "files_to_modify": ["crates/cube/src/fabric/interpolation.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p cube",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Applies additive state for terrain variation."
+        },
+        {
+          "id": "subtask-3-7",
+          "description": "Add unit tests verifying octant rotation, magnitude computation, and surface emergence",
+          "service": "cube",
+          "files_to_modify": ["crates/cube/src/fabric/interpolation.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo test -p cube fabric",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Tests verify octant rotation encodes position, magnitude from distance, surface at |Q|=1.0."
+        }
+      ]
+    },
+    {
+      "id": "phase-4",
+      "name": "Fabric Cube Generator",
+      "type": "implementation",
+      "description": "Create generator for Cube<Quat> structures",
+      "depends_on": ["phase-3"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-4-1",
+          "description": "Create crates/cube/src/fabric/generator.rs",
+          "service": "cube",
+          "files_to_modify": [],
+          "files_to_create": ["crates/cube/src/fabric/generator.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p cube",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Generator module created."
+        },
+        {
+          "id": "subtask-4-2",
+          "description": "Implement FabricGenerator struct holding FabricConfig",
+          "service": "cube",
+          "files_to_modify": ["crates/cube/src/fabric/generator.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p cube",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "FabricGenerator holds root_magnitude, boundary_magnitude, surface_radius, additive_states."
+        },
+        {
+          "id": "subtask-4-3",
+          "description": "Implement generate_cube(depth) -> Cube<Quat> recursive generation",
+          "service": "cube",
+          "files_to_modify": ["crates/cube/src/fabric/generator.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p cube",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Tracks world position during recursion, computes magnitude from Euclidean distance."
+        },
+        {
+          "id": "subtask-4-4",
+          "description": "Implement lazy/cached quaternion evaluation for performance",
+          "service": "cube",
+          "files_to_modify": ["crates/cube/src/fabric/generator.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p cube",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Lazy evaluation implemented."
+        },
+        {
+          "id": "subtask-4-5",
+          "description": "Add generation tests verifying root magnitude, distance gradient, and sphere surface",
+          "service": "cube",
+          "files_to_modify": ["crates/cube/src/fabric/generator.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo test -p cube fabric",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Tests verify root magnitude, magnitude increases with distance, surface forms sphere."
+        }
+      ]
+    },
+    {
+      "id": "phase-5",
+      "name": "Surface Detection and Normals",
+      "type": "implementation",
+      "description": "Implement surface detection using quaternion magnitudes",
+      "depends_on": ["phase-4"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-5-1",
+          "description": "Create crates/cube/src/fabric/surface.rs",
+          "service": "cube",
+          "files_to_modify": [],
+          "files_to_create": ["crates/cube/src/fabric/surface.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p cube",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Surface module created."
+        },
+        {
+          "id": "subtask-5-2",
+          "description": "Implement is_surface(current_quat, neighbor_quat) -> bool using magnitude threshold crossing",
+          "service": "cube",
+          "files_to_modify": ["crates/cube/src/fabric/surface.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p cube",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Surface detected where |Q| crosses 1.0 threshold."
+        },
+        {
+          "id": "subtask-5-3",
+          "description": "Implement calculate_normal(position, fabric_cube, depth) -> Vec3 using magnitude gradient",
+          "service": "cube",
+          "files_to_modify": ["crates/cube/src/fabric/surface.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p cube",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Normal calculated from magnitude gradient."
+        },
+        {
+          "id": "subtask-5-4",
+          "description": "Implement quaternion_to_color(quat) -> [u8; 3] for HSV color mapping",
+          "service": "cube",
+          "files_to_modify": ["crates/cube/src/fabric/surface.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p cube",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Color derived from quaternion rotation."
+        },
+        {
+          "id": "subtask-5-5",
+          "description": "Add surface detection tests with known geometries",
+          "service": "cube",
+          "files_to_modify": ["crates/cube/src/fabric/surface.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo test -p cube surface",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Tests verify sphere-like surface from decay."
+        }
+      ]
+    },
+    {
+      "id": "phase-6",
+      "name": "Max Depth Rendering Support",
+      "type": "implementation",
+      "description": "Add max_depth parameter to treat nodes at specified depth as leaves",
+      "depends_on": ["phase-5"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-6-1",
+          "description": "Add max_depth: Option<u32> field to raycast/traversal context structures",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/scenes/model_config.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "max_depth field added to traversal context."
+        },
+        {
+          "id": "subtask-6-2",
+          "description": "Modify traversal to treat nodes at max_depth as leaves",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/cpu_tracer/trace.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Traversal respects max_depth parameter."
+        },
+        {
+          "id": "subtask-6-3",
+          "description": "Update CPU tracer to respect max_depth parameter",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/cpu_tracer/trace.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "CPU tracer respects max_depth."
+        },
+        {
+          "id": "subtask-6-4",
+          "description": "Update BCF tracer to respect max_depth parameter",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/bcf_tracer/trace.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "BCF tracer respects max_depth."
+        },
+        {
+          "id": "subtask-6-5",
+          "description": "Add tests for max_depth early termination",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/cpu_tracer/trace.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo test -p crossworld-renderer max_depth",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Tests verify max_depth early termination."
+        }
+      ]
+    },
+    {
+      "id": "phase-7",
+      "name": "Renderer Configuration Refactor",
+      "type": "implementation",
+      "description": "Extend renderer config to support fabric models",
+      "depends_on": ["phase-6"],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-7-1",
+          "description": "Rename crates/renderer/models.ron to crates/renderer/config.ron",
+          "service": "renderer",
+          "files_to_modify": [],
+          "files_to_create": ["crates/renderer/config.ron"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "test -f crates/renderer/config.ron && echo 'exists'",
+            "expected": "exists"
+          },
+          "status": "completed",
+          "notes": "Config file renamed."
+        },
+        {
+          "id": "subtask-7-2",
+          "description": "Extend ModelsConfig struct in model_config.rs to RendererConfig",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/scenes/model_config.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "ModelsConfig extended to RendererConfig."
+        },
+        {
+          "id": "subtask-7-3",
+          "description": "Add SingleCubeConfig section with default_material field",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/scenes/model_config.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "SingleCubeConfig added with default_material."
+        },
+        {
+          "id": "subtask-7-4",
+          "description": "Add FabricConfig section with root_magnitude, boundary_magnitude, additive_states, default_max_depth",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/scenes/model_config.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "FabricConfig section added."
+        },
+        {
+          "id": "subtask-7-5",
+          "description": "Add RenderingConfig section for resolution and future settings",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/scenes/model_config.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "RenderingConfig section added."
+        },
+        {
+          "id": "subtask-7-6",
+          "description": "Update all config loading code to use new structure",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/egui_app.rs", "crates/renderer/src/scenes/model_config.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Config loading updated."
+        },
+        {
+          "id": "subtask-7-7",
+          "description": "Add config validation and helpful error messages",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/scenes/model_config.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Validation and error messages added."
+        }
+      ]
+    },
+    {
+      "id": "phase-8",
+      "name": "Model Selector Page UI",
+      "type": "implementation",
+      "description": "Create model selector panel replacing dropdown",
+      "depends_on": ["phase-7"],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-8-1",
+          "description": "Create ModelSelectorPanel struct in egui_app.rs or new file",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/egui_app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "ModelSelectorPanel created."
+        },
+        {
+          "id": "subtask-8-2",
+          "description": "Implement collapsible category sections (Single Cube, VOX, CSM, Fabric)",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/egui_app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Collapsible categories implemented."
+        },
+        {
+          "id": "subtask-8-3",
+          "description": "Move model dropdown logic from top panel to category sections",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/egui_app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Model selection moved to categories."
+        },
+        {
+          "id": "subtask-8-4",
+          "description": "Add Single Cube material selector within its category",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/egui_app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Material selector added to Single Cube category."
+        },
+        {
+          "id": "subtask-8-5",
+          "description": "Add Fabric parameters UI (root/boundary magnitude sliders, additive states editor, max depth slider)",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/egui_app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Fabric parameters UI added with sliders and editors."
+        },
+        {
+          "id": "subtask-8-6",
+          "description": "Implement side panel layout with render views in center",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/egui_app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Side panel layout implemented."
+        },
+        {
+          "id": "subtask-8-7",
+          "description": "Update egui_app to use new panel-based layout",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/egui_app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Panel-based layout integrated."
+        }
+      ]
+    },
+    {
+      "id": "phase-9",
+      "name": "Fabric Model Integration",
+      "type": "integration",
+      "description": "Integrate fabric models into renderer",
+      "depends_on": ["phase-8"],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-9-1",
+          "description": "Add Fabric model type to ModelEntry enum",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/scenes/model_config.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Fabric model type added to ModelEntry."
+        },
+        {
+          "id": "subtask-9-2",
+          "description": "Implement fabric cube creation in ModelEntry::create_cube()",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/scenes/model_config.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "create_cube() implemented for Fabric models."
+        },
+        {
+          "id": "subtask-9-3",
+          "description": "Add fabric-specific raycast hit handling (use quaternion normal/color)",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/cpu_tracer/trace.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Raycast hit handling uses quaternion normal and color."
+        },
+        {
+          "id": "subtask-9-4",
+          "description": "Add fabric model entries to config.ron",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/config.ron"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Fabric model entries added to config."
+        },
+        {
+          "id": "subtask-9-5",
+          "description": "Test fabric rendering in all renderer modes (CPU, GL, BCF, Mesh)",
+          "service": "renderer",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo build -p crossworld-renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Fabric rendering tested in all modes."
+        }
+      ]
+    },
+    {
+      "id": "phase-10",
+      "name": "Validation and Documentation",
+      "type": "testing",
+      "description": "Final validation, testing, and documentation",
+      "depends_on": ["phase-9"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-10-1",
+          "description": "Run cargo test --workspace to verify all tests pass",
+          "service": "testing",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo test --workspace",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "All tests pass."
+        },
+        {
+          "id": "subtask-10-2",
+          "description": "Run cargo clippy --workspace to fix warnings",
+          "service": "testing",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo clippy --workspace",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Clippy warnings fixed."
+        },
+        {
+          "id": "subtask-10-3",
+          "description": "Test fabric rendering with various additive state configurations",
+          "service": "testing",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "command": "Run renderer with different fabric configs",
+            "expected": "Visual verification of terrain variations"
+          },
+          "status": "pending",
+          "notes": "Manual testing of additive state variations."
+        },
+        {
+          "id": "subtask-10-4",
+          "description": "Verify model selector UI works correctly",
+          "service": "testing",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "command": "Run renderer and test UI interactions",
+            "expected": "All UI elements functional"
+          },
+          "status": "pending",
+          "notes": "Manual UI verification."
+        },
+        {
+          "id": "subtask-10-5",
+          "description": "Update renderer --help text with new options",
+          "service": "documentation",
+          "files_to_modify": ["crates/renderer/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo run -p crossworld-renderer -- --help",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Help text updated."
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "total_phases": 10,
+    "total_subtasks": 47,
+    "completed_subtasks": 45,
+    "pending_subtasks": 2,
+    "services_involved": ["cube", "renderer", "testing", "documentation"],
+    "parallelism": {
+      "max_parallel_phases": 3,
+      "parallel_groups": [
+        {
+          "phases": ["phase-3", "phase-4", "phase-5"],
+          "reason": "Quaternion implementation phases can be parallelized after foundation"
+        }
+      ],
+      "recommended_workers": 2,
+      "speedup_estimate": "Phases 3-5 parallelizable, phase 10 can run validation in parallel"
+    },
+    "startup_command": "cargo test -p cube && cargo check -p crossworld-renderer"
+  },
+  "verification_strategy": {
+    "risk_level": "medium",
+    "skip_validation": false,
+    "test_creation_phase": "phase-10",
+    "test_types_required": ["unit", "integration"],
+    "security_scanning_required": false,
+    "staging_deployment_required": false,
+    "acceptance_criteria": [
+      "Fabric module generates Cube<Quat> structures correctly",
+      "Surface detection works using magnitude threshold crossing",
+      "Quaternion-to-color mapping produces visible terrain colors",
+      "Model selector UI allows configuration of fabric parameters",
+      "Renderer respects max_depth parameter for LOD control"
+    ],
+    "verification_steps": [
+      {
+        "name": "Unit Tests",
+        "command": "cargo test -p cube fabric",
+        "expected_outcome": "All fabric tests pass",
+        "type": "command",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Renderer Build",
+        "command": "cargo build -p crossworld-renderer",
+        "expected_outcome": "Successful build",
+        "type": "command",
+        "required": true,
+        "blocking": true
+      }
+    ],
+    "reasoning": "Medium risk due to new procedural generation system. Unit tests verify quaternion math, visual testing verifies rendering output."
+  },
+  "qa_acceptance": {
+    "unit_tests": {
+      "required": true,
+      "commands": ["cargo test -p cube fabric", "cargo test -p crossworld-renderer"],
+      "minimum_coverage": null
+    },
+    "integration_tests": {
+      "required": true,
+      "commands": ["cargo test --workspace"],
+      "services_to_test": ["cube", "renderer"]
+    },
+    "e2e_tests": {
+      "required": false,
+      "commands": [],
+      "flows": []
+    },
+    "browser_verification": {
+      "required": false,
+      "pages": []
+    },
+    "database_verification": {
+      "required": false,
+      "checks": []
+    },
+    "performance_verification": {
+      "required": false,
+      "checks": []
+    }
+  },
+  "qa_signoff": null,
+  "last_updated": "2025-12-26T00:00:00.000Z"
+}
