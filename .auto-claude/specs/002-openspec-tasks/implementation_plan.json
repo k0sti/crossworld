@@ -510,21 +510,19 @@
   },
   "qa_signoff": {
     "status": "approved",
-    "timestamp": "2025-12-26T20:40:00+00:00",
     "qa_session": 2,
-    "report_file": "qa_report.md",
-    "tests_passed": {
-      "unit": "N/A",
-      "integration": "N/A",
-      "e2e": "N/A",
-      "json_validation": "52/52",
-      "content_verification": "10/10"
-    },
-    "verified_by": "qa_agent"
+    "issues_found": [
+      {
+        "description": "None - all verifications passed"
+      }
+    ],
+    "tests_passed": {},
+    "timestamp": "2025-12-26T18:42:18.821709+00:00",
+    "ready_for_qa_revalidation": false
   },
-  "last_updated": "2025-12-26T20:40:00+00:00",
-  "status": "completed",
-  "planStatus": "completed",
+  "last_updated": "2025-12-26T18:42:18.821721+00:00",
+  "status": "human_review",
+  "planStatus": "review",
   "updated_at": "2025-12-26T17:26:34.316Z",
   "recoveryNote": "Task recovered from stuck state at 2025-12-26T17:26:34.316Z",
   "qa_iteration_history": [
