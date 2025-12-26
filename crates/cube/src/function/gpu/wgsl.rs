@@ -102,6 +102,10 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {{
     }
 
     /// Convert an expression to WGSL code
+    ///
+    /// The `indent` parameter is reserved for future use (statement-level code generation
+    /// with proper indentation). Currently all expressions are generated inline.
+    #[allow(clippy::only_used_in_recursion)]
     pub fn expr_to_wgsl(expr: &Expr, indent: usize) -> Result<String, GpuCompileError> {
         match expr {
             Expr::Number(n) => Ok(format!("{}", n)),

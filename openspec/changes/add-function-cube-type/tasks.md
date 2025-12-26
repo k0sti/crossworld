@@ -190,10 +190,10 @@
 - `sin(0)` returns `0.0`
 - Noise functions return deterministic values
 
-### M3: WGSL Generator Works
+### M3: WGSL Generator Works ✅
 - Generates valid WGSL for simple expressions
 - Generates noise functions
-- Shader compiles without errors
+- Shader compiles without errors (validated via codegen tests)
 
 ### M4: GPU Backend Works
 - Compute shader dispatches successfully
