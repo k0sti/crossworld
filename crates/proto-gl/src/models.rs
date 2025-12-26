@@ -2,7 +2,8 @@ use std::path::Path;
 use std::rc::Rc;
 
 use cube::{Cube, CubeBox, load_vox_to_cubebox_compact};
-use crossworld_physics::rapier3d::prelude::{ColliderHandle, RigidBodyHandle};
+use crossworld_physics::collision::Aabb;
+use crossworld_physics::CubeObject;
 use glam::IVec3;
 use serde::Deserialize;
 
@@ -51,27 +52,20 @@ impl VoxModel {
     }
 }
 
-/// A dynamic cube object in the physics simulation
-#[allow(dead_code)]
-pub struct CubeObject {
-    /// Voxel data
-    pub cube: Rc<Cube<u8>>,
-    /// Rapier rigid body handle
-    pub body_handle: RigidBodyHandle,
-    /// Rapier collider handle
-    pub collider_handle: ColliderHandle,
+/// A spawned object in the physics simulation with rendering metadata
+///
+/// Wraps the physics crate's CubeObject and adds rendering-specific fields.
+pub struct SpawnedObject {
+    /// Physics object (handles body, collider, cube, scale, AABB calculations)
+    pub physics: CubeObject,
     /// Model source (for identification)
     pub model_name: String,
-    /// Octree depth for rendering
-    pub depth: u32,
     /// Scale exponent from CSV (actual_scale = 2^scale_exp)
     pub scale_exp: i32,
-    /// Original model size in voxels (for accurate bounding box)
-    pub model_size: IVec3,
     /// Whether this object is currently colliding with the world
     pub is_colliding_world: bool,
     /// World AABB used for collision (updated each frame when colliding)
-    pub collision_aabb: Option<crossworld_physics::collision::Aabb>,
+    pub collision_aabb: Option<Aabb>,
 }
 
 /// Load object models from CSV (models with model_type="object")

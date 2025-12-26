@@ -14,12 +14,10 @@ pub mod world;
 pub use app::ProtoGlApp;
 pub use camera::OrbitCamera;
 pub use config::{PhysicsConfig, ProtoGlConfig, RenderConfig, SpawningConfig, WorldConfig};
-pub use models::{CubeObject, VoxModel};
+pub use models::{SpawnedObject, VoxModel};
 
 use config::load_config;
-use crossworld_physics::{
-    PhysicsWorld, collision::Aabb, rapier3d::prelude::*, world_collider::WorldCollider,
-};
+use crossworld_physics::{PhysicsWorld, world_collider::WorldCollider};
 use models::load_vox_models;
 use physics::spawn_cube_objects;
 use std::error::Error;
@@ -94,13 +92,11 @@ pub fn run_physics_debug(iterations: u32) -> Result<(), Box<dyn Error>> {
 
     // Debug: check object colliders
     for (i, obj) in objects.iter().enumerate() {
-        if let Some(body) = physics_world.get_rigid_body(obj.body_handle) {
-            let pos = body.translation();
-            println!(
-                "Object {}: {} at ({:.2}, {:.2}, {:.2})",
-                i, obj.model_name, pos.x, pos.y, pos.z
-            );
-        }
+        let pos = obj.physics.position(&physics_world);
+        println!(
+            "Object {}: {} at ({:.2}, {:.2}, {:.2})",
+            i, obj.model_name, pos.x, pos.y, pos.z
+        );
     }
 
     // Count total colliders
@@ -122,38 +118,12 @@ pub fn run_physics_debug(iterations: u32) -> Result<(), Box<dyn Error>> {
         physics_world.step(timestep);
 
         for obj in objects.iter() {
-            // Get body position and compute AABB
-            let body = match physics_world.get_rigid_body(obj.body_handle) {
-                Some(b) => b,
-                None => continue,
-            };
-            let pos = body.translation();
-            let position = glam::Vec3::new(pos.x, pos.y, pos.z);
+            // Use physics crate's world_aabb for accurate AABB calculation
+            let body_aabb = obj.physics.world_aabb(&physics_world);
 
-            // Compute AABB for collision resolution (using actual model size)
-            let octree_size = (1 << obj.depth) as f32;
-            let scale_factor = 2.0_f32.powi(obj.scale_exp);
-            let base_scale = config.spawning.object_size * scale_factor;
-            let half_extent = glam::Vec3::new(
-                (obj.model_size.x as f32 / octree_size) * base_scale * 0.5,
-                (obj.model_size.y as f32 / octree_size) * base_scale * 0.5,
-                (obj.model_size.z as f32 / octree_size) * base_scale * 0.5,
-            );
-            let body_aabb = Aabb::new(position - half_extent, position + half_extent);
-
-            // Get correction from world collider
-            let correction = world_collider.resolve_collision(obj.body_handle, &body_aabb);
-
-            // Apply correction to body position
-            if correction.length_squared() > 0.0 {
-                if let Some(body) = physics_world.get_rigid_body_mut(obj.body_handle) {
-                    let new_pos = position + correction;
-                    body.set_translation(vector![new_pos.x, new_pos.y, new_pos.z], true);
-                    // Dampen velocity on collision
-                    let vel = body.linvel();
-                    body.set_linvel(vector![vel.x * 0.9, vel.y * 0.9, vel.z * 0.9], true);
-                }
-            }
+            // Get correction from world collider and apply collision response
+            let correction = world_collider.resolve_collision(obj.physics.body_handle(), &body_aabb);
+            obj.physics.apply_collision_response(&mut physics_world, correction);
         }
 
         // Log at intervals
@@ -165,28 +135,30 @@ pub fn run_physics_debug(iterations: u32) -> Result<(), Box<dyn Error>> {
             );
 
             for (i, obj) in objects.iter().enumerate() {
-                if let Some(body) = physics_world.get_rigid_body(obj.body_handle) {
-                    let pos = body.translation();
-                    let vel = body.linvel();
-                    let is_sleeping = body.is_sleeping();
+                let pos = obj.physics.position(&physics_world);
+                let vel = obj.physics.velocity(&physics_world);
+                // Check sleeping state via the body handle
+                let is_sleeping = physics_world
+                    .get_rigid_body(obj.physics.body_handle())
+                    .map(|b| b.is_sleeping())
+                    .unwrap_or(false);
 
-                    println!(
-                        "  [{}] {} pos=({:.2}, {:.2}, {:.2}) vel=({:.2}, {:.2}, {:.2}) {}",
-                        i,
-                        obj.model_name,
-                        pos.x,
-                        pos.y,
-                        pos.z,
-                        vel.x,
-                        vel.y,
-                        vel.z,
-                        if is_sleeping { "[SLEEPING]" } else { "" }
-                    );
+                println!(
+                    "  [{}] {} pos=({:.2}, {:.2}, {:.2}) vel=({:.2}, {:.2}, {:.2}) {}",
+                    i,
+                    obj.model_name,
+                    pos.x,
+                    pos.y,
+                    pos.z,
+                    vel.x,
+                    vel.y,
+                    vel.z,
+                    if is_sleeping { "[SLEEPING]" } else { "" }
+                );
 
-                    // Check if fallen through world (below ground level at Y=0)
-                    if pos.y < -10.0 {
-                        println!("    ⚠️  WARNING: Object fell through world!");
-                    }
+                // Check if fallen through world (below ground level at Y=0)
+                if pos.y < -10.0 {
+                    println!("    ⚠️  WARNING: Object fell through world!");
                 }
             }
             println!();
@@ -199,18 +171,16 @@ pub fn run_physics_debug(iterations: u32) -> Result<(), Box<dyn Error>> {
     println!("Final positions (ground at Y=0):");
     let mut fell_through = 0;
     for (i, obj) in objects.iter().enumerate() {
-        if let Some(body) = physics_world.get_rigid_body(obj.body_handle) {
-            let pos = body.translation();
-            let status = if pos.y < -10.0 {
-                fell_through += 1;
-                "❌ FELL THROUGH"
-            } else if pos.y < 0.0 {
-                "⚠️  Below ground"
-            } else {
-                "✓ OK"
-            };
-            println!("  [{}] {} Y={:.2} {}", i, obj.model_name, pos.y, status);
-        }
+        let pos = obj.physics.position(&physics_world);
+        let status = if pos.y < -10.0 {
+            fell_through += 1;
+            "❌ FELL THROUGH"
+        } else if pos.y < 0.0 {
+            "⚠️  Below ground"
+        } else {
+            "✓ OK"
+        };
+        println!("  [{}] {} Y={:.2} {}", i, obj.model_name, pos.y, status);
     }
 
     println!();
