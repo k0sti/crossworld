@@ -1,9 +1,11 @@
 use glam::Vec3;
 use rand::Rng;
+use std::rc::Rc;
 use crossworld_physics::rapier3d::prelude::*;
-use crossworld_physics::PhysicsWorld;
+use crossworld_physics::{CubeObject, PhysicsWorld};
+use cube::CubeBox;
 use crate::config::SpawningConfig;
-use crate::models::{VoxModel, CubeObject};
+use crate::models::{SpawnedObject, VoxModel};
 
 /// Camera object with physics body for first-person movement
 pub struct CameraObject {
@@ -94,7 +96,7 @@ pub fn spawn_cube_objects(
     config: &SpawningConfig,
     models: &[VoxModel],
     physics_world: &mut PhysicsWorld,
-) -> Vec<CubeObject> {
+) -> Vec<SpawnedObject> {
     let mut objects = Vec::new();
     let mut rng = rand::thread_rng();
 
@@ -109,16 +111,22 @@ pub fn spawn_cube_objects(
         // Random model
         let model = &models[i as usize % models.len()];
 
-        // Create physics body
-        let rb = RigidBodyBuilder::dynamic()
-            .translation(vector![x, y, z])
-            .build();
-        let rb_handle = physics_world.add_rigid_body(rb);
-
         // Calculate effective size with scale exponent
         // actual_scale = 2^scale_exp (positive = bigger, negative = smaller)
         let scale_factor = 2.0_f32.powi(model.scale_exp);
         let base_scale = config.object_size * scale_factor;
+
+        // Create physics object using the physics crate's CubeObject
+        let mut physics_obj = CubeObject::new_dynamic(
+            physics_world,
+            Vec3::new(x, y, z),
+            1.0, // mass
+        );
+
+        // Create CubeBox from the model for accurate AABB calculations
+        let cubebox = CubeBox::new(model.cube().clone(), model.size(), model.depth());
+        physics_obj.set_cube(Rc::new(cubebox));
+        physics_obj.set_scale(base_scale);
 
         // Create collider - use CubeBox dimensions for accurate bounding box
         //
@@ -141,16 +149,12 @@ pub fn spawn_cube_objects(
             .friction(0.5)
             .restitution(0.3)
             .build();
-        let coll_handle = physics_world.add_collider(collider, rb_handle);
+        physics_obj.attach_collider(physics_world, collider);
 
-        objects.push(CubeObject {
-            cube: model.cube_rc(),
-            body_handle: rb_handle,
-            collider_handle: coll_handle,
+        objects.push(SpawnedObject {
+            physics: physics_obj,
             model_name: model.name.clone(),
-            depth: model.depth(),
             scale_exp: model.scale_exp,
-            model_size: model.size(),
             is_colliding_world: false,
             collision_aabb: None,
         });

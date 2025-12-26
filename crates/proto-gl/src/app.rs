@@ -29,11 +29,20 @@ use renderer::{BACKGROUND_COLOR, CameraConfig, GlTracer, MeshRenderer};
 
 use crate::camera::{CameraMode, FirstPersonCamera, OrbitCamera};
 use crate::config::{ProtoGlConfig, load_config};
-use crate::models::{CubeObject, load_vox_models};
+use crate::models::{SpawnedObject, load_vox_models};
 use crate::physics::{CameraObject, spawn_cube_objects};
 use crate::structures::{load_structure_models, place_structures};
 use crate::ui::{UiState, render_debug_panel};
 use crate::world::generate_world;
+
+/// Wireframe color for objects that are moving (light green)
+const WIREFRAME_COLOR_MOVING: [f32; 3] = [0.5, 1.0, 0.5];
+
+/// Wireframe color for objects that are colliding with world (red)
+const WIREFRAME_COLOR_COLLIDING: [f32; 3] = [1.0, 0.3, 0.3];
+
+/// Wireframe color for objects at rest/sleeping (gray)
+const WIREFRAME_COLOR_RESTING: [f32; 3] = [0.5, 0.5, 0.5];
 
 /// Keyboard input state for FPS controls
 #[derive(Default, Clone, Copy)]
@@ -82,7 +91,7 @@ pub struct ProtoGlApp {
     // Physics state
     physics_world: Option<PhysicsWorld>,
     physics_accumulator: f32,
-    objects: Vec<CubeObject>,
+    objects: Vec<SpawnedObject>,
     /// World collider
     world_collider: Option<WorldCollider>,
 
@@ -362,8 +371,17 @@ impl ApplicationHandler for ProtoGlApp {
         // Upload meshes for each spawned object
         let mut object_mesh_indices = Vec::new();
         for obj in &objects {
+            // Get CubeBox from physics object (contains cube and depth)
+            let Some(cubebox) = obj.physics.cube() else {
+                eprintln!("  Warning: No CubeBox for {}, using fallback", obj.model_name);
+                object_mesh_indices.push(0);
+                continue;
+            };
+
+            // Wrap cube in Rc for mesh_renderer (it clones internally)
+            let cube_rc = Rc::new(cubebox.cube.clone());
             unsafe {
-                match mesh_renderer.upload_mesh(&gl, &obj.cube, obj.depth) {
+                match mesh_renderer.upload_mesh(&gl, &cube_rc, cubebox.depth) {
                     Ok(mesh_idx) => {
                         object_mesh_indices.push(mesh_idx);
                         println!(
@@ -685,29 +703,14 @@ impl ProtoGlApp {
 
             // Update world collider
             if let Some(world_collider) = &mut self.world_collider {
-                // Collect AABBs from dynamic objects
+                // Collect AABBs from dynamic objects using physics CubeObject's world_aabb
                 let dynamic_aabbs: Vec<(RigidBodyHandle, Aabb)> = self
                     .objects
                     .iter()
                     .filter_map(|obj| {
-                        let body = physics_world.get_rigid_body(obj.body_handle)?;
-                        let pos = body.translation();
-                        let position = glam::Vec3::new(pos.x, pos.y, pos.z);
-
-                        // Use actual model size for AABB (apply scale)
-                        let octree_size = (1 << obj.depth) as f32;
-                        let scale_factor = 2.0_f32.powi(obj.scale_exp);
-                        let base_scale = self.config.spawning.object_size * scale_factor;
-                        let half_extent = glam::Vec3::new(
-                            (obj.model_size.x as f32 / octree_size) * base_scale * 0.5,
-                            (obj.model_size.y as f32 / octree_size) * base_scale * 0.5,
-                            (obj.model_size.z as f32 / octree_size) * base_scale * 0.5,
-                        );
-
-                        Some((
-                            obj.body_handle,
-                            Aabb::new(position - half_extent, position + half_extent),
-                        ))
+                        // Use physics crate's world_aabb for accurate AABB calculation
+                        let aabb = obj.physics.world_aabb(physics_world);
+                        Some((obj.physics.body_handle(), aabb))
                     })
                     .collect();
 
@@ -722,38 +725,13 @@ impl ProtoGlApp {
             // Resolve world collisions (direct octree queries, bypasses Rapier)
             if let Some(world_collider) = &self.world_collider {
                 for (i, obj) in self.objects.iter_mut().enumerate() {
-                    // Get body position and compute AABB
-                    let body = match physics_world.get_rigid_body(obj.body_handle) {
-                        Some(b) => b,
-                        None => continue,
-                    };
-                    let pos = body.translation();
-                    let position = glam::Vec3::new(pos.x, pos.y, pos.z);
-
-                    // Compute AABB for collision resolution (using actual model size)
-                    // Must account for rotation - rotated OBB becomes larger AABB
-                    let octree_size = (1 << obj.depth) as f32;
-                    let scale_factor = 2.0_f32.powi(obj.scale_exp);
-                    let base_scale = self.config.spawning.object_size * scale_factor;
-
-                    // Get rotation from physics body
-                    let rot = body.rotation();
-                    let rotation = glam::Quat::from_xyzw(rot.i, rot.j, rot.k, rot.w);
-
-                    // Local AABB centered at origin
-                    let half_extent = glam::Vec3::new(
-                        (obj.model_size.x as f32 / octree_size) * base_scale * 0.5,
-                        (obj.model_size.y as f32 / octree_size) * base_scale * 0.5,
-                        (obj.model_size.z as f32 / octree_size) * base_scale * 0.5,
-                    );
-                    let local_aabb = Aabb::new(-half_extent, half_extent);
-
-                    // Transform to world space with rotation
-                    let body_aabb = local_aabb.to_world(position, rotation, 1.0);
+                    // Use physics crate's world_aabb (handles rotation automatically)
+                    let body_aabb = obj.physics.world_aabb(physics_world);
+                    let position = obj.physics.position(physics_world);
 
                     // Get correction from world collider
                     let correction =
-                        world_collider.resolve_collision(obj.body_handle, &body_aabb);
+                        world_collider.resolve_collision(obj.physics.body_handle(), &body_aabb);
 
                     // Update collision state for visualization
                     let is_colliding = correction.length_squared() > 0.0;
@@ -771,32 +749,9 @@ impl ProtoGlApp {
                         );
                     }
 
-                    // Apply correction to body position and dampen velocity
+                    // Apply collision response (position correction + velocity damping)
                     if is_colliding {
-                        if let Some(body) = physics_world.get_rigid_body_mut(obj.body_handle) {
-                            // Move body out of collision
-                            let new_pos = position + correction;
-                            body.set_translation(
-                                vector![new_pos.x, new_pos.y, new_pos.z],
-                                true,
-                            );
-
-                            // Dampen velocity in the direction of the correction
-                            // This prevents objects from continuing to fall through
-                            let correction_dir = correction.normalize();
-                            let vel = body.linvel();
-                            let velocity = glam::Vec3::new(vel.x, vel.y, vel.z);
-                            let vel_in_correction_dir = velocity.dot(correction_dir);
-                            if vel_in_correction_dir < 0.0 {
-                                // Velocity is opposing the correction, remove that component
-                                let dampened =
-                                    velocity - correction_dir * vel_in_correction_dir;
-                                body.set_linvel(
-                                    vector![dampened.x, dampened.y, dampened.z],
-                                    true,
-                                );
-                            }
-                        }
+                        obj.physics.apply_collision_response(physics_world, correction);
                     }
                 }
             }
@@ -901,30 +856,25 @@ impl ProtoGlApp {
                         continue;
                     }
 
-                    // Get physics position and rotation
-                    let Some(body) = physics_world.get_rigid_body(obj.body_handle) else {
+                    // Get physics position and rotation using CubeObject methods
+                    let position = obj.physics.position(physics_world);
+                    let rotation = obj.physics.rotation(physics_world);
+
+                    // Get CubeBox for model dimensions
+                    let Some(cubebox) = obj.physics.cube() else {
                         continue;
                     };
-                    let position = body.translation();
-                    let rotation = body.rotation();
-
-                    let position = glam::Vec3::new(position.x, position.y, position.z);
-                    let rotation =
-                        glam::Quat::from_xyzw(rotation.i, rotation.j, rotation.k, rotation.w);
 
                     // Calculate normalized size (model size as fraction of octree)
-                    let octree_size = (1 << obj.depth) as f32;
+                    let octree_size = cubebox.octree_size() as f32;
                     let normalized_size = glam::Vec3::new(
-                        obj.model_size.x as f32 / octree_size,
-                        obj.model_size.y as f32 / octree_size,
-                        obj.model_size.z as f32 / octree_size,
+                        cubebox.size.x as f32 / octree_size,
+                        cubebox.size.y as f32 / octree_size,
+                        cubebox.size.z as f32 / octree_size,
                     );
 
-                    // Mesh is in [0, normalized_size] space, centered to [-normalized_size/2, normalized_size/2] by renderer
-                    // object_size is the desired edge length in normalized world units
-                    // Apply per-object scale: actual_scale = object_size * 2^scale_exp
-                    let scale_factor = 2.0_f32.powi(obj.scale_exp);
-                    let scale = self.config.spawning.object_size * scale_factor;
+                    // Get scale from physics object (already includes scale_exp calculation)
+                    let scale = obj.physics.scale();
                     unsafe {
                         // Render solid mesh
                         mesh_renderer.render_mesh_with_normalized_size(
@@ -939,53 +889,23 @@ impl ProtoGlApp {
                             size.height as i32,
                         );
                         // Render wireframe bounding box if enabled
-                        // Wireframe is around CubeBox bounds, not the full octree
+                        // Color indicates state: green=moving, red=colliding, gray=resting
                         if self.wireframe_objects {
-                            // Calculate normalized size (model size as fraction of octree)
-                            let octree_size = (1 << obj.depth) as f32;
-                            let normalized_size = glam::Vec3::new(
-                                obj.model_size.x as f32 / octree_size,
-                                obj.model_size.y as f32 / octree_size,
-                                obj.model_size.z as f32 / octree_size,
-                            );
+                            let wireframe_color = if obj.is_colliding_world {
+                                WIREFRAME_COLOR_COLLIDING
+                            } else if obj.physics.is_sleeping(physics_world) {
+                                WIREFRAME_COLOR_RESTING
+                            } else {
+                                WIREFRAME_COLOR_MOVING
+                            };
 
-                            mesh_renderer.render_cubebox_wireframe(
+                            mesh_renderer.render_cubebox_wireframe_colored(
                                 gl,
                                 position,
                                 rotation,
                                 normalized_size,
                                 scale,
-                                &camera,
-                                size.width as i32,
-                                size.height as i32,
-                            );
-
-                            // Always render collision AABB - green normally, red when colliding
-                            let aabb_color = if obj.is_colliding_world {
-                                [1.0, 0.2, 0.2] // Red when colliding
-                            } else {
-                                [0.2, 1.0, 0.2] // Green normally
-                            };
-
-                            // Compute AABB for visualization (same as physics uses)
-                            // Must account for rotation - rotated OBB becomes larger AABB
-                            let scale_factor = 2.0_f32.powi(obj.scale_exp);
-                            let base_scale =
-                                self.config.spawning.object_size * scale_factor;
-                            let half_extent = glam::Vec3::new(
-                                (obj.model_size.x as f32 / octree_size) * base_scale * 0.5,
-                                (obj.model_size.y as f32 / octree_size) * base_scale * 0.5,
-                                (obj.model_size.z as f32 / octree_size) * base_scale * 0.5,
-                            );
-                            let local_aabb =
-                                crossworld_physics::collision::Aabb::new(-half_extent, half_extent);
-                            let world_aabb = local_aabb.to_world(position, rotation, 1.0);
-
-                            mesh_renderer.render_aabb_wireframe(
-                                gl,
-                                world_aabb.min,
-                                world_aabb.max,
-                                aabb_color,
+                                wireframe_color,
                                 &camera,
                                 size.width as i32,
                                 size.height as i32,

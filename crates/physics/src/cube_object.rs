@@ -318,6 +318,38 @@ impl CubeObject {
         }
     }
 
+    /// Apply collision response with position correction and velocity damping
+    ///
+    /// Moves the body out of collision and removes the velocity component
+    /// in the correction direction to prevent tunneling.
+    ///
+    /// # Arguments
+    /// * `world` - The physics world
+    /// * `correction` - The displacement vector to move the body out of collision
+    ///
+    /// # Returns
+    /// `true` if a correction was applied, `false` if correction was zero
+    pub fn apply_collision_response(&self, world: &mut PhysicsWorld, correction: Vec3) -> bool {
+        if correction.length_squared() < f32::EPSILON {
+            return false;
+        }
+
+        // Move body out of collision
+        let position = self.position(world);
+        self.set_position(world, position + correction);
+
+        // Remove velocity component in correction direction
+        let correction_dir = correction.normalize();
+        let velocity = self.velocity(world);
+        let vel_in_correction_dir = velocity.dot(correction_dir);
+        if vel_in_correction_dir < 0.0 {
+            let dampened = velocity - correction_dir * vel_in_correction_dir;
+            self.set_velocity(world, dampened);
+        }
+
+        true
+    }
+
     /// Get the body handle
     pub fn body_handle(&self) -> RigidBodyHandle {
         self.body_handle
@@ -331,6 +363,17 @@ impl CubeObject {
     /// Check if this rigid body is still valid in the world
     pub fn is_valid(&self, world: &PhysicsWorld) -> bool {
         world.get_rigid_body(self.body_handle).is_some()
+    }
+
+    /// Check if the rigid body is sleeping (at rest)
+    ///
+    /// Sleeping bodies have stopped moving and are not simulated until
+    /// an external force or collision wakes them up.
+    pub fn is_sleeping(&self, world: &PhysicsWorld) -> bool {
+        world
+            .get_rigid_body(self.body_handle)
+            .map(|b| b.is_sleeping())
+            .unwrap_or(false)
     }
 }
 
