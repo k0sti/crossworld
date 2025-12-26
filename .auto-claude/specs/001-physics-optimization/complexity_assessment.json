@@ -1,0 +1,110 @@
+{
+  "complexity": "standard",
+  "workflow_type": "investigation",
+  "confidence": 0.85,
+  "reasoning": "This is an optimization task for an existing, working terrain collision system within the physics crate. Changes are contained to the terrain module (5-8 files). No new dependencies, no infrastructure changes. Requires profiling and analysis to identify bottlenecks before implementing optimizations.",
+
+  "analysis": {
+    "scope": {
+      "estimated_files": 6,
+      "estimated_services": 1,
+      "is_cross_cutting": false,
+      "notes": "Changes confined to crates/physics/src/terrain/ module with 6 files: mod.rs, collider.rs, region_cache.rs, region_id.rs, shape_impl.rs, triangle_gen.rs, active_region.rs. May also touch world.rs for integration."
+    },
+    "integrations": {
+      "external_services": [],
+      "new_dependencies": [],
+      "research_needed": false,
+      "notes": "Uses existing Rapier3d physics engine already integrated. No new external services or dependencies needed. Optimization will leverage existing APIs."
+    },
+    "infrastructure": {
+      "docker_changes": false,
+      "database_changes": false,
+      "config_changes": false,
+      "notes": "Pure code optimization within existing Rust crate. No infrastructure, deployment, or configuration changes required."
+    },
+    "knowledge": {
+      "patterns_exist": true,
+      "research_required": false,
+      "unfamiliar_tech": [],
+      "notes": "System is already implemented with BVH-based spatial indexing, region caching, and TypedCompositeShape integration. Optimization will build on existing patterns. May research spatial optimization techniques but core tech stack is familiar."
+    },
+    "risk": {
+      "level": "medium",
+      "concerns": [
+        "Performance regression if optimizations backfire",
+        "Breaking existing collision behavior",
+        "Cache coherency issues with modified region handling",
+        "BVH rebuild frequency changes could affect frame timing"
+      ],
+      "notes": "Optimization work carries inherent risk of introducing bugs while chasing performance. Need comprehensive testing. Existing test suite in modules provides safety net."
+    }
+  },
+
+  "key_bottleneck_candidates": [
+    "RegionCollisionData::from_octree() - octree traversal via visit_faces_in_region",
+    "VoxelTerrainCollider::update_triangle_bvh() - BVH rebuild with many triangles",
+    "Region cache miss frequency - HashMap lookups and cache population",
+    "Triangle count explosion - 2 triangles per face, potentially thousands per region",
+    "AABB calculations in face_aabb() called for every triangle",
+    "Part ID map Vec allocation on each BVH update"
+  ],
+
+  "recommended_phases": [
+    "discovery",
+    "requirements",
+    "context",
+    "spec_writing",
+    "planning",
+    "validation"
+  ],
+
+  "flags": {
+    "needs_research": false,
+    "needs_self_critique": false,
+    "needs_infrastructure_setup": false,
+    "needs_profiling": true,
+    "is_optimization_work": true
+  },
+
+  "optimization_strategy_hints": [
+    "Profile with cargo-flamegraph to identify hotspots",
+    "Consider incremental BVH updates instead of full rebuilds",
+    "Evaluate region cache eviction policies",
+    "Look for redundant triangle AABB calculations",
+    "Consider pre-allocating Vec capacities to reduce allocations",
+    "Review region depth parameter impact on triangle count",
+    "Benchmark with realistic terrain complexity"
+  ],
+
+  "validation_recommendations": {
+    "risk_level": "medium",
+    "skip_validation": false,
+    "minimal_mode": false,
+    "test_types_required": ["unit", "integration"],
+    "security_scan_required": false,
+    "staging_deployment_required": false,
+    "reasoning": "Optimization work on physics collision requires unit tests to verify correctness and integration tests to verify performance improvements don't break collision behavior. Existing test suite in terrain module provides baseline. No security implications."
+  },
+
+  "codebase_context": {
+    "terrain_module_path": "crates/physics/src/terrain/",
+    "key_files": [
+      "collider.rs - VoxelTerrainCollider with BVH structure",
+      "region_cache.rs - RegionCollisionData caching faces",
+      "active_region.rs - ActiveRegionTracker for dynamic regions",
+      "shape_impl.rs - Rapier TypedCompositeShape implementation",
+      "triangle_gen.rs - Triangle generation from faces",
+      "region_id.rs - Region identification"
+    ],
+    "existing_optimizations": [
+      "Two-level BVH (region + triangle)",
+      "Lazy region caching",
+      "Margin-based hysteresis to reduce rebuilds",
+      "Active region tracking for dynamic bodies"
+    ],
+    "integration_point": "proto-gl/src/app.rs uses PhysicsWorld which integrates terrain collision"
+  },
+
+  "created_at": "2025-12-26T00:00:00Z"
+}
