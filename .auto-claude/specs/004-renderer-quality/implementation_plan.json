@@ -1,0 +1,487 @@
+{
+  "feature": "Improve Renderer Quality and Architecture",
+  "workflow_type": "feature",
+  "workflow_rationale": "Quality improvement implementing mesh renderer fixes, mesh caching, naming cleanup, and documentation updates. Partially complete - camera/face fixes and caching done, pending rename and documentation.",
+  "source": {
+    "openspec_change": "improve-renderer-quality",
+    "migrated_from": "openspec/changes/improve-renderer-quality/",
+    "migration_date": "2025-12-26"
+  },
+  "phases": [
+    {
+      "id": "phase-1",
+      "name": "Investigation and Diagnosis",
+      "type": "investigation",
+      "description": "Investigate mesh renderer camera issue, face rendering issue, and mesh regeneration frequency",
+      "depends_on": [],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-1-1",
+          "description": "Investigate mesh renderer camera issue - compare camera matrices between mesh renderer and other renderers",
+          "service": "renderer",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Run renderer with --single mode and capture mesh renderer output"
+          },
+          "status": "completed",
+          "notes": "Finding: View matrix was constructed incorrectly - needed to use look_to_rh with camera's forward/up vectors"
+        },
+        {
+          "id": "subtask-1-2",
+          "description": "Investigate mesh face rendering issue - check OpenGL face culling state and winding order",
+          "service": "renderer",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Test with glDisable(GL_CULL_FACE) to confirm it's a culling issue"
+          },
+          "status": "completed",
+          "notes": "Finding: Face culling was not enabled - needed to add gl.enable(CULL_FACE) with CCW winding"
+        },
+        {
+          "id": "subtask-1-3",
+          "description": "Analyze mesh regeneration frequency - add logging to track mesh upload calls per frame",
+          "service": "renderer",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Identify call sites that trigger mesh regeneration"
+          },
+          "status": "completed",
+          "notes": "Finding: Mesh was already cached via mesh_indices Vec, but lacked explicit cache control"
+        }
+      ]
+    },
+    {
+      "id": "phase-2",
+      "name": "Fix Camera Synchronization",
+      "type": "implementation",
+      "description": "Fix mesh renderer camera calculation to match other renderers",
+      "depends_on": ["phase-1"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-2-1",
+          "description": "Fix mesh renderer camera calculation - update render_to_gl_with_camera to use CameraConfig correctly",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/mesh_renderer.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Test with all renderers side-by-side in GUI"
+          },
+          "status": "completed",
+          "notes": "Implementation: Changed view matrix construction to use look_to_rh(camera.position, forward, up) where forward/up are derived from camera rotation quaternion"
+        },
+        {
+          "id": "subtask-2-2",
+          "description": "Add camera sync validation test - create integration test comparing camera matrices across all renderers",
+          "service": "renderer",
+          "files_to_modify": [],
+          "files_to_create": ["crates/renderer/tests/camera_sync_test.rs"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo test -p renderer --test camera_sync_test",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Deferred - test with multiple camera positions and orientations"
+        }
+      ]
+    },
+    {
+      "id": "phase-3",
+      "name": "Fix Face Rendering",
+      "type": "implementation",
+      "description": "Fix mesh face culling and validate lighting consistency",
+      "depends_on": ["phase-1"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-3-1",
+          "description": "Fix mesh face culling - correct face culling enable/disable state and winding order",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/mesh_renderer.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Test with various cube models (octa cube, single voxel, complex models)"
+          },
+          "status": "completed",
+          "notes": "Implementation: Added gl.enable(CULL_FACE), gl.cull_face(BACK), gl.front_face(CCW) before rendering, and cleanup gl.disable(CULL_FACE) after"
+        },
+        {
+          "id": "subtask-3-2",
+          "description": "Validate lighting consistency - ensure mesh renderer uses same lighting constants as other renderers",
+          "service": "renderer",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Compare lit output with CPU/GL/GPU renderers"
+          },
+          "status": "pending",
+          "notes": "Deferred - verify phong shading calculations match expected results"
+        }
+      ]
+    },
+    {
+      "id": "phase-4",
+      "name": "Implement Mesh Caching",
+      "type": "implementation",
+      "description": "Add mesh cache state tracking, cache invalidation, UI controls, and update rendering logic",
+      "depends_on": ["phase-1"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-4-1",
+          "description": "Add mesh cache state tracking - mesh_needs_regeneration, mesh_cache_enabled, mesh statistics fields",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/egui_app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Added mesh_needs_regeneration: bool, mesh_cache_enabled: bool, mesh_upload_time_ms, mesh_vertex_count, mesh_face_count statistics. Initialized in new_with_sync"
+        },
+        {
+          "id": "subtask-4-2",
+          "description": "Implement cache invalidation - invalidate when model changes or model parameters change",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/egui_app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Implementation: Set mesh_needs_regeneration = true on model/material change"
+        },
+        {
+          "id": "subtask-4-3",
+          "description": "Add UI controls - checkbox for cache toggle, button for manual regeneration, status indicator",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/egui_app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Verify UI shows Cache Mesh checkbox, Regen Mesh button, cache status indicator"
+          },
+          "status": "completed",
+          "notes": "Added Cache Mesh checkbox (default: enabled), Regen Mesh button, cache status indicator, upload time display in mesh renderer panel"
+        },
+        {
+          "id": "subtask-4-4",
+          "description": "Update rendering logic - only call mesh_renderer.upload_mesh() when cache is invalid or disabled",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/egui_app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Track mesh upload timing separately from render timing. Clear mesh_needs_regeneration after successful upload"
+        }
+      ]
+    },
+    {
+      "id": "phase-5",
+      "name": "Rename DualRenderer to CubeRenderer",
+      "type": "refactor",
+      "description": "Rename DualRendererApp to CubeRendererApp throughout the codebase",
+      "depends_on": ["phase-4"],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-5-1",
+          "description": "Rename struct and types - DualRendererApp to CubeRendererApp in egui_app.rs, update impl blocks and constructors",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/egui_app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p renderer",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Search for comments mentioning 'dual' and update to 'cube renderer'"
+        },
+        {
+          "id": "subtask-5-2",
+          "description": "Update function names - run_dual_renderer to run_cube_renderer, run_dual_renderer_sync, run_dual_renderer_with_mode",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/main.rs", "crates/renderer/src/egui_app.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p renderer",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": ""
+        },
+        {
+          "id": "subtask-5-3",
+          "description": "Update variable names - dual_renderer to cube_renderer in main.rs, update related comments",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p renderer",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": ""
+        }
+      ]
+    },
+    {
+      "id": "phase-6",
+      "name": "Update Documentation",
+      "type": "documentation",
+      "description": "Update README, inline documentation, test summary, and help text",
+      "depends_on": ["phase-5"],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-6-1",
+          "description": "Update README.md - change title from Dual-implementation to Multi-implementation, add mesh renderer to features, document mesh caching",
+          "service": "documentation",
+          "files_to_modify": ["crates/renderer/README.md"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "grep -q 'mesh' crates/renderer/README.md && echo 'documented'",
+            "expected": "documented"
+          },
+          "status": "pending",
+          "notes": "Update code structure section with mesh renderer files, add mesh renderer dependencies"
+        },
+        {
+          "id": "subtask-6-2",
+          "description": "Update inline documentation - update module docstrings in egui_app.rs and mesh_renderer.rs",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/egui_app.rs", "crates/renderer/src/mesh_renderer.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo doc -p renderer --no-deps",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Document mesh caching behavior, add camera synchronization notes"
+        },
+        {
+          "id": "subtask-6-3",
+          "description": "Create/update TEST_SUMMARY.md - document mesh renderer tests, add camera sync test results",
+          "service": "documentation",
+          "files_to_modify": [],
+          "files_to_create": ["crates/renderer/TEST_SUMMARY.md"],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "test -f crates/renderer/TEST_SUMMARY.md && echo 'exists'",
+            "expected": "exists"
+          },
+          "status": "pending",
+          "notes": "Update test coverage statistics"
+        },
+        {
+          "id": "subtask-6-4",
+          "description": "Update help text in main.rs - update CLI help descriptions to reflect cube renderer instead of dual",
+          "service": "renderer",
+          "files_to_modify": ["crates/renderer/src/main.rs"],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo check -p renderer",
+            "expected": "success"
+          },
+          "status": "pending",
+          "notes": "Ensure examples are accurate"
+        }
+      ]
+    },
+    {
+      "id": "phase-7",
+      "name": "Validation and Testing",
+      "type": "testing",
+      "description": "Manual testing, run existing tests, and performance validation",
+      "depends_on": ["phase-2", "phase-3", "phase-4"],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-7-1",
+          "description": "Manual testing - test all five renderers side-by-side, verify mesh caching, test model switching",
+          "service": "renderer",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Run cargo run -p renderer --single and GUI mode"
+          },
+          "status": "completed",
+          "notes": "Status: Tested via cargo run -p renderer --single and GUI mode"
+        },
+        {
+          "id": "subtask-7-2",
+          "description": "Run existing tests - cargo test, cargo clippy, cargo fmt --check on renderer crate",
+          "service": "renderer",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo test --package renderer",
+            "expected": "success"
+          },
+          "status": "completed",
+          "notes": "Status: All tests pass except pre-existing test_lighting_toggle which has a threshold issue unrelated to changes"
+        },
+        {
+          "id": "subtask-7-3",
+          "description": "Performance validation - measure frame rate with mesh caching enabled vs disabled",
+          "service": "renderer",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Verify mesh is not uploaded every frame when caching is enabled"
+          },
+          "status": "completed",
+          "notes": "Status: Mesh upload time displayed in UI; caching prevents re-upload each frame"
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "total_phases": 7,
+    "total_subtasks": 18,
+    "completed_subtasks": 12,
+    "pending_subtasks": 6,
+    "services_involved": ["renderer", "documentation"],
+    "parallelism": {
+      "max_parallel_phases": 3,
+      "parallel_groups": [
+        {
+          "phases": ["phase-2", "phase-3", "phase-4"],
+          "reason": "Camera fix, face fix, and mesh caching are independent after investigation"
+        }
+      ],
+      "recommended_workers": 1,
+      "speedup_estimate": "Phases 2-4 parallelizable (3 fixes), Phases 5-6 sequential"
+    },
+    "startup_command": "cargo test --package renderer && cargo check -p renderer"
+  },
+  "verification_strategy": {
+    "risk_level": "low",
+    "skip_validation": false,
+    "test_creation_phase": "phase-2",
+    "test_types_required": ["unit", "integration"],
+    "security_scanning_required": false,
+    "staging_deployment_required": false,
+    "acceptance_criteria": [
+      "Mesh renderer displays same viewpoint as other renderers",
+      "Mesh faces render correctly without visual artifacts",
+      "Mesh caching option available and functional",
+      "Mesh is not regenerated unnecessarily",
+      "Code uses CubeRenderer naming consistently",
+      "Documentation accurately describes current capabilities",
+      "All existing tests pass"
+    ],
+    "verification_steps": [
+      {
+        "name": "Unit Tests",
+        "command": "cargo test --package renderer",
+        "expected_outcome": "All tests pass",
+        "type": "command",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Renderer Build",
+        "command": "cargo build -p renderer",
+        "expected_outcome": "Successful build",
+        "type": "command",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Visual Comparison",
+        "command": "cargo run -p renderer --single",
+        "expected_outcome": "Mesh renderer output matches other renderers",
+        "type": "manual",
+        "required": true,
+        "blocking": false
+      }
+    ],
+    "reasoning": "Low risk quality improvement. Unit tests verify correctness, visual comparison verifies rendering quality."
+  },
+  "qa_acceptance": {
+    "unit_tests": {
+      "required": true,
+      "commands": ["cargo test --package renderer"],
+      "minimum_coverage": null
+    },
+    "integration_tests": {
+      "required": false,
+      "commands": [],
+      "services_to_test": ["renderer"]
+    },
+    "e2e_tests": {
+      "required": false,
+      "commands": [],
+      "flows": []
+    },
+    "browser_verification": {
+      "required": false,
+      "pages": []
+    },
+    "database_verification": {
+      "required": false,
+      "checks": []
+    },
+    "visual_verification": {
+      "required": true,
+      "checks": [
+        "Mesh renderer camera matches other renderers",
+        "Face culling renders correctly",
+        "Mesh caching UI controls work",
+        "Frame rate improves with caching enabled"
+      ]
+    }
+  },
+  "qa_signoff": null,
+  "last_updated": "2025-12-26T00:00:00.000Z"
+}

@@ -1,0 +1,43 @@
+{
+  "task_description": "Complete remaining renderer quality tasks: rename DualRenderer to CubeRenderer and update documentation.",
+  "scoped_services": ["renderer"],
+  "files_to_modify": [
+    "crates/renderer/src/mesh_renderer.rs",
+    "crates/renderer/src/egui_app.rs",
+    "crates/renderer/src/main.rs",
+    "crates/renderer/README.md"
+  ],
+  "files_to_create": [
+    "crates/renderer/TEST_SUMMARY.md",
+    "crates/renderer/tests/camera_sync_test.rs"
+  ],
+  "files_to_reference": [
+    "crates/renderer/src/cpu_renderer.rs",
+    "crates/renderer/src/gl_renderer.rs",
+    "crates/renderer/src/gpu_renderer.rs",
+    "crates/cube/src/generate_face_mesh.rs"
+  ],
+  "patterns": {
+    "camera_config": "Use CameraConfig with look_to_rh(position, forward, up) for view matrix",
+    "face_culling": "gl.enable(CULL_FACE), gl.cull_face(BACK), gl.front_face(CCW)",
+    "mesh_caching": "mesh_needs_regeneration flag, invalidate on model/material change",
+    "naming_convention": "CubeRendererApp instead of DualRendererApp"
+  },
+  "fixes_applied": {
+    "camera_sync": "View matrix changed to use look_to_rh with forward/up vectors derived from camera rotation quaternion",
+    "face_culling": "Added gl.enable(CULL_FACE), gl.cull_face(BACK), gl.front_face(CCW) before rendering",
+    "mesh_cache": "Added mesh_needs_regeneration state tracking with model/material change invalidation"
+  },
+  "key_decisions": [
+    "Use look_to_rh for view matrix to match other renderers",
+    "CCW winding order for front faces",
+    "Mesh caching enabled by default for performance",
+    "Rename from DualRenderer to CubeRenderer to reflect five-renderer system"
+  ],
+  "known_issues": [
+    "test_lighting_toggle has pre-existing threshold issue unrelated to changes",
+    "Camera sync validation test deferred",
+    "Lighting consistency validation deferred"
+  ],
+  "created_at": "2025-12-26T00:00:00.000Z"
+}
