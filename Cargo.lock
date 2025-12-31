@@ -3806,6 +3806,7 @@ dependencies = [
  "egui 0.29.1",
  "egui-winit",
  "egui_glow",
+ "gilrs",
  "glam 0.29.3",
  "glow 0.14.2",
  "renderer",

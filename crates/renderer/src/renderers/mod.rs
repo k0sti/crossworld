@@ -28,9 +28,11 @@ pub mod bcf_cpu_tracer;
 pub mod gl_tracer;
 pub mod gpu_tracer;
 pub mod mesh_renderer;
+pub mod skybox_renderer;
 
 pub use cpu_tracer::CpuTracer;
 pub use bcf_cpu_tracer::BcfTracer;
 pub use gl_tracer::GlTracer;
 pub use gpu_tracer::ComputeTracer;
 pub use mesh_renderer::MeshRenderer;
+pub use skybox_renderer::SkyboxRenderer;
