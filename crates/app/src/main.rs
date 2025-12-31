@@ -53,6 +53,7 @@ struct AppRuntime {
     game_app: Option<Box<dyn App>>,
     last_update: Instant,
     file_events: Arc<Mutex<Receiver<std::result::Result<Vec<DebouncedEvent>, notify_debouncer_mini::notify::Error>>>>,
+    last_reload_time: Option<Duration>,
 }
 
 impl AppRuntime {
@@ -66,6 +67,7 @@ impl AppRuntime {
             game_app: None,
             last_update: Instant::now(),
             file_events,
+            last_reload_time: None,
         }
     }
 }
@@ -139,7 +141,8 @@ impl AppRuntime {
 
     /// Reload the game library
     unsafe fn reload_game(&mut self) {
-        println!("[AppRuntime] Hot-reload triggered!");
+        let start_time = Instant::now();
+        println!("[AppRuntime] ⏱️  Hot-reload triggered!");
 
         self.unload_game();
 
@@ -147,10 +150,14 @@ impl AppRuntime {
         std::thread::sleep(Duration::from_millis(50));
 
         self.load_game();
+
+        let reload_time = start_time.elapsed();
+        self.last_reload_time = Some(reload_time);
+
         if self.game_app.is_some() {
-            println!("[AppRuntime] Hot-reload successful");
+            println!("[AppRuntime] ✅ Hot-reload successful in {:.2}ms", reload_time.as_secs_f64() * 1000.0);
         } else {
-            eprintln!("[AppRuntime] Hot-reload failed");
+            eprintln!("[AppRuntime] ❌ Hot-reload failed after {:.2}ms", reload_time.as_secs_f64() * 1000.0);
             eprintln!("[AppRuntime] Continuing with previous version (if any)");
         }
     }

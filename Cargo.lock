@@ -3802,12 +3802,13 @@ name = "game"
 version = "0.1.0"
 dependencies = [
  "app",
- "bytemuck",
+ "cube",
  "egui 0.29.1",
  "egui-winit",
  "egui_glow",
  "glam 0.29.3",
  "glow 0.14.2",
+ "renderer",
  "winit",
 ]
 

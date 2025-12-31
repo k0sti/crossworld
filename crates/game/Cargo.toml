@@ -9,9 +9,10 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 app = { path = "../app" }
+renderer = { path = "../renderer" }
+cube = { path = "../cube" }
 glow = "0.14"
 glam = "0.29"
-bytemuck = "1.14"
 winit = "0.30"
 egui = "0.29"
 egui-winit = "0.29"
