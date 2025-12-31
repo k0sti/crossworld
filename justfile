@@ -23,6 +23,10 @@ default:
     @echo "  just editor           - Run native voxel editor (Bevy)"
     @echo "  just editor-release   - Run native voxel editor (optimized build)"
     @echo "  just proto            - Run physics prototype (Bevy)"
+    @echo "  just game-run         - Run hot-reload app (Terminal 1)"
+    @echo "  just game-watch       - Watch and auto-rebuild game (Terminal 2)"
+    @echo "  just hot-reload       - Run hot-reload demo in tmux (auto-rebuild on save)"
+    @echo "  just build-game       - Build game library once"
     @echo ""
 
 # Build WASM module in development mode
@@ -175,3 +179,97 @@ proto:
 # Run proto-gl physics viewer (OpenGL, lightweight)
 proto-gl:
     cargo run --bin proto-gl
+
+# Build game library for hot-reload
+build-game:
+    cargo build --package game
+
+# Run the hot-reload app (Terminal 1)
+game-run:
+    @echo "🎮 Starting hot-reload app..."
+    @echo "Open another terminal and run: just game-watch"
+    @echo ""
+    cargo build --package game
+    cargo run --bin app
+
+# Watch and auto-rebuild game on changes (Terminal 2)
+game-watch:
+    @echo "👀 Watching crates/game/ for changes..."
+    @echo "Any changes will trigger automatic rebuild"
+    @echo "Press Ctrl+C to stop"
+    @echo ""
+    cargo watch -x 'build --package game' -w crates/game
+
+# Run hot-reload demo (rotating cube) - requires tmux
+hot-reload:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    # Check if tmux is installed
+    if ! command -v tmux &> /dev/null; then
+        echo "❌ tmux is not installed. Install it or use manual method:"
+        echo ""
+        echo "Terminal 1: cargo run --bin app"
+        echo "Terminal 2: cargo watch -x 'build --package game' -w crates/game"
+        exit 1
+    fi
+
+    # Check if cargo-watch is installed
+    if ! command -v cargo-watch &> /dev/null; then
+        echo "📦 Installing cargo-watch..."
+        cargo install cargo-watch
+    fi
+
+    # Build game first
+    echo "🔨 Building game library..."
+    cargo build --package game
+
+    # Kill existing session if it exists
+    tmux kill-session -t hot-reload 2>/dev/null || true
+
+    # Create new tmux session
+    echo "🚀 Starting hot-reload in tmux session 'hot-reload'"
+    echo ""
+    echo "Controls:"
+    echo "  - Ctrl+B, then arrow keys to switch panes"
+    echo "  - Ctrl+B, then D to detach (keeps running)"
+    echo "  - Edit crates/game/src/lib.rs to see hot-reload!"
+    echo "  - Type 'exit' in both panes to quit"
+    echo ""
+    sleep 2
+
+    # Create tmux session with two panes
+    tmux new-session -d -s hot-reload -n hot-reload
+    tmux split-window -h -t hot-reload:0
+
+    # Left pane: run app
+    tmux send-keys -t hot-reload:0.0 'cargo run --bin app' C-m
+
+    # Right pane: watch and rebuild
+    tmux send-keys -t hot-reload:0.1 'echo "Watching for changes in crates/game/..."' C-m
+    tmux send-keys -t hot-reload:0.1 'cargo watch -x "build --package game" -w crates/game' C-m
+
+    # Attach to session
+    tmux attach-session -t hot-reload
+
+# Run hot-reload demo (manual two-terminal method)
+hot-reload-manual:
+    @echo "🔧 Manual Hot-Reload Setup"
+    @echo ""
+    @echo "Terminal 1 (this one): Run the app"
+    @echo "Terminal 2 (open another): Auto-rebuild on changes"
+    @echo ""
+    @echo "After both are running, edit crates/game/src/lib.rs"
+    @echo "and save - you'll see hot-reload happen!"
+    @echo ""
+    @echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    @echo ""
+    @echo "Terminal 2 command (copy and run in another terminal):"
+    @echo "  cargo watch -x 'build --package game' -w crates/game"
+    @echo ""
+    @echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    @echo ""
+    cargo build --package game
+    @echo "Press Enter to start the app..."
+    @read -p ""
+    cargo run --bin app
