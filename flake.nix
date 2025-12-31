@@ -113,7 +113,7 @@
             echo "  just server    - Run game server"
             echo ""
             echo "Build optimizations:"
-            echo "  - mold linker available (configure in .cargo/config.toml)"
+            echo "  ✓ mold linker configured in .cargo/config.toml"
             echo "  - Use 'cargo +nightly' for cranelift codegen backend"
             echo ""
           '';

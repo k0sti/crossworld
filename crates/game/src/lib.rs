@@ -1,234 +1,115 @@
 use app::App;
-use glam::{Mat4, Vec3};
+// Hot-reload trigger: 1767200762409
+use glam::{Quat, Vec3};
 use glow::*;
+use renderer::{Camera, MeshRenderer};
 use std::sync::Arc;
 use std::time::Instant;
 use winit::event::WindowEvent;
 
-const VERTEX_SHADER: &str = r#"#version 330 core
-layout(location = 0) in vec3 a_pos;
-layout(location = 1) in vec3 a_color;
-
-out vec3 v_color;
-
-uniform mat4 u_mvp;
-
-void main() {
-    v_color = a_color;
-    gl_Position = u_mvp * vec4(a_pos, 1.0);
-}
-"#;
-
-const FRAGMENT_SHADER: &str = r#"#version 330 core
-in vec3 v_color;
-out vec4 frag_color;
-
-void main() {
-    frag_color = vec4(v_color, 1.0);
-}
-"#;
-
-/// Cube vertices: position (xyz)
-const CUBE_VERTICES: &[f32] = &[
-    // Front face
-    -0.5, -0.5,  0.5,
-     0.5, -0.5,  0.5,
-     0.5,  0.5,  0.5,
-    -0.5,  0.5,  0.5,
-    // Back face
-    -0.5, -0.5, -0.5,
-    -0.5,  0.5, -0.5,
-     0.5,  0.5, -0.5,
-     0.5, -0.5, -0.5,
-    // Top face
-    -0.5,  0.5, -0.5,
-    -0.5,  0.5,  0.5,
-     0.5,  0.5,  0.5,
-     0.5,  0.5, -0.5,
-    // Bottom face
-    -0.5, -0.5, -0.5,
-     0.5, -0.5, -0.5,
-     0.5, -0.5,  0.5,
-    -0.5, -0.5,  0.5,
-    // Right face
-     0.5, -0.5, -0.5,
-     0.5,  0.5, -0.5,
-     0.5,  0.5,  0.5,
-     0.5, -0.5,  0.5,
-    // Left face
-    -0.5, -0.5, -0.5,
-    -0.5, -0.5,  0.5,
-    -0.5,  0.5,  0.5,
-    -0.5,  0.5, -0.5,
-];
-
-/// Cube colors (one color per face)
-const CUBE_COLORS: &[f32] = &[
-    // Front face (red)
-    1.0, 0.0, 0.0,
-    1.0, 0.0, 0.0,
-    1.0, 0.0, 0.0,
-    1.0, 0.0, 0.0,
-    // Back face (green)
-    0.0, 1.0, 0.0,
-    0.0, 1.0, 0.0, 
-    0.0, 1.0, 0.0,
-    0.0, 1.0, 0.0,
-    // Top face (blue)
-    0.0, 0.0, 1.0,
-    0.0, 0.0, 1.0,
-    0.0, 0.0, 1.0,
-    0.0, 0.0, 1.0,
-    // Bottom face (yellow)
-    1.0, 1.0, 0.0,
-    1.0, 1.0, 0.0,
-    1.0, 1.0, 0.0,
-    1.0, 1.0, 0.0,
-    // Right face (magenta)
-    1.0, 0.0, 1.0,
-    1.0, 0.0, 1.0,
-    1.0, 0.0, 1.0,
-    1.0, 0.0, 1.0,
-    // Left face (cyan)
-    0.0, 1.0, 1.0,
-    0.0, 1.0, 1.0,
-    0.0, 1.0, 1.0,
-    0.0, 1.0, 1.0,
-];
-
-/// Cube indices (two triangles per face)
-const CUBE_INDICES: &[u32] = &[
-    0,  1,  2,  2,  3,  0,   // Front
-    4,  5,  6,  6,  7,  4,   // Back
-    8,  9, 10, 10, 11,  8,   // Top
-    12, 13, 14, 14, 15, 12,  // Bottom
-    16, 17, 18, 18, 19, 16,  // Right
-    20, 21, 22, 22, 23, 20,  // Left
-];
-
 pub struct RotatingCube {
-    vao: Option<NativeVertexArray>,
-    vbo_pos: Option<NativeBuffer>,
-    vbo_color: Option<NativeBuffer>,
-    ebo: Option<NativeBuffer>,
-    shader_program: Option<NativeProgram>,
+    mesh_renderer: MeshRenderer,
+    mesh_index: Option<usize>,
     rotation: f32,
     window_size: (u32, u32),
     gl: Option<Arc<Context>>,
     egui_ctx: Option<egui::Context>,
-    egui_winit: Option<egui_winit::State>,
     egui_painter: Option<egui_glow::Painter>,
-    start_time: std::time::Instant,
+    start_time: Instant,
+    last_reload_trigger: Option<Instant>,
+    // Input state for egui
+    pointer_pos: Option<egui::Pos2>,
+    mouse_button_events: Vec<(egui::PointerButton, bool)>, // (button, pressed)
 }
 
 impl RotatingCube {
     pub fn new() -> Self {
         Self {
-            vao: None,
-            vbo_pos: None,
-            vbo_color: None,
-            ebo: None,
-            shader_program: None,
+            mesh_renderer: MeshRenderer::new(),
+            mesh_index: None,
             rotation: 0.0,
             window_size: (800, 600),
             gl: None,
             egui_ctx: None,
-            egui_winit: None,
             egui_painter: None,
             start_time: Instant::now(),
+            last_reload_trigger: None,
+            pointer_pos: None,
+            mouse_button_events: Vec::new(),
         }
     }
 
-    unsafe fn compile_shader(
-        gl: &Context,
-        shader_type: u32,
-        source: &str,
-    ) -> Result<NativeShader, String> {
-        let shader = gl.create_shader(shader_type)?;
-        gl.shader_source(shader, source);
-        gl.compile_shader(shader);
+    /// Trigger a hot-reload by modifying the source file
+    fn trigger_reload(&mut self) {
+        use std::fs;
+        use std::path::PathBuf;
+        use std::time::SystemTime;
 
-        if !gl.get_shader_compile_status(shader) {
-            let log = gl.get_shader_info_log(shader);
-            return Err(format!("Shader compilation failed: {}", log));
+        let mut src_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        src_path.push("src");
+        src_path.push("lib.rs");
+
+        if let Ok(mut content) = fs::read_to_string(&src_path) {
+            // Find or create the dummy comment line
+            let marker = "// Hot-reload trigger:";
+
+            // Use SystemTime to get a real timestamp
+            let timestamp = SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_millis();
+
+            if let Some(pos) = content.find(marker) {
+                // Update existing marker with new timestamp
+                let line_end = content[pos..].find('\n').map(|i| pos + i).unwrap_or(content.len());
+                let new_line = format!("{} {}", marker, timestamp);
+                content.replace_range(pos..line_end, &new_line);
+            } else {
+                // Add marker at the top after the first line
+                if let Some(first_newline) = content.find('\n') {
+                    content.insert_str(first_newline + 1, &format!("{} {}\n", marker, timestamp));
+                }
+            }
+
+            match fs::write(&src_path, content) {
+                Ok(_) => {
+                    self.last_reload_trigger = Some(Instant::now());
+                    println!("[Game] 🔄 Triggered hot-reload by modifying source file (timestamp: {})", timestamp);
+                }
+                Err(e) => {
+                    eprintln!("[Game] ❌ Failed to write source file: {}", e);
+                }
+            }
+        } else {
+            eprintln!("[Game] ❌ Failed to read source file");
         }
-
-        Ok(shader)
     }
 }
 
 impl App for RotatingCube {
     unsafe fn init(&mut self, gl: Arc<Context>) {
-        println!("[Game] Initializing rotating cube");
+        println!("[Game] Initializing rotating cube with MeshRenderer");
 
         // Store GL context
         self.gl = Some(Arc::clone(&gl));
 
-        // Create and bind VAO
-        let vao = gl.create_vertex_array().unwrap();
-        gl.bind_vertex_array(Some(vao));
+        // Initialize mesh renderer
+        self.mesh_renderer
+            .init_gl(&gl)
+            .expect("Failed to initialize MeshRenderer");
 
-        // Create VBO for positions
-        let vbo_pos = gl.create_buffer().unwrap();
-        gl.bind_buffer(ARRAY_BUFFER, Some(vbo_pos));
-        gl.buffer_data_u8_slice(
-            ARRAY_BUFFER,
-            bytemuck::cast_slice(CUBE_VERTICES),
-            STATIC_DRAW,
-        );
-        gl.enable_vertex_attrib_array(0);
-        gl.vertex_attrib_pointer_f32(0, 3, FLOAT, false, 12, 0);
+        // Create a simple colored cube scene
+        let cube = renderer::create_octa_cube();
 
-        // Create VBO for colors
-        let vbo_color = gl.create_buffer().unwrap();
-        gl.bind_buffer(ARRAY_BUFFER, Some(vbo_color));
-        gl.buffer_data_u8_slice(
-            ARRAY_BUFFER,
-            bytemuck::cast_slice(CUBE_COLORS),
-            STATIC_DRAW,
-        );
-        gl.enable_vertex_attrib_array(1);
-        gl.vertex_attrib_pointer_f32(1, 3, FLOAT, false, 12, 0);
+        // Upload mesh to GPU (depth 1 since octa_cube is a simple 2x2x2 octree)
+        let mesh_index = self
+            .mesh_renderer
+            .upload_mesh(&gl, &cube, 1)
+            .expect("Failed to upload cube mesh");
+        self.mesh_index = Some(mesh_index);
 
-        // Create EBO
-        let ebo = gl.create_buffer().unwrap();
-        gl.bind_buffer(ELEMENT_ARRAY_BUFFER, Some(ebo));
-        gl.buffer_data_u8_slice(
-            ELEMENT_ARRAY_BUFFER,
-            bytemuck::cast_slice(CUBE_INDICES),
-            STATIC_DRAW,
-        );
-
-        // Compile shaders
-        let vertex_shader = Self::compile_shader(&gl, glow::VERTEX_SHADER, VERTEX_SHADER)
-            .expect("Failed to compile vertex shader");
-        let fragment_shader = Self::compile_shader(&gl, glow::FRAGMENT_SHADER, FRAGMENT_SHADER)
-            .expect("Failed to compile fragment shader");
-
-        // Link program
-        let program = gl.create_program().unwrap();
-        gl.attach_shader(program, vertex_shader);
-        gl.attach_shader(program, fragment_shader);
-        gl.link_program(program);
-
-        if !gl.get_program_link_status(program) {
-            let log = gl.get_program_info_log(program);
-            panic!("Program linking failed: {}", log);
-        }
-
-        // Cleanup shaders (they're linked into the program now)
-        gl.delete_shader(vertex_shader);
-        gl.delete_shader(fragment_shader);
-
-        // Enable depth testing
+        // Enable depth testing for 3D rendering
         gl.enable(DEPTH_TEST);
-
-        // Store handles
-        self.vao = Some(vao);
-        self.vbo_pos = Some(vbo_pos);
-        self.vbo_color = Some(vbo_color);
-        self.ebo = Some(ebo);
-        self.shader_program = Some(program);
 
         // Initialize egui
         let egui_ctx = egui::Context::default();
@@ -239,8 +120,8 @@ impl App for RotatingCube {
         self.egui_painter = Some(egui_painter);
 
         println!("[Game] Rotating cube initialized successfully");
-        println!("[Game] egui initialized - UI overlay enabled");
-        println!("[Game] Hot-reload ready! Try changing rotation speed or colors.");
+        println!("[Game] Using MeshRenderer with proper lighting and materials");
+        println!("[Game] Hot-reload ready! Try changing rotation speed.");
     }
 
     unsafe fn uninit(&mut self, gl: Arc<Context>) {
@@ -251,23 +132,10 @@ impl App for RotatingCube {
             painter.destroy();
         }
         self.egui_ctx = None;
-        self.egui_winit = None;
 
-        if let Some(vao) = self.vao.take() {
-            gl.delete_vertex_array(vao);
-        }
-        if let Some(vbo) = self.vbo_pos.take() {
-            gl.delete_buffer(vbo);
-        }
-        if let Some(vbo) = self.vbo_color.take() {
-            gl.delete_buffer(vbo);
-        }
-        if let Some(ebo) = self.ebo.take() {
-            gl.delete_buffer(ebo);
-        }
-        if let Some(program) = self.shader_program.take() {
-            gl.delete_program(program);
-        }
+        // Cleanup mesh renderer
+        self.mesh_renderer.destroy_gl(&gl);
+        self.mesh_index = None;
 
         self.gl = None;
 
@@ -275,9 +143,30 @@ impl App for RotatingCube {
     }
 
     fn event(&mut self, event: &WindowEvent) {
-        // Handle window resize
-        if let WindowEvent::Resized(size) = event {
-            self.window_size = (size.width, size.height);
+        use winit::event::{ElementState, MouseButton};
+
+        match event {
+            WindowEvent::Resized(size) => {
+                self.window_size = (size.width, size.height);
+            }
+            WindowEvent::CursorMoved { position, .. } => {
+                self.pointer_pos = Some(egui::Pos2::new(position.x as f32, position.y as f32));
+            }
+            WindowEvent::CursorLeft { .. } => {
+                self.pointer_pos = None;
+            }
+            WindowEvent::MouseInput { state, button, .. } => {
+                let egui_button = match button {
+                    MouseButton::Left => egui::PointerButton::Primary,
+                    MouseButton::Right => egui::PointerButton::Secondary,
+                    MouseButton::Middle => egui::PointerButton::Middle,
+                    _ => return,
+                };
+
+                let pressed = *state == ElementState::Pressed;
+                self.mouse_button_events.push((egui_button, pressed));
+            }
+            _ => {}
         }
     }
 
@@ -291,42 +180,32 @@ impl App for RotatingCube {
         gl.clear_color(0.1, 0.1, 0.1, 1.0);
         gl.clear(COLOR_BUFFER_BIT | DEPTH_BUFFER_BIT);
 
-        if let (Some(vao), Some(program)) = (self.vao, self.shader_program) {
-            // Use shader program
-            gl.use_program(Some(program));
+        // Render the cube mesh
+        if let Some(mesh_index) = self.mesh_index {
+            // Setup camera looking at the cube
+            let mut camera = Camera::default();
+            camera.position = Vec3::new(0.0, 0.0, 3.0);
+            camera.set_look_at(Vec3::ZERO);
 
-            // Create MVP matrix
-            let model = Mat4::from_rotation_y(self.rotation) * Mat4::from_rotation_x(self.rotation * 0.5);
-            let view = Mat4::look_at_rh(
-                Vec3::new(0.0, 0.0, 3.0),  // Camera position
-                Vec3::new(0.0, 0.0, 0.0),  // Look at center
-                Vec3::new(0.0, 1.0, 0.0),  // Up vector
+            // Create rotation quaternion (rotate around Y and X axes)
+            let rotation = Quat::from_rotation_y(self.rotation)
+                * Quat::from_rotation_x(self.rotation * 0.5);
+
+            // Render mesh at origin with rotation
+            self.mesh_renderer.render_mesh(
+                &gl,
+                mesh_index,
+                Vec3::ZERO,    // Position at origin
+                rotation,      // Apply rotation
+                &camera,
+                self.window_size.0 as i32,
+                self.window_size.1 as i32,
             );
-            let aspect = self.window_size.0 as f32 / self.window_size.1 as f32;
-            let projection = Mat4::perspective_rh(
-                45.0_f32.to_radians(),
-                aspect,
-                0.1,
-                100.0,
-            );
-            let mvp = projection * view * model;
-
-            // Set uniform
-            let u_mvp_loc = gl.get_uniform_location(program, "u_mvp");
-            if let Some(loc) = u_mvp_loc {
-                gl.uniform_matrix_4_f32_slice(Some(&loc), false, &mvp.to_cols_array());
-            }
-
-            // Draw cube
-            gl.bind_vertex_array(Some(vao));
-            gl.draw_elements(TRIANGLES, 36, UNSIGNED_INT, 0);
-
-            // Unbind VAO before egui
-            gl.bind_vertex_array(None);
-            gl.use_program(None);
         }
 
         // Render egui UI on top of 3D scene
+        let mut should_trigger_reload = false;
+
         if let Some(egui_ctx) = &self.egui_ctx {
             // Setup GL state for egui (2D overlay)
             gl.disable(DEPTH_TEST);
@@ -335,7 +214,9 @@ impl App for RotatingCube {
             gl.viewport(0, 0, self.window_size.0 as i32, self.window_size.1 as i32);
 
             let elapsed = self.start_time.elapsed().as_secs_f64();
-            let raw_input = egui::RawInput {
+
+            // Build raw input with mouse events
+            let mut raw_input = egui::RawInput {
                 screen_rect: Some(egui::Rect::from_min_size(
                     egui::Pos2::ZERO,
                     egui::vec2(self.window_size.0 as f32, self.window_size.1 as f32),
@@ -345,19 +226,59 @@ impl App for RotatingCube {
                 ..Default::default()
             };
 
-            let full_output = egui_ctx.run(raw_input, |ctx| {
+            // Add pointer position
+            if let Some(pos) = self.pointer_pos {
+                raw_input.events.push(egui::Event::PointerMoved(pos));
+            }
+
+            // Add mouse button events (both press and release)
+            for (button, pressed) in self.mouse_button_events.drain(..) {
+                if let Some(pos) = self.pointer_pos {
+                    raw_input.events.push(egui::Event::PointerButton {
+                        pos,
+                        button,
+                        pressed,
+                        modifiers: egui::Modifiers::default(),
+                    });
+                }
+            }
+
+            let rotation_degrees = self.rotation.to_degrees();
+            let window_size = self.window_size;
+            let last_reload_trigger = self.last_reload_trigger;
+
+            let full_output = egui_ctx.run(raw_input, |ui_ctx| {
                 egui::Window::new("🎮 Hot Reload Demo")
                     .default_pos([10.0, 10.0])
-                    .default_width(300.0)
+                    .default_width(320.0)
                     .resizable(true)
-                    .show(ctx, |ui| {
-                        ui.heading("RotatingCube");
-                        ui.colored_label(egui::Color32::GREEN, "✓ Hot-reloadable egui UI!");
+                    .show(ui_ctx, |ui| {
+                        ui.heading("Rotating Cube");
+                        ui.colored_label(egui::Color32::GREEN, "✓ Using MeshRenderer!");
                         ui.separator();
-                        ui.label(format!("Rotation: {:.2}°", self.rotation.to_degrees()));
-                        ui.label(format!("Window: {}x{}", self.window_size.0, self.window_size.1));
+
+                        ui.label(format!("Rotation: {:.2}°", rotation_degrees));
+                        ui.label(format!("Window: {}x{}", window_size.0, window_size.1));
+
                         ui.separator();
-                        ui.label("Edit crates/game/src/lib.rs to see hot-reload!");
+                        ui.label("Colored voxel cube with proper lighting");
+
+                        ui.separator();
+                        ui.heading("🔥 Hot-Reload Benchmark");
+
+                        if ui.button("🔄 Trigger Reload").clicked() {
+                            should_trigger_reload = true;
+                        }
+
+                        if let Some(trigger_time) = last_reload_trigger {
+                            let elapsed_ms = trigger_time.elapsed().as_millis();
+                            ui.label(format!("⏱️  Last trigger: {}ms ago", elapsed_ms));
+                        } else {
+                            ui.label("Click button to test reload speed");
+                        }
+
+                        ui.separator();
+                        ui.label("Edit crates/game/src/lib.rs to test!");
                     });
             });
 
@@ -385,6 +306,11 @@ impl App for RotatingCube {
             // Restore GL state for 3D rendering
             gl.enable(DEPTH_TEST);
             gl.disable(BLEND);
+        }
+
+        // Trigger reload after all borrows are dropped
+        if should_trigger_reload {
+            self.trigger_reload();
         }
     }
 }
