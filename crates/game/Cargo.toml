@@ -1,0 +1,18 @@
+[package]
+name = "game"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "game"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+app = { path = "../app" }
+glow = "0.14"
+glam = "0.29"
+bytemuck = "1.14"
+winit = "0.30"
+egui = "0.29"
+egui-winit = "0.29"
+egui_glow = "0.29"
