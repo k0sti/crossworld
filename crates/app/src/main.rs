@@ -144,6 +144,9 @@ impl AppRuntime {
         let start_time = Instant::now();
         println!("[AppRuntime] ⏱️  Hot-reload triggered!");
 
+        // Capture current window size before unloading
+        let current_size = self.window.as_ref().map(|w| w.inner_size());
+
         self.unload_game();
 
         // Small delay to ensure file is fully written
@@ -153,6 +156,11 @@ impl AppRuntime {
 
         let reload_time = start_time.elapsed();
         self.last_reload_time = Some(reload_time);
+
+        // Send resize event to new app instance to sync window size
+        if let (Some(app), Some(size)) = (self.game_app.as_mut(), current_size) {
+            app.event(&WindowEvent::Resized(size));
+        }
 
         if self.game_app.is_some() {
             println!("[AppRuntime] ✅ Hot-reload successful in {:.2}ms", reload_time.as_secs_f64() * 1000.0);

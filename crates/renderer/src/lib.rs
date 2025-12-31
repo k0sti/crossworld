@@ -48,7 +48,7 @@ pub mod mesh_renderer {
 pub use camera::{Camera, DEFAULT_VFOV};
 pub use lighting::{AMBIENT, BACKGROUND_COLOR, DIFFUSE_STRENGTH, LIGHT_DIR};
 pub use renderer::{Object, Renderer};
-pub use renderers::{BcfTracer, ComputeTracer, CpuTracer, GlTracer, MeshRenderer};
+pub use renderers::{BcfTracer, ComputeTracer, CpuTracer, GlTracer, MeshRenderer, SkyboxRenderer};
 pub use scenes::create_octa_cube;
 
 // Backward compatibility alias
