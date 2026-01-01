@@ -1,6 +1,7 @@
 use glow::Context;
 use std::sync::Arc;
 use winit::event::WindowEvent;
+use winit::window::CursorGrabMode;
 
 /// Application trait for hot-reloadable game code
 ///
@@ -32,6 +33,17 @@ pub trait App {
     /// Called for each window event (resize, keyboard, mouse, etc.).
     fn event(&mut self, event: &WindowEvent);
 
+    /// Handle raw mouse motion (for infinite mouse movement)
+    ///
+    /// Called when raw mouse motion is detected. This provides infinite
+    /// mouse movement not constrained by window boundaries.
+    ///
+    /// # Arguments
+    /// * `delta` - Raw mouse delta (x, y) in pixels
+    fn mouse_motion(&mut self, _delta: (f64, f64)) {
+        // Default: do nothing
+    }
+
     /// Update game logic
     ///
     /// Called each frame before rendering. Use this for game logic, physics,
@@ -48,6 +60,15 @@ pub trait App {
     /// # Safety
     /// The GL context must be current when this is called.
     unsafe fn render(&mut self, gl: Arc<Context>);
+
+    /// Get the desired cursor grab mode
+    ///
+    /// Called each frame to check if the cursor should be grabbed/hidden.
+    /// Return None to use default behavior (cursor visible and free).
+    /// Return Some((grab_mode, visible)) to control cursor behavior.
+    fn cursor_state(&self) -> Option<(CursorGrabMode, bool)> {
+        None
+    }
 }
 
 /// Function signature for creating a new App instance from the dynamic library
