@@ -7,79 +7,63 @@ use std::sync::Arc;
 use std::time::Instant;
 use winit::event::WindowEvent;
 use winit::keyboard::{KeyCode, PhysicalKey};
-use gilrs::{Gilrs, Button, Axis};
+use winit::window::CursorGrabMode;
+use gilrs::Gilrs;
 
 mod controller;
 use controller::ControllerInput;
 
-/// First-person camera controller
-pub struct FirstPersonCamera {
-    pub position: Vec3,
-    pub orientation: Quat,
+/// Camera control state
+pub struct CameraController {
     pub move_speed: f32,
     pub sensitivity: f32,
     pub mouse_captured: bool,
 }
 
-impl FirstPersonCamera {
-    pub fn new(position: Vec3) -> Self {
+impl CameraController {
+    pub fn new() -> Self {
         Self {
-            position,
-            orientation: Quat::IDENTITY,
             move_speed: 5.0,
             sensitivity: 0.003,
             mouse_captured: false,
         }
     }
 
-    pub fn forward(&self) -> Vec3 {
-        self.orientation * Vec3::NEG_Z
-    }
-
-    pub fn right(&self) -> Vec3 {
-        self.orientation * Vec3::X
-    }
-
-    pub fn forward_xz(&self) -> Vec3 {
-        let fwd = self.forward();
-        Vec3::new(fwd.x, 0.0, fwd.z).normalize_or_zero()
-    }
-
-    pub fn right_xz(&self) -> Vec3 {
-        let rgt = self.right();
-        Vec3::new(rgt.x, 0.0, rgt.z).normalize_or_zero()
-    }
-
-    pub fn handle_mouse_move(&mut self, delta_x: f32, delta_y: f32) {
+    pub fn handle_mouse_move(&mut self, camera: &mut Camera, delta_x: f32, delta_y: f32) {
         if !self.mouse_captured {
             return;
         }
-        self.apply_camera_rotation(delta_x, delta_y);
+
+        // Convert mouse delta to pitch/yaw adjustments
+        let yaw_delta = -delta_x * self.sensitivity;
+        let pitch_delta = -delta_y * self.sensitivity;
+
+        // Update pitch and yaw with clamping
+        camera.yaw += yaw_delta;
+        camera.pitch += pitch_delta;
+
+        // Clamp pitch to prevent gimbal lock
+        const MAX_PITCH: f32 = 89.0 * std::f32::consts::PI / 180.0;
+        camera.pitch = camera.pitch.clamp(-MAX_PITCH, MAX_PITCH);
+
+        // Update rotation from pitch and yaw
+        camera.update_from_pitch_yaw();
     }
 
-    pub fn apply_camera_rotation(&mut self, delta_x: f32, delta_y: f32) {
-        let yaw_rotation = Quat::from_axis_angle(Vec3::Y, -delta_x * self.sensitivity);
-        let pitch_rotation = Quat::from_axis_angle(self.right(), -delta_y * self.sensitivity);
+    pub fn apply_camera_rotation(&mut self, camera: &mut Camera, delta_x: f32, delta_y: f32) {
+        camera.yaw += delta_x;
+        camera.pitch += delta_y;
 
-        self.orientation = yaw_rotation * self.orientation;
-        self.orientation = pitch_rotation * self.orientation;
-        self.orientation = self.orientation.normalize();
+        // Clamp pitch to prevent gimbal lock
+        const MAX_PITCH: f32 = 89.0 * std::f32::consts::PI / 180.0;
+        camera.pitch = camera.pitch.clamp(-MAX_PITCH, MAX_PITCH);
 
-        // Clamp pitch to prevent flipping
-        let fwd = self.forward();
-        let max_pitch = 1.5_f32; // ~86 degrees
-        if fwd.y.abs() > max_pitch.sin() {
-            let yaw = fwd.x.atan2(fwd.z);
-            let pitch = fwd.y.asin().clamp(-max_pitch, max_pitch);
-
-            let yaw_quat = Quat::from_rotation_y(yaw);
-            let pitch_quat = Quat::from_rotation_x(pitch);
-            self.orientation = yaw_quat * pitch_quat;
-        }
+        camera.update_from_pitch_yaw();
     }
 
     pub fn calculate_velocity(
         &self,
+        camera: &Camera,
         forward: bool,
         backward: bool,
         left: bool,
@@ -89,20 +73,23 @@ impl FirstPersonCamera {
     ) -> Vec3 {
         let mut velocity = Vec3::ZERO;
 
-        let fwd = self.forward_xz();
-        let rgt = self.right_xz();
+        // Get forward and right vectors in XZ plane (for movement)
+        let fwd = camera.forward();
+        let fwd_xz = Vec3::new(fwd.x, 0.0, fwd.z).normalize_or_zero();
+        let rgt = camera.right();
+        let rgt_xz = Vec3::new(rgt.x, 0.0, rgt.z).normalize_or_zero();
 
         if forward {
-            velocity += fwd;
+            velocity += fwd_xz;
         }
         if backward {
-            velocity -= fwd;
+            velocity -= fwd_xz;
         }
         if left {
-            velocity -= rgt;
+            velocity -= rgt_xz;
         }
         if right {
-            velocity += rgt;
+            velocity += rgt_xz;
         }
         if up {
             velocity.y += 1.0;
@@ -133,12 +120,13 @@ pub struct RotatingCube {
     // Input state for egui
     pointer_pos: Option<egui::Pos2>,
     mouse_button_events: Vec<(egui::PointerButton, bool)>, // (button, pressed)
-    // First-person camera
-    fps_camera: FirstPersonCamera,
+    // Camera and controller
+    camera: Camera,
+    camera_controller: CameraController,
     // Keyboard input state
     keys_pressed: std::collections::HashSet<KeyCode>,
-    // Mouse delta accumulator
-    mouse_delta: (f32, f32),
+    // Raw mouse delta accumulator (from device events)
+    raw_mouse_delta: (f64, f64),
     // Controller input
     controller: ControllerInput,
     // Gamepad support
@@ -172,9 +160,10 @@ impl RotatingCube {
             last_reload_trigger: None,
             pointer_pos: None,
             mouse_button_events: Vec::new(),
-            fps_camera: FirstPersonCamera::new(Vec3::new(0.0, 2.0, 5.0)),
+            camera: Camera::from_pitch_yaw(Vec3::new(0.0, 2.0, 5.0), 0.0, 0.0),
+            camera_controller: CameraController::new(),
             keys_pressed: std::collections::HashSet::new(),
-            mouse_delta: (0.0, 0.0),
+            raw_mouse_delta: (0.0, 0.0),
             controller: ControllerInput::new(),
             gilrs,
         }
@@ -299,21 +288,11 @@ impl App for RotatingCube {
                 self.window_size = (size.width, size.height);
             }
             WindowEvent::CursorMoved { position, .. } => {
-                // Store pointer position for egui
-                let new_pos = egui::Pos2::new(position.x as f32, position.y as f32);
-
-                // Calculate mouse delta for camera
-                if let Some(old_pos) = self.pointer_pos {
-                    let delta_x = new_pos.x - old_pos.x;
-                    let delta_y = new_pos.y - old_pos.y;
-                    self.mouse_delta = (delta_x, delta_y);
-                }
-
-                self.pointer_pos = Some(new_pos);
+                // Store pointer position for egui only
+                self.pointer_pos = Some(egui::Pos2::new(position.x as f32, position.y as f32));
             }
             WindowEvent::CursorLeft { .. } => {
                 self.pointer_pos = None;
-                self.mouse_delta = (0.0, 0.0);
             }
             WindowEvent::MouseInput { state, button, .. } => {
                 let egui_button = match button {
@@ -328,7 +307,7 @@ impl App for RotatingCube {
 
                 // Right-click to toggle mouse capture for FPS camera
                 if *button == MouseButton::Right && pressed {
-                    self.fps_camera.mouse_captured = !self.fps_camera.mouse_captured;
+                    self.camera_controller.mouse_captured = !self.camera_controller.mouse_captured;
                 }
             }
             WindowEvent::KeyboardInput { event: key_event, .. } => {
@@ -396,19 +375,18 @@ impl App for RotatingCube {
         let (controller_delta_x, controller_delta_y) = self.controller.get_camera_delta(delta_time);
         // Always apply controller input if it exists (no threshold)
         if self.controller.gamepad.right_stick.length() > 0.01 {
-            // Controller delta already includes sensitivity, so apply rotation directly without sensitivity multiplier
-            let yaw_rotation = Quat::from_axis_angle(Vec3::Y, -controller_delta_x);
-            let pitch_rotation = Quat::from_axis_angle(self.fps_camera.right(), controller_delta_y); // Positive for look-up
-
-            self.fps_camera.orientation = yaw_rotation * self.fps_camera.orientation;
-            self.fps_camera.orientation = pitch_rotation * self.fps_camera.orientation;
-            self.fps_camera.orientation = self.fps_camera.orientation.normalize();
+            // Controller delta already includes sensitivity, apply rotation
+            self.camera_controller.apply_camera_rotation(&mut self.camera, -controller_delta_x, controller_delta_y);
         }
 
-        // Handle mouse movement for FPS camera
-        if self.mouse_delta.0.abs() > 0.001 || self.mouse_delta.1.abs() > 0.001 {
-            self.fps_camera.handle_mouse_move(self.mouse_delta.0, self.mouse_delta.1);
-            self.mouse_delta = (0.0, 0.0);
+        // Handle raw mouse movement for FPS camera (from device events)
+        if self.raw_mouse_delta.0.abs() > 0.001 || self.raw_mouse_delta.1.abs() > 0.001 {
+            self.camera_controller.handle_mouse_move(
+                &mut self.camera,
+                self.raw_mouse_delta.0 as f32,
+                self.raw_mouse_delta.1 as f32
+            );
+            self.raw_mouse_delta = (0.0, 0.0);
         }
 
         // Handle keyboard input for FPS camera movement
@@ -424,20 +402,26 @@ impl App for RotatingCube {
         let (controller_x, controller_y_vertical, controller_z) = self.controller.get_movement_input();
 
         // Combine keyboard and controller input
-        let mut total_velocity = self.fps_camera.calculate_velocity(forward, backward, left, right, up, down);
+        let mut total_velocity = self.camera_controller.calculate_velocity(&self.camera, forward, backward, left, right, up, down);
 
         // Add controller movement
         if controller_x.abs() > 0.01 || controller_z.abs() > 0.01 || controller_y_vertical.abs() > 0.01 {
-            let controller_move_dir = self.fps_camera.right_xz() * controller_x + self.fps_camera.forward_xz() * controller_z;
+            // Get camera direction vectors in XZ plane
+            let fwd = self.camera.forward();
+            let fwd_xz = Vec3::new(fwd.x, 0.0, fwd.z).normalize_or_zero();
+            let rgt = self.camera.right();
+            let rgt_xz = Vec3::new(rgt.x, 0.0, rgt.z).normalize_or_zero();
+
+            let controller_move_dir = rgt_xz * controller_x + fwd_xz * controller_z;
             let controller_vel = Vec3::new(
-                controller_move_dir.x * self.fps_camera.move_speed,
-                controller_y_vertical * self.fps_camera.move_speed,
-                controller_move_dir.z * self.fps_camera.move_speed,
+                controller_move_dir.x * self.camera_controller.move_speed,
+                controller_y_vertical * self.camera_controller.move_speed,
+                controller_move_dir.z * self.camera_controller.move_speed,
             );
             total_velocity += controller_vel;
         }
 
-        self.fps_camera.position += total_velocity * delta_time;
+        self.camera.position += total_velocity * delta_time;
     }
 
     unsafe fn render(&mut self, gl: Arc<Context>) {
@@ -445,15 +429,10 @@ impl App for RotatingCube {
         gl.clear_color(0.1, 0.1, 0.1, 1.0);
         gl.clear(COLOR_BUFFER_BIT | DEPTH_BUFFER_BIT);
 
-        // Setup camera from FPS controller
-        let mut camera = Camera::default();
-        camera.position = self.fps_camera.position;
-        camera.rotation = self.fps_camera.orientation;
-
         // Render skybox first (background)
         self.skybox_renderer.render(
             &gl,
-            &camera,
+            &self.camera,
             self.window_size.0 as i32,
             self.window_size.1 as i32,
         );
@@ -470,7 +449,7 @@ impl App for RotatingCube {
                 mesh_index,
                 Vec3::ZERO,    // Position at origin
                 rotation,      // Apply rotation
-                &camera,
+                &self.camera,
                 self.window_size.0 as i32,
                 self.window_size.1 as i32,
             );
@@ -519,8 +498,8 @@ impl App for RotatingCube {
             let rotation_degrees = self.rotation.to_degrees();
             let window_size = self.window_size;
             let last_reload_trigger = self.last_reload_trigger;
-            let camera_pos = self.fps_camera.position;
-            let mouse_captured = self.fps_camera.mouse_captured;
+            let camera_pos = self.camera.position;
+            let mouse_captured = self.camera_controller.mouse_captured;
             let right_stick = self.controller.gamepad.right_stick;
             let left_stick = self.controller.gamepad.left_stick;
             let left_trigger = self.controller.gamepad.left_trigger;
@@ -625,6 +604,24 @@ impl App for RotatingCube {
         // Trigger reload after all borrows are dropped
         if should_trigger_reload {
             self.trigger_reload();
+        }
+    }
+
+    fn cursor_state(&self) -> Option<(CursorGrabMode, bool)> {
+        if self.camera_controller.mouse_captured {
+            // When mouse is captured: grab cursor and hide it
+            Some((CursorGrabMode::Locked, false))
+        } else {
+            // When not captured: free cursor and show it
+            Some((CursorGrabMode::None, true))
+        }
+    }
+
+    fn mouse_motion(&mut self, delta: (f64, f64)) {
+        // Only accumulate raw mouse motion when mouse is captured
+        if self.camera_controller.mouse_captured {
+            self.raw_mouse_delta.0 += delta.0;
+            self.raw_mouse_delta.1 += delta.1;
         }
     }
 }

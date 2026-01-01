@@ -257,6 +257,17 @@ impl ApplicationHandler for AppRuntime {
         self.last_update = Instant::now();
     }
 
+    fn device_event(&mut self, _event_loop: &ActiveEventLoop, _device_id: winit::event::DeviceId, event: winit::event::DeviceEvent) {
+        use winit::event::DeviceEvent;
+
+        // Forward raw mouse motion to game for infinite mouse movement
+        if let DeviceEvent::MouseMotion { delta } = event {
+            if let Some(app) = &mut self.game_app {
+                app.mouse_motion(delta);
+            }
+        }
+    }
+
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _window_id: WindowId, event: WindowEvent) {
         // Forward events to game
         if let Some(app) = &mut self.game_app {
@@ -324,6 +335,25 @@ impl ApplicationHandler for AppRuntime {
 
                     // Update game logic
                     app.update(delta_time);
+
+                    // Apply cursor state changes
+                    if let Some((grab_mode, visible)) = app.cursor_state() {
+                        // Hide or show cursor
+                        window.set_cursor_visible(visible);
+
+                        // Try to grab cursor, fall back to Confined if Locked isn't supported
+                        if let Err(_) = window.set_cursor_grab(grab_mode) {
+                            use winit::window::CursorGrabMode;
+                            // On some platforms, Locked isn't supported, try Confined instead
+                            if matches!(grab_mode, CursorGrabMode::Locked) {
+                                let _ = window.set_cursor_grab(CursorGrabMode::Confined);
+                            }
+                        }
+                    } else {
+                        // Default: cursor visible and not grabbed
+                        window.set_cursor_visible(true);
+                        let _ = window.set_cursor_grab(winit::window::CursorGrabMode::None);
+                    }
 
                     // Render
                     unsafe {
