@@ -930,7 +930,7 @@ float linearDepthToNdc(float linearDepth, float near, float far) {
 
 void main() {
     // Normalized pixel coordinates in [-1, 1] range (NDC)
-    vec2 ndc = (gl_FragCoord.xy - 0.5 * u_resolution) / (0.5 * u_resolution.y);
+    vec2 ndc = (gl_FragCoord.xy - 0.5 * u_resolution) / u_resolution.y;
     float aspect = u_resolution.x / u_resolution.y;
 
     // Camera setup
@@ -948,11 +948,12 @@ void main() {
         right = quat_rotate(u_camera_rot, vec3(1.0, 0.0, 0.0));
         camUp = quat_rotate(u_camera_rot, vec3(0.0, 1.0, 0.0));
     } else {
-        // Use time-based orbiting camera with default 60° vertical FOV
+        // Use time-based orbiting camera (no explicit FOV - matches CPU tracer)
         cameraPos = vec3(3.0 * cos(u_time * 0.3), 2.0, 3.0 * sin(u_time * 0.3));
         vec3 target = vec3(0.0, 0.0, 0.0);
         vec3 up = vec3(0.0, 1.0, 0.0);
-        tan_half_vfov = tan(radians(30.0)); // 60° vfov -> tan(30°)
+        // Note: tan_half_vfov is NOT used for time-based camera mode
+        // The ray direction formula matches CPU tracer: normalize(forward + uv.x * right + uv.y * up)
 
         forward = normalize(target - cameraPos);
         right = normalize(cross(forward, up));
@@ -960,10 +961,15 @@ void main() {
     }
 
     // Create ray using perspective projection
-    // This matches the mesh renderer's perspective_rh projection exactly
     Ray ray;
     ray.origin = cameraPos;
-    ray.direction = normalize(forward + ndc.x * tan_half_vfov * right + ndc.y * tan_half_vfov * camUp);
+    if (u_use_camera) {
+        // Explicit camera mode: use tan_half_vfov for proper perspective projection
+        ray.direction = normalize(forward + ndc.x * tan_half_vfov * right + ndc.y * tan_half_vfov * camUp);
+    } else {
+        // Time-based camera mode: match CPU tracer (no FOV multiplication)
+        ray.direction = normalize(forward + ndc.x * right + ndc.y * camUp);
+    }
 
     // Background color (matches BACKGROUND_COLOR in Rust)
     vec3 color = vec3(0.4, 0.5, 0.6);
@@ -972,10 +978,9 @@ void main() {
     float depth = 1.0;
 
     // Raycast through BCF-encoded octree
-    // The octree internally uses [-1, 1]³ space, but world coordinates are [0, 1]³
-    // Transform ray origin from world space [0, 1]³ to octree space [-1, 1]³
-    vec3 rayOriginLocal = ray.origin * 2.0 - 1.0;
-    HitInfo octreeHit = raycastBcfOctree(rayOriginLocal, ray.direction);
+    // The octree uses [-1, 1]³ space, and raycastBcfOctree handles rays from outside the cube
+    // Pass the ray origin directly (matches CPU tracer which passes camera position to cube::raycast)
+    HitInfo octreeHit = raycastBcfOctree(ray.origin, ray.direction);
 
     if (octreeHit.hit) {
         // Get material color from voxel value (materials 1-7 are animated error materials)
@@ -1003,9 +1008,8 @@ void main() {
         }
 
         // Calculate depth from hit point
-        // Hit point is in octree space [-1, 1]³, convert back to world space
-        vec3 worldHitPoint = (octreeHit.point + 1.0) * 0.5;
-        float linearDepth = length(worldHitPoint - cameraPos);
+        // Hit point and camera are now in the same coordinate space (both untransformed)
+        float linearDepth = length(octreeHit.point - cameraPos);
 
         // Convert to NDC depth using near/far planes
         depth = linearDepthToNdc(linearDepth, u_near, u_far);
