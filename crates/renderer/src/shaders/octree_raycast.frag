@@ -978,10 +978,9 @@ void main() {
     float depth = 1.0;
 
     // Raycast through BCF-encoded octree
-    // The octree internally uses [-1, 1]³ space, but world coordinates are [0, 1]³
-    // Transform ray origin from world space [0, 1]³ to octree space [-1, 1]³
-    vec3 rayOriginLocal = ray.origin * 2.0 - 1.0;
-    HitInfo octreeHit = raycastBcfOctree(rayOriginLocal, ray.direction);
+    // The octree uses [-1, 1]³ space, and raycastBcfOctree handles rays from outside the cube
+    // Pass the ray origin directly (matches CPU tracer which passes camera position to cube::raycast)
+    HitInfo octreeHit = raycastBcfOctree(ray.origin, ray.direction);
 
     if (octreeHit.hit) {
         // Get material color from voxel value (materials 1-7 are animated error materials)
@@ -1009,9 +1008,8 @@ void main() {
         }
 
         // Calculate depth from hit point
-        // Hit point is in octree space [-1, 1]³, convert back to world space
-        vec3 worldHitPoint = (octreeHit.point + 1.0) * 0.5;
-        float linearDepth = length(worldHitPoint - cameraPos);
+        // Hit point and camera are now in the same coordinate space (both untransformed)
+        float linearDepth = length(octreeHit.point - cameraPos);
 
         // Convert to NDC depth using near/far planes
         depth = linearDepthToNdc(linearDepth, u_near, u_far);
