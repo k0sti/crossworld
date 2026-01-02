@@ -1,15 +1,15 @@
 {
   "active": true,
-  "spec": "002-openspec-tasks",
+  "spec": "018-gl-renderer-fix",
   "state": "building",
   "subtasks": {
-    "completed": 15,
-    "total": 16,
+    "completed": 0,
+    "total": 7,
     "in_progress": 1,
     "failed": 0
   },
   "phase": {
-    "current": "Deprecate OpenSpec Changes",
+    "current": "Shader Camera Math Fix",
     "id": null,
     "total": 2
   },
@@ -18,8 +18,8 @@
     "max": 1
   },
   "session": {
-    "number": 8,
-    "started_at": "2025-12-26T20:04:26.317945"
+    "number": 1,
+    "started_at": "2026-01-02T16:25:13.991282"
   },
-  "last_update": "2025-12-26T20:23:29.724077"
+  "last_update": "2026-01-02T16:25:13.994057"
 }
