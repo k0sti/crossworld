@@ -566,7 +566,12 @@ impl GlTracerGl {
             gl.disable(BLEND);
 
             // Clear both color and depth buffers
-            gl.clear_color(0.4, 0.5, 0.6, 1.0);
+            // Background color with gamma correction to match CPU tracer
+            // BACKGROUND_COLOR is (0.4, 0.5, 0.6), gamma corrected: pow(x, 1/2.2)
+            let bg_r = 0.4_f32.powf(1.0 / 2.2);
+            let bg_g = 0.5_f32.powf(1.0 / 2.2);
+            let bg_b = 0.6_f32.powf(1.0 / 2.2);
+            gl.clear_color(bg_r, bg_g, bg_b, 1.0);
             gl.clear(COLOR_BUFFER_BIT | DEPTH_BUFFER_BIT);
 
             gl.use_program(Some(self.program));
