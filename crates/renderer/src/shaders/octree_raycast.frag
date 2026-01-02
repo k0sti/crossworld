@@ -948,11 +948,12 @@ void main() {
         right = quat_rotate(u_camera_rot, vec3(1.0, 0.0, 0.0));
         camUp = quat_rotate(u_camera_rot, vec3(0.0, 1.0, 0.0));
     } else {
-        // Use time-based orbiting camera with default 60° vertical FOV
+        // Use time-based orbiting camera (no explicit FOV - matches CPU tracer)
         cameraPos = vec3(3.0 * cos(u_time * 0.3), 2.0, 3.0 * sin(u_time * 0.3));
         vec3 target = vec3(0.0, 0.0, 0.0);
         vec3 up = vec3(0.0, 1.0, 0.0);
-        tan_half_vfov = tan(radians(30.0)); // 60° vfov -> tan(30°)
+        // Note: tan_half_vfov is NOT used for time-based camera mode
+        // The ray direction formula matches CPU tracer: normalize(forward + uv.x * right + uv.y * up)
 
         forward = normalize(target - cameraPos);
         right = normalize(cross(forward, up));
@@ -960,10 +961,15 @@ void main() {
     }
 
     // Create ray using perspective projection
-    // This matches the mesh renderer's perspective_rh projection exactly
     Ray ray;
     ray.origin = cameraPos;
-    ray.direction = normalize(forward + ndc.x * tan_half_vfov * right + ndc.y * tan_half_vfov * camUp);
+    if (u_use_camera) {
+        // Explicit camera mode: use tan_half_vfov for proper perspective projection
+        ray.direction = normalize(forward + ndc.x * tan_half_vfov * right + ndc.y * tan_half_vfov * camUp);
+    } else {
+        // Time-based camera mode: match CPU tracer (no FOV multiplication)
+        ray.direction = normalize(forward + ndc.x * right + ndc.y * camUp);
+    }
 
     // Background color (matches BACKGROUND_COLOR in Rust)
     vec3 color = vec3(0.4, 0.5, 0.6);
