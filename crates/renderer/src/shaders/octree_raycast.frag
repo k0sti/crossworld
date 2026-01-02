@@ -930,7 +930,7 @@ float linearDepthToNdc(float linearDepth, float near, float far) {
 
 void main() {
     // Normalized pixel coordinates in [-1, 1] range (NDC)
-    vec2 ndc = (gl_FragCoord.xy - 0.5 * u_resolution) / (0.5 * u_resolution.y);
+    vec2 ndc = (gl_FragCoord.xy - 0.5 * u_resolution) / u_resolution.y;
     float aspect = u_resolution.x / u_resolution.y;
 
     // Camera setup
