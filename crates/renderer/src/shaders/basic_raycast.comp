@@ -7,9 +7,11 @@
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
 // Output image (writeonly for compute shader)
-layout(rgba8) uniform writeonly image2D outputImage;
+// binding = 0 corresponds to gl.bind_image_texture(0, ...)
+layout(rgba8, binding = 0) uniform writeonly image2D outputImage;
 // Depth output image (r32f format for high precision depth)
-layout(r32f) uniform writeonly image2D depthImage;
+// binding = 1 corresponds to gl.bind_image_texture(1, ...)
+layout(r32f, binding = 1) uniform writeonly image2D depthImage;
 
 // Uniforms
 uniform vec2 uResolution;      // Screen resolution
@@ -182,15 +184,37 @@ void readBcfNode(uint offset, out uint node_type, out uint value, out uint value
 // ============================================================================
 
 // Decode R2G3B2 color encoding to RGB
+// Encoding: (r << 5) | (g << 2) | b
+// where index = value - 128
 vec3 decodeR2G3B2(int value) {
     int bits = value - 128;
     int r_bits = (bits >> 5) & 3;
     int g_bits = (bits >> 2) & 7;
     int b_bits = bits & 3;
 
-    float r = float(r_bits) / 3.0;
-    float g = float(g_bits) / 7.0;
-    float b = float(b_bits) / 3.0;
+    // Convert to normalized RGB values
+    // Using same mapping as Rust implementation and GL tracer
+    // 2-bit expansion for R and B: value * 255 / 3, then normalize
+    float r = 0.0;
+    if (r_bits == 1) r = 0.333;  // 0x55/255 = 85/255
+    else if (r_bits == 2) r = 0.667;  // 0xAA/255 = 170/255
+    else if (r_bits == 3) r = 1.0;    // 0xFF/255 = 255/255
+
+    // 3-bit expansion for G: value * 255 / 7, then normalize
+    float g = 0.0;
+    if (g_bits == 1) g = 0.141;  // 0x24/255 ≈ 36/255
+    else if (g_bits == 2) g = 0.286;  // 0x49/255 ≈ 73/255
+    else if (g_bits == 3) g = 0.427;  // 0x6D/255 ≈ 109/255
+    else if (g_bits == 4) g = 0.573;  // 0x92/255 ≈ 146/255
+    else if (g_bits == 5) g = 0.714;  // 0xB6/255 ≈ 182/255
+    else if (g_bits == 6) g = 0.859;  // 0xDB/255 ≈ 219/255
+    else if (g_bits == 7) g = 1.0;    // 0xFF/255 = 255/255
+
+    // 2-bit expansion for B (same as R)
+    float b = 0.0;
+    if (b_bits == 1) b = 0.333;  // 0x55/255 = 85/255
+    else if (b_bits == 2) b = 0.667;  // 0xAA/255 = 170/255
+    else if (b_bits == 3) b = 1.0;    // 0xFF/255 = 255/255
 
     return vec3(r, g, b);
 }
@@ -596,6 +620,7 @@ void main() {
             float diffuse = max(dot(hit.normal, LIGHT_DIR), 0.0);
             color = materialColor * (AMBIENT + diffuse * DIFFUSE_STRENGTH);
         }
+
 
         // Calculate depth from hit point
         // Hit point is in octree space [-1, 1]³, convert back to world space
