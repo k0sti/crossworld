@@ -1,6 +1,6 @@
 {
   "sandbox": {
-    "enabled": true,
+    "enabled": false,
     "autoAllowBashIfSandboxed": true
   },
   "permissions": {
@@ -11,7 +11,20 @@
       "Edit(./**)",
       "Glob(./**)",
       "Grep(./**)",
-      "Bash(*)",
+      "Bash(cargo:*)",
+      "Bash(rustc:*)",
+      "Bash(rustfmt:*)",
+      "Bash(clippy-driver:*)",
+      "Bash(rustup:*)",
+      "Bash(just:*)",
+      "Bash(bun:*)",
+      "Bash(git:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(mkdir:*)",
+      "Bash(rm:*)",
+      "Bash(cp:*)",
+      "Bash(mv:*)",
       "mcp__context7__resolve-library-id",
       "mcp__context7__get-library-docs",
       "mcp__graphiti-memory__search_nodes",
