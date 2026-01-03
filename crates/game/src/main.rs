@@ -36,7 +36,7 @@ fn get_lib_name() -> &'static str {
 /// Get the path to the game library
 fn get_lib_path() -> PathBuf {
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    path.pop(); // Go from crates/app to crates
+    path.pop(); // Go from crates/game to crates
     path.pop(); // Go from crates to workspace root
     path.push("target");
     path.push("debug");
@@ -44,27 +44,27 @@ fn get_lib_path() -> PathBuf {
     path
 }
 
-struct AppRuntime {
+struct GameRuntime {
     window: Option<Window>,
     gl_context: Option<glutin::context::PossiblyCurrentContext>,
     gl_surface: Option<glutin::surface::Surface<WindowSurface>>,
     gl: Option<Arc<Context>>,
-    game_lib: Option<Library>,
-    game_app: Option<Box<dyn App>>,
+    app_lib: Option<Library>,
+    app_instance: Option<Box<dyn App>>,
     last_update: Instant,
     file_events: Arc<Mutex<Receiver<std::result::Result<Vec<DebouncedEvent>, notify_debouncer_mini::notify::Error>>>>,
     last_reload_time: Option<Duration>,
 }
 
-impl AppRuntime {
+impl GameRuntime {
     fn new(file_events: Arc<Mutex<Receiver<std::result::Result<Vec<DebouncedEvent>, notify_debouncer_mini::notify::Error>>>>) -> Self {
         Self {
             window: None,
             gl_context: None,
             gl_surface: None,
             gl: None,
-            game_lib: None,
-            game_app: None,
+            app_lib: None,
+            app_instance: None,
             last_update: Instant::now(),
             file_events,
             last_reload_time: None,
@@ -72,22 +72,22 @@ impl AppRuntime {
     }
 }
 
-impl AppRuntime {
-    /// Load the game library and create the app instance
-    unsafe fn load_game(&mut self) {
+impl GameRuntime {
+    /// Load the app library and create the app instance
+    unsafe fn load_app(&mut self) {
         let lib_path = get_lib_path();
 
-        println!("[AppRuntime] Loading game library from: {}", lib_path.display());
+        println!("[GameRuntime] Loading app library from: {}", lib_path.display());
 
         if !lib_path.exists() {
-            eprintln!("[AppRuntime] ERROR: Game library not found at: {}", lib_path.display());
+            eprintln!("[GameRuntime] ERROR: App library not found at: {}", lib_path.display());
             return;
         }
 
         let lib = match Library::new(&lib_path) {
             Ok(lib) => lib,
             Err(e) => {
-                eprintln!("[AppRuntime] ERROR: Failed to load library: {}", e);
+                eprintln!("[GameRuntime] ERROR: Failed to load library: {}", e);
                 return;
             }
         };
@@ -95,14 +95,14 @@ impl AppRuntime {
         let create_app: libloading::Symbol<unsafe extern "C" fn() -> *mut dyn App> = match lib.get(CREATE_APP_SYMBOL) {
             Ok(func) => func,
             Err(e) => {
-                eprintln!("[AppRuntime] ERROR: Failed to find create_app symbol: {}", e);
+                eprintln!("[GameRuntime] ERROR: Failed to find create_app symbol: {}", e);
                 return;
             }
         };
 
         let app_ptr = create_app();
         if app_ptr.is_null() {
-            eprintln!("[AppRuntime] ERROR: create_app returned null");
+            eprintln!("[GameRuntime] ERROR: create_app returned null");
             return;
         }
 
@@ -110,74 +110,74 @@ impl AppRuntime {
 
         // Initialize the app if we have a GL context
         if let Some(gl) = &self.gl {
-            println!("[AppRuntime] Calling app.init()");
+            println!("[GameRuntime] Calling app.init()");
             let mut app = app;
             app.init(Arc::clone(gl));
-            self.game_app = Some(app);
+            self.app_instance = Some(app);
         } else {
-            self.game_app = Some(app);
+            self.app_instance = Some(app);
         }
 
-        self.game_lib = Some(lib);
+        self.app_lib = Some(lib);
 
-        println!("[AppRuntime] Game loaded successfully");
+        println!("[GameRuntime] App loaded successfully");
     }
 
-    /// Unload the current game library
-    unsafe fn unload_game(&mut self) {
-        println!("[AppRuntime] Unloading game library");
+    /// Unload the current app library
+    unsafe fn unload_app(&mut self) {
+        println!("[GameRuntime] Unloading app library");
 
-        if let (Some(mut app), Some(gl)) = (self.game_app.take(), &self.gl) {
-            println!("[AppRuntime] Calling app.uninit()");
+        if let (Some(mut app), Some(gl)) = (self.app_instance.take(), &self.gl) {
+            println!("[GameRuntime] Calling app.uninit()");
             app.uninit(Arc::clone(gl));
             drop(app);
         }
 
-        if let Some(lib) = self.game_lib.take() {
+        if let Some(lib) = self.app_lib.take() {
             drop(lib);
-            println!("[AppRuntime] Game library unloaded");
+            println!("[GameRuntime] App library unloaded");
         }
     }
 
-    /// Reload the game library
-    unsafe fn reload_game(&mut self) {
+    /// Reload the app library
+    unsafe fn reload_app(&mut self) {
         let start_time = Instant::now();
-        println!("[AppRuntime] ⏱️  Hot-reload triggered!");
+        println!("[GameRuntime] ⏱️  Hot-reload triggered!");
 
         // Capture current window size before unloading
         let current_size = self.window.as_ref().map(|w| w.inner_size());
 
-        self.unload_game();
+        self.unload_app();
 
         // Small delay to ensure file is fully written
         std::thread::sleep(Duration::from_millis(50));
 
-        self.load_game();
+        self.load_app();
 
         let reload_time = start_time.elapsed();
         self.last_reload_time = Some(reload_time);
 
         // Send resize event to new app instance to sync window size
-        if let (Some(app), Some(size)) = (self.game_app.as_mut(), current_size) {
+        if let (Some(app), Some(size)) = (self.app_instance.as_mut(), current_size) {
             app.event(&WindowEvent::Resized(size));
         }
 
-        if self.game_app.is_some() {
-            println!("[AppRuntime] ✅ Hot-reload successful in {:.2}ms", reload_time.as_secs_f64() * 1000.0);
+        if self.app_instance.is_some() {
+            println!("[GameRuntime] ✅ Hot-reload successful in {:.2}ms", reload_time.as_secs_f64() * 1000.0);
         } else {
-            eprintln!("[AppRuntime] ❌ Hot-reload failed after {:.2}ms", reload_time.as_secs_f64() * 1000.0);
-            eprintln!("[AppRuntime] Continuing with previous version (if any)");
+            eprintln!("[GameRuntime] ❌ Hot-reload failed after {:.2}ms", reload_time.as_secs_f64() * 1000.0);
+            eprintln!("[GameRuntime] Continuing with previous version (if any)");
         }
     }
 }
 
-impl ApplicationHandler for AppRuntime {
+impl ApplicationHandler for GameRuntime {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.window.is_some() {
             return;
         }
 
-        println!("[AppRuntime] Initializing window and GL context");
+        println!("[GameRuntime] Initializing window and GL context");
 
         let window_attributes = Window::default_attributes()
             .with_title("Hot-Reload Demo - Rotating Cube")
@@ -237,18 +237,18 @@ impl ApplicationHandler for AppRuntime {
             Context::from_loader_function_cstr(|s| gl_display.get_proc_address(s))
         });
 
-        println!("[AppRuntime] OpenGL context created successfully");
+        println!("[GameRuntime] OpenGL context created successfully");
 
         self.window = Some(window);
         self.gl_context = Some(gl_context);
         self.gl_surface = Some(gl_surface);
         self.gl = Some(gl);
 
-        // Load the game library
+        // Load the app library
         unsafe {
-            self.load_game();
-            if self.game_app.is_none() {
-                eprintln!("[AppRuntime] Failed to load game, exiting...");
+            self.load_app();
+            if self.app_instance.is_none() {
+                eprintln!("[GameRuntime] Failed to load app, exiting...");
                 event_loop.exit();
                 return;
             }
@@ -260,25 +260,25 @@ impl ApplicationHandler for AppRuntime {
     fn device_event(&mut self, _event_loop: &ActiveEventLoop, _device_id: winit::event::DeviceId, event: winit::event::DeviceEvent) {
         use winit::event::DeviceEvent;
 
-        // Forward raw mouse motion to game for infinite mouse movement
+        // Forward raw mouse motion to app for infinite mouse movement
         if let DeviceEvent::MouseMotion { delta } = event {
-            if let Some(app) = &mut self.game_app {
+            if let Some(app) = &mut self.app_instance {
                 app.mouse_motion(delta);
             }
         }
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _window_id: WindowId, event: WindowEvent) {
-        // Forward events to game
-        if let Some(app) = &mut self.game_app {
+        // Forward events to app
+        if let Some(app) = &mut self.app_instance {
             app.event(&event);
         }
 
         match event {
             WindowEvent::CloseRequested => {
-                println!("[AppRuntime] Close requested");
+                println!("[GameRuntime] Close requested");
                 unsafe {
-                    self.unload_game();
+                    self.unload_app();
                 }
                 event_loop.exit();
             }
@@ -318,14 +318,14 @@ impl ApplicationHandler for AppRuntime {
 
                 if should_reload {
                     unsafe {
-                        self.reload_game();
+                        self.reload_app();
                     }
                 }
 
                 if let (Some(window), Some(gl), Some(app), Some(gl_context), Some(gl_surface)) = (
                     self.window.as_ref(),
                     self.gl.as_ref(),
-                    self.game_app.as_mut(),
+                    self.app_instance.as_mut(),
                     self.gl_context.as_ref(),
                     self.gl_surface.as_ref(),
                 ) {
@@ -375,19 +375,19 @@ impl ApplicationHandler for AppRuntime {
     }
 }
 
-impl Drop for AppRuntime {
+impl Drop for GameRuntime {
     fn drop(&mut self) {
         unsafe {
-            self.unload_game();
+            self.unload_app();
         }
     }
 }
 
 fn main() {
-    println!("[AppRuntime] Starting hot-reload runtime");
+    println!("[GameRuntime] Starting hot-reload runtime");
 
     let lib_path = get_lib_path();
-    println!("[AppRuntime] Watching for changes: {}", lib_path.display());
+    println!("[GameRuntime] Watching for changes: {}", lib_path.display());
 
     // Setup file watcher for hot-reload
     let (tx, rx) = channel();
@@ -399,7 +399,7 @@ fn main() {
     _debouncer.watcher().watch(watch_dir, RecursiveMode::NonRecursive)
         .expect("Failed to watch directory");
 
-    println!("[AppRuntime] File watcher initialized");
+    println!("[GameRuntime] File watcher initialized");
 
     let file_events = Arc::new(Mutex::new(rx));
 
@@ -415,7 +415,7 @@ fn main() {
 
     event_loop.set_control_flow(ControlFlow::Poll);
 
-    let mut app_runtime = AppRuntime::new(file_events);
+    let mut game_runtime = GameRuntime::new(file_events);
 
-    event_loop.run_app(&mut app_runtime).expect("Event loop error");
+    event_loop.run_app(&mut game_runtime).expect("Event loop error");
 }
