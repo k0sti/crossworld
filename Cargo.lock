@@ -7861,6 +7861,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "testbed"
+version = "0.1.0"
+dependencies = [
+ "app",
+ "crossworld-physics",
+ "cube",
+ "egui 0.29.1",
+ "egui-winit",
+ "egui_glow",
+ "glam 0.29.3",
+ "glow 0.14.2",
+ "glutin",
+ "glutin-winit",
+ "raw-window-handle",
+ "renderer",
+ "winit",
+]
+
+[[package]]
 name = "thiserror"
 version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
