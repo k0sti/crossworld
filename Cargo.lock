@@ -259,12 +259,6 @@ name = "app"
 version = "0.1.0"
 dependencies = [
  "glow 0.14.2",
- "glutin",
- "glutin-winit",
- "libloading",
- "notify",
- "notify-debouncer-mini",
- "raw-window-handle",
  "winit",
 ]
 
@@ -3809,6 +3803,12 @@ dependencies = [
  "gilrs",
  "glam 0.29.3",
  "glow 0.14.2",
+ "glutin",
+ "glutin-winit",
+ "libloading",
+ "notify",
+ "notify-debouncer-mini",
+ "raw-window-handle",
  "renderer",
  "winit",
 ]
