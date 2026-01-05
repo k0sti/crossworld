@@ -190,7 +190,7 @@ game-run:
     @echo "Open another terminal and run: just game-watch"
     @echo ""
     cargo build --package game
-    cargo run --bin app
+    cargo run --bin game
 
 # Watch and auto-rebuild game on changes (Terminal 2)
 game-watch:
