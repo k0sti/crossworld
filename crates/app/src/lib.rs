@@ -1,3 +1,14 @@
+//! Application framework for Crossworld native applications
+//!
+//! This crate provides the core abstractions for building native applications:
+//!
+//! - [`App`] trait: The main interface for application logic
+//! - [`ControllerBackend`] trait: Gamepad input handling
+//!
+//! With the `runtime` feature enabled, additional utilities are available:
+//! - [`AppRunner`]: Window creation and event loop management
+//! - [`EguiIntegration`]: Egui UI rendering integration
+
 use glow::Context;
 use std::sync::Arc;
 use winit::event::WindowEvent;
@@ -6,12 +17,26 @@ use winit::window::CursorGrabMode;
 pub mod controller;
 
 pub use controller::{
-    ControllerBackend, ControllerInfo, ControllerInput, GamepadState,
-    create_controller_backend,
+    create_controller_backend, ControllerBackend, ControllerInfo, ControllerInput, GamepadState,
 };
 
 #[cfg(feature = "gilrs")]
 pub use controller::GilrsBackend;
+
+// Runtime module (requires runtime feature)
+#[cfg(feature = "runtime")]
+mod egui_integration;
+#[cfg(feature = "runtime")]
+mod runner;
+
+#[cfg(feature = "runtime")]
+pub use egui_integration::EguiIntegration;
+#[cfg(feature = "runtime")]
+pub use runner::{create_event_loop, run_app, AppConfig, AppRuntime};
+
+// Re-export egui when runtime feature is enabled
+#[cfg(feature = "runtime")]
+pub use egui;
 
 /// Application trait for hot-reloadable game code
 ///

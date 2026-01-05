@@ -1,7 +1,7 @@
 //! Gilrs-based controller backend implementation
 
 use crate::controller::{ControllerBackend, ControllerInfo, ControllerInput};
-use gilrs::{Gilrs, GamepadId};
+use gilrs::{GamepadId, Gilrs};
 use std::collections::HashMap;
 
 /// Gilrs-based controller backend
@@ -50,9 +50,8 @@ impl GilrsBackend {
         }
 
         // Remove disconnected controllers from the map
-        self.controllers.retain(|id, _| {
-            self.gilrs.gamepad(*id).is_connected()
-        });
+        self.controllers
+            .retain(|id, _| self.gilrs.gamepad(*id).is_connected());
     }
 
     /// Get the gilrs GamepadId for a given enumeration index
