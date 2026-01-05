@@ -1,29 +1,108 @@
 //! 3D shapes with physics - shapes fall onto a ground plane using Rapier physics.
 //!
 //! Based on Bevy's 3d_shapes.rs example but with physics simulation.
+//!
+//! ## Debug Mode
+//!
+//! Use `--debug N` to enable debug mode:
+//! - Enables debug logging
+//! - Runs N frames after physics settles
+//! - Saves last rendered frame to `output/exit_frame.png`
+//!
+//! Example: `cargo run --bin proto-bevy -- --debug 5`
 
 use std::f32::consts::PI;
+use std::path::Path;
+
+use clap::Parser;
 
 #[cfg(not(target_arch = "wasm32"))]
 use bevy::pbr::wireframe::{WireframeConfig, WireframePlugin};
 use bevy::{
+    app::AppExit,
     asset::RenderAssetUsages,
     color::palettes::basic::SILVER,
+    log::LogPlugin,
     prelude::*,
-    render::render_resource::{Extent3d, TextureDimension, TextureFormat},
+    render::{
+        render_resource::{Extent3d, TextureDimension, TextureFormat},
+        view::screenshot::{save_to_disk, Screenshot},
+    },
 };
 use bevy_rapier3d::prelude::*;
 
+/// Proto-Bevy: 3D shapes with physics simulation
+#[derive(Parser, Debug)]
+#[command(name = "proto-bevy")]
+#[command(about = "3D shapes with physics simulation using Bevy and Rapier")]
+struct Args {
+    /// Debug mode: run N frames after startup, save final frame to output/exit_frame.png
+    /// Default is 1 frame when --debug is specified without a value
+    #[arg(long, num_args = 0..=1, default_missing_value = "1")]
+    debug: Option<u32>,
+}
+
+/// Resource to track debug mode state
+#[derive(Resource)]
+struct DebugMode {
+    /// Number of frames to run before exiting
+    frames_to_run: u32,
+    /// Current frame count
+    frame_count: u32,
+    /// Whether screenshot has been triggered
+    screenshot_triggered: bool,
+}
+
+impl DebugMode {
+    fn new(frames: u32) -> Self {
+        Self {
+            frames_to_run: frames,
+            frame_count: 0,
+            screenshot_triggered: false,
+        }
+    }
+}
+
 fn main() {
-    App::new()
-        .add_plugins((
-            DefaultPlugins.set(ImagePlugin::default_nearest()),
-            RapierPhysicsPlugin::<NoUserData>::default(),
-            RapierDebugRenderPlugin::default(),
-            #[cfg(not(target_arch = "wasm32"))]
-            WireframePlugin::default(),
-        ))
-        .add_systems(Startup, setup)
+    let args = Args::parse();
+
+    let mut app = App::new();
+
+    // Configure logging based on debug mode
+    let log_level = if args.debug.is_some() {
+        bevy::log::Level::DEBUG
+    } else {
+        bevy::log::Level::INFO
+    };
+
+    // Build plugins with appropriate log level
+    let default_plugins = DefaultPlugins
+        .set(ImagePlugin::default_nearest())
+        .set(LogPlugin {
+            level: log_level,
+            filter: "wgpu=error,naga=warn".to_string(),
+            ..default()
+        });
+
+    app.add_plugins((
+        default_plugins,
+        RapierPhysicsPlugin::<NoUserData>::default(),
+        RapierDebugRenderPlugin::default(),
+        #[cfg(not(target_arch = "wasm32"))]
+        WireframePlugin::default(),
+    ));
+
+    // Insert debug mode resource if enabled
+    if let Some(frames) = args.debug {
+        info!(
+            "[DEBUG] Debug mode enabled, will run {} frame(s) and save to output/exit_frame.png",
+            frames
+        );
+        app.insert_resource(DebugMode::new(frames));
+        app.add_systems(Update, debug_frame_counter);
+    }
+
+    app.add_systems(Startup, setup)
         .add_systems(
             Update,
             (
@@ -33,6 +112,53 @@ fn main() {
             ),
         )
         .run();
+}
+
+/// System to count frames and exit in debug mode
+fn debug_frame_counter(
+    mut commands: Commands,
+    mut debug_mode: ResMut<DebugMode>,
+    mut exit_writer: MessageWriter<AppExit>,
+) {
+    debug_mode.frame_count += 1;
+    debug!(
+        "[DEBUG] Frame {}/{}",
+        debug_mode.frame_count, debug_mode.frames_to_run
+    );
+
+    // On the last frame, trigger screenshot
+    if debug_mode.frame_count >= debug_mode.frames_to_run && !debug_mode.screenshot_triggered {
+        debug_mode.screenshot_triggered = true;
+
+        // Ensure output directory exists
+        let output_dir = Path::new("output");
+        if !output_dir.exists() {
+            if let Err(e) = std::fs::create_dir_all(output_dir) {
+                error!("[DEBUG] Failed to create output directory: {}", e);
+            }
+        }
+
+        let output_path = "output/exit_frame.png".to_string();
+        info!("[DEBUG] Capturing screenshot to: {}", output_path);
+
+        // Spawn screenshot entity with save observer
+        commands
+            .spawn(Screenshot::primary_window())
+            .observe(save_to_disk(output_path.clone()))
+            .observe(
+                move |_trigger: On<bevy::render::view::screenshot::ScreenshotCaptured>,
+                      mut exit: MessageWriter<AppExit>| {
+                    info!("[DEBUG] Screenshot saved, exiting application");
+                    exit.write(AppExit::Success);
+                },
+            );
+    }
+
+    // Safety timeout - if screenshot hasn't completed after extra frames, exit anyway
+    if debug_mode.frame_count > debug_mode.frames_to_run + 10 {
+        warn!("[DEBUG] Screenshot timeout, forcing exit");
+        exit_writer.write(AppExit::Success);
+    }
 }
 
 /// A marker component for our shapes so we can query them separately from the ground plane
