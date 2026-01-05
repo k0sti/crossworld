@@ -5,22 +5,23 @@ rustflags = ["--cfg=web_sys_unstable_apis"]
 rustflags = ["--cfg=web_sys_unstable_apis", "--cfg=getrandom_backend=\"wasm_js\""]
 
 # Linux-specific optimizations - use mold for fast linking
-# Note: Uncomment below if clang and mold are installed
-# [target.x86_64-unknown-linux-gnu]
-# linker = "clang"
-# rustflags = ["-C", "link-arg=-fuse-ld=mold"]
+# Note: Requires clang and mold (available in nix develop shell)
+[target.x86_64-unknown-linux-gnu]
+linker = "clang"
+rustflags = ["-C", "link-arg=-fuse-ld=mold"]
 
 # Enable unstable features (requires nightly for cranelift)
 [unstable]
 codegen-backend = true
 
-# Fast debug builds profile
-# Usage: cargo build --profile fast-dev
+# Fast debug builds profile with cranelift backend
+# Usage: cargo +nightly build --profile fast-dev
 [profile.fast-dev]
 inherits = "dev"
 opt-level = 1              # Minimal optimizations for speed
 debug = true               # Keep debug info
 incremental = true         # Enable incremental compilation
+codegen-backend = "cranelift"
 
 # Development profile tweaks
 [profile.dev]
@@ -28,6 +29,12 @@ opt-level = 0              # No optimizations
 debug = true               # Full debug info
 incremental = true         # Incremental compilation
 codegen-units = 256        # Maximize parallel codegen
+
+# Development profile with cranelift for faster compilation
+# Usage: cargo +nightly build --profile dev-cranelift
+[profile.dev-cranelift]
+inherits = "dev"
+codegen-backend = "cranelift"
 
 # Release profile optimizations
 [profile.release]
