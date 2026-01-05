@@ -15,7 +15,6 @@
 //! Example: `cargo run --bin proto -- --debug 5`
 
 use std::f32::consts::PI;
-use std::path::Path;
 
 use clap::Parser;
 
@@ -181,6 +180,13 @@ fn main() {
     app.init_resource::<RaycastHitInfo>();
 
     let debug_mode = DebugMode::new(args.debug);
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        app.insert_resource(WireframeConfig {
+            global: debug_mode.enabled,
+            default_color: Color::srgb(0.0, 1.0, 0.0),
+        });
+    }
     if debug_mode.enabled {
         info!(
             "[DEBUG] Running {} frames ({} warmup + {})",
@@ -188,13 +194,6 @@ fn main() {
             RENDER_WARMUP_FRAMES,
             debug_mode.frames_after_warmup
         );
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            app.insert_resource(WireframeConfig {
-                global: true,
-                default_color: Color::srgb(0.0, 1.0, 0.0),
-            });
-        }
     }
     app.insert_resource(debug_mode);
 
@@ -227,13 +226,12 @@ fn debug_frame_counter(
     if debug_mode.frame_count >= total && !debug_mode.screenshot_triggered {
         debug_mode.screenshot_triggered = true;
 
-        let output_dir = Path::new("output");
-        if !output_dir.exists() && let Err(e) = std::fs::create_dir_all(output_dir) {
+        if let Err(e) = std::fs::create_dir_all("output") {
             error!("[DEBUG] Failed to create output directory: {}", e);
         }
 
-        let output_path = "output/exit_frame.png".to_string();
-        info!("[DEBUG] Capturing screenshot to: {}", output_path);
+        let output_path = std::path::PathBuf::from("output/exit_frame.png");
+        info!("[DEBUG] Capturing screenshot to: {:?}", output_path);
 
         commands
             .spawn(Screenshot::primary_window())
@@ -265,46 +263,54 @@ fn setup(
         ..default()
     });
 
+    // Bevy default primitive sizes:
+    // Cuboid: half_size = 0.5 (1x1x1 box)
+    // Sphere: radius = 0.5
+    // Capsule3d: radius = 0.25, half_length = 0.5 (total height = 1.5)
+    // Cylinder: radius = 0.5, half_height = 0.5 (total height = 1.0)
+    // Cone: radius = 0.5, height = 1.0
+    // Torus: minor_radius = 0.25, major_radius = 0.75
+    // Tetrahedron: edge length ~1.73 (vertices at distance 1.0 from center)
+    // ConicalFrustum: radius_top = 0.25, radius_bottom = 0.5, height = 0.5
     let shape_data: Vec<(Handle<Mesh>, Collider, &str)> = vec![
         (meshes.add(Cuboid::default()), Collider::cuboid(0.5, 0.5, 0.5), "Cuboid"),
         (
             meshes.add(Tetrahedron::default()),
-            Collider::convex_hull(&[
-                Vec3::new(-0.5, -0.289, -0.289),
-                Vec3::new(0.5, -0.289, -0.289),
-                Vec3::new(0.0, -0.289, 0.577),
-                Vec3::new(0.0, 0.577, 0.0),
-            ])
-            .unwrap_or_else(|| Collider::ball(0.5)),
+            create_tetrahedron_collider(),
             "Tetrahedron",
         ),
-        (meshes.add(Capsule3d::default()), Collider::capsule_y(0.5, 0.5), "Capsule3d"),
+        // Capsule3d: radius=0.25, half_length=0.5 → capsule_y(half_segment, radius)
+        (meshes.add(Capsule3d::default()), Collider::capsule_y(0.5, 0.25), "Capsule3d"),
         (meshes.add(Torus::default()), create_torus_collider(0.75, 0.25, 16), "Torus"),
         (meshes.add(Cylinder::default()), Collider::cylinder(0.5, 0.5), "Cylinder"),
+        // Cone: height=1.0 means half_height=0.5
         (meshes.add(Cone::default()), Collider::cone(0.5, 0.5), "Cone"),
-        (meshes.add(ConicalFrustum::default()), create_frustum_collider(0.5, 0.25, 0.5, 12), "ConicalFrustum"),
+        (meshes.add(ConicalFrustum::default()), create_frustum_collider(0.5, 0.25, 0.25, 12), "ConicalFrustum"),
         (meshes.add(Sphere::default().mesh().ico(5).unwrap()), Collider::ball(0.5), "Icosphere"),
         (meshes.add(Sphere::default().mesh().uv(32, 18)), Collider::ball(0.5), "UVSphere"),
     ];
 
+    // 2D shape defaults for extrusions:
+    // Rectangle: half_size = (0.5, 0.5)
+    // Capsule2d: radius = 0.25, half_length = 0.5
+    // Annulus: inner_radius = 0.25, outer_radius = 0.5
+    // Circle: radius = 0.5
+    // Ellipse: half_size = (0.5, 0.25)
+    // RegularPolygon: circumradius = 0.5, 6 sides
+    // Triangle2d: default equilateral with circumradius ~0.58
     let extrusion_data: Vec<(Handle<Mesh>, Collider, &str)> = vec![
         (meshes.add(Extrusion::new(Rectangle::default(), 1.)), Collider::cuboid(0.5, 0.5, 0.5), "RectExtrusion"),
-        (meshes.add(Extrusion::new(Capsule2d::default(), 1.)), Collider::capsule_z(0.5, 0.5), "CapsuleExtrusion"),
+        // Capsule2d extruded: radius=0.25, half_length=0.5, depth=0.5
+        (meshes.add(Extrusion::new(Capsule2d::default(), 1.)), Collider::capsule_z(0.5, 0.25), "CapsuleExtrusion"),
+        // Annulus: approximate with cylinder at outer radius
         (meshes.add(Extrusion::new(Annulus::default(), 1.)), Collider::cylinder(0.5, 0.5), "AnnulusExtrusion"),
         (meshes.add(Extrusion::new(Circle::default(), 1.)), Collider::cylinder(0.5, 0.5), "CircleExtrusion"),
+        // Ellipse: half_size = (0.5, 0.25)
         (meshes.add(Extrusion::new(Ellipse::default(), 1.)), create_ellipse_extrusion_collider(0.5, 0.25, 0.5, 12), "EllipseExtrusion"),
         (meshes.add(Extrusion::new(RegularPolygon::default(), 1.)), create_polygon_extrusion_collider(0.5, 6, 0.5), "PolygonExtrusion"),
         (
             meshes.add(Extrusion::new(Triangle2d::default(), 1.)),
-            Collider::convex_hull(&[
-                Vec3::new(-0.5, -0.289, -0.5),
-                Vec3::new(0.5, -0.289, -0.5),
-                Vec3::new(0.0, 0.577, -0.5),
-                Vec3::new(-0.5, -0.289, 0.5),
-                Vec3::new(0.5, -0.289, 0.5),
-                Vec3::new(0.0, 0.577, 0.5),
-            ])
-            .unwrap_or_else(|| Collider::cuboid(0.5, 0.5, 0.5)),
+            create_triangle_extrusion_collider(0.5),
             "TriangleExtrusion",
         ),
     ];
@@ -397,6 +403,18 @@ fn setup(
     ));
 }
 
+fn create_tetrahedron_collider() -> Collider {
+    // Bevy's Tetrahedron::default() vertices (regular tetrahedron)
+    let a = 1.0 / 3.0_f32.sqrt();
+    Collider::convex_hull(&[
+        Vec3::new(0.0, a, 0.0),
+        Vec3::new(-0.5, -a / 2.0, a * 0.866),
+        Vec3::new(-0.5, -a / 2.0, -a * 0.866),
+        Vec3::new(1.0, -a / 2.0, 0.0),
+    ])
+    .unwrap_or_else(|| Collider::ball(0.5))
+}
+
 fn create_torus_collider(major_radius: f32, minor_radius: f32, segments: usize) -> Collider {
     let mut points = Vec::with_capacity(segments * 4);
     for i in 0..segments {
@@ -447,6 +465,20 @@ fn create_polygon_extrusion_collider(radius: f32, sides: usize, half_depth: f32)
         points.push(Vec3::new(x, y, half_depth));
     }
     Collider::convex_hull(&points).unwrap_or_else(|| Collider::cylinder(half_depth, radius))
+}
+
+fn create_triangle_extrusion_collider(half_depth: f32) -> Collider {
+    // Triangle2d::default() is equilateral with vertices at:
+    // top: (0, 0.5), bottom-left: (-0.5, -0.5), bottom-right: (0.5, -0.5)
+    Collider::convex_hull(&[
+        Vec3::new(0.0, 0.5, -half_depth),
+        Vec3::new(-0.5, -0.5, -half_depth),
+        Vec3::new(0.5, -0.5, -half_depth),
+        Vec3::new(0.0, 0.5, half_depth),
+        Vec3::new(-0.5, -0.5, half_depth),
+        Vec3::new(0.5, -0.5, half_depth),
+    ])
+    .unwrap_or_else(|| Collider::cuboid(0.5, 0.5, half_depth))
 }
 
 fn uv_debug_texture() -> Image {
@@ -512,7 +544,8 @@ fn mouse_look(
     mouse_motion: Res<AccumulatedMouseMotion>,
     mut query: Query<(&mut Transform, &mut FirstPersonCamera)>,
 ) {
-    if !mouse_button.pressed(MouseButton::Right) {
+    // Skip the first frame when button is pressed to avoid jump from accumulated motion
+    if !mouse_button.pressed(MouseButton::Right) || mouse_button.just_pressed(MouseButton::Right) {
         return;
     }
     let delta = mouse_motion.delta;
