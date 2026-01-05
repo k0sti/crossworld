@@ -42,11 +42,15 @@ struct Args {
     debug: Option<u32>,
 }
 
+/// Minimum frames needed for render pipeline to initialize (shader compilation, etc.)
+/// Bevy's pipelined rendering needs several frames for the render world to catch up
+const RENDER_WARMUP_FRAMES: u32 = 10;
+
 /// Resource to track debug mode state
 #[derive(Resource)]
 struct DebugMode {
-    /// Number of frames to run before exiting
-    frames_to_run: u32,
+    /// Number of frames to run after warmup before exiting
+    frames_after_warmup: u32,
     /// Current frame count
     frame_count: u32,
     /// Whether screenshot has been triggered
@@ -56,10 +60,15 @@ struct DebugMode {
 impl DebugMode {
     fn new(frames: u32) -> Self {
         Self {
-            frames_to_run: frames,
+            frames_after_warmup: frames,
             frame_count: 0,
             screenshot_triggered: false,
         }
+    }
+
+    /// Total frames needed: warmup + user-specified frames
+    fn total_frames(&self) -> u32 {
+        RENDER_WARMUP_FRAMES + self.frames_after_warmup
     }
 }
 
@@ -94,11 +103,14 @@ fn main() {
 
     // Insert debug mode resource if enabled
     if let Some(frames) = args.debug {
+        let debug_mode = DebugMode::new(frames);
         info!(
-            "[DEBUG] Debug mode enabled, will run {} frame(s) and save to output/exit_frame.png",
+            "[DEBUG] Debug mode enabled, will run {} frame(s) ({} warmup + {} user) and save to output/exit_frame.png",
+            debug_mode.total_frames(),
+            RENDER_WARMUP_FRAMES,
             frames
         );
-        app.insert_resource(DebugMode::new(frames));
+        app.insert_resource(debug_mode);
         app.add_systems(Update, debug_frame_counter);
     }
 
@@ -121,13 +133,14 @@ fn debug_frame_counter(
     mut exit_writer: MessageWriter<AppExit>,
 ) {
     debug_mode.frame_count += 1;
+    let total = debug_mode.total_frames();
     debug!(
         "[DEBUG] Frame {}/{}",
-        debug_mode.frame_count, debug_mode.frames_to_run
+        debug_mode.frame_count, total
     );
 
     // On the last frame, trigger screenshot
-    if debug_mode.frame_count >= debug_mode.frames_to_run && !debug_mode.screenshot_triggered {
+    if debug_mode.frame_count >= total && !debug_mode.screenshot_triggered {
         debug_mode.screenshot_triggered = true;
 
         // Ensure output directory exists
@@ -155,7 +168,7 @@ fn debug_frame_counter(
     }
 
     // Safety timeout - if screenshot hasn't completed after extra frames, exit anyway
-    if debug_mode.frame_count > debug_mode.frames_to_run + 10 {
+    if debug_mode.frame_count > debug_mode.total_frames() + 10 {
         warn!("[DEBUG] Screenshot timeout, forcing exit");
         exit_writer.write(AppExit::Success);
     }
