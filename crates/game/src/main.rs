@@ -1,5 +1,13 @@
-use app::{App, CREATE_APP_SYMBOL};
-use glow::*;
+//! Hot-reload runtime for the game library
+//!
+//! This binary watches the game library for changes and hot-reloads it.
+
+use app::{
+    create_controller_backend, App, ControllerBackend, CursorMode, FrameContext,
+    InputState, CREATE_APP_SYMBOL,
+};
+use glam::Vec2;
+use glow::{Context, HasContext};
 use glutin::config::ConfigTemplateBuilder;
 use glutin::context::{ContextApi, ContextAttributesBuilder, Version};
 use glutin::display::GetGlDisplay;
@@ -14,9 +22,10 @@ use std::sync::mpsc::{channel, Receiver};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use winit::application::ApplicationHandler;
-use winit::event::WindowEvent;
+use winit::event::{ElementState, MouseButton, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
-use winit::window::{Window, WindowId};
+use winit::keyboard::PhysicalKey;
+use winit::window::{CursorGrabMode, Window, WindowId};
 
 #[cfg(target_os = "linux")]
 use winit::platform::x11::EventLoopBuilderExtX11;
@@ -51,13 +60,48 @@ struct GameRuntime {
     gl: Option<Arc<Context>>,
     app_lib: Option<Library>,
     app_instance: Option<Box<dyn App>>,
+
+    // Timing
+    start_time: Instant,
     last_update: Instant,
-    file_events: Arc<Mutex<Receiver<std::result::Result<Vec<DebouncedEvent>, notify_debouncer_mini::notify::Error>>>>,
+    frame_count: u64,
+
+    // Input state
+    input_state: InputState,
+    last_mouse_pos: Option<Vec2>,
+
+    // Controller backend
+    controller_backend: Option<Box<dyn ControllerBackend>>,
+
+    // Egui integration
+    egui: Option<app::EguiIntegration>,
+
+    // File watching
+    file_events: Arc<
+        Mutex<
+            Receiver<
+                std::result::Result<Vec<DebouncedEvent>, notify_debouncer_mini::notify::Error>,
+            >,
+        >,
+    >,
     last_reload_time: Option<Duration>,
 }
 
 impl GameRuntime {
-    fn new(file_events: Arc<Mutex<Receiver<std::result::Result<Vec<DebouncedEvent>, notify_debouncer_mini::notify::Error>>>>) -> Self {
+    fn new(
+        file_events: Arc<
+            Mutex<
+                Receiver<
+                    std::result::Result<
+                        Vec<DebouncedEvent>,
+                        notify_debouncer_mini::notify::Error,
+                    >,
+                >,
+            >,
+        >,
+    ) -> Self {
+        let controller_backend = create_controller_backend();
+
         Self {
             window: None,
             gl_context: None,
@@ -65,10 +109,23 @@ impl GameRuntime {
             gl: None,
             app_lib: None,
             app_instance: None,
+            start_time: Instant::now(),
             last_update: Instant::now(),
+            frame_count: 0,
+            input_state: InputState::default(),
+            last_mouse_pos: None,
+            controller_backend,
+            egui: None,
             file_events,
             last_reload_time: None,
         }
+    }
+
+    /// Reset per-frame input deltas
+    fn reset_frame_deltas(&mut self) {
+        self.input_state.mouse_delta = Vec2::ZERO;
+        self.input_state.raw_mouse_delta = Vec2::ZERO;
+        self.input_state.scroll_delta = Vec2::ZERO;
     }
 }
 
@@ -77,10 +134,16 @@ impl GameRuntime {
     unsafe fn load_app(&mut self) {
         let lib_path = get_lib_path();
 
-        println!("[GameRuntime] Loading app library from: {}", lib_path.display());
+        println!(
+            "[GameRuntime] Loading app library from: {}",
+            lib_path.display()
+        );
 
         if !lib_path.exists() {
-            eprintln!("[GameRuntime] ERROR: App library not found at: {}", lib_path.display());
+            eprintln!(
+                "[GameRuntime] ERROR: App library not found at: {}",
+                lib_path.display()
+            );
             return;
         }
 
@@ -92,13 +155,17 @@ impl GameRuntime {
             }
         };
 
-        let create_app: libloading::Symbol<unsafe extern "C" fn() -> *mut dyn App> = match lib.get(CREATE_APP_SYMBOL) {
-            Ok(func) => func,
-            Err(e) => {
-                eprintln!("[GameRuntime] ERROR: Failed to find create_app symbol: {}", e);
-                return;
-            }
-        };
+        let create_app: libloading::Symbol<unsafe extern "C" fn() -> *mut dyn App> =
+            match lib.get(CREATE_APP_SYMBOL) {
+                Ok(func) => func,
+                Err(e) => {
+                    eprintln!(
+                        "[GameRuntime] ERROR: Failed to find create_app symbol: {}",
+                        e
+                    );
+                    return;
+                }
+            };
 
         let app_ptr = create_app();
         if app_ptr.is_null() {
@@ -106,18 +173,24 @@ impl GameRuntime {
             return;
         }
 
-        let app = Box::from_raw(app_ptr);
+        let mut app = Box::from_raw(app_ptr);
 
         // Initialize the app if we have a GL context
-        if let Some(gl) = &self.gl {
+        if let (Some(window), Some(gl)) = (self.window.as_ref(), self.gl.as_ref()) {
             println!("[GameRuntime] Calling app.init()");
-            let mut app = app;
-            app.init(Arc::clone(gl));
-            self.app_instance = Some(app);
-        } else {
-            self.app_instance = Some(app);
+            let size = window.inner_size();
+            let ctx = FrameContext {
+                gl,
+                window,
+                delta_time: 0.0,
+                elapsed: 0.0,
+                frame: 0,
+                size: (size.width, size.height),
+            };
+            app.init(&ctx);
         }
 
+        self.app_instance = Some(app);
         self.app_lib = Some(lib);
 
         println!("[GameRuntime] App loaded successfully");
@@ -127,9 +200,20 @@ impl GameRuntime {
     unsafe fn unload_app(&mut self) {
         println!("[GameRuntime] Unloading app library");
 
-        if let (Some(mut app), Some(gl)) = (self.app_instance.take(), &self.gl) {
-            println!("[GameRuntime] Calling app.uninit()");
-            app.uninit(Arc::clone(gl));
+        if let (Some(mut app), Some(window), Some(gl)) =
+            (self.app_instance.take(), self.window.as_ref(), self.gl.as_ref())
+        {
+            println!("[GameRuntime] Calling app.shutdown()");
+            let size = window.inner_size();
+            let ctx = FrameContext {
+                gl,
+                window,
+                delta_time: 0.0,
+                elapsed: self.start_time.elapsed().as_secs_f32(),
+                frame: self.frame_count,
+                size: (size.width, size.height),
+            };
+            app.shutdown(&ctx);
             drop(app);
         }
 
@@ -142,7 +226,7 @@ impl GameRuntime {
     /// Reload the app library
     unsafe fn reload_app(&mut self) {
         let start_time = Instant::now();
-        println!("[GameRuntime] ⏱️  Hot-reload triggered!");
+        println!("[GameRuntime] Hot-reload triggered!");
 
         // Capture current window size before unloading
         let current_size = self.window.as_ref().map(|w| w.inner_size());
@@ -159,13 +243,19 @@ impl GameRuntime {
 
         // Send resize event to new app instance to sync window size
         if let (Some(app), Some(size)) = (self.app_instance.as_mut(), current_size) {
-            app.event(&WindowEvent::Resized(size));
+            app.on_event(&WindowEvent::Resized(size));
         }
 
         if self.app_instance.is_some() {
-            println!("[GameRuntime] ✅ Hot-reload successful in {:.2}ms", reload_time.as_secs_f64() * 1000.0);
+            println!(
+                "[GameRuntime] Hot-reload successful in {:.2}ms",
+                reload_time.as_secs_f64() * 1000.0
+            );
         } else {
-            eprintln!("[GameRuntime] ❌ Hot-reload failed after {:.2}ms", reload_time.as_secs_f64() * 1000.0);
+            eprintln!(
+                "[GameRuntime] Hot-reload failed after {:.2}ms",
+                reload_time.as_secs_f64() * 1000.0
+            );
             eprintln!("[GameRuntime] Continuing with previous version (if any)");
         }
     }
@@ -187,7 +277,8 @@ impl ApplicationHandler for GameRuntime {
             .with_alpha_size(8)
             .with_transparency(false);
 
-        let display_builder = DisplayBuilder::new().with_window_attributes(Some(window_attributes));
+        let display_builder =
+            DisplayBuilder::new().with_window_attributes(Some(window_attributes));
 
         let (window, gl_config) = display_builder
             .build(event_loop, template, |configs| {
@@ -239,10 +330,15 @@ impl ApplicationHandler for GameRuntime {
 
         println!("[GameRuntime] OpenGL context created successfully");
 
+        // Initialize egui integration
+        let egui = unsafe { app::EguiIntegration::new(&window, Arc::clone(&gl)) };
+
         self.window = Some(window);
         self.gl_context = Some(gl_context);
         self.gl_surface = Some(gl_surface);
         self.gl = Some(gl);
+        self.egui = Some(egui);
+        self.start_time = Instant::now();
 
         // Load the app library
         unsafe {
@@ -257,21 +353,84 @@ impl ApplicationHandler for GameRuntime {
         self.last_update = Instant::now();
     }
 
-    fn device_event(&mut self, _event_loop: &ActiveEventLoop, _device_id: winit::event::DeviceId, event: winit::event::DeviceEvent) {
+    fn device_event(
+        &mut self,
+        _event_loop: &ActiveEventLoop,
+        _device_id: winit::event::DeviceId,
+        event: winit::event::DeviceEvent,
+    ) {
         use winit::event::DeviceEvent;
 
-        // Forward raw mouse motion to app for infinite mouse movement
+        // Accumulate raw mouse motion for FPS camera
         if let DeviceEvent::MouseMotion { delta } = event {
-            if let Some(app) = &mut self.app_instance {
-                app.mouse_motion(delta);
-            }
+            self.input_state.raw_mouse_delta.x += delta.0 as f32;
+            self.input_state.raw_mouse_delta.y += delta.1 as f32;
         }
     }
 
-    fn window_event(&mut self, event_loop: &ActiveEventLoop, _window_id: WindowId, event: WindowEvent) {
-        // Forward events to app
+    fn window_event(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        _window_id: WindowId,
+        event: WindowEvent,
+    ) {
+        // Let egui handle events first
+        if let (Some(window), Some(egui)) = (self.window.as_ref(), self.egui.as_mut()) {
+            if egui.on_window_event(window, &event) {
+                return;
+            }
+        }
+
+        // Process input events into InputState
+        match &event {
+            WindowEvent::CursorMoved { position, .. } => {
+                let new_pos = Vec2::new(position.x as f32, position.y as f32);
+                if let Some(last_pos) = self.last_mouse_pos {
+                    self.input_state.mouse_delta = new_pos - last_pos;
+                }
+                self.last_mouse_pos = Some(new_pos);
+                self.input_state.mouse_pos = Some(new_pos);
+            }
+            WindowEvent::CursorLeft { .. } => {
+                self.input_state.mouse_pos = None;
+                self.last_mouse_pos = None;
+            }
+            WindowEvent::MouseInput { state, button, .. } => {
+                let pressed = *state == ElementState::Pressed;
+                match button {
+                    MouseButton::Left => self.input_state.mouse_buttons.left = pressed,
+                    MouseButton::Right => self.input_state.mouse_buttons.right = pressed,
+                    MouseButton::Middle => self.input_state.mouse_buttons.middle = pressed,
+                    _ => {}
+                }
+            }
+            WindowEvent::MouseWheel { delta, .. } => {
+                let scroll = match delta {
+                    winit::event::MouseScrollDelta::LineDelta(x, y) => Vec2::new(*x, *y),
+                    winit::event::MouseScrollDelta::PixelDelta(pos) => {
+                        Vec2::new(pos.x as f32, pos.y as f32) / 10.0
+                    }
+                };
+                self.input_state.scroll_delta += scroll;
+            }
+            WindowEvent::KeyboardInput { event, .. } => {
+                if let PhysicalKey::Code(keycode) = event.physical_key {
+                    match event.state {
+                        ElementState::Pressed => {
+                            self.input_state.keys.insert(keycode);
+                        }
+                        ElementState::Released => {
+                            self.input_state.keys.remove(&keycode);
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+
+        // Let app handle remaining events
         if let Some(app) = &mut self.app_instance {
-            app.event(&event);
+            app.on_event(&event);
         }
 
         match event {
@@ -306,7 +465,10 @@ impl ApplicationHandler for GameRuntime {
                             if let Ok(events) = events_result {
                                 for event in events {
                                     if event.path == lib_path {
-                                        println!("[FileWatcher] Detected change: {}", event.path.display());
+                                        println!(
+                                            "[FileWatcher] Detected change: {}",
+                                            event.path.display()
+                                        );
                                         needs_reload = true;
                                     }
                                 }
@@ -322,46 +484,96 @@ impl ApplicationHandler for GameRuntime {
                     }
                 }
 
-                if let (Some(window), Some(gl), Some(app), Some(gl_context), Some(gl_surface)) = (
+                if let (
+                    Some(window),
+                    Some(gl),
+                    Some(app),
+                    Some(gl_context),
+                    Some(gl_surface),
+                ) = (
                     self.window.as_ref(),
                     self.gl.as_ref(),
                     self.app_instance.as_mut(),
                     self.gl_context.as_ref(),
                     self.gl_surface.as_ref(),
                 ) {
+                    // Calculate timing
                     let now = Instant::now();
                     let delta_time = (now - self.last_update).as_secs_f32();
                     self.last_update = now;
+                    let elapsed = self.start_time.elapsed().as_secs_f32();
+                    let size = window.inner_size();
 
-                    // Update game logic
-                    app.update(delta_time);
+                    // Poll controller backend
+                    if let Some(backend) = &mut self.controller_backend {
+                        backend.poll();
+                        if let Some(controller) = backend.get_first_controller() {
+                            self.input_state.gamepad = Some(controller.gamepad.clone());
+                        } else {
+                            self.input_state.gamepad = None;
+                        }
+                    }
 
-                    // Apply cursor state changes
-                    if let Some((grab_mode, visible)) = app.cursor_state() {
-                        // Hide or show cursor
-                        window.set_cursor_visible(visible);
+                    // Build frame context
+                    let ctx = FrameContext {
+                        gl,
+                        window,
+                        delta_time,
+                        elapsed,
+                        frame: self.frame_count,
+                        size: (size.width, size.height),
+                    };
 
-                        // Try to grab cursor, fall back to Confined if Locked isn't supported
-                        if let Err(_) = window.set_cursor_grab(grab_mode) {
-                            use winit::window::CursorGrabMode;
-                            // On some platforms, Locked isn't supported, try Confined instead
-                            if matches!(grab_mode, CursorGrabMode::Locked) {
+                    // Update app logic
+                    app.update(&ctx, &self.input_state);
+
+                    // Get cursor mode before we borrow app mutably for UI
+                    let cursor_mode = app.cursor_mode();
+
+                    // Render app
+                    app.render(&ctx);
+
+                    // Apply cursor mode
+                    match cursor_mode {
+                        CursorMode::Normal => {
+                            window.set_cursor_visible(true);
+                            let _ = window.set_cursor_grab(CursorGrabMode::None);
+                        }
+                        CursorMode::Hidden => {
+                            window.set_cursor_visible(false);
+                            let _ = window.set_cursor_grab(CursorGrabMode::None);
+                        }
+                        CursorMode::Grabbed => {
+                            window.set_cursor_visible(false);
+                            if window.set_cursor_grab(CursorGrabMode::Locked).is_err() {
                                 let _ = window.set_cursor_grab(CursorGrabMode::Confined);
                             }
                         }
-                    } else {
-                        // Default: cursor visible and not grabbed
-                        window.set_cursor_visible(true);
-                        let _ = window.set_cursor_grab(winit::window::CursorGrabMode::None);
                     }
 
-                    // Render
-                    unsafe {
-                        app.render(Arc::clone(gl));
+                    // Render egui UI
+                    if let Some(egui) = &mut self.egui {
+                        unsafe {
+                            gl.disable(glow::DEPTH_TEST);
+                            gl.enable(glow::BLEND);
+                            gl.blend_func(glow::SRC_ALPHA, glow::ONE_MINUS_SRC_ALPHA);
+                        }
+
+                        egui.run(window, [size.width, size.height], |egui_ctx| {
+                            app.ui(&ctx, egui_ctx);
+                        });
+
+                        unsafe {
+                            gl.enable(glow::DEPTH_TEST);
+                            gl.disable(glow::BLEND);
+                        }
                     }
 
                     gl_surface.swap_buffers(gl_context).unwrap();
                     window.request_redraw();
+
+                    self.frame_count += 1;
+                    self.reset_frame_deltas();
                 }
             }
             _ => (),
@@ -387,16 +599,21 @@ fn main() {
     println!("[GameRuntime] Starting hot-reload runtime");
 
     let lib_path = get_lib_path();
-    println!("[GameRuntime] Watching for changes: {}", lib_path.display());
+    println!(
+        "[GameRuntime] Watching for changes: {}",
+        lib_path.display()
+    );
 
     // Setup file watcher for hot-reload
     let (tx, rx) = channel();
-    let mut _debouncer = new_debouncer(Duration::from_millis(100), tx)
-        .expect("Failed to create file watcher");
+    let mut _debouncer =
+        new_debouncer(Duration::from_millis(100), tx).expect("Failed to create file watcher");
 
     // Watch the parent directory (watching the file directly doesn't work well with atomic writes)
     let watch_dir = lib_path.parent().unwrap();
-    _debouncer.watcher().watch(watch_dir, RecursiveMode::NonRecursive)
+    _debouncer
+        .watcher()
+        .watch(watch_dir, RecursiveMode::NonRecursive)
         .expect("Failed to watch directory");
 
     println!("[GameRuntime] File watcher initialized");
@@ -417,5 +634,7 @@ fn main() {
 
     let mut game_runtime = GameRuntime::new(file_events);
 
-    event_loop.run_app(&mut game_runtime).expect("Event loop error");
+    event_loop
+        .run_app(&mut game_runtime)
+        .expect("Event loop error");
 }

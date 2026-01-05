@@ -4,22 +4,18 @@
 //! - Left: Simple flat ground using cuboid collider
 //! - Right: Flat ground constructed from Cube objects using terrain collider
 
-use app::App;
+use app::{App, FrameContext, InputState};
 use crossworld_physics::{
     create_box_collider,
     rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder},
     CubeObject, PhysicsWorld, VoxelColliderBuilder,
 };
 use cube::Cube;
-use egui;
-use egui_glow::Painter;
-use glam::{Quat, Vec3};
+use glam::{Quat, Vec2, Vec3};
 use glow::{Context, HasContext, COLOR_BUFFER_BIT, DEPTH_BUFFER_BIT, SCISSOR_TEST};
 use renderer::{Camera, MeshRenderer, OrbitController, OrbitControllerConfig};
 use std::rc::Rc;
-use std::sync::Arc;
 use std::time::Instant;
-use winit::event::WindowEvent;
 
 /// Physics state for display
 #[derive(Default, Clone)]
@@ -52,13 +48,6 @@ pub struct PhysicsScene {
 
 /// Physics testbed application
 pub struct PhysicsTestbed {
-    // GL context
-    gl: Option<Arc<Context>>,
-
-    // Egui integration (created during init)
-    egui_ctx: Option<egui::Context>,
-    egui_painter: Option<Painter>,
-
     // Rendering
     mesh_renderer: MeshRenderer,
     camera: Camera,
@@ -70,26 +59,17 @@ pub struct PhysicsTestbed {
 
     // Cubes for rendering
     ground_cube: Option<Rc<Cube<u8>>>,
+    #[allow(dead_code)]
     falling_cube: Option<Rc<Cube<u8>>>,
-
-    // Window info
-    window_size: (u32, u32),
 
     // UI state
     reset_requested: bool,
-
-    // Input state for egui (manual input handling)
-    pointer_pos: Option<egui::Pos2>,
-    pointer_delta: egui::Vec2,
-    scroll_delta: egui::Vec2,
-    pointer_button_pressed: bool,
 
     // Timing
     frame_count: u64,
     debug_frames: Option<u64>,
     physics_dt: f32,
     last_physics_update: Instant,
-    start_time: Instant,
 }
 
 impl Default for PhysicsTestbed {
@@ -114,9 +94,6 @@ impl PhysicsTestbed {
         };
 
         Self {
-            gl: None,
-            egui_ctx: None,
-            egui_painter: None,
             mesh_renderer: MeshRenderer::new(),
             camera: Camera::look_at(camera_position, camera_target, Vec3::Y),
             orbit_controller: OrbitController::new(camera_target, orbit_config),
@@ -124,17 +101,11 @@ impl PhysicsTestbed {
             right_scene: None,
             ground_cube: None,
             falling_cube: None,
-            window_size: (1200, 700),
             reset_requested: false,
-            pointer_pos: None,
-            pointer_delta: egui::Vec2::ZERO,
-            scroll_delta: egui::Vec2::ZERO,
-            pointer_button_pressed: false,
             frame_count: 0,
             debug_frames: None,
             physics_dt: 1.0 / 60.0,
             last_physics_update: Instant::now(),
-            start_time: Instant::now(),
         }
     }
 
@@ -196,21 +167,23 @@ impl PhysicsTestbed {
     }
 
     /// Reset physics scenes to initial state
-    fn reset_scenes(&mut self) {
+    ///
+    /// # Safety
+    /// The GL context must be current when this is called.
+    unsafe fn reset_scenes(&mut self, gl: &Context) {
         if let Some(ground_cube) = self.ground_cube.clone() {
             self.left_scene = Some(self.create_cuboid_ground_scene());
             self.right_scene = Some(self.create_terrain_ground_scene(&ground_cube));
 
             // Re-upload meshes
-            if let Some(gl) = self.gl.clone() {
-                unsafe {
-                    self.upload_meshes(&gl);
-                }
-            }
+            self.upload_meshes(gl);
         }
     }
 
     /// Upload meshes for rendering
+    ///
+    /// # Safety
+    /// The GL context must be current when this is called.
     unsafe fn upload_meshes(&mut self, gl: &Context) {
         // Create ground cube - a solid cube (green-ish color)
         let ground_cube = Rc::new(Cube::Solid(156u8));
@@ -352,7 +325,7 @@ impl PhysicsTestbed {
     }
 
     /// Render a scene to the given viewport
-    unsafe fn render_scene(
+    fn render_scene(
         gl: &Context,
         scene: &PhysicsScene,
         mesh_renderer: &MeshRenderer,
@@ -364,14 +337,16 @@ impl PhysicsTestbed {
         viewport_height: i32,
         x_offset: f32,
     ) {
-        // Set viewport and scissor
-        gl.viewport(viewport_x, viewport_y, viewport_width, viewport_height);
-        gl.scissor(viewport_x, viewport_y, viewport_width, viewport_height);
-        gl.enable(SCISSOR_TEST);
+        unsafe {
+            // Set viewport and scissor
+            gl.viewport(viewport_x, viewport_y, viewport_width, viewport_height);
+            gl.scissor(viewport_x, viewport_y, viewport_width, viewport_height);
+            gl.enable(SCISSOR_TEST);
 
-        // Clear this viewport with dark background
-        gl.clear_color(0.12, 0.12, 0.18, 1.0);
-        gl.clear(COLOR_BUFFER_BIT | DEPTH_BUFFER_BIT);
+            // Clear this viewport with dark background
+            gl.clear_color(0.12, 0.12, 0.18, 1.0);
+            gl.clear(COLOR_BUFFER_BIT | DEPTH_BUFFER_BIT);
+        }
 
         // Create camera for this scene with offset position
         let offset_position = camera.position + Vec3::new(x_offset, 0.0, 0.0);
@@ -381,18 +356,20 @@ impl PhysicsTestbed {
         // Render ground cube
         if let Some(ground_idx) = scene.ground_mesh_index {
             let ground_pos = Vec3::new(x_offset, -0.25, 0.0);
-            mesh_renderer.render_mesh_with_options(
-                gl,
-                ground_idx,
-                ground_pos,
-                Quat::IDENTITY,
-                0.5,
-                Vec3::ONE,
-                false,
-                &scene_camera,
-                viewport_width,
-                viewport_height,
-            );
+            unsafe {
+                mesh_renderer.render_mesh_with_options(
+                    gl,
+                    ground_idx,
+                    ground_pos,
+                    Quat::IDENTITY,
+                    0.5,
+                    Vec3::ONE,
+                    false,
+                    &scene_camera,
+                    viewport_width,
+                    viewport_height,
+                );
+            }
         }
 
         // Render falling cube
@@ -400,19 +377,23 @@ impl PhysicsTestbed {
             let falling_pos =
                 scene.falling_object.position(&scene.world) + Vec3::new(x_offset, 0.0, 0.0);
             let falling_rot = scene.falling_object.rotation(&scene.world);
-            mesh_renderer.render_mesh_with_scale(
-                gl,
-                falling_idx,
-                falling_pos,
-                falling_rot,
-                0.8,
-                &scene_camera,
-                viewport_width,
-                viewport_height,
-            );
+            unsafe {
+                mesh_renderer.render_mesh_with_scale(
+                    gl,
+                    falling_idx,
+                    falling_pos,
+                    falling_rot,
+                    0.8,
+                    &scene_camera,
+                    viewport_width,
+                    viewport_height,
+                );
+            }
         }
 
-        gl.disable(SCISSOR_TEST);
+        unsafe {
+            gl.disable(SCISSOR_TEST);
+        }
     }
 
     fn check_debug_exit(&mut self) -> bool {
@@ -443,23 +424,28 @@ impl PhysicsTestbed {
         }
         false
     }
+
+    /// Handle orbit camera input from egui response
+    fn handle_orbit_input(&mut self, input: &InputState) {
+        // Handle camera orbit with left mouse drag
+        if input.mouse_buttons.left && input.mouse_delta.length() > 0.0 {
+            let delta = input.mouse_delta * self.orbit_controller.config.mouse_sensitivity;
+            self.orbit_controller.rotate(delta.x, delta.y, &mut self.camera);
+        }
+
+        // Handle zoom with scroll
+        if input.scroll_delta.y.abs() > 0.0 {
+            self.orbit_controller.zoom(input.scroll_delta.y * self.orbit_controller.config.zoom_sensitivity, &mut self.camera);
+        }
+    }
 }
 
 impl App for PhysicsTestbed {
-    unsafe fn init(&mut self, gl: Arc<Context>) {
+    fn init(&mut self, ctx: &FrameContext) {
         println!("[Testbed] Initializing physics testbed");
 
-        self.gl = Some(Arc::clone(&gl));
-
-        // Initialize egui
-        let egui_ctx = egui::Context::default();
-        let egui_painter =
-            Painter::new(Arc::clone(&gl), "", None, false).expect("Failed to create egui painter");
-        self.egui_ctx = Some(egui_ctx);
-        self.egui_painter = Some(egui_painter);
-
         // Initialize mesh renderer
-        if let Err(e) = self.mesh_renderer.init_gl(&gl) {
+        if let Err(e) = unsafe { self.mesh_renderer.init_gl(ctx.gl) } {
             eprintln!("[Testbed] Failed to initialize mesh renderer: {}", e);
         }
 
@@ -471,10 +457,9 @@ impl App for PhysicsTestbed {
         self.right_scene = Some(self.create_terrain_ground_scene(&ground_cube));
 
         // Upload meshes
-        self.upload_meshes(&gl);
+        unsafe { self.upload_meshes(ctx.gl) };
 
         self.last_physics_update = Instant::now();
-        self.start_time = Instant::now();
 
         println!("[Testbed] Physics scenes initialized");
         println!("  Left:  Simple cuboid ground collider");
@@ -484,52 +469,19 @@ impl App for PhysicsTestbed {
         }
     }
 
-    unsafe fn uninit(&mut self, gl: Arc<Context>) {
+    fn shutdown(&mut self, ctx: &FrameContext) {
         println!("[Testbed] Cleaning up");
-        self.mesh_renderer.destroy_gl(&gl);
-        if let Some(mut painter) = self.egui_painter.take() {
-            painter.destroy();
-        }
-        self.egui_ctx = None;
-        self.gl = None;
+        unsafe { self.mesh_renderer.destroy_gl(ctx.gl) };
     }
 
-    fn event(&mut self, event: &WindowEvent) {
-        use winit::event::{ElementState, MouseButton, MouseScrollDelta};
-
-        match event {
-            WindowEvent::Resized(size) => {
-                self.window_size = (size.width, size.height);
-            }
-            WindowEvent::CursorMoved { position, .. } => {
-                let new_pos = egui::Pos2::new(position.x as f32, position.y as f32);
-                if let Some(old_pos) = self.pointer_pos {
-                    self.pointer_delta = new_pos - old_pos;
-                }
-                self.pointer_pos = Some(new_pos);
-            }
-            WindowEvent::MouseInput { state, button, .. } => {
-                if *button == MouseButton::Left {
-                    self.pointer_button_pressed = *state == ElementState::Pressed;
-                }
-            }
-            WindowEvent::MouseWheel { delta, .. } => match delta {
-                MouseScrollDelta::LineDelta(x, y) => {
-                    self.scroll_delta = egui::Vec2::new(*x * 10.0, *y * 10.0);
-                }
-                MouseScrollDelta::PixelDelta(pos) => {
-                    self.scroll_delta = egui::Vec2::new(pos.x as f32, pos.y as f32);
-                }
-            },
-            _ => {}
-        }
-    }
-
-    fn update(&mut self, _delta_time: f32) {
+    fn update(&mut self, ctx: &FrameContext, input: &InputState) {
         // Check debug frame limit
         if self.check_debug_exit() {
             return;
         }
+
+        // Handle orbit camera
+        self.handle_orbit_input(input);
 
         // Step physics
         self.step_physics();
@@ -540,15 +492,15 @@ impl App for PhysicsTestbed {
         // Handle reset after the frame
         if self.reset_requested {
             self.reset_requested = false;
-            self.reset_scenes();
+            unsafe { self.reset_scenes(ctx.gl) };
         }
 
         self.frame_count += 1;
     }
 
-    unsafe fn render(&mut self, gl: Arc<Context>) {
-        let width = self.window_size.0 as i32;
-        let height = self.window_size.1 as i32;
+    fn render(&mut self, ctx: &FrameContext) {
+        let width = ctx.size.0 as i32;
+        let height = ctx.size.1 as i32;
 
         // Reserve space for top bar
         let top_bar_height = 40;
@@ -557,9 +509,11 @@ impl App for PhysicsTestbed {
         let half_width = width / 2;
 
         // Clear the entire window first
-        gl.viewport(0, 0, width, height);
-        gl.clear_color(0.1, 0.1, 0.1, 1.0);
-        gl.clear(COLOR_BUFFER_BIT | DEPTH_BUFFER_BIT);
+        unsafe {
+            ctx.gl.viewport(0, 0, width, height);
+            ctx.gl.clear_color(0.1, 0.1, 0.1, 1.0);
+            ctx.gl.clear(COLOR_BUFFER_BIT | DEPTH_BUFFER_BIT);
+        }
 
         // Get camera target for consistent rendering
         let camera_target = self.orbit_controller.target;
@@ -567,7 +521,7 @@ impl App for PhysicsTestbed {
         // Render left scene (cuboid ground)
         if let Some(scene) = &self.left_scene {
             Self::render_scene(
-                &gl,
+                ctx.gl,
                 scene,
                 &self.mesh_renderer,
                 &self.camera,
@@ -583,7 +537,7 @@ impl App for PhysicsTestbed {
         // Render right scene (terrain ground)
         if let Some(scene) = &self.right_scene {
             Self::render_scene(
-                &gl,
+                ctx.gl,
                 scene,
                 &self.mesh_renderer,
                 &self.camera,
@@ -597,172 +551,105 @@ impl App for PhysicsTestbed {
         }
 
         // Draw divider line between viewports
-        gl.viewport(0, 0, width, height);
-        gl.scissor(half_width - 1, 0, 2, render_height);
-        gl.enable(SCISSOR_TEST);
-        gl.clear_color(0.4, 0.4, 0.4, 1.0);
-        gl.clear(COLOR_BUFFER_BIT);
-        gl.disable(SCISSOR_TEST);
+        unsafe {
+            ctx.gl.viewport(0, 0, width, height);
+            ctx.gl.scissor(half_width - 1, 0, 2, render_height);
+            ctx.gl.enable(SCISSOR_TEST);
+            ctx.gl.clear_color(0.4, 0.4, 0.4, 1.0);
+            ctx.gl.clear(COLOR_BUFFER_BIT);
+            ctx.gl.disable(SCISSOR_TEST);
+        }
+    }
 
-        // Render egui UI
-        if let Some(egui_ctx) = &self.egui_ctx {
-            // Prepare egui state for rendering
-            let left_state_text = self
-                .left_scene
-                .as_ref()
-                .map(|s| format!("Cuboid: {}", s.state.format_compact()))
-                .unwrap_or_else(|| "Cuboid: N/A".to_string());
-            let right_state_text = self
-                .right_scene
-                .as_ref()
-                .map(|s| format!("Terrain: {}", s.state.format_compact()))
-                .unwrap_or_else(|| "Terrain: N/A".to_string());
-            let frame_count = self.frame_count;
-            let label_height_f = label_height as f32;
+    fn ui(&mut self, ctx: &FrameContext, egui_ctx: &egui::Context) {
+        let left_state_text = self
+            .left_scene
+            .as_ref()
+            .map(|s| format!("Cuboid: {}", s.state.format_compact()))
+            .unwrap_or_else(|| "Cuboid: N/A".to_string());
+        let right_state_text = self
+            .right_scene
+            .as_ref()
+            .map(|s| format!("Terrain: {}", s.state.format_compact()))
+            .unwrap_or_else(|| "Terrain: N/A".to_string());
+        let frame_count = self.frame_count;
+        let label_height_f = 25.0;
 
-            // Build raw input manually
-            let elapsed = self.start_time.elapsed().as_secs_f64();
-            let mut raw_input = egui::RawInput {
-                screen_rect: Some(egui::Rect::from_min_size(
-                    egui::Pos2::ZERO,
-                    egui::vec2(self.window_size.0 as f32, self.window_size.1 as f32),
-                )),
-                time: Some(elapsed),
-                predicted_dt: 1.0 / 60.0,
-                ..Default::default()
-            };
+        // Top bar with dropdown
+        egui::TopBottomPanel::top("top_panel").show(egui_ctx, |ui| {
+            ui.horizontal(|ui| {
+                ui.heading("Physics Testbed");
+                ui.separator();
+                ui.label("Setup: Single Falling Cube");
+                ui.separator();
 
-            // Add pointer events
-            if let Some(pos) = self.pointer_pos {
-                raw_input.events.push(egui::Event::PointerMoved(pos));
-                if self.pointer_button_pressed {
-                    raw_input.events.push(egui::Event::PointerButton {
-                        pos,
-                        button: egui::PointerButton::Primary,
-                        pressed: true,
-                        modifiers: egui::Modifiers::default(),
-                    });
+                if ui.button("Reset").clicked() {
+                    self.reset_requested = true;
                 }
-            }
 
-            // Add scroll via MouseWheel event
-            if self.scroll_delta != egui::Vec2::ZERO {
-                raw_input.events.push(egui::Event::MouseWheel {
-                    unit: egui::MouseWheelUnit::Point,
-                    delta: self.scroll_delta,
-                    modifiers: egui::Modifiers::default(),
-                });
-                self.scroll_delta = egui::Vec2::ZERO;
-            }
+                ui.separator();
+                ui.label(format!("Frame: {}", frame_count));
+            });
+        });
 
-            let full_output = egui_ctx.run(raw_input, |ctx| {
-                // Top bar with dropdown
-                egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.heading("Physics Testbed");
-                        ui.separator();
-                        ui.label("Setup: Single Falling Cube");
-                        ui.separator();
+        // Physics state labels above viewports
+        egui::TopBottomPanel::bottom("state_panel")
+            .frame(egui::Frame::none().fill(egui::Color32::from_gray(30)))
+            .show(egui_ctx, |ui| {
+                ui.set_height(label_height_f);
+                ui.horizontal(|ui| {
+                    let available_width = ui.available_width();
+                    let half = available_width / 2.0;
 
-                        if ui.button("Reset").clicked() {
-                            self.reset_requested = true;
-                        }
-
-                        ui.separator();
-                        ui.label(format!("Frame: {}", frame_count));
-                    });
-                });
-
-                // Physics state labels above viewports
-                egui::TopBottomPanel::bottom("state_panel")
-                    .frame(egui::Frame::none().fill(egui::Color32::from_gray(30)))
-                    .show(ctx, |ui| {
-                        ui.set_height(label_height_f);
-                        ui.horizontal(|ui| {
-                            let available_width = ui.available_width();
-                            let half = available_width / 2.0;
-
-                            // Left scene state
-                            ui.allocate_ui_with_layout(
-                                egui::vec2(half - 5.0, label_height_f),
-                                egui::Layout::left_to_right(egui::Align::Center),
-                                |ui| {
-                                    ui.label(
-                                        egui::RichText::new(&left_state_text)
-                                            .monospace()
-                                            .color(egui::Color32::LIGHT_GREEN),
-                                    );
-                                },
+                    // Left scene state
+                    ui.allocate_ui_with_layout(
+                        egui::vec2(half - 5.0, label_height_f),
+                        egui::Layout::left_to_right(egui::Align::Center),
+                        |ui| {
+                            ui.label(
+                                egui::RichText::new(&left_state_text)
+                                    .monospace()
+                                    .color(egui::Color32::LIGHT_GREEN),
                             );
+                        },
+                    );
 
-                            ui.separator();
+                    ui.separator();
 
-                            // Right scene state
-                            ui.allocate_ui_with_layout(
-                                egui::vec2(half - 5.0, label_height_f),
-                                egui::Layout::left_to_right(egui::Align::Center),
-                                |ui| {
-                                    ui.label(
-                                        egui::RichText::new(&right_state_text)
-                                            .monospace()
-                                            .color(egui::Color32::LIGHT_BLUE),
-                                    );
-                                },
+                    // Right scene state
+                    ui.allocate_ui_with_layout(
+                        egui::vec2(half - 5.0, label_height_f),
+                        egui::Layout::left_to_right(egui::Align::Center),
+                        |ui| {
+                            ui.label(
+                                egui::RichText::new(&right_state_text)
+                                    .monospace()
+                                    .color(egui::Color32::LIGHT_BLUE),
                             );
-                        });
-                    });
-
-                // Central panel for camera control
-                egui::CentralPanel::default()
-                    .frame(egui::Frame::none())
-                    .show(ctx, |ui| {
-                        let rect = ui.available_rect_before_wrap();
-                        let response = ui.allocate_rect(rect, egui::Sense::drag());
-
-                        // Handle camera orbit and zoom
-                        self.orbit_controller
-                            .handle_response(&response, &mut self.camera);
-
-                        // Show hint
-                        let hint_rect = egui::Rect::from_min_size(
-                            egui::pos2(rect.min.x + 5.0, rect.max.y - 20.0),
-                            egui::vec2(300.0, 20.0),
-                        );
-                        ui.painter().text(
-                            hint_rect.min,
-                            egui::Align2::LEFT_TOP,
-                            "(Drag: orbit, Scroll: zoom)",
-                            egui::FontId::proportional(12.0),
-                            egui::Color32::from_gray(120),
-                        );
-                    });
+                        },
+                    );
+                });
             });
 
-            // Paint egui
-            if let Some(egui_painter) = &mut self.egui_painter {
-                // Upload textures
-                for (id, image_delta) in &full_output.textures_delta.set {
-                    egui_painter.set_texture(*id, image_delta);
-                }
+        // Central panel for camera control hint
+        egui::CentralPanel::default()
+            .frame(egui::Frame::none())
+            .show(egui_ctx, |ui| {
+                let rect = ui.available_rect_before_wrap();
 
-                let clipped_primitives =
-                    egui_ctx.tessellate(full_output.shapes, full_output.pixels_per_point);
-
-                egui_painter.paint_primitives(
-                    [self.window_size.0, self.window_size.1],
-                    full_output.pixels_per_point,
-                    &clipped_primitives,
+                // Show hint at bottom
+                let hint_rect = egui::Rect::from_min_size(
+                    egui::pos2(rect.min.x + 5.0, rect.max.y - 20.0),
+                    egui::vec2(300.0, 20.0),
                 );
-
-                // Free old textures
-                for id in &full_output.textures_delta.free {
-                    egui_painter.free_texture(*id);
-                }
-            }
-        }
-
-        // Reset pointer delta for next frame
-        self.pointer_delta = egui::Vec2::ZERO;
+                ui.painter().text(
+                    hint_rect.min,
+                    egui::Align2::LEFT_TOP,
+                    "(Drag: orbit, Scroll: zoom)",
+                    egui::FontId::proportional(12.0),
+                    egui::Color32::from_gray(120),
+                );
+            });
     }
 }
 

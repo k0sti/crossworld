@@ -108,4 +108,21 @@ impl OrbitController {
     pub fn set_target(&mut self, target: Vec3) {
         self.target = target;
     }
+
+    /// Apply rotation directly (for non-egui use cases)
+    ///
+    /// # Arguments
+    /// * `yaw_delta` - Horizontal rotation in radians
+    /// * `pitch_delta` - Vertical rotation in radians
+    pub fn rotate(&self, yaw_delta: f32, pitch_delta: f32, camera: &mut Camera) {
+        camera.orbit(self.target, yaw_delta, pitch_delta);
+    }
+
+    /// Apply zoom directly (for non-egui use cases)
+    ///
+    /// # Arguments
+    /// * `zoom_delta` - Zoom amount (positive = closer, negative = farther)
+    pub fn zoom(&self, zoom_delta: f32, camera: &mut Camera) {
+        self.apply_zoom(camera, zoom_delta);
+    }
 }
