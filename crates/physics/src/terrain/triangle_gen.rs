@@ -57,6 +57,7 @@ pub fn face_to_triangle(face: &FaceInfo, tri_idx: u8, world_size: f32) -> Triang
 }
 
 /// Compute the AABB for a triangle
+#[allow(dead_code)]
 pub fn triangle_aabb(tri: &Triangle) -> Aabb {
     let min = tri.a.coords.inf(&tri.b.coords).inf(&tri.c.coords);
     let max = tri.a.coords.sup(&tri.b.coords).sup(&tri.c.coords);
