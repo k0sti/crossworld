@@ -3,10 +3,6 @@ name = "proto-bevy"
 version = "0.1.0"
 edition = "2024"
 
-[[bin]]
-name = "proto"
-path = "src/main.rs"
-
 [dependencies]
 bevy = { version = "0.17", default-features = false, features = [
     "dynamic_linking",

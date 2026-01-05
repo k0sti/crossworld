@@ -1,4 +1,7 @@
 [build]
+# Share build artifacts. Good for worktrees.
+rustc-wrapper = "sccache"
+
 rustflags = ["--cfg=web_sys_unstable_apis"]
 
 [target.wasm32-unknown-unknown]
@@ -51,3 +54,4 @@ inherits = "release"
 lto = "fat"                # Full LTO for maximum optimization
 codegen-units = 1
 strip = true
+
