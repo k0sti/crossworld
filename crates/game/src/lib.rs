@@ -1,13 +1,10 @@
-use app::{App, ControllerBackend, create_controller_backend};
+use app::{App, CursorMode, FrameContext, InputState};
 // Hot-reload trigger: 1767203552400
 use glam::{Quat, Vec3};
 use glow::*;
 use renderer::{Camera, MeshRenderer, SkyboxRenderer};
-use std::sync::Arc;
 use std::time::Instant;
-use winit::event::WindowEvent;
-use winit::keyboard::{KeyCode, PhysicalKey};
-use winit::window::CursorGrabMode;
+use winit::keyboard::KeyCode;
 
 /// Camera control state
 pub struct CameraController {
@@ -107,49 +104,24 @@ pub struct RotatingCube {
     skybox_renderer: SkyboxRenderer,
     mesh_index: Option<usize>,
     rotation: f32,
-    window_size: (u32, u32),
-    gl: Option<Arc<Context>>,
-    egui_ctx: Option<egui::Context>,
-    egui_painter: Option<egui_glow::Painter>,
     start_time: Instant,
     last_reload_trigger: Option<Instant>,
-    // Input state for egui
-    pointer_pos: Option<egui::Pos2>,
-    mouse_button_events: Vec<(egui::PointerButton, bool)>, // (button, pressed)
     // Camera and controller
     camera: Camera,
     camera_controller: CameraController,
-    // Keyboard input state
-    keys_pressed: std::collections::HashSet<KeyCode>,
-    // Raw mouse delta accumulator (from device events)
-    raw_mouse_delta: (f64, f64),
-    // Controller backend
-    controller_backend: Option<Box<dyn ControllerBackend>>,
 }
 
 impl RotatingCube {
     pub fn new() -> Self {
-        // Initialize controller backend
-        let controller_backend = create_controller_backend();
-
         Self {
             mesh_renderer: MeshRenderer::new(),
             skybox_renderer: SkyboxRenderer::new(),
             mesh_index: None,
             rotation: 0.0,
-            window_size: (800, 600),
-            gl: None,
-            egui_ctx: None,
-            egui_painter: None,
             start_time: Instant::now(),
             last_reload_trigger: None,
-            pointer_pos: None,
-            mouse_button_events: Vec::new(),
             camera: Camera::from_pitch_yaw(Vec3::new(0.0, 2.0, 5.0), 0.0, 0.0),
             camera_controller: CameraController::new(),
-            keys_pressed: std::collections::HashSet::new(),
-            raw_mouse_delta: (0.0, 0.0),
-            controller_backend,
         }
     }
 
@@ -188,173 +160,119 @@ impl RotatingCube {
             match fs::write(&src_path, content) {
                 Ok(_) => {
                     self.last_reload_trigger = Some(Instant::now());
-                    println!("[Game] 🔄 Triggered hot-reload by modifying source file (timestamp: {})", timestamp);
+                    println!("[Game] Triggered hot-reload by modifying source file (timestamp: {})", timestamp);
                 }
                 Err(e) => {
-                    eprintln!("[Game] ❌ Failed to write source file: {}", e);
+                    eprintln!("[Game] Failed to write source file: {}", e);
                 }
             }
         } else {
-            eprintln!("[Game] ❌ Failed to read source file");
+            eprintln!("[Game] Failed to read source file");
         }
     }
 }
 
 impl App for RotatingCube {
-    unsafe fn init(&mut self, gl: Arc<Context>) {
+    fn init(&mut self, ctx: &FrameContext) {
         println!("[Game] Initializing rotating cube with MeshRenderer");
 
-        // Store GL context
-        self.gl = Some(Arc::clone(&gl));
+        unsafe {
+            // Initialize skybox renderer
+            self.skybox_renderer
+                .init_gl(ctx.gl)
+                .expect("Failed to initialize SkyboxRenderer");
 
-        // Initialize skybox renderer
-        self.skybox_renderer
-            .init_gl(&gl)
-            .expect("Failed to initialize SkyboxRenderer");
+            // Initialize mesh renderer
+            self.mesh_renderer
+                .init_gl(ctx.gl)
+                .expect("Failed to initialize MeshRenderer");
 
-        // Initialize mesh renderer
-        self.mesh_renderer
-            .init_gl(&gl)
-            .expect("Failed to initialize MeshRenderer");
+            // Create a simple colored cube scene
+            let cube = renderer::create_octa_cube();
 
-        // Create a simple colored cube scene
-        let cube = renderer::create_octa_cube();
+            // Upload mesh to GPU (depth 1 since octa_cube is a simple 2x2x2 octree)
+            let mesh_index = self
+                .mesh_renderer
+                .upload_mesh(ctx.gl, &cube, 1)
+                .expect("Failed to upload cube mesh");
+            self.mesh_index = Some(mesh_index);
 
-        // Upload mesh to GPU (depth 1 since octa_cube is a simple 2x2x2 octree)
-        let mesh_index = self
-            .mesh_renderer
-            .upload_mesh(&gl, &cube, 1)
-            .expect("Failed to upload cube mesh");
-        self.mesh_index = Some(mesh_index);
-
-        // Enable depth testing for 3D rendering
-        gl.enable(DEPTH_TEST);
-
-        // Initialize egui
-        let egui_ctx = egui::Context::default();
-        let egui_painter = egui_glow::Painter::new(Arc::clone(&gl), "", None, false)
-            .expect("Failed to create egui painter");
-
-        self.egui_ctx = Some(egui_ctx);
-        self.egui_painter = Some(egui_painter);
+            // Enable depth testing for 3D rendering
+            ctx.gl.enable(DEPTH_TEST);
+        }
 
         println!("[Game] Rotating cube initialized successfully");
         println!("[Game] Using MeshRenderer with proper lighting and materials");
         println!("[Game] Hot-reload ready! Try changing rotation speed.");
     }
 
-    unsafe fn uninit(&mut self, gl: Arc<Context>) {
+    fn shutdown(&mut self, ctx: &FrameContext) {
         println!("[Game] Cleaning up rotating cube");
 
-        // Destroy egui
-        if let Some(mut painter) = self.egui_painter.take() {
-            painter.destroy();
+        unsafe {
+            // Cleanup skybox renderer
+            self.skybox_renderer.destroy_gl(ctx.gl);
+
+            // Cleanup mesh renderer
+            self.mesh_renderer.destroy_gl(ctx.gl);
         }
-        self.egui_ctx = None;
-
-        // Cleanup skybox renderer
-        self.skybox_renderer.destroy_gl(&gl);
-
-        // Cleanup mesh renderer
-        self.mesh_renderer.destroy_gl(&gl);
         self.mesh_index = None;
-
-        self.gl = None;
 
         println!("[Game] Cleanup complete");
     }
 
-    fn event(&mut self, event: &WindowEvent) {
-        use winit::event::{ElementState, MouseButton};
+    fn on_event(&mut self, event: &winit::event::WindowEvent) -> bool {
+        use winit::event::{ElementState, MouseButton, WindowEvent};
 
-        match event {
-            WindowEvent::Resized(size) => {
-                self.window_size = (size.width, size.height);
+        // Right-click to toggle mouse capture for FPS camera
+        if let WindowEvent::MouseInput { state, button, .. } = event {
+            if *button == MouseButton::Right && *state == ElementState::Pressed {
+                self.camera_controller.mouse_captured = !self.camera_controller.mouse_captured;
+                return true;
             }
-            WindowEvent::CursorMoved { position, .. } => {
-                // Store pointer position for egui only
-                self.pointer_pos = Some(egui::Pos2::new(position.x as f32, position.y as f32));
-            }
-            WindowEvent::CursorLeft { .. } => {
-                self.pointer_pos = None;
-            }
-            WindowEvent::MouseInput { state, button, .. } => {
-                let egui_button = match button {
-                    MouseButton::Left => egui::PointerButton::Primary,
-                    MouseButton::Right => egui::PointerButton::Secondary,
-                    MouseButton::Middle => egui::PointerButton::Middle,
-                    _ => return,
-                };
-
-                let pressed = *state == ElementState::Pressed;
-                self.mouse_button_events.push((egui_button, pressed));
-
-                // Right-click to toggle mouse capture for FPS camera
-                if *button == MouseButton::Right && pressed {
-                    self.camera_controller.mouse_captured = !self.camera_controller.mouse_captured;
-                }
-            }
-            WindowEvent::KeyboardInput { event: key_event, .. } => {
-                if let PhysicalKey::Code(keycode) = key_event.physical_key {
-                    match key_event.state {
-                        ElementState::Pressed => {
-                            self.keys_pressed.insert(keycode);
-                        }
-                        ElementState::Released => {
-                            self.keys_pressed.remove(&keycode);
-                        }
-                    }
-                }
-            }
-            _ => {}
         }
+        false
     }
 
-    fn update(&mut self, delta_time: f32) {
+    fn update(&mut self, ctx: &FrameContext, input: &InputState) {
         // Rotate at 45 degrees per second (change this value to test hot-reload!)
-        self.rotation += 45.0_f32.to_radians() * delta_time;
-
-        // Poll controller backend for gamepad input
-        if let Some(backend) = &mut self.controller_backend {
-            backend.poll();
-        }
-
-        // Get controller input from the first connected controller
-        let controller = self.controller_backend.as_mut().and_then(|b| b.get_first_controller());
+        self.rotation += 45.0_f32.to_radians() * ctx.delta_time;
 
         // Handle controller camera movement
-        if let Some(ctrl) = controller {
-            let (controller_delta_x, controller_delta_y) = ctrl.get_camera_delta(delta_time);
-            // Always apply controller input if it exists (no threshold)
-            if ctrl.gamepad.right_stick.length() > 0.01 {
-                // Controller delta already includes sensitivity, apply rotation
-                self.camera_controller.apply_camera_rotation(&mut self.camera, -controller_delta_x, controller_delta_y);
+        if let Some(gamepad) = &input.gamepad {
+            if gamepad.right_stick.length() > 0.01 {
+                // Apply controller look
+                let sensitivity = 3.0 * ctx.delta_time;
+                let delta_x = -gamepad.right_stick.x * sensitivity;
+                let delta_y = gamepad.right_stick.y * sensitivity;
+                self.camera_controller.apply_camera_rotation(&mut self.camera, delta_x, delta_y);
             }
         }
 
-        // Handle raw mouse movement for FPS camera (from device events)
-        if self.raw_mouse_delta.0.abs() > 0.001 || self.raw_mouse_delta.1.abs() > 0.001 {
+        // Handle raw mouse movement for FPS camera
+        if input.raw_mouse_delta.x.abs() > 0.001 || input.raw_mouse_delta.y.abs() > 0.001 {
             self.camera_controller.handle_mouse_move(
                 &mut self.camera,
-                self.raw_mouse_delta.0 as f32,
-                self.raw_mouse_delta.1 as f32
+                input.raw_mouse_delta.x,
+                input.raw_mouse_delta.y
             );
-            self.raw_mouse_delta = (0.0, 0.0);
         }
 
         // Handle keyboard input for FPS camera movement
-        let forward = self.keys_pressed.contains(&KeyCode::KeyW);
-        let backward = self.keys_pressed.contains(&KeyCode::KeyS);
-        let left = self.keys_pressed.contains(&KeyCode::KeyA);
-        let right = self.keys_pressed.contains(&KeyCode::KeyD);
-        let up = self.keys_pressed.contains(&KeyCode::Space);
-        let down = self.keys_pressed.contains(&KeyCode::ShiftLeft)
-                || self.keys_pressed.contains(&KeyCode::ShiftRight);
+        let forward = input.is_key_pressed(KeyCode::KeyW);
+        let backward = input.is_key_pressed(KeyCode::KeyS);
+        let left = input.is_key_pressed(KeyCode::KeyA);
+        let right = input.is_key_pressed(KeyCode::KeyD);
+        let up = input.is_key_pressed(KeyCode::Space);
+        let down = input.is_key_pressed(KeyCode::ShiftLeft) || input.is_key_pressed(KeyCode::ShiftRight);
 
-        // Get controller movement input (left stick for movement, right stick for camera, triggers for vertical)
-        let controller = self.controller_backend.as_mut().and_then(|b| b.get_first_controller());
-        let (controller_x, controller_y_vertical, controller_z) = controller
-            .map(|c| c.get_movement_input())
+        // Get controller movement input
+        let (controller_x, controller_y_vertical, controller_z) = input.gamepad
+            .as_ref()
+            .map(|g| {
+                let vertical = g.right_trigger - g.left_trigger;
+                (g.left_stick.x, vertical, g.left_stick.y)
+            })
             .unwrap_or((0.0, 0.0, 0.0));
 
         // Combine keyboard and controller input
@@ -377,208 +295,108 @@ impl App for RotatingCube {
             total_velocity += controller_vel;
         }
 
-        self.camera.position += total_velocity * delta_time;
+        self.camera.position += total_velocity * ctx.delta_time;
     }
 
-    unsafe fn render(&mut self, gl: Arc<Context>) {
-        // Clear the screen
-        gl.clear_color(0.1, 0.1, 0.1, 1.0);
-        gl.clear(COLOR_BUFFER_BIT | DEPTH_BUFFER_BIT);
+    fn render(&mut self, ctx: &FrameContext) {
+        unsafe {
+            // Clear the screen
+            ctx.gl.clear_color(0.1, 0.1, 0.1, 1.0);
+            ctx.gl.clear(COLOR_BUFFER_BIT | DEPTH_BUFFER_BIT);
 
-        // Render skybox first (background)
-        self.skybox_renderer.render(
-            &gl,
-            &self.camera,
-            self.window_size.0 as i32,
-            self.window_size.1 as i32,
-        );
-
-        // Render the cube mesh on top of skybox
-        if let Some(mesh_index) = self.mesh_index {
-            // Create rotation quaternion (rotate around Y and X axes)
-            let rotation = Quat::from_rotation_y(self.rotation)
-                * Quat::from_rotation_x(self.rotation * 0.5);
-
-            // Render mesh at origin with rotation
-            self.mesh_renderer.render_mesh(
-                &gl,
-                mesh_index,
-                Vec3::ZERO,    // Position at origin
-                rotation,      // Apply rotation
+            // Render skybox first (background)
+            self.skybox_renderer.render(
+                ctx.gl,
                 &self.camera,
-                self.window_size.0 as i32,
-                self.window_size.1 as i32,
+                ctx.size.0 as i32,
+                ctx.size.1 as i32,
             );
-        }
 
-        // Render egui UI on top of 3D scene
+            // Render the cube mesh on top of skybox
+            if let Some(mesh_index) = self.mesh_index {
+                // Create rotation quaternion (rotate around Y and X axes)
+                let rotation = Quat::from_rotation_y(self.rotation)
+                    * Quat::from_rotation_x(self.rotation * 0.5);
+
+                // Render mesh at origin with rotation
+                self.mesh_renderer.render_mesh(
+                    ctx.gl,
+                    mesh_index,
+                    Vec3::ZERO,    // Position at origin
+                    rotation,      // Apply rotation
+                    &self.camera,
+                    ctx.size.0 as i32,
+                    ctx.size.1 as i32,
+                );
+            }
+        }
+    }
+
+    fn ui(&mut self, ctx: &FrameContext, egui_ctx: &egui::Context) {
+        let rotation_degrees = self.rotation.to_degrees();
+        let camera_pos = self.camera.position;
+        let mouse_captured = self.camera_controller.mouse_captured;
+        let last_reload_trigger = self.last_reload_trigger;
+
+        // Get gamepad state for UI display (we need to store this temporarily)
         let mut should_trigger_reload = false;
 
-        if let Some(egui_ctx) = &self.egui_ctx {
-            // Setup GL state for egui (2D overlay)
-            gl.disable(DEPTH_TEST);
-            gl.enable(BLEND);
-            gl.blend_func(SRC_ALPHA, ONE_MINUS_SRC_ALPHA);
-            gl.viewport(0, 0, self.window_size.0 as i32, self.window_size.1 as i32);
+        egui::Window::new("Hot Reload Demo")
+            .fixed_pos([10.0, 10.0])
+            .default_width(320.0)
+            .resizable(false)
+            .movable(false)
+            .title_bar(false)
+            .frame(egui::Frame::none()
+                .fill(egui::Color32::from_rgba_premultiplied(0, 0, 0, 180))
+                .inner_margin(egui::Margin::same(10.0)))
+            .show(egui_ctx, |ui| {
+                ui.heading("First Person Demo");
+                ui.colored_label(egui::Color32::GREEN, "With Skybox!");
+                ui.separator();
 
-            let elapsed = self.start_time.elapsed().as_secs_f64();
+                ui.label(format!("Cube rotation: {:.2}", rotation_degrees));
+                ui.label(format!("Window: {}x{}", ctx.size.0, ctx.size.1));
 
-            // Build raw input with mouse events
-            let mut raw_input = egui::RawInput {
-                screen_rect: Some(egui::Rect::from_min_size(
-                    egui::Pos2::ZERO,
-                    egui::vec2(self.window_size.0 as f32, self.window_size.1 as f32),
-                )),
-                time: Some(elapsed),
-                predicted_dt: 1.0 / 60.0,
-                ..Default::default()
-            };
-
-            // Add pointer position
-            if let Some(pos) = self.pointer_pos {
-                raw_input.events.push(egui::Event::PointerMoved(pos));
-            }
-
-            // Add mouse button events (both press and release)
-            for (button, pressed) in self.mouse_button_events.drain(..) {
-                if let Some(pos) = self.pointer_pos {
-                    raw_input.events.push(egui::Event::PointerButton {
-                        pos,
-                        button,
-                        pressed,
-                        modifiers: egui::Modifiers::default(),
-                    });
+                ui.separator();
+                ui.heading("Camera");
+                ui.label(format!("Pos: ({:.1}, {:.1}, {:.1})", camera_pos.x, camera_pos.y, camera_pos.z));
+                if mouse_captured {
+                    ui.colored_label(egui::Color32::GREEN, "Mouse captured");
+                } else {
+                    ui.colored_label(egui::Color32::GRAY, "Right-click to capture");
                 }
-            }
 
-            let rotation_degrees = self.rotation.to_degrees();
-            let window_size = self.window_size;
-            let last_reload_trigger = self.last_reload_trigger;
-            let camera_pos = self.camera.position;
-            let mouse_captured = self.camera_controller.mouse_captured;
+                ui.separator();
+                ui.heading("Controls");
+                ui.label("WASD - Move");
+                ui.label("Space/Shift - Up/Down");
+                ui.label("Mouse - Look around");
+                ui.label("Right-click - Toggle mouse");
 
-            // Get controller state for UI display
-            let controller = self.controller_backend.as_mut().and_then(|b| b.get_first_controller());
-            let (right_stick, left_stick, left_trigger, right_trigger, has_controller_input, gamepad_connected) =
-                controller.map(|c| {
-                    (c.gamepad.right_stick, c.gamepad.left_stick, c.gamepad.left_trigger, c.gamepad.right_trigger, c.has_input(), c.gamepad.connected)
-                }).unwrap_or_default();
+                ui.separator();
+                ui.heading("Hot-Reload");
 
-            let full_output = egui_ctx.run(raw_input, |ui_ctx| {
-                egui::Window::new("🎮 Hot Reload Demo")
-                    .fixed_pos([10.0, 10.0])
-                    .default_width(320.0)
-                    .resizable(false)
-                    .movable(false)
-                    .title_bar(false)
-                    .frame(egui::Frame::none()
-                        .fill(egui::Color32::from_rgba_premultiplied(0, 0, 0, 180))
-                        .inner_margin(egui::Margin::same(10.0)))
-                    .show(ui_ctx, |ui| {
-                        ui.heading("First Person Demo");
-                        ui.colored_label(egui::Color32::GREEN, "✓ With Skybox!");
-                        ui.separator();
+                if ui.button("Trigger Reload").clicked() {
+                    should_trigger_reload = true;
+                }
 
-                        ui.label(format!("Cube rotation: {:.2}°", rotation_degrees));
-                        ui.label(format!("Window: {}x{}", window_size.0, window_size.1));
-
-                        ui.separator();
-                        ui.heading("📷 Camera");
-                        ui.label(format!("Pos: ({:.1}, {:.1}, {:.1})", camera_pos.x, camera_pos.y, camera_pos.z));
-                        if mouse_captured {
-                            ui.colored_label(egui::Color32::GREEN, "🖱️  Mouse captured");
-                        } else {
-                            ui.colored_label(egui::Color32::GRAY, "🖱️  Right-click to capture");
-                        }
-
-                        ui.separator();
-                        ui.heading("⌨️  Controls");
-                        ui.label("WASD - Move");
-                        ui.label("Space/Shift - Up/Down");
-                        ui.label("Mouse - Look around");
-                        ui.label("Right-click - Toggle mouse");
-
-                        ui.separator();
-                        ui.heading("🎮 Gamepad");
-                        if gamepad_connected {
-                            ui.colored_label(egui::Color32::GREEN, "✓ Connected");
-                        } else {
-                            ui.colored_label(egui::Color32::GRAY, "○ Not connected");
-                        }
-
-                        if has_controller_input {
-                            if right_stick.length() > 0.01 {
-                                ui.label(format!("👁  Look: ({:.2}, {:.2})", right_stick.x, right_stick.y));
-                            }
-                            if left_stick.length() > 0.01 {
-                                ui.label(format!("🚶 Move: ({:.2}, {:.2})", left_stick.x, left_stick.y));
-                            }
-                            if left_trigger > 0.01 || right_trigger > 0.01 {
-                                ui.label(format!("⬇️⬆️  Triggers: {:.2} / {:.2}", left_trigger, right_trigger));
-                            }
-                        }
-
-                        ui.separator();
-                        ui.heading("🔥 Hot-Reload");
-
-                        if ui.button("🔄 Trigger Reload").clicked() {
-                            should_trigger_reload = true;
-                        }
-
-                        if let Some(trigger_time) = last_reload_trigger {
-                            let elapsed_ms = trigger_time.elapsed().as_millis();
-                            ui.label(format!("⏱️  Last: {}ms ago", elapsed_ms));
-                        }
-                    });
+                if let Some(trigger_time) = last_reload_trigger {
+                    let elapsed_ms = trigger_time.elapsed().as_millis();
+                    ui.label(format!("Last: {}ms ago", elapsed_ms));
+                }
             });
 
-            // Paint egui
-            if let Some(egui_painter) = &mut self.egui_painter {
-                // Upload textures (fonts, images, etc.)
-                for (id, image_delta) in &full_output.textures_delta.set {
-                    egui_painter.set_texture(*id, image_delta);
-                }
-
-                let clipped_primitives = egui_ctx.tessellate(full_output.shapes, full_output.pixels_per_point);
-
-                egui_painter.paint_primitives(
-                    [self.window_size.0, self.window_size.1],
-                    full_output.pixels_per_point,
-                    &clipped_primitives,
-                );
-
-                // Free old textures
-                for id in &full_output.textures_delta.free {
-                    egui_painter.free_texture(*id);
-                }
-            }
-
-            // Restore GL state for 3D rendering
-            gl.enable(DEPTH_TEST);
-            gl.disable(BLEND);
-        }
-
-        // Trigger reload after all borrows are dropped
         if should_trigger_reload {
             self.trigger_reload();
         }
     }
 
-    fn cursor_state(&self) -> Option<(CursorGrabMode, bool)> {
+    fn cursor_mode(&self) -> CursorMode {
         if self.camera_controller.mouse_captured {
-            // When mouse is captured: grab cursor and hide it
-            Some((CursorGrabMode::Locked, false))
+            CursorMode::Grabbed
         } else {
-            // When not captured: free cursor and show it
-            Some((CursorGrabMode::None, true))
-        }
-    }
-
-    fn mouse_motion(&mut self, delta: (f64, f64)) {
-        // Only accumulate raw mouse motion when mouse is captured
-        if self.camera_controller.mouse_captured {
-            self.raw_mouse_delta.0 += delta.0;
-            self.raw_mouse_delta.1 += delta.1;
+            CursorMode::Normal
         }
     }
 }

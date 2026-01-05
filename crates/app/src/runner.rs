@@ -3,7 +3,8 @@
 //! Provides the window creation, OpenGL context setup, and event loop
 //! management that is common across all applications.
 
-use glow::Context;
+use glam::Vec2;
+use glow::{Context, HasContext};
 use glutin::config::ConfigTemplateBuilder;
 use glutin::context::{ContextApi, ContextAttributesBuilder, Version};
 use glutin::display::GetGlDisplay;
@@ -11,18 +12,25 @@ use glutin::prelude::*;
 use glutin::surface::{SurfaceAttributesBuilder, WindowSurface};
 use glutin_winit::DisplayBuilder;
 use raw_window_handle::HasWindowHandle;
+use std::collections::HashSet;
 use std::num::NonZeroU32;
 use std::sync::Arc;
 use std::time::Instant;
 use winit::application::ApplicationHandler;
-use winit::event::WindowEvent;
+use winit::event::{ElementState, MouseButton, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
+use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::{CursorGrabMode, Window, WindowId};
 
 #[cfg(target_os = "linux")]
 use winit::platform::x11::EventLoopBuilderExtX11;
 
-use crate::App;
+use crate::{
+    create_controller_backend, App, ControllerBackend, CursorMode, FrameContext, GamepadState,
+    InputState, MouseButtons,
+};
+
+use super::EguiIntegration;
 
 /// Configuration for the application window
 #[derive(Clone)]
@@ -83,13 +91,30 @@ pub struct AppRuntime<A: App> {
     gl_context: Option<glutin::context::PossiblyCurrentContext>,
     gl_surface: Option<glutin::surface::Surface<WindowSurface>>,
     gl: Option<Arc<Context>>,
+
+    // Timing
+    start_time: Instant,
     last_update: Instant,
+    frame_count: u64,
+
+    // Input state (accumulated between frames)
+    input_state: InputState,
+    last_mouse_pos: Option<Vec2>,
+
+    // Egui integration
+    egui: Option<EguiIntegration>,
+
+    // Controller backend
+    controller_backend: Option<Box<dyn ControllerBackend>>,
+
     initialized: bool,
 }
 
 impl<A: App> AppRuntime<A> {
     /// Create a new runtime with the given app and configuration
     pub fn new(app: A, config: AppConfig) -> Self {
+        let controller_backend = create_controller_backend();
+
         Self {
             config,
             app,
@@ -97,7 +122,13 @@ impl<A: App> AppRuntime<A> {
             gl_context: None,
             gl_surface: None,
             gl: None,
+            start_time: Instant::now(),
             last_update: Instant::now(),
+            frame_count: 0,
+            input_state: InputState::default(),
+            last_mouse_pos: None,
+            egui: None,
+            controller_backend,
             initialized: false,
         }
     }
@@ -115,6 +146,35 @@ impl<A: App> AppRuntime<A> {
     /// Get a mutable reference to the app
     pub fn app_mut(&mut self) -> &mut A {
         &mut self.app
+    }
+
+    /// Reset per-frame input deltas (called after processing)
+    fn reset_frame_deltas(&mut self) {
+        self.input_state.mouse_delta = Vec2::ZERO;
+        self.input_state.raw_mouse_delta = Vec2::ZERO;
+        self.input_state.scroll_delta = Vec2::ZERO;
+    }
+
+    /// Apply cursor mode from app
+    fn apply_cursor_mode(&self, window: &Window) {
+        let mode = self.app.cursor_mode();
+        match mode {
+            CursorMode::Normal => {
+                window.set_cursor_visible(true);
+                let _ = window.set_cursor_grab(CursorGrabMode::None);
+            }
+            CursorMode::Hidden => {
+                window.set_cursor_visible(false);
+                let _ = window.set_cursor_grab(CursorGrabMode::None);
+            }
+            CursorMode::Grabbed => {
+                window.set_cursor_visible(false);
+                // Try Locked first, fall back to Confined
+                if window.set_cursor_grab(CursorGrabMode::Locked).is_err() {
+                    let _ = window.set_cursor_grab(CursorGrabMode::Confined);
+                }
+            }
+        }
     }
 }
 
@@ -191,11 +251,20 @@ impl<A: App> ApplicationHandler for AppRuntime<A> {
 
         println!("[AppRuntime] OpenGL context created successfully");
 
+        // Initialize egui integration
+        let egui = unsafe { EguiIntegration::new(&window, Arc::clone(&gl)) };
+
         // Initialize the app
         if !self.initialized {
-            unsafe {
-                self.app.init(Arc::clone(&gl));
-            }
+            let ctx = FrameContext {
+                gl: &gl,
+                window: &window,
+                delta_time: 0.0,
+                elapsed: 0.0,
+                frame: 0,
+                size: (size.width, size.height),
+            };
+            self.app.init(&ctx);
             self.initialized = true;
             println!("[AppRuntime] App initialized");
         }
@@ -204,6 +273,8 @@ impl<A: App> ApplicationHandler for AppRuntime<A> {
         self.gl_context = Some(gl_context);
         self.gl_surface = Some(gl_surface);
         self.gl = Some(gl);
+        self.egui = Some(egui);
+        self.start_time = Instant::now();
         self.last_update = Instant::now();
     }
 
@@ -215,9 +286,10 @@ impl<A: App> ApplicationHandler for AppRuntime<A> {
     ) {
         use winit::event::DeviceEvent;
 
-        // Forward raw mouse motion to app
+        // Accumulate raw mouse motion for FPS camera
         if let DeviceEvent::MouseMotion { delta } = event {
-            self.app.mouse_motion(delta);
+            self.input_state.raw_mouse_delta.x += delta.0 as f32;
+            self.input_state.raw_mouse_delta.y += delta.1 as f32;
         }
     }
 
@@ -227,16 +299,78 @@ impl<A: App> ApplicationHandler for AppRuntime<A> {
         _window_id: WindowId,
         event: WindowEvent,
     ) {
-        // Forward events to app
-        self.app.event(&event);
+        // Let egui handle events first
+        if let (Some(window), Some(egui)) = (self.window.as_ref(), self.egui.as_mut()) {
+            if egui.on_window_event(window, &event) {
+                // Egui consumed the event
+                return;
+            }
+        }
+
+        // Process input events into InputState
+        match &event {
+            WindowEvent::CursorMoved { position, .. } => {
+                let new_pos = Vec2::new(position.x as f32, position.y as f32);
+                if let Some(last_pos) = self.last_mouse_pos {
+                    self.input_state.mouse_delta = new_pos - last_pos;
+                }
+                self.last_mouse_pos = Some(new_pos);
+                self.input_state.mouse_pos = Some(new_pos);
+            }
+            WindowEvent::CursorLeft { .. } => {
+                self.input_state.mouse_pos = None;
+                self.last_mouse_pos = None;
+            }
+            WindowEvent::MouseInput { state, button, .. } => {
+                let pressed = *state == ElementState::Pressed;
+                match button {
+                    MouseButton::Left => self.input_state.mouse_buttons.left = pressed,
+                    MouseButton::Right => self.input_state.mouse_buttons.right = pressed,
+                    MouseButton::Middle => self.input_state.mouse_buttons.middle = pressed,
+                    _ => {}
+                }
+            }
+            WindowEvent::MouseWheel { delta, .. } => {
+                let scroll = match delta {
+                    winit::event::MouseScrollDelta::LineDelta(x, y) => Vec2::new(*x, *y),
+                    winit::event::MouseScrollDelta::PixelDelta(pos) => {
+                        Vec2::new(pos.x as f32, pos.y as f32) / 10.0
+                    }
+                };
+                self.input_state.scroll_delta += scroll;
+            }
+            WindowEvent::KeyboardInput { event, .. } => {
+                if let PhysicalKey::Code(keycode) = event.physical_key {
+                    match event.state {
+                        ElementState::Pressed => {
+                            self.input_state.keys.insert(keycode);
+                        }
+                        ElementState::Released => {
+                            self.input_state.keys.remove(&keycode);
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+
+        // Let app handle remaining events
+        self.app.on_event(&event);
 
         match event {
             WindowEvent::CloseRequested => {
                 println!("[AppRuntime] Close requested");
-                if let Some(gl) = &self.gl {
-                    unsafe {
-                        self.app.uninit(Arc::clone(gl));
-                    }
+                if let (Some(window), Some(gl)) = (self.window.as_ref(), self.gl.as_ref()) {
+                    let size = window.inner_size();
+                    let ctx = FrameContext {
+                        gl,
+                        window,
+                        delta_time: 0.0,
+                        elapsed: self.start_time.elapsed().as_secs_f32(),
+                        frame: self.frame_count,
+                        size: (size.width, size.height),
+                    };
+                    self.app.shutdown(&ctx);
                 }
                 event_loop.exit();
             }
@@ -261,34 +395,68 @@ impl<A: App> ApplicationHandler for AppRuntime<A> {
                     self.gl_context.as_ref(),
                     self.gl_surface.as_ref(),
                 ) {
+                    // Calculate timing
                     let now = Instant::now();
                     let delta_time = (now - self.last_update).as_secs_f32();
                     self.last_update = now;
+                    let elapsed = self.start_time.elapsed().as_secs_f32();
+                    let size = window.inner_size();
 
-                    // Update app logic
-                    self.app.update(delta_time);
-
-                    // Apply cursor state changes
-                    if let Some((grab_mode, visible)) = self.app.cursor_state() {
-                        window.set_cursor_visible(visible);
-                        if window.set_cursor_grab(grab_mode).is_err() {
-                            // Fall back to Confined if Locked isn't supported
-                            if matches!(grab_mode, CursorGrabMode::Locked) {
-                                let _ = window.set_cursor_grab(CursorGrabMode::Confined);
-                            }
+                    // Poll controller backend
+                    if let Some(backend) = &mut self.controller_backend {
+                        backend.poll();
+                        // Get gamepad state from first controller
+                        if let Some(controller) = backend.get_first_controller() {
+                            self.input_state.gamepad = Some(controller.gamepad.clone());
+                        } else {
+                            self.input_state.gamepad = None;
                         }
-                    } else {
-                        window.set_cursor_visible(true);
-                        let _ = window.set_cursor_grab(CursorGrabMode::None);
                     }
 
-                    // Render
-                    unsafe {
-                        self.app.render(Arc::clone(gl));
+                    // Build frame context
+                    let ctx = FrameContext {
+                        gl,
+                        window,
+                        delta_time,
+                        elapsed,
+                        frame: self.frame_count,
+                        size: (size.width, size.height),
+                    };
+
+                    // Update app logic
+                    self.app.update(&ctx, &self.input_state);
+
+                    // Apply cursor mode
+                    self.apply_cursor_mode(window);
+
+                    // Render app
+                    self.app.render(&ctx);
+
+                    // Render egui UI
+                    if let Some(egui) = &mut self.egui {
+                        // Setup GL state for egui
+                        unsafe {
+                            gl.disable(glow::DEPTH_TEST);
+                            gl.enable(glow::BLEND);
+                            gl.blend_func(glow::SRC_ALPHA, glow::ONE_MINUS_SRC_ALPHA);
+                        }
+
+                        egui.run(window, [size.width, size.height], |egui_ctx| {
+                            self.app.ui(&ctx, egui_ctx);
+                        });
+
+                        // Restore GL state
+                        unsafe {
+                            gl.enable(glow::DEPTH_TEST);
+                            gl.disable(glow::BLEND);
+                        }
                     }
 
                     gl_surface.swap_buffers(gl_context).unwrap();
                     window.request_redraw();
+
+                    self.frame_count += 1;
+                    self.reset_frame_deltas();
                 }
             }
             _ => (),

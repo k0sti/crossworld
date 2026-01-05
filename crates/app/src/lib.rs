@@ -3,16 +3,20 @@
 //! This crate provides the core abstractions for building native applications:
 //!
 //! - [`App`] trait: The main interface for application logic
+//! - [`FrameContext`]: Per-frame context with GL, window, timing info
+//! - [`InputState`]: Unified input state snapshot
 //! - [`ControllerBackend`] trait: Gamepad input handling
 //!
 //! With the `runtime` feature enabled, additional utilities are available:
-//! - [`AppRunner`]: Window creation and event loop management
-//! - [`EguiIntegration`]: Egui UI rendering integration
+//! - [`AppRuntime`]: Window creation and event loop management
+//! - Integrated egui UI rendering via the `ui()` method
 
+use glam::Vec2;
 use glow::Context;
-use std::sync::Arc;
+use std::collections::HashSet;
 use winit::event::WindowEvent;
-use winit::window::CursorGrabMode;
+use winit::keyboard::KeyCode;
+use winit::window::Window;
 
 pub mod controller;
 
@@ -38,71 +42,164 @@ pub use runner::{create_event_loop, run_app, AppConfig, AppRuntime};
 #[cfg(feature = "runtime")]
 pub use egui;
 
+/// Mouse button state flags
+#[derive(Debug, Clone, Copy, Default)]
+pub struct MouseButtons {
+    pub left: bool,
+    pub right: bool,
+    pub middle: bool,
+}
+
+/// Frame context passed to update/render methods
+///
+/// Contains all per-frame information apps need without storing it themselves.
+pub struct FrameContext<'a> {
+    /// OpenGL context
+    pub gl: &'a Context,
+    /// Window reference (for DPI, size, etc.)
+    pub window: &'a Window,
+    /// Time since last frame in seconds
+    pub delta_time: f32,
+    /// Total elapsed time since app start in seconds
+    pub elapsed: f32,
+    /// Current frame number
+    pub frame: u64,
+    /// Window size in pixels (width, height)
+    pub size: (u32, u32),
+}
+
+/// Input state snapshot for the current frame
+///
+/// Contains all input information aggregated from events.
+#[derive(Debug, Clone, Default)]
+pub struct InputState {
+    /// Currently pressed keys
+    pub keys: HashSet<KeyCode>,
+    /// Mouse position in window coordinates
+    pub mouse_pos: Option<Vec2>,
+    /// Mouse delta since last frame (from window events)
+    pub mouse_delta: Vec2,
+    /// Raw mouse motion (for FPS camera, not constrained by window)
+    pub raw_mouse_delta: Vec2,
+    /// Scroll delta
+    pub scroll_delta: Vec2,
+    /// Mouse buttons currently held
+    pub mouse_buttons: MouseButtons,
+    /// Gamepad state (if connected)
+    pub gamepad: Option<GamepadState>,
+}
+
+impl InputState {
+    /// Check if a key is currently pressed
+    pub fn is_key_pressed(&self, key: KeyCode) -> bool {
+        self.keys.contains(&key)
+    }
+
+    /// Check if left mouse button is pressed
+    pub fn is_left_mouse_pressed(&self) -> bool {
+        self.mouse_buttons.left
+    }
+
+    /// Check if right mouse button is pressed
+    pub fn is_right_mouse_pressed(&self) -> bool {
+        self.mouse_buttons.right
+    }
+}
+
+/// Cursor mode for the application
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CursorMode {
+    /// Visible, free movement (default)
+    #[default]
+    Normal,
+    /// Hidden but not grabbed
+    Hidden,
+    /// Hidden and confined/locked (for FPS camera)
+    Grabbed,
+}
+
 /// Application trait for hot-reloadable game code
 ///
 /// This trait defines the lifecycle hooks that game code must implement.
 /// The runtime will call these methods at appropriate times during the
 /// application lifecycle and hot-reload process.
+///
+/// # Example
+///
+/// ```ignore
+/// struct MyApp {
+///     mesh_renderer: MeshRenderer,
+/// }
+///
+/// impl App for MyApp {
+///     fn init(&mut self, ctx: &FrameContext) {
+///         self.mesh_renderer.init_gl(ctx.gl).unwrap();
+///     }
+///
+///     fn update(&mut self, ctx: &FrameContext, input: &InputState) {
+///         if input.is_key_pressed(KeyCode::KeyW) {
+///             // Move forward
+///         }
+///     }
+///
+///     fn render(&mut self, ctx: &FrameContext) {
+///         self.mesh_renderer.render(ctx.gl, ...);
+///     }
+///
+///     fn ui(&mut self, ctx: &FrameContext, egui: &egui::Context) {
+///         egui::Window::new("Debug").show(egui, |ui| {
+///             ui.label(format!("FPS: {:.0}", 1.0 / ctx.delta_time));
+///         });
+///     }
+/// }
+/// ```
 pub trait App {
     /// Initialize the application
     ///
     /// Called once when the game library is first loaded, and again after
     /// each hot-reload. Use this to create OpenGL resources (buffers, shaders,
     /// textures) and initialize game state.
-    ///
-    /// # Safety
-    /// The GL context must be current when this is called.
-    unsafe fn init(&mut self, gl: Arc<Context>);
+    fn init(&mut self, ctx: &FrameContext);
 
-    /// Uninitialize the application
+    /// Cleanup before destruction
     ///
     /// Called before unloading the game library during hot-reload. Use this
     /// to clean up OpenGL resources and prevent leaks.
-    ///
-    /// # Safety
-    /// The GL context must be current when this is called.
-    unsafe fn uninit(&mut self, gl: Arc<Context>);
+    fn shutdown(&mut self, ctx: &FrameContext);
 
-    /// Handle window events
+    /// Handle a window event (optional)
     ///
-    /// Called for each window event (resize, keyboard, mouse, etc.).
-    fn event(&mut self, event: &WindowEvent);
-
-    /// Handle raw mouse motion (for infinite mouse movement)
-    ///
-    /// Called when raw mouse motion is detected. This provides infinite
-    /// mouse movement not constrained by window boundaries.
-    ///
-    /// # Arguments
-    /// * `delta` - Raw mouse delta (x, y) in pixels
-    fn mouse_motion(&mut self, _delta: (f64, f64)) {
-        // Default: do nothing
+    /// Called for each window event not handled by the framework.
+    /// Return true to consume the event (prevent further processing).
+    fn on_event(&mut self, _event: &WindowEvent) -> bool {
+        false
     }
 
     /// Update game logic
     ///
     /// Called each frame before rendering. Use this for game logic, physics,
     /// animation updates, etc.
-    ///
-    /// # Arguments
-    /// * `delta_time` - Time elapsed since last update in seconds
-    fn update(&mut self, delta_time: f32);
+    fn update(&mut self, ctx: &FrameContext, input: &InputState);
 
-    /// Render the current frame
+    /// Render the frame
     ///
     /// Called each frame after update. Use this to issue OpenGL draw calls.
-    ///
-    /// # Safety
-    /// The GL context must be current when this is called.
-    unsafe fn render(&mut self, gl: Arc<Context>);
+    fn render(&mut self, ctx: &FrameContext);
 
-    /// Get the desired cursor grab mode
+    /// Render UI (optional)
     ///
-    /// Called each frame to check if the cursor should be grabbed/hidden.
-    /// Return None to use default behavior (cursor visible and free).
-    /// Return Some((grab_mode, visible)) to control cursor behavior.
-    fn cursor_state(&self) -> Option<(CursorGrabMode, bool)> {
-        None
+    /// Called after render with the egui context. Use this for UI rendering.
+    /// The runtime handles all egui setup, input, and rendering.
+    #[cfg(feature = "runtime")]
+    fn ui(&mut self, _ctx: &FrameContext, _egui: &egui::Context) {
+        // Default: no UI
+    }
+
+    /// Request cursor mode (optional)
+    ///
+    /// Called each frame to check cursor behavior.
+    fn cursor_mode(&self) -> CursorMode {
+        CursorMode::Normal
     }
 }
 

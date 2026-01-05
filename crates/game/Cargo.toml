@@ -12,8 +12,8 @@ name = "game"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-# Core app framework - lib uses base App trait, bin uses runtime feature
-app = { path = "../app" }
+# Core app framework with runtime feature for egui integration
+app = { path = "../app", features = ["runtime"] }
 
 # Rendering
 renderer = { path = "../renderer" }
