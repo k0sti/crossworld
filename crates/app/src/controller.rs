@@ -1,8 +1,20 @@
 //! Game controller (gamepad) support
 //!
-//! Handles gamepad input for camera movement and looking around.
+//! Provides a generic controller interface with gamepad input handling,
+//! deadzone processing, and controller enumeration.
 
 use glam::Vec2;
+
+/// Controller information for enumeration
+#[derive(Debug, Clone)]
+pub struct ControllerInfo {
+    /// Unique identifier for this controller
+    pub id: usize,
+    /// Human-readable name of the controller
+    pub name: String,
+    /// Whether the controller is currently connected
+    pub connected: bool,
+}
 
 /// Gamepad state tracker
 #[derive(Debug, Clone)]
@@ -72,7 +84,7 @@ impl GamepadState {
     /// Process left stick with deadzone
     fn process_left_stick(&mut self) {
         const DEADZONE: f32 = 0.15;
-        let vec = Vec2::new(self.raw_left_stick.x, self.raw_left_stick.y); // Don't invert Y - let game code handle orientation
+        let vec = Vec2::new(self.raw_left_stick.x, self.raw_left_stick.y);
 
         if vec.length() < DEADZONE {
             self.left_stick = Vec2::ZERO;
@@ -87,7 +99,7 @@ impl GamepadState {
     /// Process right stick with deadzone
     fn process_right_stick(&mut self) {
         const DEADZONE: f32 = 0.15;
-        let vec = Vec2::new(self.raw_right_stick.x, self.raw_right_stick.y); // Don't invert Y - let game code handle orientation
+        let vec = Vec2::new(self.raw_right_stick.x, self.raw_right_stick.y);
 
         if vec.length() < DEADZONE {
             self.right_stick = Vec2::ZERO;
@@ -140,9 +152,9 @@ impl GamepadState {
     }
 }
 
-/// Controller input handler
+/// Controller input handler with sensitivity settings
 pub struct ControllerInput {
-    /// Currently active gamepad
+    /// Currently active gamepad state
     pub gamepad: GamepadState,
     /// Gamepad look sensitivity
     pub look_sensitivity: f32,
@@ -202,4 +214,49 @@ impl ControllerInput {
         self.gamepad.connected = false;
         self.gamepad.reset();
     }
+}
+
+/// Trait for controller backends (e.g., gilrs, SDL2, etc.)
+pub trait ControllerBackend {
+    /// Poll for controller events and update state
+    /// Returns true if any events were processed
+    fn poll(&mut self);
+
+    /// Get list of all connected controllers
+    fn enumerate(&self) -> Vec<ControllerInfo>;
+
+    /// Get mutable reference to controller input state for a specific controller
+    fn get_controller(&mut self, id: usize) -> Option<&mut ControllerInput>;
+
+    /// Get the first connected controller (convenience method)
+    fn get_first_controller(&mut self) -> Option<&mut ControllerInput>;
+
+    /// Check if any controllers are connected
+    fn has_controllers(&self) -> bool {
+        !self.enumerate().is_empty()
+    }
+}
+
+#[cfg(feature = "gilrs")]
+#[path = "gilrs_backend.rs"]
+mod gilrs_backend;
+
+#[cfg(feature = "gilrs")]
+pub use gilrs_backend::GilrsBackend;
+
+/// Create the default controller backend based on enabled features
+#[cfg(feature = "gilrs")]
+pub fn create_controller_backend() -> Option<Box<dyn ControllerBackend>> {
+    match GilrsBackend::new() {
+        Ok(backend) => Some(Box::new(backend)),
+        Err(e) => {
+            eprintln!("[Controller] Failed to initialize gilrs backend: {}", e);
+            None
+        }
+    }
+}
+
+#[cfg(not(feature = "gilrs"))]
+pub fn create_controller_backend() -> Option<Box<dyn ControllerBackend>> {
+    None
 }

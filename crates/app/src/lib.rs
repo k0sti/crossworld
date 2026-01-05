@@ -3,6 +3,16 @@ use std::sync::Arc;
 use winit::event::WindowEvent;
 use winit::window::CursorGrabMode;
 
+pub mod controller;
+
+pub use controller::{
+    ControllerBackend, ControllerInfo, ControllerInput, GamepadState,
+    create_controller_backend,
+};
+
+#[cfg(feature = "gilrs")]
+pub use controller::GilrsBackend;
+
 /// Application trait for hot-reloadable game code
 ///
 /// This trait defines the lifecycle hooks that game code must implement.
