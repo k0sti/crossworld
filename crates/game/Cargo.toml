@@ -12,15 +12,21 @@ name = "game"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+# Core app framework - lib uses base App trait, bin uses runtime feature
 app = { path = "../app" }
+
+# Rendering
 renderer = { path = "../renderer" }
 cube = { path = "../cube" }
+
+# Core graphics (needed for App trait implementation in lib)
 glow = "0.14"
 glam = "0.29"
 winit = "0.30"
 egui = "0.29"
-egui-winit = "0.29"
 egui_glow = "0.29"
+
+# Hot-reload runtime dependencies (only used by binary)
 glutin = "0.32"
 glutin-winit = "0.5"
 raw-window-handle = "0.6"

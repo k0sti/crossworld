@@ -1,26 +1,31 @@
 [package]
 name = "testbed"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 
 [[bin]]
 name = "testbed"
 path = "src/main.rs"
 
+[lib]
+name = "testbed"
+path = "src/lib.rs"
+
 [dependencies]
-app = { path = "../app" }
+# Core app framework with runtime support
+app = { path = "../app", features = ["runtime"] }
+
+# Physics and rendering
 renderer = { path = "../renderer" }
 cube = { path = "../cube" }
 crossworld-physics = { path = "../physics" }
+
+# Core graphics (needed for App trait implementation)
 glow = "0.14"
 glam = "0.29"
 winit = "0.30"
 egui = "0.29"
-egui-winit = "0.29"
 egui_glow = "0.29"
-glutin = "0.32"
-glutin-winit = "0.5"
-raw-window-handle = "0.6"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 winit = { version = "0.30", features = ["x11"] }
