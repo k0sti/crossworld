@@ -27,7 +27,7 @@ fn main() {
         .add_systems(
             Update,
             (
-                rotate,
+                //rotate,
                 #[cfg(not(target_arch = "wasm32"))]
                 toggle_wireframe,
             ),
