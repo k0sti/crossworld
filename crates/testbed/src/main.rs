@@ -9,7 +9,11 @@
 //! - Compact physics state display above each viewport
 //! - Single large ground cube with smaller falling cube
 
-use crossworld_physics::{create_box_collider, CubeObject, PhysicsWorld, VoxelColliderBuilder};
+use crossworld_physics::{
+    create_box_collider,
+    rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder},
+    CubeObject, PhysicsWorld, VoxelColliderBuilder,
+};
 use cube::Cube;
 use glam::{Quat, Vec3};
 use glow::*;
@@ -169,9 +173,12 @@ impl App {
     fn create_cuboid_ground_scene(&self) -> PhysicsScene {
         let mut world = PhysicsWorld::new(Vec3::new(0.0, -9.81, 0.0));
 
-        // Create large ground plane as a flat cuboid
-        // Ground top surface at Y=0, size 8x0.5x8
-        let ground_collider = create_box_collider(Vec3::new(4.0, 0.25, 4.0));
+        // Create ground as a cube matching the terrain collider
+        // 0.5x0.5x0.5 cube (half-extents 0.25), positioned so top is at Y=0
+        // Center at Y=-0.25 so top is at Y=0
+        let ground_collider = ColliderBuilder::cuboid(0.25, 0.25, 0.25)
+            .translation([0.0, -0.25, 0.0].into())
+            .build();
         world.add_static_collider(ground_collider);
 
         // Create small falling cube at Y=8 (smaller than ground)
@@ -194,9 +201,15 @@ impl App {
         let mut world = PhysicsWorld::new(Vec3::new(0.0, -9.81, 0.0));
 
         // Create ground using VoxelColliderBuilder from a solid cube
-        // Scale: 8 units world size, centered at origin, top at Y=0
-        let terrain_collider = VoxelColliderBuilder::from_cube_scaled(ground_cube, 0, 8.0);
-        world.add_static_collider(terrain_collider);
+        // Use a small world_size (0.5) to create a thin slab
+        // The 0.5x0.5x0.5 cube spans [-0.25, +0.25], so top is at Y=+0.25
+        // Position the fixed body at Y=-0.25 to put top at Y=0
+        let terrain_collider = VoxelColliderBuilder::from_cube_scaled(ground_cube, 0, 0.5);
+        let terrain_body = RigidBodyBuilder::fixed()
+            .translation([0.0, -0.25, 0.0].into())
+            .build();
+        let terrain_body_handle = world.add_rigid_body(terrain_body);
+        world.add_collider(terrain_collider, terrain_body_handle);
 
         // Create small falling cube at Y=8
         let mut falling_object = CubeObject::new_dynamic(&mut world, Vec3::new(0.0, 8.0, 0.0), 1.0);
@@ -411,7 +424,9 @@ unsafe fn render_scene(
         let offset_target = camera_target + Vec3::new(x_offset, 0.0, 0.0);
         let scene_camera = Camera::look_at(offset_position, offset_target, Vec3::Y);
 
-        // Render ground cube (large flat slab at Y=0)
+        // Render ground cube (0.5x0.5x0.5 cube with top at Y=0)
+        // The mesh is a unit cube [0,1]³, scaled to 0.5 units.
+        // After centering, spans [-0.25, 0.25]. Positioned at Y=-0.25 so top is at Y=0.
         if let Some(ground_idx) = scene.ground_mesh_index {
             let ground_pos = Vec3::new(x_offset, -0.25, 0.0);
             mesh_renderer.render_mesh_with_options(
@@ -419,8 +434,8 @@ unsafe fn render_scene(
                 ground_idx,
                 ground_pos,
                 Quat::IDENTITY,
-                8.0,                         // scale to 8 units
-                Vec3::new(1.0, 0.0625, 1.0), // 8 * 0.0625 = 0.5 height
+                0.5,       // 0.5 unit cube
+                Vec3::ONE, // full cube, centered
                 false,
                 &scene_camera,
                 viewport_width,
