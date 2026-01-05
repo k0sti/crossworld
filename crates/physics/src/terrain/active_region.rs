@@ -99,6 +99,7 @@ impl ActiveRegionTracker {
 }
 
 /// Convert glam Vec3 to Rapier AABB
+#[allow(dead_code)]
 pub fn aabb_from_center_half_extents(center: Vec3, half_extents: Vec3) -> Aabb {
     let min = center - half_extents;
     let max = center + half_extents;

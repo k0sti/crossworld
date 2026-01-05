@@ -107,6 +107,10 @@ pub trait App {
 }
 
 /// Function signature for creating a new App instance from the dynamic library
+///
+/// Note: This uses `dyn App` which isn't strictly FFI-safe, but this is only used
+/// for hot-reload between Rust code, not for interop with other languages.
+#[allow(improper_ctypes_definitions)]
 pub type CreateAppFn = unsafe extern "C" fn() -> *mut dyn App;
 
 /// Export symbol name for the create_app function

@@ -584,7 +584,11 @@ impl App for RotatingCube {
 }
 
 /// Export the create_app function for dynamic loading
+///
+/// Note: This uses `dyn App` which isn't strictly FFI-safe, but this is only used
+/// for hot-reload between Rust code, not for interop with other languages.
 #[no_mangle]
+#[allow(improper_ctypes_definitions)]
 pub extern "C" fn create_app() -> *mut dyn App {
     Box::into_raw(Box::new(RotatingCube::new()))
 }

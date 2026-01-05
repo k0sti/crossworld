@@ -38,9 +38,9 @@ impl ModelEntry {
             let full_path = format!("{}{}", VOX_MODELS_BASE_PATH, vox_path);
             let bytes = fs::read(&full_path)
                 .map_err(|e| format!("Failed to read VOX file '{}': {}", full_path, e))?;
-            // Center the model within the cube (0.5 = centered on each axis)
-            cube::load_vox_to_cube(&bytes, cube::glam::Vec3::splat(0.5))
-                .map(Rc::new)
+            // Load VOX file and extract the cube from the CubeBox
+            cube::load_vox_to_cubebox(&bytes)
+                .map(|cubebox| Rc::new(cubebox.cube))
                 .map_err(|e| format!("Failed to load VOX: {}", e))
         } else {
             Err("Model has neither csm nor vox_path".to_string())
