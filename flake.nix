@@ -18,14 +18,8 @@
           inherit system overlays;
         };
 
-        # Rust stable toolchain with wasm target
-        rustToolchain = pkgs.rust-bin.stable.latest.default.override {
-          extensions = [ "rust-src" "rust-analyzer" ];
-          targets = [ "wasm32-unknown-unknown" ];
-        };
-
         # Rust nightly toolchain with cranelift backend for faster dev builds
-        rustNightly = pkgs.rust-bin.nightly.latest.default.override {
+        rustToolchain = pkgs.rust-bin.nightly.latest.default.override {
           extensions = [ "rust-src" "rust-analyzer" "rustc-codegen-cranelift" ];
           targets = [ "wasm32-unknown-unknown" ];
         };
@@ -35,7 +29,6 @@
           pkg-config
           cmake
           rustToolchain
-          rustNightly
           wasm-pack
           bun
           just
@@ -94,8 +87,6 @@
           buildInputs = buildInputs ++ devTools;
           inherit nativeBuildInputs;
 
-          RUST_NIGHTLY_PATH = "${rustNightly}/bin";
-
           shellHook = ''
             export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:$LD_LIBRARY_PATH"
             export PKG_CONFIG_PATH="${pkgs.alsa-lib.dev}/lib/pkgconfig:${pkgs.udev.dev}/lib/pkgconfig:${pkgs.openssl.dev}/lib/pkgconfig:$PKG_CONFIG_PATH"
@@ -104,17 +95,10 @@
             export WAYLAND_DISPLAY="''${WAYLAND_DISPLAY:-wayland-1}"
             export XDG_RUNTIME_DIR="''${XDG_RUNTIME_DIR:-/run/user/1000}"
 
-            # Create wrapper functions for nightly toolchain that set RUSTC properly
-            cargo-nightly() {
-              CARGO="${rustNightly}/bin/cargo" RUSTC="${rustNightly}/bin/rustc" "${rustNightly}/bin/cargo" "$@"
-            }
-            export -f cargo-nightly
-
             echo "🦀 Crossworld development environment loaded"
             echo ""
             echo "Toolchain:"
-            echo "  Rust stable: $(rustc --version)"
-            echo "  Rust nightly: $(${rustNightly}/bin/rustc --version)"
+            echo "  Rust: $(rustc --version)"
             echo "  Bun: $(bun --version)"
             echo ""
             echo "Quick start:"
@@ -130,8 +114,8 @@
             echo ""
             echo "Build optimizations:"
             echo "  ✓ mold linker configured in .cargo/config.toml"
-            echo "  ✓ cargo-nightly build --profile dev-cranelift  (cranelift backend)"
-            echo "  ✓ cargo-nightly build --profile fast-dev       (cranelift + opt-level=1)"
+            echo "  ✓ cargo build --profile dev-cranelift  (cranelift backend)"
+            echo "  ✓ cargo build --profile fast-dev       (cranelift + opt-level=1)"
             echo ""
           '';
         };
