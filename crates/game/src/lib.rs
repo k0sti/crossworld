@@ -1,4 +1,4 @@
-use app::App;
+use app::{App, ControllerBackend, create_controller_backend};
 // Hot-reload trigger: 1767203552400
 use glam::{Quat, Vec3};
 use glow::*;
@@ -8,10 +8,6 @@ use std::time::Instant;
 use winit::event::WindowEvent;
 use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::CursorGrabMode;
-use gilrs::Gilrs;
-
-mod controller;
-use controller::ControllerInput;
 
 /// Camera control state
 pub struct CameraController {
@@ -127,25 +123,14 @@ pub struct RotatingCube {
     keys_pressed: std::collections::HashSet<KeyCode>,
     // Raw mouse delta accumulator (from device events)
     raw_mouse_delta: (f64, f64),
-    // Controller input
-    controller: ControllerInput,
-    // Gamepad support
-    gilrs: Option<Gilrs>,
+    // Controller backend
+    controller_backend: Option<Box<dyn ControllerBackend>>,
 }
 
 impl RotatingCube {
     pub fn new() -> Self {
-        // Initialize gilrs for gamepad support
-        let gilrs = match Gilrs::new() {
-            Ok(gilrs) => {
-                println!("[Game] Gilrs initialized for gamepad support");
-                Some(gilrs)
-            }
-            Err(e) => {
-                eprintln!("[Game] Failed to initialize gilrs: {}", e);
-                None
-            }
-        };
+        // Initialize controller backend
+        let controller_backend = create_controller_backend();
 
         Self {
             mesh_renderer: MeshRenderer::new(),
@@ -164,8 +149,7 @@ impl RotatingCube {
             camera_controller: CameraController::new(),
             keys_pressed: std::collections::HashSet::new(),
             raw_mouse_delta: (0.0, 0.0),
-            controller: ControllerInput::new(),
-            gilrs,
+            controller_backend,
         }
     }
 
@@ -330,53 +314,22 @@ impl App for RotatingCube {
         // Rotate at 45 degrees per second (change this value to test hot-reload!)
         self.rotation += 45.0_f32.to_radians() * delta_time;
 
-        // Poll gilrs for real gamepad input
-        if let Some(gilrs) = &mut self.gilrs {
-            while let Some(event) = gilrs.next_event() {
-                match event.event {
-                    gilrs::EventType::Connected => {
-                        self.controller.connect();
-                        println!("[Game] Gamepad {} connected", gilrs.gamepad(event.id).name());
-                    }
-                    gilrs::EventType::Disconnected => {
-                        self.controller.disconnect();
-                        println!("[Game] Gamepad disconnected");
-                    }
-                    gilrs::EventType::AxisChanged(axis, value, _) => {
-                        use gilrs::Axis as GilrsAxis;
-                        match axis {
-                            GilrsAxis::LeftStickX => {
-                                self.controller.gamepad.set_left_stick_x(value);
-                            }
-                            GilrsAxis::LeftStickY => {
-                                self.controller.gamepad.set_left_stick_y(value);
-                            }
-                            GilrsAxis::RightStickX => {
-                                self.controller.gamepad.set_right_stick_x(value);
-                            }
-                            GilrsAxis::RightStickY => {
-                                self.controller.gamepad.set_right_stick_y(value);
-                            }
-                            GilrsAxis::LeftZ => {
-                                self.controller.gamepad.set_left_trigger(value);
-                            }
-                            GilrsAxis::RightZ => {
-                                self.controller.gamepad.set_right_trigger(value);
-                            }
-                            _ => {}
-                        }
-                    }
-                    _ => {}
-                }
-            }
+        // Poll controller backend for gamepad input
+        if let Some(backend) = &mut self.controller_backend {
+            backend.poll();
         }
 
+        // Get controller input from the first connected controller
+        let controller = self.controller_backend.as_mut().and_then(|b| b.get_first_controller());
+
         // Handle controller camera movement
-        let (controller_delta_x, controller_delta_y) = self.controller.get_camera_delta(delta_time);
-        // Always apply controller input if it exists (no threshold)
-        if self.controller.gamepad.right_stick.length() > 0.01 {
-            // Controller delta already includes sensitivity, apply rotation
-            self.camera_controller.apply_camera_rotation(&mut self.camera, -controller_delta_x, controller_delta_y);
+        if let Some(ctrl) = controller {
+            let (controller_delta_x, controller_delta_y) = ctrl.get_camera_delta(delta_time);
+            // Always apply controller input if it exists (no threshold)
+            if ctrl.gamepad.right_stick.length() > 0.01 {
+                // Controller delta already includes sensitivity, apply rotation
+                self.camera_controller.apply_camera_rotation(&mut self.camera, -controller_delta_x, controller_delta_y);
+            }
         }
 
         // Handle raw mouse movement for FPS camera (from device events)
@@ -399,7 +352,10 @@ impl App for RotatingCube {
                 || self.keys_pressed.contains(&KeyCode::ShiftRight);
 
         // Get controller movement input (left stick for movement, right stick for camera, triggers for vertical)
-        let (controller_x, controller_y_vertical, controller_z) = self.controller.get_movement_input();
+        let controller = self.controller_backend.as_mut().and_then(|b| b.get_first_controller());
+        let (controller_x, controller_y_vertical, controller_z) = controller
+            .map(|c| c.get_movement_input())
+            .unwrap_or((0.0, 0.0, 0.0));
 
         // Combine keyboard and controller input
         let mut total_velocity = self.camera_controller.calculate_velocity(&self.camera, forward, backward, left, right, up, down);
@@ -500,12 +456,13 @@ impl App for RotatingCube {
             let last_reload_trigger = self.last_reload_trigger;
             let camera_pos = self.camera.position;
             let mouse_captured = self.camera_controller.mouse_captured;
-            let right_stick = self.controller.gamepad.right_stick;
-            let left_stick = self.controller.gamepad.left_stick;
-            let left_trigger = self.controller.gamepad.left_trigger;
-            let right_trigger = self.controller.gamepad.right_trigger;
-            let has_controller_input = self.controller.has_input();
-            let gamepad_connected = self.controller.gamepad.connected;
+
+            // Get controller state for UI display
+            let controller = self.controller_backend.as_mut().and_then(|b| b.get_first_controller());
+            let (right_stick, left_stick, left_trigger, right_trigger, has_controller_input, gamepad_connected) =
+                controller.map(|c| {
+                    (c.gamepad.right_stick, c.gamepad.left_stick, c.gamepad.left_trigger, c.gamepad.right_trigger, c.has_input(), c.gamepad.connected)
+                }).unwrap_or_default();
 
             let full_output = egui_ctx.run(raw_input, |ui_ctx| {
                 egui::Window::new("🎮 Hot Reload Demo")
