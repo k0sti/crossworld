@@ -3,6 +3,9 @@
 //! Compares physics behavior between:
 //! - Left: Simple flat ground using cuboid collider
 //! - Right: Flat ground constructed from Cube objects using terrain collider
+//!
+//! Scene configuration can be loaded from Steel (Scheme) files when the
+//! `steel` feature is enabled. See `config/scene.scm` for an example.
 
 use app::{App, FrameContext, InputState};
 use crossworld_physics::{
@@ -11,11 +14,16 @@ use crossworld_physics::{
     CubeObject, PhysicsWorld, VoxelColliderBuilder,
 };
 use cube::Cube;
-use glam::{Quat, Vec2, Vec3};
+use glam::{Quat, Vec3};
 use glow::{Context, HasContext, COLOR_BUFFER_BIT, DEPTH_BUFFER_BIT, SCISSOR_TEST};
 use renderer::{Camera, MeshRenderer, OrbitController, OrbitControllerConfig};
 use std::rc::Rc;
 use std::time::Instant;
+
+#[cfg(feature = "steel")]
+use app::steel_config::{CameraConfig, SteelConfig};
+#[cfg(feature = "steel")]
+use std::path::Path;
 
 /// Physics state for display
 #[derive(Default, Clone)]
@@ -112,6 +120,64 @@ impl PhysicsTestbed {
     pub fn with_debug_frames(mut self, frames: Option<u64>) -> Self {
         self.debug_frames = frames;
         self
+    }
+
+    /// Load configuration from a Steel file
+    ///
+    /// Returns a new PhysicsTestbed configured from the Steel scene configuration.
+    /// Falls back to default configuration if the file doesn't exist or fails to parse.
+    #[cfg(feature = "steel")]
+    pub fn from_config_file(path: &Path) -> Self {
+        match Self::try_from_config_file(path) {
+            Ok(testbed) => testbed,
+            Err(e) => {
+                eprintln!("[Testbed] Warning: Failed to load config from {:?}: {}", path, e);
+                eprintln!("[Testbed] Using default configuration");
+                Self::new()
+            }
+        }
+    }
+
+    /// Try to load configuration from a Steel file
+    #[cfg(feature = "steel")]
+    pub fn try_from_config_file(path: &Path) -> Result<Self, String> {
+        let mut steel = SteelConfig::new();
+        steel.load_file(path)?;
+
+        // Try to extract camera configuration
+        let camera_config = steel.extract_camera("scene-camera")
+            .unwrap_or_else(|_| CameraConfig::default());
+
+        Self::from_camera_config(&camera_config)
+    }
+
+    /// Create testbed from camera configuration
+    #[cfg(feature = "steel")]
+    fn from_camera_config(camera_config: &CameraConfig) -> Result<Self, String> {
+        let camera_position = camera_config.position.to_vec3();
+        let camera_target = camera_config.look_at.to_vec3();
+
+        let orbit_config = OrbitControllerConfig {
+            mouse_sensitivity: 0.005,
+            zoom_sensitivity: 0.5,
+            min_distance: 2.0,
+            max_distance: 30.0,
+        };
+
+        Ok(Self {
+            mesh_renderer: MeshRenderer::new(),
+            camera: Camera::look_at(camera_position, camera_target, Vec3::Y),
+            orbit_controller: OrbitController::new(camera_target, orbit_config),
+            left_scene: None,
+            right_scene: None,
+            ground_cube: None,
+            falling_cube: None,
+            reset_requested: false,
+            frame_count: 0,
+            debug_frames: None,
+            physics_dt: 1.0 / 60.0,
+            last_physics_update: Instant::now(),
+        })
     }
 
     /// Create physics scene with simple cuboid ground collider
@@ -561,7 +627,7 @@ impl App for PhysicsTestbed {
         }
     }
 
-    fn ui(&mut self, ctx: &FrameContext, egui_ctx: &egui::Context) {
+    fn ui(&mut self, _ctx: &FrameContext, egui_ctx: &egui::Context) {
         let left_state_text = self
             .left_scene
             .as_ref()

@@ -22,11 +22,17 @@ runtime = [
     "dep:egui_glow",
 ]
 
+# Steel feature enables configuration via Steel (embedded Scheme)
+steel = ["dep:steel-core"]
+
 [dependencies]
 glow = "0.14"
 winit = "0.30"
 glam = "0.29"
 gilrs = { version = "0.11", optional = true }
+
+# Optional Steel dependency for configuration
+steel-core = { version = "0.7", optional = true }
 
 # Optional runtime dependencies
 glutin = { version = "0.32", optional = true }
