@@ -22,20 +22,30 @@
 ;; Scene Objects
 ;; =============================================================================
 
-;; Falling cube object
-;; - Position: (0, 1, 0) - 1 unit above ground
-;; - Rotation: identity quaternion (no rotation)
-;; - Size: (0.4, 0.4, 0.4) - half-extents for collider
-;; - Mass: 1.0 kg
-;; - Material: 224 (red color from palette)
+;; Multiple falling cube objects for testing
+;; Each object has:
+;; - Position: (x, y, z) - world position
+;; - Rotation: quaternion (x, y, z, w)
+;; - Size: (x, y, z) - half-extents for collider
+;; - Mass: kg
+;; - Material: color index from palette
 (define scene-objects
   (list
+    ;; Object 0: Center cube, no rotation
     (object
       (vec3 0 1 0)
       (quat 0.0 0.0 0.0 1.0)
       (vec3 0.4 0.4 0.4)
       1.0
-      224)))
+      224)
+    ;; Object 1: Left cube, rotated 45 degrees around Y axis
+    (object
+      (vec3 0 3 0)
+      (quat 0.0 0.0 0.3827 0.9239)  ;; ~45 deg Y rotation
+      (vec3 0.3 0.3 0.3)
+      0.8
+      160)
+))
 
 ;; =============================================================================
 ;; Camera Configuration

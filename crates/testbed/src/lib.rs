@@ -50,12 +50,12 @@ impl PhysicsState {
 /// Physics testbed state for one side (left = cuboid, right = terrain)
 pub struct PhysicsScene {
     pub world: PhysicsWorld,
-    pub falling_object: CubeObject,
+    pub falling_objects: Vec<CubeObject>,
     pub ground_mesh_index: Option<usize>,
-    pub falling_mesh_index: Option<usize>,
+    pub falling_mesh_indices: Vec<usize>,
     #[allow(dead_code)]
     pub ground_collider_type: &'static str,
-    pub state: PhysicsState,
+    pub states: Vec<PhysicsState>,
 }
 
 /// Ground configuration for scene creation
@@ -128,8 +128,8 @@ pub struct PhysicsTestbed {
     left_ground_settings: GroundSettings,
     right_ground_settings: GroundSettings,
 
-    // Object configuration
-    object_settings: ObjectSettings,
+    // Object configurations (multiple objects supported)
+    object_settings: Vec<ObjectSettings>,
 
     // Config file path for reloading
     #[cfg(feature = "steel")]
@@ -177,7 +177,7 @@ impl PhysicsTestbed {
             falling_cube: None,
             left_ground_settings: GroundSettings::default(),
             right_ground_settings: GroundSettings::default(),
-            object_settings: ObjectSettings::default(),
+            object_settings: vec![ObjectSettings::default()],
             #[cfg(feature = "steel")]
             config_path: None,
             reset_requested: false,
@@ -222,12 +222,13 @@ impl PhysicsTestbed {
         let left_ground_config = config.extract_ground("ground-1")?;
         let right_ground_config = config.extract_ground("ground-2")?;
 
-        // Extract object configuration from scene-objects (use first object if available)
+        // Extract object configurations from scene-objects
         let objects = config.extract_objects("scene-objects")?;
-        let object_config = objects.first()
-            .ok_or_else(|| "scene-objects must contain at least one object".to_string())?;
+        if objects.is_empty() {
+            return Err("scene-objects must contain at least one object".to_string());
+        }
 
-        Self::from_config(path, &camera_config, &left_ground_config, &right_ground_config, object_config)
+        Self::from_config(path, &camera_config, &left_ground_config, &right_ground_config, &objects)
     }
 
     /// Convert a GroundConfig to GroundSettings
@@ -273,7 +274,7 @@ impl PhysicsTestbed {
         camera_config: &CameraConfig,
         left_ground_config: &GroundConfig,
         right_ground_config: &GroundConfig,
-        object_config: &steel_scene::ObjectConfig,
+        object_configs: &[steel_scene::ObjectConfig],
     ) -> Result<Self, String> {
         let camera_position = camera_config.position.to_vec3();
         let camera_target = camera_config.look_at.to_vec3();
@@ -282,8 +283,11 @@ impl PhysicsTestbed {
         let left_ground_settings = Self::ground_config_to_settings(left_ground_config);
         let right_ground_settings = Self::ground_config_to_settings(right_ground_config);
 
-        // Convert object config to settings
-        let object_settings = Self::object_config_to_settings(object_config);
+        // Convert all object configs to settings
+        let object_settings: Vec<ObjectSettings> = object_configs
+            .iter()
+            .map(Self::object_config_to_settings)
+            .collect();
 
         let orbit_config = OrbitControllerConfig {
             mouse_sensitivity: 0.005,
@@ -354,17 +358,27 @@ impl PhysicsTestbed {
             .build();
         world.add_static_collider(ground_collider);
 
-        let mut falling_object = CubeObject::new_dynamic(&mut world, self.object_settings.position, self.object_settings.mass);
-        let falling_collider = create_box_collider(self.object_settings.size);
-        falling_object.attach_collider(&mut world, falling_collider);
+        // Create all falling objects from config
+        let mut falling_objects = Vec::with_capacity(self.object_settings.len());
+        let mut states = Vec::with_capacity(self.object_settings.len());
+
+        for obj_settings in &self.object_settings {
+            let mut falling_object = CubeObject::new_dynamic(&mut world, obj_settings.position, obj_settings.mass);
+            // Apply rotation from config
+            falling_object.set_rotation(&mut world, obj_settings.rotation);
+            let falling_collider = create_box_collider(obj_settings.size);
+            falling_object.attach_collider(&mut world, falling_collider);
+            falling_objects.push(falling_object);
+            states.push(PhysicsState::default());
+        }
 
         PhysicsScene {
             world,
-            falling_object,
+            falling_objects,
             ground_mesh_index: None,
-            falling_mesh_index: None,
+            falling_mesh_indices: Vec::new(),
             ground_collider_type: "Cuboid",
-            state: PhysicsState::default(),
+            states,
         }
     }
 
@@ -400,17 +414,27 @@ impl PhysicsTestbed {
         let terrain_body_handle = world.add_rigid_body(terrain_body);
         world.add_collider(terrain_collider, terrain_body_handle);
 
-        let mut falling_object = CubeObject::new_dynamic(&mut world, self.object_settings.position, self.object_settings.mass);
-        let falling_collider = create_box_collider(self.object_settings.size);
-        falling_object.attach_collider(&mut world, falling_collider);
+        // Create all falling objects from config
+        let mut falling_objects = Vec::with_capacity(self.object_settings.len());
+        let mut states = Vec::with_capacity(self.object_settings.len());
+
+        for obj_settings in &self.object_settings {
+            let mut falling_object = CubeObject::new_dynamic(&mut world, obj_settings.position, obj_settings.mass);
+            // Apply rotation from config
+            falling_object.set_rotation(&mut world, obj_settings.rotation);
+            let falling_collider = create_box_collider(obj_settings.size);
+            falling_object.attach_collider(&mut world, falling_collider);
+            falling_objects.push(falling_object);
+            states.push(PhysicsState::default());
+        }
 
         PhysicsScene {
             world,
-            falling_object,
+            falling_objects,
             ground_mesh_index: None,
-            falling_mesh_index: None,
+            falling_mesh_indices: Vec::new(),
             ground_collider_type: "Terrain (Cube)",
-            state: PhysicsState::default(),
+            states,
         }
     }
 
@@ -448,10 +472,6 @@ impl PhysicsTestbed {
         self.left_ground_cube = Some(left_ground_cube.clone());
         self.right_ground_cube = Some(right_ground_cube.clone());
 
-        // Create falling cube with configured material color
-        let falling_cube = Rc::new(Cube::Solid(self.object_settings.material));
-        self.falling_cube = Some(falling_cube.clone());
-
         // Upload left ground mesh
         match self.mesh_renderer.upload_mesh(gl, &left_ground_cube, 1) {
             Ok(idx) => {
@@ -472,24 +492,33 @@ impl PhysicsTestbed {
             Err(e) => eprintln!("Failed to upload right ground mesh: {}", e),
         }
 
-        // Upload falling cube mesh (for left scene)
-        match self.mesh_renderer.upload_mesh(gl, &falling_cube, 1) {
-            Ok(idx) => {
-                if let Some(scene) = &mut self.left_scene {
-                    scene.falling_mesh_index = Some(idx);
+        // Upload falling cube meshes for each object (for left scene)
+        if let Some(scene) = &mut self.left_scene {
+            scene.falling_mesh_indices.clear();
+            for obj_settings in &self.object_settings {
+                let falling_cube = Rc::new(Cube::Solid(obj_settings.material));
+                match self.mesh_renderer.upload_mesh(gl, &falling_cube, 1) {
+                    Ok(idx) => scene.falling_mesh_indices.push(idx),
+                    Err(e) => eprintln!("Failed to upload falling mesh: {}", e),
                 }
             }
-            Err(e) => eprintln!("Failed to upload falling mesh: {}", e),
         }
 
-        // Upload falling cube mesh (for right scene)
-        match self.mesh_renderer.upload_mesh(gl, &falling_cube, 1) {
-            Ok(idx) => {
-                if let Some(scene) = &mut self.right_scene {
-                    scene.falling_mesh_index = Some(idx);
+        // Upload falling cube meshes for each object (for right scene)
+        if let Some(scene) = &mut self.right_scene {
+            scene.falling_mesh_indices.clear();
+            for obj_settings in &self.object_settings {
+                let falling_cube = Rc::new(Cube::Solid(obj_settings.material));
+                match self.mesh_renderer.upload_mesh(gl, &falling_cube, 1) {
+                    Ok(idx) => scene.falling_mesh_indices.push(idx),
+                    Err(e) => eprintln!("Failed to upload falling mesh: {}", e),
                 }
             }
-            Err(e) => eprintln!("Failed to upload falling mesh: {}", e),
+        }
+
+        // Store first falling cube for backwards compatibility (if any)
+        if let Some(first_obj) = self.object_settings.first() {
+            self.falling_cube = Some(Rc::new(Cube::Solid(first_obj.material)));
         }
     }
 
@@ -505,30 +534,38 @@ impl PhysicsTestbed {
             if let Some(scene) = &mut self.left_scene {
                 scene.world.step(self.physics_dt);
 
-                // Update physics state
-                let pos = scene.falling_object.position(&scene.world);
-                let vel = scene.falling_object.velocity(&scene.world);
-                let is_on_ground = vel.y.abs() < 0.1 && pos.y < 1.0;
+                // Update physics state for all objects
+                for (i, falling_object) in scene.falling_objects.iter().enumerate() {
+                    let pos = falling_object.position(&scene.world);
+                    let vel = falling_object.velocity(&scene.world);
+                    let is_on_ground = vel.y.abs() < 0.1 && pos.y < 1.0;
 
-                scene.state = PhysicsState {
-                    falling_position: pos,
-                    falling_velocity: vel,
-                    is_on_ground,
-                };
+                    if i < scene.states.len() {
+                        scene.states[i] = PhysicsState {
+                            falling_position: pos,
+                            falling_velocity: vel,
+                            is_on_ground,
+                        };
+                    }
+                }
             }
             if let Some(scene) = &mut self.right_scene {
                 scene.world.step(self.physics_dt);
 
-                // Update physics state
-                let pos = scene.falling_object.position(&scene.world);
-                let vel = scene.falling_object.velocity(&scene.world);
-                let is_on_ground = vel.y.abs() < 0.1 && pos.y < 1.0;
+                // Update physics state for all objects
+                for (i, falling_object) in scene.falling_objects.iter().enumerate() {
+                    let pos = falling_object.position(&scene.world);
+                    let vel = falling_object.velocity(&scene.world);
+                    let is_on_ground = vel.y.abs() < 0.1 && pos.y < 1.0;
 
-                scene.state = PhysicsState {
-                    falling_position: pos,
-                    falling_velocity: vel,
-                    is_on_ground,
-                };
+                    if i < scene.states.len() {
+                        scene.states[i] = PhysicsState {
+                            falling_position: pos,
+                            falling_velocity: vel,
+                            is_on_ground,
+                        };
+                    }
+                }
             }
         }
     }
@@ -539,64 +576,68 @@ impl PhysicsTestbed {
             return;
         }
 
-        let left_pos = self
-            .left_scene
-            .as_ref()
-            .map(|s| s.falling_object.position(&s.world))
-            .unwrap_or(Vec3::ZERO);
+        let num_objects = self.object_settings.len();
 
-        let right_pos = self
-            .right_scene
-            .as_ref()
-            .map(|s| s.falling_object.position(&s.world))
-            .unwrap_or(Vec3::ZERO);
+        for obj_idx in 0..num_objects {
+            let left_pos = self
+                .left_scene
+                .as_ref()
+                .and_then(|s| s.falling_objects.get(obj_idx).map(|o| o.position(&s.world)))
+                .unwrap_or(Vec3::ZERO);
 
-        let left_vel = self
-            .left_scene
-            .as_ref()
-            .map(|s| s.falling_object.velocity(&s.world))
-            .unwrap_or(Vec3::ZERO);
+            let right_pos = self
+                .right_scene
+                .as_ref()
+                .and_then(|s| s.falling_objects.get(obj_idx).map(|o| o.position(&s.world)))
+                .unwrap_or(Vec3::ZERO);
 
-        let right_vel = self
-            .right_scene
-            .as_ref()
-            .map(|s| s.falling_object.velocity(&s.world))
-            .unwrap_or(Vec3::ZERO);
+            let left_vel = self
+                .left_scene
+                .as_ref()
+                .and_then(|s| s.falling_objects.get(obj_idx).map(|o| o.velocity(&s.world)))
+                .unwrap_or(Vec3::ZERO);
 
-        let left_rot = self
-            .left_scene
-            .as_ref()
-            .map(|s| s.falling_object.rotation(&s.world))
-            .unwrap_or(Quat::IDENTITY);
+            let right_vel = self
+                .right_scene
+                .as_ref()
+                .and_then(|s| s.falling_objects.get(obj_idx).map(|o| o.velocity(&s.world)))
+                .unwrap_or(Vec3::ZERO);
 
-        let right_rot = self
-            .right_scene
-            .as_ref()
-            .map(|s| s.falling_object.rotation(&s.world))
-            .unwrap_or(Quat::IDENTITY);
+            let left_rot = self
+                .left_scene
+                .as_ref()
+                .and_then(|s| s.falling_objects.get(obj_idx).map(|o| o.rotation(&s.world)))
+                .unwrap_or(Quat::IDENTITY);
 
-        let pos_diff = left_pos - right_pos;
-        let vel_diff = left_vel - right_vel;
+            let right_rot = self
+                .right_scene
+                .as_ref()
+                .and_then(|s| s.falling_objects.get(obj_idx).map(|o| o.rotation(&s.world)))
+                .unwrap_or(Quat::IDENTITY);
 
-        println!(
-            "Frame {}: Left(Cuboid) pos={:.4},{:.4},{:.4} rot=({:.4},{:.4},{:.4},{:.4}) vel={:.4},{:.4},{:.4}",
-            self.frame_count,
-            left_pos.x, left_pos.y, left_pos.z,
-            left_rot.x, left_rot.y, left_rot.z, left_rot.w,
-            left_vel.x, left_vel.y, left_vel.z,
-        );
-        println!(
-            "         Right(Terrain) pos={:.4},{:.4},{:.4} rot=({:.4},{:.4},{:.4},{:.4}) vel={:.4},{:.4},{:.4}",
-            right_pos.x, right_pos.y, right_pos.z,
-            right_rot.x, right_rot.y, right_rot.z, right_rot.w,
-            right_vel.x, right_vel.y, right_vel.z,
-        );
+            let pos_diff = left_pos - right_pos;
+            let vel_diff = left_vel - right_vel;
 
-        if pos_diff.length() > 0.001 || vel_diff.length() > 0.001 {
             println!(
-                "  DIFF: pos_delta={:.6},{:.6},{:.6} vel_delta={:.6},{:.6},{:.6}",
-                pos_diff.x, pos_diff.y, pos_diff.z, vel_diff.x, vel_diff.y, vel_diff.z,
+                "Frame {} Obj[{}]: Left(Cuboid) pos={:.4},{:.4},{:.4} rot=({:.4},{:.4},{:.4},{:.4}) vel={:.4},{:.4},{:.4}",
+                self.frame_count, obj_idx,
+                left_pos.x, left_pos.y, left_pos.z,
+                left_rot.x, left_rot.y, left_rot.z, left_rot.w,
+                left_vel.x, left_vel.y, left_vel.z,
             );
+            println!(
+                "               Right(Terrain) pos={:.4},{:.4},{:.4} rot=({:.4},{:.4},{:.4},{:.4}) vel={:.4},{:.4},{:.4}",
+                right_pos.x, right_pos.y, right_pos.z,
+                right_rot.x, right_rot.y, right_rot.z, right_rot.w,
+                right_vel.x, right_vel.y, right_vel.z,
+            );
+
+            if pos_diff.length() > 0.001 || vel_diff.length() > 0.001 {
+                println!(
+                    "  DIFF: pos_delta={:.6},{:.6},{:.6} vel_delta={:.6},{:.6},{:.6}",
+                    pos_diff.x, pos_diff.y, pos_diff.z, vel_diff.x, vel_diff.y, vel_diff.z,
+                );
+            }
         }
     }
 
@@ -614,7 +655,7 @@ impl PhysicsTestbed {
         x_offset: f32,
         ground_size: f32,
         ground_center: Vec3,
-        object_size: Vec3,
+        object_sizes: &[Vec3],
     ) {
         unsafe {
             // Set viewport and scissor
@@ -650,24 +691,26 @@ impl PhysicsTestbed {
             }
         }
 
-        // Render falling cube with configured size (half-extents * 2 = full size)
-        if let Some(falling_idx) = scene.falling_mesh_index {
-            let falling_pos =
-                scene.falling_object.position(&scene.world) + Vec3::new(x_offset, 0.0, 0.0);
-            let falling_rot = scene.falling_object.rotation(&scene.world);
-            // Use max dimension * 2 as uniform scale (size is half-extents)
-            let render_scale = object_size.max_element() * 2.0;
-            unsafe {
-                mesh_renderer.render_mesh_with_scale(
-                    gl,
-                    falling_idx,
-                    falling_pos,
-                    falling_rot,
-                    render_scale,
-                    &scene_camera,
-                    viewport_width,
-                    viewport_height,
-                );
+        // Render all falling cubes with configured sizes
+        for (i, falling_object) in scene.falling_objects.iter().enumerate() {
+            if let Some(&falling_idx) = scene.falling_mesh_indices.get(i) {
+                let falling_pos = falling_object.position(&scene.world) + Vec3::new(x_offset, 0.0, 0.0);
+                let falling_rot = falling_object.rotation(&scene.world);
+                // Use max dimension * 2 as uniform scale (size is half-extents)
+                let object_size = object_sizes.get(i).copied().unwrap_or(Vec3::splat(0.4));
+                let render_scale = object_size.max_element() * 2.0;
+                unsafe {
+                    mesh_renderer.render_mesh_with_scale(
+                        gl,
+                        falling_idx,
+                        falling_pos,
+                        falling_rot,
+                        render_scale,
+                        &scene_camera,
+                        viewport_width,
+                        viewport_height,
+                    );
+                }
             }
         }
 
@@ -681,18 +724,27 @@ impl PhysicsTestbed {
             if self.frame_count >= max_frames {
                 println!("\n[Testbed] Reached {} frames, exiting", max_frames);
 
-                // Print final comparison
+                // Print final comparison for all objects
                 if let (Some(left), Some(right)) = (&self.left_scene, &self.right_scene) {
-                    let left_pos = left.falling_object.position(&left.world);
-                    let right_pos = right.falling_object.position(&right.world);
-                    let diff = left_pos - right_pos;
-
                     println!("\n=== Final Comparison ===");
-                    println!("Left (Cuboid):   Y = {:.6}", left_pos.y);
-                    println!("Right (Terrain): Y = {:.6}", right_pos.y);
-                    println!("Difference:      Y = {:.6}", diff.y);
 
-                    if diff.length() > 0.01 {
+                    let mut has_significant_diff = false;
+                    for (i, (left_obj, right_obj)) in left.falling_objects.iter().zip(right.falling_objects.iter()).enumerate() {
+                        let left_pos = left_obj.position(&left.world);
+                        let right_pos = right_obj.position(&right.world);
+                        let diff = left_pos - right_pos;
+
+                        println!("Object[{}]:", i);
+                        println!("  Left (Cuboid):   Y = {:.6}", left_pos.y);
+                        println!("  Right (Terrain): Y = {:.6}", right_pos.y);
+                        println!("  Difference:      Y = {:.6}", diff.y);
+
+                        if diff.length() > 0.01 {
+                            has_significant_diff = true;
+                        }
+                    }
+
+                    if has_significant_diff {
                         println!("\nWARNING: Significant physics difference detected!");
                     } else {
                         println!("\nPhysics behavior is consistent between both collider types.");
@@ -798,6 +850,9 @@ impl App for PhysicsTestbed {
         // Get camera target for consistent rendering
         let camera_target = self.orbit_controller.target;
 
+        // Collect object sizes for rendering
+        let object_sizes: Vec<Vec3> = self.object_settings.iter().map(|s| s.size).collect();
+
         // Render left scene (cuboid ground, uses ground-1)
         if let Some(scene) = &self.left_scene {
             Self::render_scene(
@@ -813,7 +868,7 @@ impl App for PhysicsTestbed {
                 -6.0,
                 self.left_ground_settings.size,
                 self.left_ground_settings.center,
-                self.object_settings.size,
+                &object_sizes,
             );
         }
 
@@ -832,7 +887,7 @@ impl App for PhysicsTestbed {
                 6.0,
                 self.right_ground_settings.size,
                 self.right_ground_settings.center,
-                self.object_settings.size,
+                &object_sizes,
             );
         }
 
@@ -848,15 +903,16 @@ impl App for PhysicsTestbed {
     }
 
     fn ui(&mut self, _ctx: &FrameContext, egui_ctx: &egui::Context) {
+        // Show first object state for status display (could be expanded to show all)
         let left_state_text = self
             .left_scene
             .as_ref()
-            .map(|s| format!("Cuboid: {}", s.state.format_compact()))
+            .and_then(|s| s.states.first().map(|state| format!("Cuboid: {}", state.format_compact())))
             .unwrap_or_else(|| "Cuboid: N/A".to_string());
         let right_state_text = self
             .right_scene
             .as_ref()
-            .map(|s| format!("Terrain: {}", s.state.format_compact()))
+            .and_then(|s| s.states.first().map(|state| format!("Terrain: {}", state.format_compact())))
             .unwrap_or_else(|| "Terrain: N/A".to_string());
         let frame_count = self.frame_count;
         let label_height_f = 25.0;
