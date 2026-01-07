@@ -23,7 +23,9 @@ use std::rc::Rc;
 use std::time::Instant;
 
 #[cfg(feature = "steel")]
-use app::steel_config::{CameraConfig, SteelConfig};
+mod steel_scene;
+#[cfg(feature = "steel")]
+use steel_scene::{CameraConfig, TestbedConfig};
 #[cfg(feature = "steel")]
 use std::path::Path;
 
@@ -143,11 +145,11 @@ impl PhysicsTestbed {
     /// Try to load configuration from a Steel file
     #[cfg(feature = "steel")]
     pub fn try_from_config_file(path: &Path) -> Result<Self, String> {
-        let mut steel = SteelConfig::new();
-        steel.load_file(path)?;
+        let mut config = TestbedConfig::new();
+        config.load_file(path)?;
 
         // Try to extract camera configuration
-        let camera_config = steel.extract_camera("scene-camera")
+        let camera_config = config.extract_camera("scene-camera")
             .unwrap_or_else(|_| CameraConfig::default());
 
         Self::from_camera_config(&camera_config)
