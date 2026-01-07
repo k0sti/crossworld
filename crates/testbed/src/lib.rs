@@ -936,7 +936,7 @@ impl App for PhysicsTestbed {
 
         // Physics state labels above viewports
         egui::TopBottomPanel::bottom("state_panel")
-            .frame(egui::Frame::none().fill(egui::Color32::from_gray(30)))
+            .frame(egui::Frame::NONE.fill(egui::Color32::from_gray(30)))
             .show(egui_ctx, |ui| {
                 ui.set_height(label_height_f);
                 ui.horizontal(|ui| {
@@ -975,7 +975,7 @@ impl App for PhysicsTestbed {
 
         // Central panel for camera control hint
         egui::CentralPanel::default()
-            .frame(egui::Frame::none())
+            .frame(egui::Frame::NONE)
             .show(egui_ctx, |ui| {
                 let rect = ui.available_rect_before_wrap();
 

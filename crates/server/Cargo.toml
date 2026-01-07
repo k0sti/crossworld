@@ -25,19 +25,19 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
 # Nostr for discovery
-nostr-sdk = "0.39"
+nostr-sdk = "0.44"
 
 # Utilities
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 anyhow = "1.0"
-clap = { version = "4.0", features = ["derive"] }
+clap = { version = "4.5", features = ["derive"] }
 
 # Math
 glam = { version = "0.30", features = ["serde"] }
 
 # Metrics
-prometheus = { version = "0.13", default-features = false }
+prometheus = { version = "0.14", default-features = false }
 
 # Time
 tokio-util = "0.7"

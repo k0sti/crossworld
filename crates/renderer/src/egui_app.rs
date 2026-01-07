@@ -612,7 +612,7 @@ impl CubeRendererApp {
                             0,
                             RGBA,
                             UNSIGNED_BYTE,
-                            None,
+                            glow::PixelUnpackData::Slice(None),
                         );
                         gl.tex_parameter_i32(TEXTURE_2D, TEXTURE_MIN_FILTER, LINEAR as i32);
                         gl.tex_parameter_i32(TEXTURE_2D, TEXTURE_MAG_FILTER, LINEAR as i32);
@@ -880,7 +880,7 @@ impl CubeRendererApp {
                 height as i32,
                 RGBA,
                 UNSIGNED_BYTE,
-                glow::PixelPackData::Slice(&mut pixels),
+                glow::PixelPackData::Slice(Some(&mut pixels)),
             );
             gl.bind_framebuffer(FRAMEBUFFER, None);
         }
@@ -901,6 +901,7 @@ impl CubeRendererApp {
 
         Some(ColorImage {
             size: [width as usize, height as usize],
+            source_size: egui::Vec2::ZERO,
             pixels: egui_pixels,
         })
     }
@@ -964,6 +965,7 @@ impl CubeRendererApp {
 
                     let color_image = ColorImage {
                         size: [width, height],
+                        source_size: egui::Vec2::ZERO,
                         pixels,
                     };
 
@@ -996,6 +998,7 @@ impl CubeRendererApp {
 
                 let color_image = ColorImage {
                     size: [width, height],
+                    source_size: egui::Vec2::ZERO,
                     pixels,
                 };
 
@@ -1044,6 +1047,7 @@ impl CubeRendererApp {
 
         ColorImage {
             size,
+            source_size: egui::Vec2::ZERO,
             pixels: diff_pixels,
         }
     }

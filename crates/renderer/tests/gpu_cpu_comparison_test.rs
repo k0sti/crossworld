@@ -267,7 +267,7 @@ fn test_gpu_cpu_tracer_comparison() {
             height,
             RGBA,
             UNSIGNED_BYTE,
-            PixelPackData::Slice(&mut gpu_pixels),
+            PixelPackData::Slice(Some(&mut gpu_pixels)),
         );
     }
     save_debug_png_rgba(&gpu_pixels, width, height, "gpu_tracer_comparison_output.png");
