@@ -581,7 +581,7 @@ impl PhysicsTestbed {
         }
     }
 
-    fn check_debug_exit(&mut self) -> bool {
+    fn check_debug_exit(&mut self) {
         if let Some(max_frames) = self.debug_frames {
             if self.frame_count >= max_frames {
                 println!("\n[Testbed] Reached {} frames, exiting", max_frames);
@@ -604,10 +604,9 @@ impl PhysicsTestbed {
                     }
                 }
 
-                return true;
+                std::process::exit(0);
             }
         }
-        false
     }
 
     /// Handle orbit camera input from egui response
@@ -663,10 +662,8 @@ impl App for PhysicsTestbed {
     }
 
     fn update(&mut self, ctx: &FrameContext, input: &InputState) {
-        // Check debug frame limit
-        if self.check_debug_exit() {
-            return;
-        }
+        // Check debug frame limit (exits if reached)
+        self.check_debug_exit();
 
         // Handle orbit camera
         self.handle_orbit_input(input);
