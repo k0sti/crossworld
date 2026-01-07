@@ -238,12 +238,12 @@ pub fn place_structures(
 
     for _ in 0..config.count {
         // Select random model
-        let model = &models[rng.gen_range(0..models.len())];
+        let model = &models[rng.random_range(0..models.len())];
 
         // Calculate position in world coordinates (origin at center)
         // Random X, Z within spawn radius, Y at ground level
-        let angle: f32 = rng.gen_range(0.0..std::f32::consts::TAU);
-        let dist: f32 = rng.gen_range(0.0..radius);
+        let angle: f32 = rng.random_range(0.0..std::f32::consts::TAU);
+        let dist: f32 = rng.random_range(0.0..radius);
         // Convert from origin-centered coords to octree coords (0 to world_size)
         let x = (half_world + angle.cos() * dist) as i32;
         let z = (half_world + angle.sin() * dist) as i32;
@@ -254,7 +254,7 @@ pub fn place_structures(
         let y = 64; // Approximate ground surface in octree coords
 
         // Random rotation (0, 90, 180, or 270 degrees)
-        let rotation = rng.gen_range(0..4);
+        let rotation = rng.random_range(0..4);
         let rotated_cube = rotate_y_90(model.cube(), rotation);
 
         // Calculate model size at its native resolution
