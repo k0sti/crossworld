@@ -7,14 +7,16 @@
 
 ;; Test 1: CSM-style solid cube ground
 ;; - material: 32 (green-ish color from palette)
-;; - size_shift: 3 (2^3 = 8 units cube edge, origin-centered)
+;; - size_shift: 3 (2^3 = 8 units cube edge)
+;; - center: (0, -4, 0) - positioned so top face is at Y=0
 (define ground-1
-  (make-ground-cube 32 3))
+  (make-ground-cube 32 3 (vec3 0 -4 0)))
 
 ;; Test 2: Simple cuboid ground
-;; - Dimensions: 8x8x8 units, origin-centered
+;; - Dimensions: 8x8x8 units
+;; - center: (0, -4, 0) - positioned so top face is at Y=0
 (define ground-2
-  (make-ground-cuboid 8 8 8))
+  (make-ground-cuboid 8 8 8 (vec3 0 -4 0)))
 
 ;; =============================================================================
 ;; Scene Objects

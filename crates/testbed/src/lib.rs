@@ -65,13 +65,17 @@ pub struct GroundSettings {
     pub size: f32,
     /// Material/color index for ground
     pub material: u8,
+    /// Center position of the ground (default: origin-centered with top at Y=0)
+    pub center: Vec3,
 }
 
 impl Default for GroundSettings {
     fn default() -> Self {
+        let size = 8.0;
         Self {
-            size: 8.0,
+            size,
             material: 32,
+            center: Vec3::new(0.0, -size / 2.0, 0.0),
         }
     }
 }
@@ -197,14 +201,23 @@ impl PhysicsTestbed {
     #[cfg(feature = "steel")]
     fn ground_config_to_settings(ground_config: &GroundConfig) -> GroundSettings {
         match ground_config {
-            GroundConfig::SolidCube { material, size_shift } => GroundSettings {
+            GroundConfig::SolidCube {
+                material,
+                size_shift,
+                center,
+            } => GroundSettings {
                 size: (1 << size_shift) as f32,
                 material: *material,
+                center: center.to_vec3(),
             },
-            GroundConfig::Cuboid { width, height: _, depth: _ } => GroundSettings {
-                // Use width as the primary size (assuming cube-like ground)
+            GroundConfig::Cuboid {
+                width,
+                center,
+                ..
+            } => GroundSettings {
                 size: *width,
-                material: 32, // default material for cuboid
+                material: 32,
+                center: center.to_vec3(),
             },
         }
     }
@@ -285,15 +298,13 @@ impl PhysicsTestbed {
     fn create_cuboid_ground_scene(&self) -> PhysicsScene {
         let mut world = PhysicsWorld::new(Vec3::new(0.0, -9.81, 0.0));
 
-        // Ground cube: size x size x size, centered at origin with top face at Y=0
-        // Half-extent is size/2, center Y is -size/2
         let half_size = self.left_ground_settings.size / 2.0;
+        let center = self.left_ground_settings.center;
         let ground_collider = ColliderBuilder::cuboid(half_size, half_size, half_size)
-            .translation([0.0, -half_size, 0.0].into())
+            .translation([center.x, center.y, center.z].into())
             .build();
         world.add_static_collider(ground_collider);
 
-        // Create falling cube starting above ground (at Y = 6)
         let mut falling_object = CubeObject::new_dynamic(&mut world, Vec3::new(0.0, 6.0, 0.0), 1.0);
         let falling_collider = create_box_collider(Vec3::new(0.4, 0.4, 0.4));
         falling_object.attach_collider(&mut world, falling_collider);
@@ -312,18 +323,15 @@ impl PhysicsTestbed {
     fn create_terrain_ground_scene(&self, ground_cube: &Rc<Cube<u8>>) -> PhysicsScene {
         let mut world = PhysicsWorld::new(Vec3::new(0.0, -9.81, 0.0));
 
-        // Ground cube: size x size x size, centered at origin with top face at Y=0
-        // Scale factor converts 1-unit cube to ground size
-        let half_size = self.right_ground_settings.size / 2.0;
         let scale = self.right_ground_settings.size;
+        let center = self.right_ground_settings.center;
         let terrain_collider = VoxelColliderBuilder::from_cube_scaled(ground_cube, 0, scale);
         let terrain_body = RigidBodyBuilder::fixed()
-            .translation([0.0, -half_size, 0.0].into())
+            .translation([center.x, center.y, center.z].into())
             .build();
         let terrain_body_handle = world.add_rigid_body(terrain_body);
         world.add_collider(terrain_collider, terrain_body_handle);
 
-        // Create falling cube starting above ground (at Y = 6)
         let mut falling_object = CubeObject::new_dynamic(&mut world, Vec3::new(0.0, 6.0, 0.0), 1.0);
         let falling_collider = create_box_collider(Vec3::new(0.4, 0.4, 0.4));
         falling_object.attach_collider(&mut world, falling_collider);
@@ -520,6 +528,7 @@ impl PhysicsTestbed {
         viewport_height: i32,
         x_offset: f32,
         ground_size: f32,
+        ground_center: Vec3,
     ) {
         unsafe {
             // Set viewport and scissor
@@ -537,10 +546,8 @@ impl PhysicsTestbed {
         let offset_target = camera_target + Vec3::new(x_offset, 0.0, 0.0);
         let scene_camera = Camera::look_at(offset_position, offset_target, Vec3::Y);
 
-        // Render ground cube - centered at (0, -half_size, 0) so top face is at Y=0
-        let half_size = ground_size / 2.0;
         if let Some(ground_idx) = scene.ground_mesh_index {
-            let ground_pos = Vec3::new(x_offset, -half_size, 0.0);
+            let ground_pos = ground_center + Vec3::new(x_offset, 0.0, 0.0);
             unsafe {
                 mesh_renderer.render_mesh_with_options(
                     gl,
@@ -717,6 +724,7 @@ impl App for PhysicsTestbed {
                 render_height,
                 -6.0,
                 self.left_ground_settings.size,
+                self.left_ground_settings.center,
             );
         }
 
@@ -734,6 +742,7 @@ impl App for PhysicsTestbed {
                 render_height,
                 6.0,
                 self.right_ground_settings.size,
+                self.right_ground_settings.center,
             );
         }
 

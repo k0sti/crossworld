@@ -14,9 +14,18 @@ use std::path::Path;
 #[derive(Debug, Clone)]
 pub enum GroundConfig {
     /// Solid cube with material and size_shift (edge = 2^size_shift)
-    SolidCube { material: u8, size_shift: u32 },
+    SolidCube {
+        material: u8,
+        size_shift: u32,
+        center: Vec3Config,
+    },
     /// Simple cuboid with dimensions
-    Cuboid { width: f32, height: f32, depth: f32 },
+    Cuboid {
+        width: f32,
+        height: f32,
+        depth: f32,
+        center: Vec3Config,
+    },
 }
 
 impl Default for GroundConfig {
@@ -24,6 +33,7 @@ impl Default for GroundConfig {
         GroundConfig::SolidCube {
             material: 32,
             size_shift: 3,
+            center: Vec3Config::new(0.0, 0.0, 0.0),
         }
     }
 }
@@ -107,28 +117,30 @@ impl TestbedConfig {
             },
         );
 
-        // Register make-ground-cube (solid cube with material and size_shift)
+        // Register make-ground-cube (solid cube with material, size_shift, and optional center)
         engine.register_fn(
             "make-ground-cube",
-            |material: SteelVal, size_shift: SteelVal| -> SteelVal {
+            |material: SteelVal, size_shift: SteelVal, center: SteelVal| -> SteelVal {
                 let list = vec![
                     SteelVal::SymbolV("ground-cube".into()),
                     SteelVal::IntV(steel_val_to_isize(&material)),
                     SteelVal::IntV(steel_val_to_isize(&size_shift)),
+                    center,
                 ];
                 SteelVal::ListV(list.into())
             },
         );
 
-        // Register make-ground-cuboid (cuboid with dimensions)
+        // Register make-ground-cuboid (cuboid with dimensions and optional center)
         engine.register_fn(
             "make-ground-cuboid",
-            |width: SteelVal, height: SteelVal, depth: SteelVal| -> SteelVal {
+            |width: SteelVal, height: SteelVal, depth: SteelVal, center: SteelVal| -> SteelVal {
                 let list = vec![
                     SteelVal::SymbolV("ground-cuboid".into()),
                     SteelVal::NumV(steel_val_to_f64(&width)),
                     SteelVal::NumV(steel_val_to_f64(&height)),
                     SteelVal::NumV(steel_val_to_f64(&depth)),
+                    center,
                 ];
                 SteelVal::ListV(list.into())
             },
@@ -263,27 +275,31 @@ fn parse_ground_config(val: &SteelVal) -> Result<GroundConfig, String> {
 
             match &items[0] {
                 SteelVal::SymbolV(s) if s.as_str() == "ground-cube" => {
-                    if items.len() < 3 {
-                        return Err("ground-cube requires material and size_shift".to_string());
+                    if items.len() < 4 {
+                        return Err("ground-cube requires material, size_shift, and center".to_string());
                     }
                     let material = extract_u8(&items[1])?;
                     let size_shift = extract_u32(&items[2])?;
+                    let center = parse_vec3(&items[3])?;
                     Ok(GroundConfig::SolidCube {
                         material,
                         size_shift,
+                        center,
                     })
                 }
                 SteelVal::SymbolV(s) if s.as_str() == "ground-cuboid" => {
-                    if items.len() < 4 {
-                        return Err("ground-cuboid requires width, height, depth".to_string());
+                    if items.len() < 5 {
+                        return Err("ground-cuboid requires width, height, depth, and center".to_string());
                     }
                     let width = extract_f32(&items[1])?;
                     let height = extract_f32(&items[2])?;
                     let depth = extract_f32(&items[3])?;
+                    let center = parse_vec3(&items[4])?;
                     Ok(GroundConfig::Cuboid {
                         width,
                         height,
                         depth,
+                        center,
                     })
                 }
                 _ => Err(format!("Unknown ground type: {:?}", items[0])),
@@ -392,7 +408,7 @@ mod tests {
     fn test_ground_cube_config() {
         let mut config = TestbedConfig::new();
         config
-            .load_string("(define test-ground (make-ground-cube 32 3))")
+            .load_string("(define test-ground (make-ground-cube 32 3 (vec3 0 -4 0)))")
             .unwrap();
 
         let ground = config.extract_ground("test-ground").unwrap();
@@ -400,9 +416,11 @@ mod tests {
             GroundConfig::SolidCube {
                 material,
                 size_shift,
+                center,
             } => {
                 assert_eq!(material, 32);
                 assert_eq!(size_shift, 3);
+                assert_eq!(center.y, -4.0);
             }
             _ => panic!("Expected SolidCube"),
         }
@@ -412,7 +430,7 @@ mod tests {
     fn test_ground_cuboid_config() {
         let mut config = TestbedConfig::new();
         config
-            .load_string("(define test-ground (make-ground-cuboid 8 8 8))")
+            .load_string("(define test-ground (make-ground-cuboid 8 8 8 (vec3 0 -4 0)))")
             .unwrap();
 
         let ground = config.extract_ground("test-ground").unwrap();
@@ -421,10 +439,12 @@ mod tests {
                 width,
                 height,
                 depth,
+                center,
             } => {
                 assert_eq!(width, 8.0);
                 assert_eq!(height, 8.0);
                 assert_eq!(depth, 8.0);
+                assert_eq!(center.y, -4.0);
             }
             _ => panic!("Expected Cuboid"),
         }
@@ -438,7 +458,7 @@ mod tests {
                 r#"
                 (define test-scene
                   (make-scene
-                    (make-ground-cube 32 3)
+                    (make-ground-cube 32 3 (vec3 0 -4 0))
                     (list
                       (make-object
                         (vec3 0 6 0)
@@ -457,9 +477,11 @@ mod tests {
             GroundConfig::SolidCube {
                 material,
                 size_shift,
+                center,
             } => {
                 assert_eq!(material, 32);
                 assert_eq!(size_shift, 3);
+                assert_eq!(center.y, -4.0);
             }
             _ => panic!("Expected SolidCube"),
         }
