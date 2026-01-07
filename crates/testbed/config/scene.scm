@@ -10,13 +10,13 @@
 ;; - size_shift: 3 (2^3 = 8 units cube edge)
 ;; - center: (0, -4, 0) - positioned so top face is at Y=0
 (define ground-1
-  (make-ground-cube 32 3 (vec3 0 -4 0)))
+  (ground-cube 32 3 (vec3 0 -4 0)))
 
 ;; Test 2: Simple cuboid ground
-;; - Dimensions: 8x8x8 units
+;; - Dimensions: 8 units (width used for cube size)
 ;; - center: (0, -4, 0) - positioned so top face is at Y=0
 (define ground-2
-  (make-ground-cuboid 8 8 8 (vec3 0 -4 0)))
+  (ground-cuboid 8 (vec3 0 -4 0)))
 
 ;; =============================================================================
 ;; Scene Objects
@@ -24,12 +24,16 @@
 
 ;; Falling cube object
 ;; - Position: (0, 6, 0) - 6 units above ground
-;; - Rotation: slight rotation for visual interest
+;; - Rotation: identity quaternion (no rotation)
+;; - Size: (0.4, 0.4, 0.4) - half-extents for collider
+;; - Mass: 1.0 kg
 (define scene-objects
   (list
-    (make-object
-      (vec3 0 6 0)
-      (quat-euler 0.1 0.2 0.3))))
+    (object
+      (vec3 0 1 0)
+      (quat 0.0 0.0 0.0 1.0)
+      (vec3 0.4 0.4 0.4)
+      1.0)))
 
 ;; =============================================================================
 ;; Camera Configuration
@@ -39,7 +43,7 @@
 ;; - Position: (0, 6, -3) - eye level, slightly back
 ;; - Look-at: (0, 0, 4) - looking towards ground center, forward
 (define scene-camera
-  (make-camera
+  (camera
     (vec3 0 6 -3)
     (vec3 0 0 4)))
 
@@ -49,14 +53,14 @@
 
 ;; Scene 1: Using solid cube ground (CSM-style)
 (define scene-1
-  (make-scene
+  (scene
     ground-1
     scene-objects
     scene-camera))
 
 ;; Scene 2: Using cuboid ground
 (define scene-2
-  (make-scene
+  (scene
     ground-2
     scene-objects
     scene-camera))

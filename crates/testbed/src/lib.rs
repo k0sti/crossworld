@@ -80,6 +80,30 @@ impl Default for GroundSettings {
     }
 }
 
+/// Object configuration for scene creation
+#[derive(Clone)]
+pub struct ObjectSettings {
+    /// Initial position of the object
+    pub position: Vec3,
+    /// Initial rotation of the object
+    pub rotation: Quat,
+    /// Size of the object (half-extents)
+    pub size: Vec3,
+    /// Mass of the object
+    pub mass: f32,
+}
+
+impl Default for ObjectSettings {
+    fn default() -> Self {
+        Self {
+            position: Vec3::new(0.0, 6.0, 0.0),
+            rotation: Quat::from_euler(glam::EulerRot::XYZ, 0.1, 0.2, 0.3),
+            size: Vec3::new(0.4, 0.4, 0.4),
+            mass: 1.0,
+        }
+    }
+}
+
 /// Physics testbed application
 pub struct PhysicsTestbed {
     // Rendering
@@ -100,6 +124,9 @@ pub struct PhysicsTestbed {
     // Ground configuration (separate for left and right scenes)
     left_ground_settings: GroundSettings,
     right_ground_settings: GroundSettings,
+
+    // Object configuration
+    object_settings: ObjectSettings,
 
     // Config file path for reloading
     #[cfg(feature = "steel")]
@@ -147,6 +174,7 @@ impl PhysicsTestbed {
             falling_cube: None,
             left_ground_settings: GroundSettings::default(),
             right_ground_settings: GroundSettings::default(),
+            object_settings: ObjectSettings::default(),
             #[cfg(feature = "steel")]
             config_path: None,
             reset_requested: false,
@@ -184,17 +212,19 @@ impl PhysicsTestbed {
         let mut config = TestbedConfig::new();
         config.load_file(path)?;
 
-        // Try to extract camera configuration
-        let camera_config = config.extract_camera("scene-camera")
-            .unwrap_or_else(|_| CameraConfig::default());
+        // Extract camera configuration
+        let camera_config = config.extract_camera("scene-camera")?;
 
         // Extract ground configurations: ground-1 for left scene, ground-2 for right scene
-        let left_ground_config = config.extract_ground("ground-1")
-            .unwrap_or_else(|_| GroundConfig::default());
-        let right_ground_config = config.extract_ground("ground-2")
-            .unwrap_or_else(|_| GroundConfig::default());
+        let left_ground_config = config.extract_ground("ground-1")?;
+        let right_ground_config = config.extract_ground("ground-2")?;
 
-        Self::from_config(path, &camera_config, &left_ground_config, &right_ground_config)
+        // Extract object configuration from scene-objects (use first object if available)
+        let objects = config.extract_objects("scene-objects")?;
+        let object_config = objects.first()
+            .ok_or_else(|| "scene-objects must contain at least one object".to_string())?;
+
+        Self::from_config(path, &camera_config, &left_ground_config, &right_ground_config, object_config)
     }
 
     /// Convert a GroundConfig to GroundSettings
@@ -213,12 +243,22 @@ impl PhysicsTestbed {
             GroundConfig::Cuboid {
                 width,
                 center,
-                ..
             } => GroundSettings {
                 size: *width,
                 material: 32,
                 center: center.to_vec3(),
             },
+        }
+    }
+
+    /// Convert an ObjectConfig to ObjectSettings
+    #[cfg(feature = "steel")]
+    fn object_config_to_settings(object_config: &steel_scene::ObjectConfig) -> ObjectSettings {
+        ObjectSettings {
+            position: object_config.position.to_vec3(),
+            rotation: object_config.rotation.to_quat(),
+            size: object_config.size.to_vec3(),
+            mass: object_config.mass,
         }
     }
 
@@ -229,6 +269,7 @@ impl PhysicsTestbed {
         camera_config: &CameraConfig,
         left_ground_config: &GroundConfig,
         right_ground_config: &GroundConfig,
+        object_config: &steel_scene::ObjectConfig,
     ) -> Result<Self, String> {
         let camera_position = camera_config.position.to_vec3();
         let camera_target = camera_config.look_at.to_vec3();
@@ -236,6 +277,9 @@ impl PhysicsTestbed {
         // Convert ground configs to settings
         let left_ground_settings = Self::ground_config_to_settings(left_ground_config);
         let right_ground_settings = Self::ground_config_to_settings(right_ground_config);
+
+        // Convert object config to settings
+        let object_settings = Self::object_config_to_settings(object_config);
 
         let orbit_config = OrbitControllerConfig {
             mouse_sensitivity: 0.005,
@@ -255,6 +299,7 @@ impl PhysicsTestbed {
             falling_cube: None,
             left_ground_settings,
             right_ground_settings,
+            object_settings,
             config_path: Some(path.to_path_buf()),
             reset_requested: false,
             frame_count: 0,
@@ -305,8 +350,8 @@ impl PhysicsTestbed {
             .build();
         world.add_static_collider(ground_collider);
 
-        let mut falling_object = CubeObject::new_dynamic(&mut world, Vec3::new(0.0, 6.0, 0.0), 1.0);
-        let falling_collider = create_box_collider(Vec3::new(0.4, 0.4, 0.4));
+        let mut falling_object = CubeObject::new_dynamic(&mut world, self.object_settings.position, self.object_settings.mass);
+        let falling_collider = create_box_collider(self.object_settings.size);
         falling_object.attach_collider(&mut world, falling_collider);
 
         PhysicsScene {
@@ -332,8 +377,8 @@ impl PhysicsTestbed {
         let terrain_body_handle = world.add_rigid_body(terrain_body);
         world.add_collider(terrain_collider, terrain_body_handle);
 
-        let mut falling_object = CubeObject::new_dynamic(&mut world, Vec3::new(0.0, 6.0, 0.0), 1.0);
-        let falling_collider = create_box_collider(Vec3::new(0.4, 0.4, 0.4));
+        let mut falling_object = CubeObject::new_dynamic(&mut world, self.object_settings.position, self.object_settings.mass);
+        let falling_collider = create_box_collider(self.object_settings.size);
         falling_object.attach_collider(&mut world, falling_collider);
 
         PhysicsScene {
