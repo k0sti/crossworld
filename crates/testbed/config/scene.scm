@@ -33,16 +33,16 @@
   (list
     ;; Object 0: Center cube, no rotation
     (object
-      (vec3 0 1 0)
+      (vec3 -1 1 0)
       (quat 0.0 0.0 0.0 1.0)
       (vec3 0.4 0.4 0.4)
       1.0
       224)
     ;; Object 1: Left cube, rotated 45 degrees around Y axis
     (object
-      (vec3 0 3 0)
+      (vec3 1 10 0)
       (quat 0.0 0.0 0.3827 0.9239)  ;; ~45 deg Y rotation
-      (vec3 0.3 0.3 0.3)
+      (vec3 0.8 0.3 0.3)
       0.8
       160)
 ))
