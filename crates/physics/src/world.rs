@@ -221,6 +221,26 @@ impl PhysicsWorld {
             .insert_with_parent(new_collider, body_handle, &mut self.rigid_body_set)
     }
 
+    /// Check if a collider is currently in contact with any other collider
+    ///
+    /// Uses the narrow phase contact data to determine if there are active contacts.
+    ///
+    /// # Arguments
+    /// * `collider_handle` - Handle to the collider to check
+    ///
+    /// # Returns
+    /// `true` if the collider has at least one active contact
+    pub fn is_colliding(&self, collider_handle: ColliderHandle) -> bool {
+        // Iterate through all contact pairs involving this collider
+        for contact_pair in self.narrow_phase.contact_pairs_with(collider_handle) {
+            // Check if there are any active contact manifolds
+            if contact_pair.has_any_active_contact {
+                return true;
+            }
+        }
+        false
+    }
+
     /// Perform a raycast through the physics world with an optional collider exclusion
     ///
     /// # Arguments
