@@ -16,7 +16,7 @@ use nom::{
     combinator::{cut, map, opt, recognize, value},
     multi::{many0, separated_list0},
     number::complete::double,
-    sequence::{delimited, pair, preceded, separated_pair, terminated, tuple},
+    sequence::{delimited, pair, preceded, separated_pair, terminated},
     IResult, Parser,
 };
 use std::collections::HashMap;
@@ -137,7 +137,7 @@ fn function_call(input: &str) -> IResult<&str, Expr> {
 
     let (input, args) = delimited(
         pair(char('('), ws),
-        separated_list0(tuple((ws, char(','), ws)), expr),
+        separated_list0((ws, char(','), ws), expr),
         pair(ws, cut(char(')'))),
     ).parse(input)?;
 
@@ -209,7 +209,7 @@ fn match_pattern(input: &str) -> IResult<&str, MatchPattern> {
     alt((
         // Range pattern: n..m
         map(
-            separated_pair(double, tuple((ws, tag(".."), ws)), double),
+            separated_pair(double, (ws, tag(".."), ws), double),
             |(low, high)| MatchPattern::Range { low, high },
         ),
         // Number pattern
@@ -239,7 +239,7 @@ fn match_expr(input: &str) -> IResult<&str, Expr> {
     // Parse cases
     let (input, cases) = many0(terminated(
         match_case,
-        tuple((ws, char(','), ws)),
+        (ws, char(','), ws),
     )).parse(input)?;
 
     // Parse default case: _ => expr
@@ -291,7 +291,7 @@ fn unary(input: &str) -> IResult<&str, Expr> {
             }),
             // Logical not: not expr
             map(
-                preceded(tuple((tag_no_case("not"), ws)), unary),
+                preceded((tag_no_case("not"), ws), unary),
                 |e| Expr::unary(UnaryOpKind::Not, e),
             ),
             primary,
@@ -316,7 +316,7 @@ fn power(input: &str) -> IResult<&str, Expr> {
 /// Parse multiplication/division/modulo
 fn term(input: &str) -> IResult<&str, Expr> {
     let (input, first) = power(input)?;
-    let (input, rest) = many0(tuple((
+    let (input, rest) = many0((
         ws,
         alt((
             value(BinOpKind::Mul, char('*')),
@@ -325,7 +325,7 @@ fn term(input: &str) -> IResult<&str, Expr> {
         )),
         ws,
         power,
-    ))).parse(input)?;
+    )).parse(input)?;
 
     let result = rest
         .into_iter()
@@ -337,7 +337,7 @@ fn term(input: &str) -> IResult<&str, Expr> {
 /// Parse addition/subtraction
 fn additive(input: &str) -> IResult<&str, Expr> {
     let (input, first) = term(input)?;
-    let (input, rest) = many0(tuple((
+    let (input, rest) = many0((
         ws,
         alt((
             value(BinOpKind::Add, char('+')),
@@ -345,7 +345,7 @@ fn additive(input: &str) -> IResult<&str, Expr> {
         )),
         ws,
         term,
-    ))).parse(input)?;
+    )).parse(input)?;
 
     let result = rest
         .into_iter()
@@ -357,7 +357,7 @@ fn additive(input: &str) -> IResult<&str, Expr> {
 /// Parse comparison operators
 fn comparison(input: &str) -> IResult<&str, Expr> {
     let (input, first) = additive(input)?;
-    let (input, rest) = many0(tuple((
+    let (input, rest) = many0((
         ws,
         alt((
             value(BinOpKind::Le, tag("<=")),
@@ -369,7 +369,7 @@ fn comparison(input: &str) -> IResult<&str, Expr> {
         )),
         ws,
         additive,
-    ))).parse(input)?;
+    )).parse(input)?;
 
     let result = rest
         .into_iter()
@@ -381,12 +381,12 @@ fn comparison(input: &str) -> IResult<&str, Expr> {
 /// Parse logical and
 fn logical_and(input: &str) -> IResult<&str, Expr> {
     let (input, first) = comparison(input)?;
-    let (input, rest) = many0(tuple((
+    let (input, rest) = many0((
         ws,
         value(BinOpKind::And, tag_no_case("and")),
         ws,
         comparison,
-    ))).parse(input)?;
+    )).parse(input)?;
 
     let result = rest
         .into_iter()
@@ -398,12 +398,12 @@ fn logical_and(input: &str) -> IResult<&str, Expr> {
 /// Parse logical or
 fn logical_or(input: &str) -> IResult<&str, Expr> {
     let (input, first) = logical_and(input)?;
-    let (input, rest) = many0(tuple((
+    let (input, rest) = many0((
         ws,
         value(BinOpKind::Or, tag_no_case("or")),
         ws,
         logical_and,
-    ))).parse(input)?;
+    )).parse(input)?;
 
     let result = rest
         .into_iter()

@@ -6,7 +6,7 @@ use nom::{
     character::complete::{char, multispace0, one_of, u8 as nom_u8},
     combinator::{map, opt, value},
     multi::many0,
-    sequence::{delimited, preceded, tuple},
+    sequence::{delimited, preceded},
     IResult, Parser,
 };
 use std::collections::HashMap;
@@ -34,7 +34,7 @@ type Result<T> = std::result::Result<T, CsmError>;
 fn comment(input: &str) -> IResult<&str, ()> {
     value(
         (),
-        tuple((char('#'), take_while(|c| c != '\n'), opt(char('\n')))),
+        (char('#'), take_while(|c| c != '\n'), opt(char('\n'))),
     ).parse(input)
 }
 
