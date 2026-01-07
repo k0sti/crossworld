@@ -218,9 +218,11 @@ impl PhysicsTestbed {
         // Extract camera configuration
         let camera_config = config.extract_camera("scene-camera")?;
 
-        // Extract ground configurations: ground-1 for left scene, ground-2 for right scene
-        let left_ground_config = config.extract_ground("ground-1")?;
-        let right_ground_config = config.extract_ground("ground-2")?;
+        // Extract ground configurations:
+        // - Left scene uses cuboid collider, so it needs ground-2 (ground-cuboid)
+        // - Right scene uses terrain collider, so it needs ground-1 (ground-cube)
+        let left_ground_config = config.extract_ground("ground-2")?;
+        let right_ground_config = config.extract_ground("ground-1")?;
 
         // Extract object configurations from scene-objects
         let objects = config.extract_objects("scene-objects")?;
@@ -335,11 +337,13 @@ impl PhysicsTestbed {
                 self.orbit_controller.target = camera_target;
             }
 
-            // Reload ground configurations
-            if let Ok(left_ground_config) = config.extract_ground("ground-1") {
+            // Reload ground configurations:
+            // - Left scene uses cuboid collider, so it needs ground-2 (ground-cuboid)
+            // - Right scene uses terrain collider, so it needs ground-1 (ground-cube)
+            if let Ok(left_ground_config) = config.extract_ground("ground-2") {
                 self.left_ground_settings = Self::ground_config_to_settings(&left_ground_config);
             }
-            if let Ok(right_ground_config) = config.extract_ground("ground-2") {
+            if let Ok(right_ground_config) = config.extract_ground("ground-1") {
                 self.right_ground_settings = Self::ground_config_to_settings(&right_ground_config);
             }
 
@@ -691,7 +695,7 @@ impl PhysicsTestbed {
             }
         }
 
-        // Render all falling cubes with configured sizes
+        // Render all falling cubes with configured sizes and collision wireframes
         for (i, falling_object) in scene.falling_objects.iter().enumerate() {
             if let Some(&falling_idx) = scene.falling_mesh_indices.get(i) {
                 let falling_pos = falling_object.position(&scene.world) + Vec3::new(x_offset, 0.0, 0.0);
@@ -706,6 +710,36 @@ impl PhysicsTestbed {
                         falling_pos,
                         falling_rot,
                         render_scale,
+                        &scene_camera,
+                        viewport_width,
+                        viewport_height,
+                    );
+                }
+
+                // Render debug wireframe based on collision state
+                let is_colliding = falling_object
+                    .collider_handle()
+                    .map(|h| scene.world.is_colliding(h))
+                    .unwrap_or(false);
+
+                // Green when no collision, red when colliding
+                let wireframe_color = if is_colliding {
+                    [1.0, 0.2, 0.2] // Red
+                } else {
+                    [0.2, 1.0, 0.2] // Green
+                };
+
+                // Calculate AABB for wireframe (object_size is half-extents)
+                let aabb_half = object_size;
+                let aabb_min = falling_pos - aabb_half;
+                let aabb_max = falling_pos + aabb_half;
+
+                unsafe {
+                    mesh_renderer.render_aabb_wireframe(
+                        gl,
+                        aabb_min,
+                        aabb_max,
+                        wireframe_color,
                         &scene_camera,
                         viewport_width,
                         viewport_height,
@@ -796,8 +830,8 @@ impl App for PhysicsTestbed {
         self.last_physics_update = Instant::now();
 
         println!("[Testbed] Physics scenes initialized");
-        println!("  Left:  Cuboid ground (ground-1), size={}", self.left_ground_settings.size);
-        println!("  Right: Terrain ground (ground-2), size={}", self.right_ground_settings.size);
+        println!("  Left:  Cuboid ground (ground-2), size={}", self.left_ground_settings.size);
+        println!("  Right: Terrain ground (ground-1), size={}", self.right_ground_settings.size);
         if let Some(frames) = self.debug_frames {
             println!("  Debug mode: running {} frames", frames);
         }
