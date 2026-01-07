@@ -87,13 +87,19 @@ pub struct PhysicsTestbed {
     left_scene: Option<PhysicsScene>,  // Cuboid ground
     right_scene: Option<PhysicsScene>, // Terrain collider ground
 
-    // Cubes for rendering
-    ground_cube: Option<Rc<Cube<u8>>>,
+    // Cubes for rendering (one for each scene with different materials)
+    left_ground_cube: Option<Rc<Cube<u8>>>,
+    right_ground_cube: Option<Rc<Cube<u8>>>,
     #[allow(dead_code)]
     falling_cube: Option<Rc<Cube<u8>>>,
 
-    // Ground configuration
-    ground_settings: GroundSettings,
+    // Ground configuration (separate for left and right scenes)
+    left_ground_settings: GroundSettings,
+    right_ground_settings: GroundSettings,
+
+    // Config file path for reloading
+    #[cfg(feature = "steel")]
+    config_path: Option<std::path::PathBuf>,
 
     // UI state
     reset_requested: bool,
@@ -132,9 +138,13 @@ impl PhysicsTestbed {
             orbit_controller: OrbitController::new(camera_target, orbit_config),
             left_scene: None,
             right_scene: None,
-            ground_cube: None,
+            left_ground_cube: None,
+            right_ground_cube: None,
             falling_cube: None,
-            ground_settings: GroundSettings::default(),
+            left_ground_settings: GroundSettings::default(),
+            right_ground_settings: GroundSettings::default(),
+            #[cfg(feature = "steel")]
+            config_path: None,
             reset_requested: false,
             frame_count: 0,
             debug_frames: None,
@@ -174,22 +184,19 @@ impl PhysicsTestbed {
         let camera_config = config.extract_camera("scene-camera")
             .unwrap_or_else(|_| CameraConfig::default());
 
-        // Try to extract ground configuration (use ground-1 for left, ground-2 for right)
-        // For now we use ground-1 as the primary ground config for both sides
-        let ground_config = config.extract_ground("ground-1")
+        // Extract ground configurations: ground-1 for left scene, ground-2 for right scene
+        let left_ground_config = config.extract_ground("ground-1")
+            .unwrap_or_else(|_| GroundConfig::default());
+        let right_ground_config = config.extract_ground("ground-2")
             .unwrap_or_else(|_| GroundConfig::default());
 
-        Self::from_config(&camera_config, &ground_config)
+        Self::from_config(path, &camera_config, &left_ground_config, &right_ground_config)
     }
 
-    /// Create testbed from camera and ground configuration
+    /// Convert a GroundConfig to GroundSettings
     #[cfg(feature = "steel")]
-    fn from_config(camera_config: &CameraConfig, ground_config: &GroundConfig) -> Result<Self, String> {
-        let camera_position = camera_config.position.to_vec3();
-        let camera_target = camera_config.look_at.to_vec3();
-
-        // Convert ground config to settings
-        let ground_settings = match ground_config {
+    fn ground_config_to_settings(ground_config: &GroundConfig) -> GroundSettings {
+        match ground_config {
             GroundConfig::SolidCube { material, size_shift } => GroundSettings {
                 size: (1 << size_shift) as f32,
                 material: *material,
@@ -199,7 +206,23 @@ impl PhysicsTestbed {
                 size: *width,
                 material: 32, // default material for cuboid
             },
-        };
+        }
+    }
+
+    /// Create testbed from camera and ground configurations
+    #[cfg(feature = "steel")]
+    fn from_config(
+        path: &Path,
+        camera_config: &CameraConfig,
+        left_ground_config: &GroundConfig,
+        right_ground_config: &GroundConfig,
+    ) -> Result<Self, String> {
+        let camera_position = camera_config.position.to_vec3();
+        let camera_target = camera_config.look_at.to_vec3();
+
+        // Convert ground configs to settings
+        let left_ground_settings = Self::ground_config_to_settings(left_ground_config);
+        let right_ground_settings = Self::ground_config_to_settings(right_ground_config);
 
         let orbit_config = OrbitControllerConfig {
             mouse_sensitivity: 0.005,
@@ -214,9 +237,12 @@ impl PhysicsTestbed {
             orbit_controller: OrbitController::new(camera_target, orbit_config),
             left_scene: None,
             right_scene: None,
-            ground_cube: None,
+            left_ground_cube: None,
+            right_ground_cube: None,
             falling_cube: None,
-            ground_settings,
+            left_ground_settings,
+            right_ground_settings,
+            config_path: Some(path.to_path_buf()),
             reset_requested: false,
             frame_count: 0,
             debug_frames: None,
@@ -225,13 +251,43 @@ impl PhysicsTestbed {
         })
     }
 
-    /// Create physics scene with simple cuboid ground collider
+    /// Reload configuration from the config file (if available)
+    #[cfg(feature = "steel")]
+    fn reload_config(&mut self) {
+        if let Some(path) = &self.config_path.clone() {
+            let mut config = TestbedConfig::new();
+            if let Err(e) = config.load_file(path) {
+                eprintln!("[Testbed] Warning: Failed to reload config: {}", e);
+                return;
+            }
+
+            // Reload camera configuration
+            if let Ok(camera_config) = config.extract_camera("scene-camera") {
+                let camera_position = camera_config.position.to_vec3();
+                let camera_target = camera_config.look_at.to_vec3();
+                self.camera = Camera::look_at(camera_position, camera_target, Vec3::Y);
+                self.orbit_controller.target = camera_target;
+            }
+
+            // Reload ground configurations
+            if let Ok(left_ground_config) = config.extract_ground("ground-1") {
+                self.left_ground_settings = Self::ground_config_to_settings(&left_ground_config);
+            }
+            if let Ok(right_ground_config) = config.extract_ground("ground-2") {
+                self.right_ground_settings = Self::ground_config_to_settings(&right_ground_config);
+            }
+
+            println!("[Testbed] Configuration reloaded from {:?}", path);
+        }
+    }
+
+    /// Create physics scene with simple cuboid ground collider (left scene, uses ground-1)
     fn create_cuboid_ground_scene(&self) -> PhysicsScene {
         let mut world = PhysicsWorld::new(Vec3::new(0.0, -9.81, 0.0));
 
         // Ground cube: size x size x size, centered at origin with top face at Y=0
         // Half-extent is size/2, center Y is -size/2
-        let half_size = self.ground_settings.size / 2.0;
+        let half_size = self.left_ground_settings.size / 2.0;
         let ground_collider = ColliderBuilder::cuboid(half_size, half_size, half_size)
             .translation([0.0, -half_size, 0.0].into())
             .build();
@@ -252,14 +308,14 @@ impl PhysicsTestbed {
         }
     }
 
-    /// Create physics scene with terrain collider from Cube objects
+    /// Create physics scene with terrain collider from Cube objects (right scene, uses ground-2)
     fn create_terrain_ground_scene(&self, ground_cube: &Rc<Cube<u8>>) -> PhysicsScene {
         let mut world = PhysicsWorld::new(Vec3::new(0.0, -9.81, 0.0));
 
         // Ground cube: size x size x size, centered at origin with top face at Y=0
-        // Scale factor converts 1-unit cube to ground_settings.size
-        let half_size = self.ground_settings.size / 2.0;
-        let scale = self.ground_settings.size;
+        // Scale factor converts 1-unit cube to ground size
+        let half_size = self.right_ground_settings.size / 2.0;
+        let scale = self.right_ground_settings.size;
         let terrain_collider = VoxelColliderBuilder::from_cube_scaled(ground_cube, 0, scale);
         let terrain_body = RigidBodyBuilder::fixed()
             .translation([0.0, -half_size, 0.0].into())
@@ -287,13 +343,22 @@ impl PhysicsTestbed {
     /// # Safety
     /// The GL context must be current when this is called.
     unsafe fn reset_scenes(&mut self, gl: &Context) {
-        if let Some(ground_cube) = self.ground_cube.clone() {
-            self.left_scene = Some(self.create_cuboid_ground_scene());
-            self.right_scene = Some(self.create_terrain_ground_scene(&ground_cube));
+        // Reload configuration from file if available
+        #[cfg(feature = "steel")]
+        self.reload_config();
 
-            // Re-upload meshes
-            self.upload_meshes(gl);
-        }
+        // Create ground cubes with their respective materials
+        let left_ground_cube = Rc::new(Cube::Solid(self.left_ground_settings.material));
+        let right_ground_cube = Rc::new(Cube::Solid(self.right_ground_settings.material));
+        self.left_ground_cube = Some(left_ground_cube);
+        self.right_ground_cube = Some(right_ground_cube.clone());
+
+        // Recreate physics scenes
+        self.left_scene = Some(self.create_cuboid_ground_scene());
+        self.right_scene = Some(self.create_terrain_ground_scene(&right_ground_cube));
+
+        // Re-upload meshes
+        self.upload_meshes(gl);
     }
 
     /// Upload meshes for rendering
@@ -301,32 +366,34 @@ impl PhysicsTestbed {
     /// # Safety
     /// The GL context must be current when this is called.
     unsafe fn upload_meshes(&mut self, gl: &Context) {
-        // Create ground cube - a solid cube with configured material color
-        let ground_cube = Rc::new(Cube::Solid(self.ground_settings.material));
-        self.ground_cube = Some(ground_cube.clone());
+        // Create ground cubes with configured material colors (separate for left and right)
+        let left_ground_cube = Rc::new(Cube::Solid(self.left_ground_settings.material));
+        let right_ground_cube = Rc::new(Cube::Solid(self.right_ground_settings.material));
+        self.left_ground_cube = Some(left_ground_cube.clone());
+        self.right_ground_cube = Some(right_ground_cube.clone());
 
         // Create falling cube (red color, smaller)
         let falling_cube = Rc::new(Cube::Solid(224u8));
         self.falling_cube = Some(falling_cube.clone());
 
-        // Upload ground mesh (for both scenes)
-        match self.mesh_renderer.upload_mesh(gl, &ground_cube, 1) {
+        // Upload left ground mesh
+        match self.mesh_renderer.upload_mesh(gl, &left_ground_cube, 1) {
             Ok(idx) => {
                 if let Some(scene) = &mut self.left_scene {
                     scene.ground_mesh_index = Some(idx);
                 }
             }
-            Err(e) => eprintln!("Failed to upload ground mesh: {}", e),
+            Err(e) => eprintln!("Failed to upload left ground mesh: {}", e),
         }
 
-        // Upload second ground mesh for right scene
-        match self.mesh_renderer.upload_mesh(gl, &ground_cube, 1) {
+        // Upload right ground mesh
+        match self.mesh_renderer.upload_mesh(gl, &right_ground_cube, 1) {
             Ok(idx) => {
                 if let Some(scene) = &mut self.right_scene {
                     scene.ground_mesh_index = Some(idx);
                 }
             }
-            Err(e) => eprintln!("Failed to upload ground mesh: {}", e),
+            Err(e) => eprintln!("Failed to upload right ground mesh: {}", e),
         }
 
         // Upload falling cube mesh (for left scene)
@@ -567,12 +634,15 @@ impl App for PhysicsTestbed {
             eprintln!("[Testbed] Failed to initialize mesh renderer: {}", e);
         }
 
-        // Create ground cube for terrain collider
-        let ground_cube = Rc::new(Cube::Solid(156u8));
+        // Create ground cubes with their respective materials from config
+        let left_ground_cube = Rc::new(Cube::Solid(self.left_ground_settings.material));
+        let right_ground_cube = Rc::new(Cube::Solid(self.right_ground_settings.material));
+        self.left_ground_cube = Some(left_ground_cube);
+        self.right_ground_cube = Some(right_ground_cube.clone());
 
         // Create physics scenes
         self.left_scene = Some(self.create_cuboid_ground_scene());
-        self.right_scene = Some(self.create_terrain_ground_scene(&ground_cube));
+        self.right_scene = Some(self.create_terrain_ground_scene(&right_ground_cube));
 
         // Upload meshes
         unsafe { self.upload_meshes(ctx.gl) };
@@ -580,8 +650,8 @@ impl App for PhysicsTestbed {
         self.last_physics_update = Instant::now();
 
         println!("[Testbed] Physics scenes initialized");
-        println!("  Left:  Simple cuboid ground collider");
-        println!("  Right: Terrain collider from Cube objects");
+        println!("  Left:  Cuboid ground (ground-1), size={}", self.left_ground_settings.size);
+        println!("  Right: Terrain ground (ground-2), size={}", self.right_ground_settings.size);
         if let Some(frames) = self.debug_frames {
             println!("  Debug mode: running {} frames", frames);
         }
@@ -636,7 +706,7 @@ impl App for PhysicsTestbed {
         // Get camera target for consistent rendering
         let camera_target = self.orbit_controller.target;
 
-        // Render left scene (cuboid ground)
+        // Render left scene (cuboid ground, uses ground-1)
         if let Some(scene) = &self.left_scene {
             Self::render_scene(
                 ctx.gl,
@@ -649,11 +719,11 @@ impl App for PhysicsTestbed {
                 half_width,
                 render_height,
                 -6.0,
-                self.ground_settings.size,
+                self.left_ground_settings.size,
             );
         }
 
-        // Render right scene (terrain ground)
+        // Render right scene (terrain ground, uses ground-2)
         if let Some(scene) = &self.right_scene {
             Self::render_scene(
                 ctx.gl,
@@ -666,7 +736,7 @@ impl App for PhysicsTestbed {
                 half_width,
                 render_height,
                 6.0,
-                self.ground_settings.size,
+                self.right_ground_settings.size,
             );
         }
 
