@@ -91,6 +91,8 @@ pub struct ObjectSettings {
     pub size: Vec3,
     /// Mass of the object
     pub mass: f32,
+    /// Material/color index for the object
+    pub material: u8,
 }
 
 impl Default for ObjectSettings {
@@ -100,6 +102,7 @@ impl Default for ObjectSettings {
             rotation: Quat::from_euler(glam::EulerRot::XYZ, 0.1, 0.2, 0.3),
             size: Vec3::new(0.4, 0.4, 0.4),
             mass: 1.0,
+            material: 224,
         }
     }
 }
@@ -259,6 +262,7 @@ impl PhysicsTestbed {
             rotation: object_config.rotation.to_quat(),
             size: object_config.size.to_vec3(),
             mass: object_config.mass,
+            material: object_config.material,
         }
     }
 
@@ -370,7 +374,26 @@ impl PhysicsTestbed {
 
         let scale = self.right_ground_settings.size;
         let center = self.right_ground_settings.center;
+
+        if self.debug_frames.is_some() {
+            println!("[DEBUG] Creating terrain collider:");
+            println!("  Ground cube: {:?}", ground_cube);
+            println!("  Scale: {}", scale);
+            println!("  Center: {:?}", center);
+        }
+
         let terrain_collider = VoxelColliderBuilder::from_cube_scaled(ground_cube, 0, scale);
+
+        if self.debug_frames.is_some() {
+            // Print collider info
+            if let Some(trimesh) = terrain_collider.shape().as_trimesh() {
+                println!("  Terrain collider: {} vertices, {} triangles",
+                    trimesh.vertices().len(), trimesh.indices().len());
+            } else {
+                println!("  WARNING: Terrain collider is not a trimesh!");
+            }
+        }
+
         let terrain_body = RigidBodyBuilder::fixed()
             .translation([center.x, center.y, center.z].into())
             .build();
@@ -425,8 +448,8 @@ impl PhysicsTestbed {
         self.left_ground_cube = Some(left_ground_cube.clone());
         self.right_ground_cube = Some(right_ground_cube.clone());
 
-        // Create falling cube (red color, smaller)
-        let falling_cube = Rc::new(Cube::Solid(224u8));
+        // Create falling cube with configured material color
+        let falling_cube = Rc::new(Cube::Solid(self.object_settings.material));
         self.falling_cube = Some(falling_cube.clone());
 
         // Upload left ground mesh
@@ -540,15 +563,32 @@ impl PhysicsTestbed {
             .map(|s| s.falling_object.velocity(&s.world))
             .unwrap_or(Vec3::ZERO);
 
+        let left_rot = self
+            .left_scene
+            .as_ref()
+            .map(|s| s.falling_object.rotation(&s.world))
+            .unwrap_or(Quat::IDENTITY);
+
+        let right_rot = self
+            .right_scene
+            .as_ref()
+            .map(|s| s.falling_object.rotation(&s.world))
+            .unwrap_or(Quat::IDENTITY);
+
         let pos_diff = left_pos - right_pos;
         let vel_diff = left_vel - right_vel;
 
         println!(
-            "Frame {}: Left(Cuboid) pos={:.4},{:.4},{:.4} vel={:.4},{:.4},{:.4} | Right(Terrain) pos={:.4},{:.4},{:.4} vel={:.4},{:.4},{:.4}",
+            "Frame {}: Left(Cuboid) pos={:.4},{:.4},{:.4} rot=({:.4},{:.4},{:.4},{:.4}) vel={:.4},{:.4},{:.4}",
             self.frame_count,
             left_pos.x, left_pos.y, left_pos.z,
+            left_rot.x, left_rot.y, left_rot.z, left_rot.w,
             left_vel.x, left_vel.y, left_vel.z,
+        );
+        println!(
+            "         Right(Terrain) pos={:.4},{:.4},{:.4} rot=({:.4},{:.4},{:.4},{:.4}) vel={:.4},{:.4},{:.4}",
             right_pos.x, right_pos.y, right_pos.z,
+            right_rot.x, right_rot.y, right_rot.z, right_rot.w,
             right_vel.x, right_vel.y, right_vel.z,
         );
 
@@ -574,6 +614,7 @@ impl PhysicsTestbed {
         x_offset: f32,
         ground_size: f32,
         ground_center: Vec3,
+        object_size: Vec3,
     ) {
         unsafe {
             // Set viewport and scissor
@@ -609,18 +650,20 @@ impl PhysicsTestbed {
             }
         }
 
-        // Render falling cube
+        // Render falling cube with configured size (half-extents * 2 = full size)
         if let Some(falling_idx) = scene.falling_mesh_index {
             let falling_pos =
                 scene.falling_object.position(&scene.world) + Vec3::new(x_offset, 0.0, 0.0);
             let falling_rot = scene.falling_object.rotation(&scene.world);
+            // Use max dimension * 2 as uniform scale (size is half-extents)
+            let render_scale = object_size.max_element() * 2.0;
             unsafe {
                 mesh_renderer.render_mesh_with_scale(
                     gl,
                     falling_idx,
                     falling_pos,
                     falling_rot,
-                    0.8,
+                    render_scale,
                     &scene_camera,
                     viewport_width,
                     viewport_height,
@@ -770,6 +813,7 @@ impl App for PhysicsTestbed {
                 -6.0,
                 self.left_ground_settings.size,
                 self.left_ground_settings.center,
+                self.object_settings.size,
             );
         }
 
@@ -788,6 +832,7 @@ impl App for PhysicsTestbed {
                 6.0,
                 self.right_ground_settings.size,
                 self.right_ground_settings.center,
+                self.object_settings.size,
             );
         }
 
