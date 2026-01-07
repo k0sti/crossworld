@@ -334,7 +334,7 @@ impl GlTracerGl {
                 0,                  // border
                 RED_INTEGER,        // format
                 UNSIGNED_BYTE,      // type
-                Some(&padded_data), // data
+                glow::PixelUnpackData::Slice(Some(&padded_data)), // data
             );
 
             // Set texture parameters
@@ -432,7 +432,7 @@ impl GlTracerGl {
                 0,
                 RGB,
                 FLOAT,
-                Some(bytemuck::cast_slice(&data)),
+                glow::PixelUnpackData::Slice(Some(bytemuck::cast_slice(&data))),
             );
 
             gl.tex_parameter_i32(TEXTURE_2D, TEXTURE_MIN_FILTER, NEAREST as i32);
@@ -740,7 +740,7 @@ impl Renderer for GlTracer {
                 height as i32,
                 glow::RGBA,
                 glow::UNSIGNED_BYTE,
-                glow::PixelPackData::Slice(&mut pixels),
+                glow::PixelPackData::Slice(Some(&mut pixels)),
             );
         }
 

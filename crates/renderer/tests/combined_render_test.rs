@@ -233,7 +233,7 @@ fn test_both_tracers() {
             height,
             RGBA,
             UNSIGNED_BYTE,
-            PixelPackData::Slice(&mut pixels),
+            PixelPackData::Slice(Some(&mut pixels)),
         );
     }
 
@@ -306,7 +306,7 @@ fn test_both_tracers() {
                     height,
                     RGBA,
                     UNSIGNED_BYTE,
-                    PixelPackData::Slice(&mut pixels),
+                    PixelPackData::Slice(Some(&mut pixels)),
                 );
             }
 

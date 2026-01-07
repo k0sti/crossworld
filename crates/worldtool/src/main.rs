@@ -268,7 +268,7 @@ async fn init_live(
 
     // Publish the event
     println!("\nPublishing event...");
-    let output = client.send_event(event).await?;
+    let output = client.send_event(&event).await?;
     println!("Event published: {:?}", output);
 
     // Wait a bit for confirmation

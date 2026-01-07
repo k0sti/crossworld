@@ -361,9 +361,9 @@ impl App for RotatingCube {
             .resizable(false)
             .movable(false)
             .title_bar(false)
-            .frame(egui::Frame::none()
+            .frame(egui::Frame::NONE
                 .fill(egui::Color32::from_rgba_premultiplied(0, 0, 0, 180))
-                .inner_margin(egui::Margin::same(10.0)))
+                .inner_margin(egui::Margin::same(10)))
             .show(egui_ctx, |ui| {
                 ui.heading("First Person Demo");
                 ui.colored_label(egui::Color32::GREEN, "With Skybox!");
