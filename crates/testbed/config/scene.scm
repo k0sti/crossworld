@@ -23,17 +23,19 @@
 ;; =============================================================================
 
 ;; Falling cube object
-;; - Position: (0, 6, 0) - 6 units above ground
+;; - Position: (0, 1, 0) - 1 unit above ground
 ;; - Rotation: identity quaternion (no rotation)
 ;; - Size: (0.4, 0.4, 0.4) - half-extents for collider
 ;; - Mass: 1.0 kg
+;; - Material: 224 (red color from palette)
 (define scene-objects
   (list
     (object
       (vec3 0 1 0)
       (quat 0.0 0.0 0.0 1.0)
       (vec3 0.4 0.4 0.4)
-      1.0)))
+      1.0
+      224)))
 
 ;; =============================================================================
 ;; Camera Configuration

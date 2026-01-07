@@ -34,6 +34,7 @@ pub struct ObjectConfig {
     pub rotation: QuatConfig,
     pub size: Vec3Config,
     pub mass: f32,
+    pub material: u8,
 }
 
 /// Camera configuration
@@ -121,13 +122,14 @@ impl TestbedConfig {
         // Register object
         engine.register_fn(
             "object",
-            |position: SteelVal, rotation: SteelVal, size: SteelVal, mass: SteelVal| -> SteelVal {
+            |position: SteelVal, rotation: SteelVal, size: SteelVal, mass: SteelVal, material: SteelVal| -> SteelVal {
                 let list = vec![
                     SteelVal::SymbolV("object".into()),
                     position,
                     rotation,
                     size,
                     mass,
+                    SteelVal::IntV(steel_val_to_isize(&material)),
                 ];
                 SteelVal::ListV(list.into())
             },
@@ -258,8 +260,8 @@ fn parse_object_config(val: &SteelVal) -> Result<ObjectConfig, String> {
     match val {
         SteelVal::ListV(list) => {
             let items: Vec<_> = list.iter().collect();
-            if items.len() < 5 {
-                return Err("object requires position, rotation, size, and mass".to_string());
+            if items.len() < 6 {
+                return Err("object requires position, rotation, size, mass, and material".to_string());
             }
 
             // First element should be 'object symbol
@@ -272,12 +274,14 @@ fn parse_object_config(val: &SteelVal) -> Result<ObjectConfig, String> {
             let rotation = parse_quat(&items[2])?;
             let size = parse_vec3(&items[3])?;
             let mass = extract_f32(&items[4])?;
+            let material = extract_u8(&items[5])?;
 
             Ok(ObjectConfig {
                 position,
                 rotation,
                 size,
                 mass,
+                material,
             })
         }
         _ => Err(format!("Expected list for object, got {:?}", val)),
