@@ -118,7 +118,7 @@ fn save_to_path(path: std::path::PathBuf, file_state: &mut FileState, scene: &Vo
     // Export scene to CSM format
     let csm_code = {
         let cube_lock = scene.cube.lock();
-        cube::serialize_csm(&(**cube_lock))
+        cube::serialize_csm(&cube_lock)
     };
 
     // Write to file

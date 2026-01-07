@@ -2,6 +2,8 @@
 //!
 //! This binary watches the game library for changes and hot-reloads it.
 
+#![allow(clippy::type_complexity)]
+
 use app::{
     create_controller_backend, App, ControllerBackend, CursorMode, FrameContext,
     InputState, CREATE_APP_SYMBOL,

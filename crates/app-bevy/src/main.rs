@@ -129,7 +129,6 @@ fn setup(
     commands.insert_resource(AmbientLight {
         color: Color::WHITE,
         brightness: 300.0,
-        ..default()
     });
 
     // Camera

@@ -1,16 +1,11 @@
 use glam::{Mat4, Quat, Vec3};
 
 /// Camera mode selection
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum CameraMode {
+    #[default]
     Orbit,
     FirstPerson,
-}
-
-impl Default for CameraMode {
-    fn default() -> Self {
-        Self::Orbit
-    }
 }
 
 /// Orbit camera for viewing the scene

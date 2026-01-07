@@ -38,14 +38,6 @@ Technical references and specifications:
 - **[materials.md](reference/materials.md)** - Material system and shader specifications
 - **[server.md](reference/server.md)** - Game server technical design and deployment
 
-## Change Proposals
-
-For architectural decisions and change proposals, see the [OpenSpec system](../openspec/):
-
-- **[openspec/project.md](../openspec/project.md)** - Project context and tech stack
-- **[openspec/AGENTS.md](../openspec/AGENTS.md)** - OpenSpec workflow for AI assistants
-- **[openspec/changes/](../openspec/changes/)** - Active change proposals
-
 ## External Resources
 
 - **[Nostr NIPs](https://github.com/nostr-protocol/nips)** - Nostr protocol specifications

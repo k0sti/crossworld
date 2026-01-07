@@ -80,7 +80,7 @@ impl WorldCube {
 
         self.inner
             .borrow_mut()
-            .set_voxel_at_depth(x, y, z, depth, color_index.clamp(0, 255) as u8);
+            .set_voxel_at_depth(x, y, z, depth, color_index.clamp(0, 255));
     }
 
     /// Remove voxel from world cube at specified depth

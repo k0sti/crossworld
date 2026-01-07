@@ -89,19 +89,6 @@ pub fn orbit_camera_controller(
         // NOTE: Panning is disabled to keep the cube centered at the origin.
         // If panning is needed in the future, it should move the camera position
         // while keeping the target fixed at Vec3::ZERO.
-        if false && mouse_buttons.pressed(MouseButton::Middle) && mouse_delta.length_squared() > 0.0
-        {
-            let pan_speed = 0.01 * camera.distance;
-
-            // Calculate right and up vectors in camera space
-            let forward = (camera.target - camera.calculate_position()).normalize();
-            let right = forward.cross(Vec3::Y).normalize();
-            let up = right.cross(forward).normalize();
-
-            // Pan the target
-            camera.target -= right * mouse_delta.x * pan_speed;
-            camera.target += up * mouse_delta.y * pan_speed;
-        }
 
         // Scroll wheel to zoom
         if scroll_delta.abs() > 0.01 {

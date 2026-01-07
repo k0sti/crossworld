@@ -189,7 +189,7 @@ impl<'a> NeighborView<'a> {
     pub fn create_child_grid(&self) -> NeighborGrid {
         let mut voxels: [Rc<Cube<u8>>; 64] = std::array::from_fn(|_| Rc::new(Cube::Solid(0)));
 
-        for i in 0..64 {
+        for (i, voxel) in voxels.iter_mut().enumerate() {
             let pos = NeighborGrid::index_to_pos(i);
 
             // Calculate parent offset and child position
@@ -206,7 +206,7 @@ impl<'a> NeighborView<'a> {
             let child_octant = (child_pos.x | (child_pos.y << 1) | (child_pos.z << 2)) as usize;
 
             // Extract child or replicate if solid
-            voxels[i] = match &**parent {
+            *voxel = match &**parent {
                 Cube::Cubes(children) => children[child_octant].clone(),
                 Cube::Solid(v) => Rc::new(Cube::Solid(*v)),
                 _ => Rc::new(Cube::Solid(0)),

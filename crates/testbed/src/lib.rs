@@ -7,6 +7,8 @@
 //! Scene configuration can be loaded from Steel (Scheme) files when the
 //! `steel` feature is enabled. See `config/scene.scm` for an example.
 
+#![allow(clippy::too_many_arguments)]
+
 use app::{App, FrameContext, InputState};
 use crossworld_physics::{
     create_box_collider,

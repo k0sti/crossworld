@@ -15,8 +15,8 @@ pub struct GilrsBackend {
 
 impl GilrsBackend {
     /// Create a new gilrs backend
-    pub fn new() -> Result<Self, gilrs::Error> {
-        let gilrs = Gilrs::new()?;
+    pub fn new() -> Result<Self, Box<gilrs::Error>> {
+        let gilrs = Gilrs::new().map_err(Box::new)?;
         println!("[Controller] Gilrs backend initialized");
 
         let mut backend = Self {
@@ -40,10 +40,10 @@ impl GilrsBackend {
                 self.gamepad_ids.push(id);
 
                 // Initialize controller state if not already present
-                if !self.controllers.contains_key(&id) {
+                if let std::collections::hash_map::Entry::Vacant(e) = self.controllers.entry(id) {
                     let mut input = ControllerInput::new();
                     input.connect();
-                    self.controllers.insert(id, input);
+                    e.insert(input);
                     println!("[Controller] Gamepad '{}' connected", gamepad.name());
                 }
             }

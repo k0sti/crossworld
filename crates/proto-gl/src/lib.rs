@@ -1,6 +1,9 @@
 // Proto-GL Physics Viewer Library
 // Modular structure for the physics testing viewer
 
+#![allow(clippy::arc_with_non_send_sync)]
+#![allow(clippy::collapsible_if)]
+
 pub mod app;
 pub mod camera;
 pub mod config;
