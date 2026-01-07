@@ -354,7 +354,7 @@ fn extract_neighbor_grid(
 ) -> NeighborGrid {
     let mut voxels: [Rc<Cube<u8>>; 64] = std::array::from_fn(|_| Rc::new(Cube::Solid(0)));
 
-    for i in 0..64 {
+    for (i, voxel) in voxels.iter_mut().enumerate() {
         let ng_pos = NeighborGrid::index_to_pos(i);
         // NeighborGrid uses [0,3] coordinates, center at [1,2]
         // Map to region grid: ng_pos - 1 gives offset from center
@@ -369,7 +369,7 @@ fn extract_neighbor_grid(
             && region_pos.z < grid_size.z
         {
             let idx = region_grid_index(region_pos, grid_size);
-            voxels[i] = region_grid[idx].clone();
+            *voxel = region_grid[idx].clone();
         }
     }
 

@@ -148,4 +148,3 @@ Check console logs for errors. Ensure you have write permissions in the director
 
 - GitHub Issues: https://github.com/crossworld-project/issues
 - Documentation: See `CLAUDE.md` in project root
-- Implementation tasks: See `openspec/changes/create-bevy-voxel-editor/tasks.md`

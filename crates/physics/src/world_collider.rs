@@ -168,10 +168,8 @@ impl WorldCollider {
                         if abs_y > max_correction.y.abs() {
                             max_correction.y = pen_y;
                         }
-                    } else {
-                        if abs_z > max_correction.z.abs() {
-                            max_correction.z = pen_z;
-                        }
+                    } else if abs_z > max_correction.z.abs() {
+                        max_correction.z = pen_z;
                     }
                 }
             },

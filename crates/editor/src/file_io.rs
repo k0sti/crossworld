@@ -3,21 +3,12 @@ use rfd::FileDialog;
 use std::path::PathBuf;
 
 /// Resource tracking the current file path and modification state
-#[derive(Resource)]
+#[derive(Resource, Default)]
 pub struct FileState {
     /// Current file path (None if never saved)
     pub current_file: Option<PathBuf>,
     /// Whether the scene has unsaved changes
     pub dirty: bool,
-}
-
-impl Default for FileState {
-    fn default() -> Self {
-        Self {
-            current_file: None,
-            dirty: false,
-        }
-    }
 }
 
 impl FileState {

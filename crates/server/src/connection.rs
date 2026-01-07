@@ -259,13 +259,8 @@ impl GameServer {
         let mut data = Vec::new();
         let mut buf = [0u8; 4096];
 
-        loop {
-            match stream.read(&mut buf).await? {
-                Some(n) => {
-                    data.extend_from_slice(&buf[..n]);
-                }
-                None => break,
-            }
+        while let Some(n) = stream.read(&mut buf).await? {
+            data.extend_from_slice(&buf[..n]);
         }
 
         Ok(data)

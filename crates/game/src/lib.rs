@@ -13,13 +13,19 @@ pub struct CameraController {
     pub mouse_captured: bool,
 }
 
-impl CameraController {
-    pub fn new() -> Self {
+impl Default for CameraController {
+    fn default() -> Self {
         Self {
             move_speed: 5.0,
             sensitivity: 0.003,
             mouse_captured: false,
         }
+    }
+}
+
+impl CameraController {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn handle_mouse_move(&mut self, camera: &mut Camera, delta_x: f32, delta_y: f32) {
@@ -54,6 +60,7 @@ impl CameraController {
         camera.update_from_pitch_yaw();
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn calculate_velocity(
         &self,
         camera: &Camera,
@@ -104,6 +111,7 @@ pub struct RotatingCube {
     skybox_renderer: SkyboxRenderer,
     mesh_index: Option<usize>,
     rotation: f32,
+    #[allow(dead_code)]
     start_time: Instant,
     last_reload_trigger: Option<Instant>,
     // Camera and controller
@@ -111,8 +119,8 @@ pub struct RotatingCube {
     camera_controller: CameraController,
 }
 
-impl RotatingCube {
-    pub fn new() -> Self {
+impl Default for RotatingCube {
+    fn default() -> Self {
         Self {
             mesh_renderer: MeshRenderer::new(),
             skybox_renderer: SkyboxRenderer::new(),
@@ -123,6 +131,12 @@ impl RotatingCube {
             camera: Camera::from_pitch_yaw(Vec3::new(0.0, 2.0, 5.0), 0.0, 0.0),
             camera_controller: CameraController::new(),
         }
+    }
+}
+
+impl RotatingCube {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     /// Trigger a hot-reload by modifying the source file
