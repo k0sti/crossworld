@@ -33,6 +33,7 @@ use bevy::{
         render_resource::{Extent3d, TextureDimension, TextureFormat},
         view::screenshot::{save_to_disk, Screenshot},
     },
+    window::{CursorGrabMode, CursorOptions},
 };
 use bevy_rapier3d::prelude::*;
 
@@ -147,6 +148,9 @@ struct RaycastHitInfo {
 struct HitInfoText;
 
 #[derive(Component)]
+struct CameraDebugText;
+
+#[derive(Component)]
 struct Shape;
 
 fn main() {
@@ -207,6 +211,7 @@ fn main() {
                 update_raycast_info,
                 draw_mesh_intersections,
                 update_hit_info_text,
+                update_camera_debug_text,
                 #[cfg(not(target_arch = "wasm32"))]
                 toggle_wireframe,
             ),
@@ -367,16 +372,17 @@ fn setup(
 
     let camera_pos = Vec3::new(0.0, 12., 24.0);
     let look_target = Vec3::new(0., 4., 0.);
-    let direction = (look_target - camera_pos).normalize();
-    let initial_yaw = direction.x.atan2(direction.z);
-    let initial_pitch = (-direction.y).asin();
+    let transform = Transform::from_translation(camera_pos).looking_at(look_target, Vec3::Y);
+
+    // Extract yaw/pitch from the actual transform rotation to ensure consistency
+    let (yaw, pitch, _roll) = transform.rotation.to_euler(EulerRot::YXZ);
 
     commands.spawn((
         Camera3d::default(),
-        Transform::from_translation(camera_pos).looking_at(look_target, Vec3::Y),
+        transform,
         FirstPersonCamera {
-            pitch: initial_pitch,
-            yaw: initial_yaw,
+            pitch,
+            yaw,
             ..default()
         },
     ));
@@ -397,6 +403,17 @@ fn setup(
         Node {
             position_type: PositionType::Absolute,
             bottom: px(12.),
+            left: px(12.),
+            ..default()
+        },
+    ));
+
+    commands.spawn((
+        Text::new("Camera: ..."),
+        CameraDebugText,
+        Node {
+            position_type: PositionType::Absolute,
+            top: px(36.),
             left: px(12.),
             ..default()
         },
@@ -543,11 +560,25 @@ fn mouse_look(
     mouse_button: Res<ButtonInput<MouseButton>>,
     mouse_motion: Res<AccumulatedMouseMotion>,
     mut query: Query<(&mut Transform, &mut FirstPersonCamera)>,
+    mut cursor_options: Query<&mut CursorOptions>,
 ) {
-    // Skip the first frame when button is pressed to avoid jump from accumulated motion
-    if !mouse_button.pressed(MouseButton::Right) || mouse_button.just_pressed(MouseButton::Right) {
+    let mut cursor = cursor_options.single_mut().unwrap();
+
+    // Handle cursor visibility and grab mode
+    if mouse_button.just_pressed(MouseButton::Right) {
+        cursor.visible = false;
+        cursor.grab_mode = CursorGrabMode::Locked;
+        return; // Skip first frame to avoid jump from accumulated motion
+    }
+    if mouse_button.just_released(MouseButton::Right) {
+        cursor.visible = true;
+        cursor.grab_mode = CursorGrabMode::None;
         return;
     }
+    if !mouse_button.pressed(MouseButton::Right) {
+        return;
+    }
+
     let delta = mouse_motion.delta;
     if delta == Vec2::ZERO {
         return;
@@ -597,4 +628,28 @@ fn update_hit_info_text(hit_info: Res<RaycastHitInfo>, mut query: Query<&mut Tex
             **text = "Hit: None".to_string();
         }
     }
+}
+
+fn update_camera_debug_text(
+    camera_query: Query<(&Transform, &FirstPersonCamera)>,
+    mouse_button: Res<ButtonInput<MouseButton>>,
+    mouse_motion: Res<AccumulatedMouseMotion>,
+    mut text_query: Query<&mut Text, With<CameraDebugText>>,
+) {
+    let Ok((transform, cam)) = camera_query.single() else { return };
+    let Ok(mut text) = text_query.single_mut() else { return };
+
+    let pos = transform.translation;
+    let fwd = transform.forward();
+    let rmb = if mouse_button.pressed(MouseButton::Right) { "RMB" } else { "---" };
+    let delta = mouse_motion.delta;
+
+    **text = format!(
+        "Pos: ({:.1}, {:.1}, {:.1}) | Pitch: {:.2} Yaw: {:.2} | Fwd: ({:.2}, {:.2}, {:.2}) | {} | Delta: ({:.1}, {:.1})",
+        pos.x, pos.y, pos.z,
+        cam.pitch, cam.yaw,
+        fwd.x, fwd.y, fwd.z,
+        rmb,
+        delta.x, delta.y
+    );
 }
