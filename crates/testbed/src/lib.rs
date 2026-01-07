@@ -721,9 +721,12 @@ impl PhysicsTestbed {
                     .collider_handle()
                     .map(|h| scene.world.is_colliding(h))
                     .unwrap_or(false);
+                let is_sleeping = falling_object.is_sleeping(&scene.world);
 
-                // Green when no collision, red when colliding
-                let wireframe_color = if is_colliding {
+                // Gray when sleeping, red when colliding, green when active
+                let wireframe_color = if is_sleeping {
+                    [0.5, 0.5, 0.5] // Gray
+                } else if is_colliding {
                     [1.0, 0.2, 0.2] // Red
                 } else {
                     [0.2, 1.0, 0.2] // Green
