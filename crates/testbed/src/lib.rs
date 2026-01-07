@@ -25,7 +25,7 @@ use std::time::Instant;
 #[cfg(feature = "steel")]
 mod steel_scene;
 #[cfg(feature = "steel")]
-use steel_scene::{CameraConfig, TestbedConfig};
+use steel_scene::{CameraConfig, GroundConfig, TestbedConfig};
 #[cfg(feature = "steel")]
 use std::path::Path;
 
@@ -58,6 +58,24 @@ pub struct PhysicsScene {
     pub state: PhysicsState,
 }
 
+/// Ground configuration for scene creation
+#[derive(Clone)]
+pub struct GroundSettings {
+    /// Size of ground cube edge (default 8.0)
+    pub size: f32,
+    /// Material/color index for ground
+    pub material: u8,
+}
+
+impl Default for GroundSettings {
+    fn default() -> Self {
+        Self {
+            size: 8.0,
+            material: 32,
+        }
+    }
+}
+
 /// Physics testbed application
 pub struct PhysicsTestbed {
     // Rendering
@@ -73,6 +91,9 @@ pub struct PhysicsTestbed {
     ground_cube: Option<Rc<Cube<u8>>>,
     #[allow(dead_code)]
     falling_cube: Option<Rc<Cube<u8>>>,
+
+    // Ground configuration
+    ground_settings: GroundSettings,
 
     // UI state
     reset_requested: bool,
@@ -113,6 +134,7 @@ impl PhysicsTestbed {
             right_scene: None,
             ground_cube: None,
             falling_cube: None,
+            ground_settings: GroundSettings::default(),
             reset_requested: false,
             frame_count: 0,
             debug_frames: None,
@@ -152,14 +174,32 @@ impl PhysicsTestbed {
         let camera_config = config.extract_camera("scene-camera")
             .unwrap_or_else(|_| CameraConfig::default());
 
-        Self::from_camera_config(&camera_config)
+        // Try to extract ground configuration (use ground-1 for left, ground-2 for right)
+        // For now we use ground-1 as the primary ground config for both sides
+        let ground_config = config.extract_ground("ground-1")
+            .unwrap_or_else(|_| GroundConfig::default());
+
+        Self::from_config(&camera_config, &ground_config)
     }
 
-    /// Create testbed from camera configuration
+    /// Create testbed from camera and ground configuration
     #[cfg(feature = "steel")]
-    fn from_camera_config(camera_config: &CameraConfig) -> Result<Self, String> {
+    fn from_config(camera_config: &CameraConfig, ground_config: &GroundConfig) -> Result<Self, String> {
         let camera_position = camera_config.position.to_vec3();
         let camera_target = camera_config.look_at.to_vec3();
+
+        // Convert ground config to settings
+        let ground_settings = match ground_config {
+            GroundConfig::SolidCube { material, size_shift } => GroundSettings {
+                size: (1 << size_shift) as f32,
+                material: *material,
+            },
+            GroundConfig::Cuboid { width, height: _, depth: _ } => GroundSettings {
+                // Use width as the primary size (assuming cube-like ground)
+                size: *width,
+                material: 32, // default material for cuboid
+            },
+        };
 
         let orbit_config = OrbitControllerConfig {
             mouse_sensitivity: 0.005,
@@ -176,6 +216,7 @@ impl PhysicsTestbed {
             right_scene: None,
             ground_cube: None,
             falling_cube: None,
+            ground_settings,
             reset_requested: false,
             frame_count: 0,
             debug_frames: None,
@@ -188,14 +229,16 @@ impl PhysicsTestbed {
     fn create_cuboid_ground_scene(&self) -> PhysicsScene {
         let mut world = PhysicsWorld::new(Vec3::new(0.0, -9.81, 0.0));
 
-        // Create ground as a cube matching the terrain collider
-        let ground_collider = ColliderBuilder::cuboid(0.25, 0.25, 0.25)
-            .translation([0.0, -0.25, 0.0].into())
+        // Ground cube: size x size x size, centered at origin with top face at Y=0
+        // Half-extent is size/2, center Y is -size/2
+        let half_size = self.ground_settings.size / 2.0;
+        let ground_collider = ColliderBuilder::cuboid(half_size, half_size, half_size)
+            .translation([0.0, -half_size, 0.0].into())
             .build();
         world.add_static_collider(ground_collider);
 
-        // Create small falling cube at Y=8
-        let mut falling_object = CubeObject::new_dynamic(&mut world, Vec3::new(0.0, 8.0, 0.0), 1.0);
+        // Create falling cube starting above ground (at Y = 6)
+        let mut falling_object = CubeObject::new_dynamic(&mut world, Vec3::new(0.0, 6.0, 0.0), 1.0);
         let falling_collider = create_box_collider(Vec3::new(0.4, 0.4, 0.4));
         falling_object.attach_collider(&mut world, falling_collider);
 
@@ -213,16 +256,19 @@ impl PhysicsTestbed {
     fn create_terrain_ground_scene(&self, ground_cube: &Rc<Cube<u8>>) -> PhysicsScene {
         let mut world = PhysicsWorld::new(Vec3::new(0.0, -9.81, 0.0));
 
-        // Create ground using VoxelColliderBuilder from a solid cube
-        let terrain_collider = VoxelColliderBuilder::from_cube_scaled(ground_cube, 0, 0.5);
+        // Ground cube: size x size x size, centered at origin with top face at Y=0
+        // Scale factor converts 1-unit cube to ground_settings.size
+        let half_size = self.ground_settings.size / 2.0;
+        let scale = self.ground_settings.size;
+        let terrain_collider = VoxelColliderBuilder::from_cube_scaled(ground_cube, 0, scale);
         let terrain_body = RigidBodyBuilder::fixed()
-            .translation([0.0, -0.25, 0.0].into())
+            .translation([0.0, -half_size, 0.0].into())
             .build();
         let terrain_body_handle = world.add_rigid_body(terrain_body);
         world.add_collider(terrain_collider, terrain_body_handle);
 
-        // Create small falling cube at Y=8
-        let mut falling_object = CubeObject::new_dynamic(&mut world, Vec3::new(0.0, 8.0, 0.0), 1.0);
+        // Create falling cube starting above ground (at Y = 6)
+        let mut falling_object = CubeObject::new_dynamic(&mut world, Vec3::new(0.0, 6.0, 0.0), 1.0);
         let falling_collider = create_box_collider(Vec3::new(0.4, 0.4, 0.4));
         falling_object.attach_collider(&mut world, falling_collider);
 
@@ -255,8 +301,8 @@ impl PhysicsTestbed {
     /// # Safety
     /// The GL context must be current when this is called.
     unsafe fn upload_meshes(&mut self, gl: &Context) {
-        // Create ground cube - a solid cube (green-ish color)
-        let ground_cube = Rc::new(Cube::Solid(156u8));
+        // Create ground cube - a solid cube with configured material color
+        let ground_cube = Rc::new(Cube::Solid(self.ground_settings.material));
         self.ground_cube = Some(ground_cube.clone());
 
         // Create falling cube (red color, smaller)
@@ -406,6 +452,7 @@ impl PhysicsTestbed {
         viewport_width: i32,
         viewport_height: i32,
         x_offset: f32,
+        ground_size: f32,
     ) {
         unsafe {
             // Set viewport and scissor
@@ -423,16 +470,17 @@ impl PhysicsTestbed {
         let offset_target = camera_target + Vec3::new(x_offset, 0.0, 0.0);
         let scene_camera = Camera::look_at(offset_position, offset_target, Vec3::Y);
 
-        // Render ground cube
+        // Render ground cube - centered at (0, -half_size, 0) so top face is at Y=0
+        let half_size = ground_size / 2.0;
         if let Some(ground_idx) = scene.ground_mesh_index {
-            let ground_pos = Vec3::new(x_offset, -0.25, 0.0);
+            let ground_pos = Vec3::new(x_offset, -half_size, 0.0);
             unsafe {
                 mesh_renderer.render_mesh_with_options(
                     gl,
                     ground_idx,
                     ground_pos,
                     Quat::IDENTITY,
-                    0.5,
+                    ground_size,
                     Vec3::ONE,
                     false,
                     &scene_camera,
@@ -601,6 +649,7 @@ impl App for PhysicsTestbed {
                 half_width,
                 render_height,
                 -6.0,
+                self.ground_settings.size,
             );
         }
 
@@ -617,6 +666,7 @@ impl App for PhysicsTestbed {
                 half_width,
                 render_height,
                 6.0,
+                self.ground_settings.size,
             );
         }
 
