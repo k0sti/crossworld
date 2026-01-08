@@ -312,7 +312,7 @@ impl MeshRenderer {
         }
     }
 
-    /// Render a mesh at given position with specified scale
+    /// Render a mesh at given position with specified uniform scale
     ///
     /// # Safety
     ///
@@ -335,9 +335,9 @@ impl MeshRenderer {
                 mesh_index,
                 position,
                 rotation,
-                scale,
-                glam::Vec3::ONE, // Default normalized_size (full octree)
-                false,           // wireframe
+                glam::Vec3::splat(scale), // Convert uniform scale to Vec3
+                glam::Vec3::ONE,          // Default normalized_size (full octree)
+                false,                    // wireframe
                 camera,
                 viewport_width,
                 viewport_height,
@@ -345,7 +345,7 @@ impl MeshRenderer {
         }
     }
 
-    /// Render a mesh at given position with specified scale and normalized size (for centering)
+    /// Render a mesh at given position with specified uniform scale and normalized size (for centering)
     ///
     /// # Safety
     ///
@@ -369,7 +369,7 @@ impl MeshRenderer {
                 mesh_index,
                 position,
                 rotation,
-                scale,
+                glam::Vec3::splat(scale), // Convert uniform scale to Vec3
                 normalized_size,
                 false, // wireframe
                 camera,
@@ -381,6 +381,10 @@ impl MeshRenderer {
 
     /// Render a mesh at given position with specified scale and wireframe option
     ///
+    /// # Arguments
+    /// * `scale` - Non-uniform scale to apply to the mesh (Vec3 for X/Y/Z independent scaling)
+    /// * `normalized_size` - Model size as fraction of octree (for centering offset)
+    ///
     /// # Safety
     ///
     /// Must be called with an active GL context on the current thread.
@@ -391,7 +395,7 @@ impl MeshRenderer {
         mesh_index: usize,
         position: glam::Vec3,
         rotation: glam::Quat,
-        scale: f32,
+        scale: glam::Vec3,
         normalized_size: glam::Vec3,
         wireframe: bool,
         camera: &Camera,
@@ -434,21 +438,25 @@ impl MeshRenderer {
             let target = camera.position + forward;
             let view = glam::Mat4::look_at_rh(camera.position, target, up);
 
-            // Mesh vertices are in [0, 1] space (visit_faces outputs normalized positions)
-            // The model occupies [0, normalized_size] in octree space.
-            // To center the model at 'position', we need to offset the mesh by -normalized_size/2
-            let mesh_offset = normalized_size * -0.5;
-
-            // Model matrix: translate to position, rotate, then scale mesh
+            // Transform mesh to match CubeBox position within mesh:
+            // 1. The mesh uses [0, normalized_size] space
+            // 2. To render mesh centered at 'position':
+            // - Scale unit [0,1] mesh by normalized_size to get actual mesh bounds
+            // - Apply -normalized_size/2 offset to center at origin
+            // - Apply world scale (non-uniform supported)
+            // - Apply rotation and translation
+            //
             // Order of operations (right to left):
-            // 1. Offset to center model: [0, normalized_size] -> [-normalized_size/2, normalized_size/2]
-            // 2. Scale by object scale
-            // 3. Apply rotation (if any)
-            // 4. Translate to world position
+            // 1. Scale by normalized_size (mesh occupies [0, normalized_size])
+            // 2. Offset to center: [0, normalized_size] -> [-normalized_size/2, normalized_size/2]
+            // 3. Scale by world scale (non-uniform)
+            // 4. Apply rotation
+            // 5. Translate to world position
             let model = glam::Mat4::from_translation(position)
                 * glam::Mat4::from_quat(rotation)
-                * glam::Mat4::from_scale(glam::Vec3::splat(scale))
-                * glam::Mat4::from_translation(mesh_offset);
+                * glam::Mat4::from_scale(scale)
+                * glam::Mat4::from_translation(normalized_size * -0.5)
+                * glam::Mat4::from_scale(normalized_size);
 
             // Upload uniforms
             let mvp = projection * view * model;
