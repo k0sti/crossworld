@@ -700,16 +700,19 @@ impl PhysicsTestbed {
             if let Some(&falling_idx) = scene.falling_mesh_indices.get(i) {
                 let falling_pos = falling_object.position(&scene.world) + Vec3::new(x_offset, 0.0, 0.0);
                 let falling_rot = falling_object.rotation(&scene.world);
-                // Use max dimension * 2 as uniform scale (size is half-extents)
+                // Get object half-extents and calculate full box dimensions
                 let object_size = object_sizes.get(i).copied().unwrap_or(Vec3::splat(0.4));
-                let render_scale = object_size.max_element() * 2.0;
+                // Use object_size * 2 as normalized_size (full physics box dimensions)
+                // This matches the wireframe rendering which also uses object_size * 2 for box_size
+                let normalized_size = object_size * 2.0;
                 unsafe {
-                    mesh_renderer.render_mesh_with_scale(
+                    mesh_renderer.render_mesh_with_normalized_size(
                         gl,
                         falling_idx,
                         falling_pos,
                         falling_rot,
-                        render_scale,
+                        1.0, // scale: 1.0 since normalized_size already contains full dimensions
+                        normalized_size,
                         &scene_camera,
                         viewport_width,
                         viewport_height,
