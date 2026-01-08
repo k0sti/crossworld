@@ -16,9 +16,9 @@
       "Edit(/home/k0/work/crossworld/**)",
       "Glob(/home/k0/work/crossworld/**)",
       "Grep(/home/k0/work/crossworld/**)",
-      "Read(/home/k0/work/crossworld/.auto-claude/specs/004-run-tesbed-project/**)",
-      "Write(/home/k0/work/crossworld/.auto-claude/specs/004-run-tesbed-project/**)",
-      "Edit(/home/k0/work/crossworld/.auto-claude/specs/004-run-tesbed-project/**)",
+      "Read(/home/k0/work/crossworld/.auto-claude/specs/007-build-and-run-physics-testbed-binary/**)",
+      "Write(/home/k0/work/crossworld/.auto-claude/specs/007-build-and-run-physics-testbed-binary/**)",
+      "Edit(/home/k0/work/crossworld/.auto-claude/specs/007-build-and-run-physics-testbed-binary/**)",
       "Bash(*)",
       "WebFetch(*)",
       "WebSearch(*)",
@@ -28,15 +28,7 @@
       "mcp__graphiti-memory__search_facts(*)",
       "mcp__graphiti-memory__add_episode(*)",
       "mcp__graphiti-memory__get_episodes(*)",
-      "mcp__graphiti-memory__get_entity_edge(*)",
-      "mcp__vibe_kanban__list_projects(*)",
-      "mcp__vibe_kanban__list_tasks(*)",
-      "mcp__vibe_kanban__create_task(*)",
-      "mcp__vibe_kanban__start_workspace_session(*)",
-      "mcp__vibe_kanban__get_task(*)",
-      "mcp__vibe_kanban__update_task(*)",
-      "mcp__vibe_kanban__delete_task(*)",
-      "mcp__vibe_kanban__list_repos(*)"
+      "mcp__graphiti-memory__get_entity_edge(*)"
     ]
   }
 }

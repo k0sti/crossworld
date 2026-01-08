@@ -23,6 +23,7 @@
   ],
   "script_commands": [],
   "custom_commands": [
+    "nix",
     "cargo",
     "cargo build",
     "cargo run",
