@@ -149,6 +149,61 @@ impl TestbedConfig {
             },
         );
 
+        // Register deterministic random function
+        // LCG: Linear Congruential Generator with constants from Numerical Recipes
+        engine.register_fn(
+            "rand-lcg",
+            |seed: SteelVal| -> SteelVal {
+                const A: u64 = 1664525;
+                const C: u64 = 1013904223;
+                const M: u64 = 2u64.pow(32);
+
+                let seed_val = steel_val_to_isize(&seed) as u64;
+                let next = (A.wrapping_mul(seed_val).wrapping_add(C)) % M;
+                SteelVal::IntV(next as isize)
+            },
+        );
+
+        // Register normalized random (0.0 to 1.0)
+        engine.register_fn(
+            "rand-01",
+            |seed: SteelVal| -> SteelVal {
+                const A: u64 = 1664525;
+                const C: u64 = 1013904223;
+                const M: u64 = 2u64.pow(32);
+
+                let seed_val = steel_val_to_isize(&seed) as u64;
+                let next = (A.wrapping_mul(seed_val).wrapping_add(C)) % M;
+                let normalized = next as f64 / M as f64;
+                SteelVal::NumV(normalized)
+            },
+        );
+
+        // Register ranged random (min to max)
+        engine.register_fn(
+            "rand-range",
+            |seed: SteelVal, min: SteelVal, max: SteelVal| -> SteelVal {
+                const A: u64 = 1664525;
+                const C: u64 = 1013904223;
+                const M: u64 = 2u64.pow(32);
+
+                let seed_val = steel_val_to_isize(&seed) as u64;
+                let next = (A.wrapping_mul(seed_val).wrapping_add(C)) % M;
+                let normalized = next as f64 / M as f64;
+
+                let min_val = steel_val_to_f64(&min);
+                let max_val = steel_val_to_f64(&max);
+                let ranged = min_val + normalized * (max_val - min_val);
+
+                // Return both the value and the next seed
+                let list = vec![
+                    SteelVal::NumV(ranged),
+                    SteelVal::IntV(next as isize),
+                ];
+                SteelVal::ListV(list.into())
+            },
+        );
+
         Self { config }
     }
 
@@ -204,8 +259,8 @@ fn parse_camera_config(val: &SteelVal) -> Result<CameraConfig, String> {
                 _ => return Err("Expected 'camera symbol".to_string()),
             }
 
-            let position = parse_vec3(&items[1])?;
-            let look_at = parse_vec3(&items[2])?;
+            let position = parse_vec3(items[1])?;
+            let look_at = parse_vec3(items[2])?;
 
             Ok(CameraConfig {
                 position,
@@ -229,9 +284,9 @@ fn parse_ground_config(val: &SteelVal) -> Result<GroundConfig, String> {
                     if items.len() < 4 {
                         return Err("ground-cube requires material, size_shift, and center".to_string());
                     }
-                    let material = extract_u8(&items[1])?;
-                    let size_shift = extract_u32(&items[2])?;
-                    let center = parse_vec3(&items[3])?;
+                    let material = extract_u8(items[1])?;
+                    let size_shift = extract_u32(items[2])?;
+                    let center = parse_vec3(items[3])?;
                     Ok(GroundConfig::SolidCube {
                         material,
                         size_shift,
@@ -242,8 +297,8 @@ fn parse_ground_config(val: &SteelVal) -> Result<GroundConfig, String> {
                     if items.len() < 3 {
                         return Err("ground-cuboid requires width and center".to_string());
                     }
-                    let width = extract_f32(&items[1])?;
-                    let center = parse_vec3(&items[2])?;
+                    let width = extract_f32(items[1])?;
+                    let center = parse_vec3(items[2])?;
                     Ok(GroundConfig::Cuboid {
                         width,
                         center,
@@ -270,11 +325,11 @@ fn parse_object_config(val: &SteelVal) -> Result<ObjectConfig, String> {
                 _ => return Err("Expected 'object symbol".to_string()),
             }
 
-            let position = parse_vec3(&items[1])?;
-            let rotation = parse_quat(&items[2])?;
-            let size = parse_vec3(&items[3])?;
-            let mass = extract_f32(&items[4])?;
-            let material = extract_u8(&items[5])?;
+            let position = parse_vec3(items[1])?;
+            let rotation = parse_quat(items[2])?;
+            let size = parse_vec3(items[3])?;
+            let mass = extract_f32(items[4])?;
+            let material = extract_u8(items[5])?;
 
             Ok(ObjectConfig {
                 position,
@@ -290,7 +345,7 @@ fn parse_object_config(val: &SteelVal) -> Result<ObjectConfig, String> {
 
 fn parse_objects_config(val: &SteelVal) -> Result<Vec<ObjectConfig>, String> {
     match val {
-        SteelVal::ListV(list) => list.iter().map(|item| parse_object_config(item)).collect(),
+        SteelVal::ListV(list) => list.iter().map(parse_object_config).collect(),
         _ => Err(format!("Expected list for objects, got {:?}", val)),
     }
 }

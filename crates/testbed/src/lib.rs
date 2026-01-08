@@ -732,16 +732,18 @@ impl PhysicsTestbed {
                     [0.2, 1.0, 0.2] // Green
                 };
 
-                // Calculate AABB for wireframe (object_size is half-extents)
-                let aabb_half = object_size;
-                let aabb_min = falling_pos - aabb_half;
-                let aabb_max = falling_pos + aabb_half;
+                // Render oriented bounding box wireframe with rotation
+                // object_size is half-extents, full box dimensions are object_size * 2
+                // Use Vec3::ONE as normalized size and object_size * 2 as scale to get proper non-uniform dimensions
+                let box_size = object_size * 2.0;
 
                 unsafe {
-                    mesh_renderer.render_aabb_wireframe(
+                    mesh_renderer.render_cubebox_wireframe_colored(
                         gl,
-                        aabb_min,
-                        aabb_max,
+                        falling_pos,
+                        falling_rot,
+                        box_size, // normalized_size: full box dimensions
+                        1.0,      // scale: 1.0 since we've already scaled normalized_size
                         wireframe_color,
                         &scene_camera,
                         viewport_width,
