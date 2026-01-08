@@ -685,7 +685,7 @@ impl PhysicsTestbed {
                     ground_idx,
                     ground_pos,
                     Quat::IDENTITY,
-                    ground_size,
+                    Vec3::splat(ground_size),
                     Vec3::ONE,
                     false,
                     &scene_camera,
