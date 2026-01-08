@@ -1,0 +1,49 @@
+{
+  "version": "v2",
+  "base_commands": [
+    "cat",
+    "cd",
+    "cp",
+    "echo",
+    "find",
+    "git",
+    "grep",
+    "ls",
+    "mkdir",
+    "mv",
+    "pwd",
+    "rm",
+    "touch",
+    "which"
+  ],
+  "stack_commands": [
+    "bun",
+    "node",
+    "npm"
+  ],
+  "script_commands": [],
+  "custom_commands": [
+    "cargo",
+    "cargo build",
+    "cargo run",
+    "cargo test",
+    "cargo check",
+    "cargo clippy",
+    "cargo fmt",
+    "cargo clean",
+    "cargo update",
+    "cargo bench",
+    "cargo doc",
+    "rustc",
+    "rustup",
+    "wasm-pack",
+    "wasm-pack build",
+    "just",
+    "just build",
+    "just dev",
+    "just build-wasm",
+    "just build-wasm-dev",
+    "just test",
+    "just check"
+  ]
+}
