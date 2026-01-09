@@ -36,6 +36,8 @@ mod egui_integration;
 #[cfg(feature = "runtime")]
 mod note_overlay;
 #[cfg(feature = "runtime")]
+mod review_overlay;
+#[cfg(feature = "runtime")]
 mod runner;
 
 #[cfg(feature = "runtime")]
@@ -43,7 +45,9 @@ pub use egui_integration::EguiIntegration;
 #[cfg(feature = "runtime")]
 pub use note_overlay::render_note_overlay;
 #[cfg(feature = "runtime")]
-pub use runner::{create_event_loop, run_app, AppConfig, AppRuntime, DebugMode};
+pub use review_overlay::{render_review_overlay, ReviewAction};
+#[cfg(feature = "runtime")]
+pub use runner::{create_event_loop, run_app, AppConfig, AppRuntime, DebugMode, ReviewConfig};
 
 // Re-export egui when runtime feature is enabled
 #[cfg(feature = "runtime")]

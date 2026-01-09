@@ -50,6 +50,29 @@ impl DebugMode {
     }
 }
 
+/// Review panel configuration
+#[derive(Clone, Debug)]
+pub struct ReviewConfig {
+    /// Path to the review document file
+    pub file_path: std::path::PathBuf,
+    /// Document content (loaded from file, Arc for efficient cloning)
+    pub content: std::sync::Arc<str>,
+    /// User comment input buffer
+    pub comment: String,
+}
+
+impl ReviewConfig {
+    /// Create a new review configuration by loading a file
+    pub fn new(file_path: std::path::PathBuf) -> std::io::Result<Self> {
+        let content = std::fs::read_to_string(&file_path)?;
+        Ok(Self {
+            file_path,
+            content: content.into(),
+            comment: String::new(),
+        })
+    }
+}
+
 /// Configuration for the application window
 #[derive(Clone)]
 pub struct AppConfig {
@@ -67,6 +90,8 @@ pub struct AppConfig {
     pub debug_mode: Option<DebugMode>,
     /// Optional note message to display as overlay (supports markdown)
     pub note: Option<String>,
+    /// Optional review panel configuration
+    pub review: Option<ReviewConfig>,
 }
 
 impl Default for AppConfig {
@@ -79,6 +104,7 @@ impl Default for AppConfig {
             gl_minor: 3,
             debug_mode: None,
             note: None,
+            review: None,
         }
     }
 }
@@ -116,6 +142,12 @@ impl AppConfig {
     pub fn with_note(mut self, note: impl Into<String>) -> Self {
         self.note = Some(note.into());
         self
+    }
+
+    /// Set a review panel from a file path
+    pub fn with_review(mut self, file_path: std::path::PathBuf) -> std::io::Result<Self> {
+        self.review = Some(ReviewConfig::new(file_path)?);
+        Ok(self)
     }
 }
 
@@ -535,6 +567,8 @@ impl<A: App> ApplicationHandler for AppRuntime<A> {
 
                         // Get note for rendering in the closure
                         let note = self.config.note.clone();
+                        let mut review = self.config.review.clone();
+                        let mut review_action = super::review_overlay::ReviewAction::Continue;
 
                         egui.run(window, [size.width, size.height], |egui_ctx| {
                             self.app.ui(&ctx, egui_ctx);
@@ -543,7 +577,42 @@ impl<A: App> ApplicationHandler for AppRuntime<A> {
                             if let Some(ref note_text) = note {
                                 super::note_overlay::render_note_overlay(egui_ctx, note_text);
                             }
+
+                            // Render review overlay if configured
+                            if let Some(ref mut review_config) = review {
+                                review_action = super::review_overlay::render_review_overlay(
+                                    egui_ctx,
+                                    review_config,
+                                );
+                            }
                         });
+
+                        // Update review config from closure
+                        if let Some(review_config) = review {
+                            self.config.review = Some(review_config);
+                        }
+
+                        // Handle review action
+                        match review_action {
+                            super::review_overlay::ReviewAction::Continue => {
+                                // Keep running
+                            }
+                            super::review_overlay::ReviewAction::ExitWithComment => {
+                                if let Some(ref review_config) = self.config.review {
+                                    // Write comment to stdout
+                                    println!("{}", review_config.comment);
+                                }
+                                self.app.shutdown(&ctx);
+                                event_loop.exit();
+                                return;
+                            }
+                            super::review_overlay::ReviewAction::ExitWithoutComment => {
+                                // Exit without printing comment
+                                self.app.shutdown(&ctx);
+                                event_loop.exit();
+                                return;
+                            }
+                        }
 
                         // Restore GL state
                         unsafe {
