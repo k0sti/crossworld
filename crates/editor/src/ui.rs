@@ -101,7 +101,7 @@ pub enum FileOperation {
 ///
 /// # Returns
 /// Option<FileOperation> - the operation to perform, if any
-pub fn show_file_menu(ui: &mut Ui, file_state: &FileState) -> Option<FileOperation> {
+pub fn show_file_menu(ui: &mut Ui, _file_state: &FileState) -> Option<FileOperation> {
     let mut operation = None;
 
     ui.menu_button("File", |ui| {
@@ -171,9 +171,6 @@ pub fn show_file_menu(ui: &mut Ui, file_state: &FileState) -> Option<FileOperati
             operation = Some(FileOperation::SaveAs);
         }
     }
-
-    // Suppress warning about unused file_state - it's used for future enhancements
-    let _ = file_state;
 
     operation
 }

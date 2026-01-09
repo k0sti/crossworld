@@ -117,7 +117,7 @@ impl EditorApp {
         // Create new cube with voxel set
         let material = self.editor_state.material();
         let new_cube = Rc::new(cube.set_voxel(pos.x, pos.y, pos.z, depth, material));
-        self.cube = Some(new_cube.clone());
+        self.cube = Some(Rc::clone(&new_cube));
 
         // Mark file as dirty
         self.file_state.mark_dirty();
@@ -156,7 +156,7 @@ impl EditorApp {
 
         // Create new cube with voxel removed (set to 0)
         let new_cube = Rc::new(cube.set_voxel(pos.x, pos.y, pos.z, depth, 0));
-        self.cube = Some(new_cube.clone());
+        self.cube = Some(Rc::clone(&new_cube));
 
         // Mark file as dirty
         self.file_state.mark_dirty();
@@ -181,7 +181,7 @@ impl EditorApp {
     fn new_cube(&mut self, gl: &glow::Context) {
         // Create fresh solid cube (same as init)
         let cube = Rc::new(Cube::Solid(156u8));
-        self.cube = Some(cube.clone());
+        self.cube = Some(Rc::clone(&cube));
 
         // Clear file state
         self.file_state.clear();
@@ -220,7 +220,7 @@ impl EditorApp {
         };
 
         // Update editor state
-        self.cube = Some(cube.clone());
+        self.cube = Some(Rc::clone(&cube));
         self.file_state.set_file(path.clone());
 
         // Re-upload mesh
@@ -354,7 +354,7 @@ impl App for EditorApp {
 
         // Create initial cube - solid with a colorful material (material index 156 = green-ish)
         let cube = Rc::new(Cube::Solid(156u8));
-        self.cube = Some(cube.clone());
+        self.cube = Some(Rc::clone(&cube));
 
         // Upload cube mesh at EDIT_DEPTH for voxel editing
         match unsafe { self.mesh_renderer.upload_mesh(ctx.gl, &cube, EDIT_DEPTH) } {
