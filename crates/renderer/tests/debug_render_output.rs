@@ -1,8 +1,8 @@
 //! Debug test to render and inspect actual output
 
 use renderer::cpu_tracer::CpuTracer;
-use renderer::{Camera, Renderer};
 use renderer::scenes::create_octa_cube;
+use renderer::{Camera, Renderer};
 use std::path::Path;
 
 #[test]

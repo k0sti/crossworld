@@ -20,9 +20,9 @@ use std::rc::Rc;
 use winit::keyboard::KeyCode;
 
 use crate::lua_config::{EditorTestConfig, MouseEvent};
-use std::sync::mpsc::{channel, Receiver};
 use cube::io::vox::load_vox_to_cubebox_compact;
 use image::ImageBuffer;
+use std::sync::mpsc::{channel, Receiver};
 
 /// Type alias for thumbnail image
 type ThumbnailImage = ImageBuffer<image::Rgb<u8>, Vec<u8>>;
@@ -589,7 +589,10 @@ impl EditorApp {
             .collect();
 
         let total_models = models_to_load.len();
-        println!("[Editor] Starting background loading for {} models", total_models);
+        println!(
+            "[Editor] Starting background loading for {} models",
+            total_models
+        );
 
         // Spawn background thread
         std::thread::spawn(move || {
@@ -601,14 +604,27 @@ impl EditorApp {
                 match load_model_thumbnail(&path) {
                     Ok((size, thumbnail)) => {
                         // Send loaded data back
-                        if tx.send(ModelLoadMessage::ModelLoaded { id, size, thumbnail }).is_err() {
-                            eprintln!("[Editor] Background thread: failed to send loaded model {}", id);
+                        if tx
+                            .send(ModelLoadMessage::ModelLoaded {
+                                id,
+                                size,
+                                thumbnail,
+                            })
+                            .is_err()
+                        {
+                            eprintln!(
+                                "[Editor] Background thread: failed to send loaded model {}",
+                                id
+                            );
                             break;
                         }
                         succeeded += 1;
                     }
                     Err(e) => {
-                        eprintln!("[Editor] Background thread: failed to load model {}: {}", id, e);
+                        eprintln!(
+                            "[Editor] Background thread: failed to load model {}: {}",
+                            id, e
+                        );
                         failed += 1;
                     }
                 }
@@ -632,7 +648,11 @@ impl EditorApp {
         // Process all available messages (non-blocking)
         while let Ok(msg) = receiver.try_recv() {
             match msg {
-                ModelLoadMessage::ModelLoaded { id, size, thumbnail } => {
+                ModelLoadMessage::ModelLoaded {
+                    id,
+                    size,
+                    thumbnail,
+                } => {
                     // Update the model in the palette
                     if let Some(model) = self.model_palette.get_model_by_id_mut(id) {
                         model.size = Some(size);
@@ -640,7 +660,11 @@ impl EditorApp {
                         self.models_loaded_count += 1;
                     }
                 }
-                ModelLoadMessage::LoadingComplete { total, succeeded, failed } => {
+                ModelLoadMessage::LoadingComplete {
+                    total,
+                    succeeded,
+                    failed,
+                } => {
                     println!(
                         "[Editor] Model loading complete: {}/{} succeeded, {} failed",
                         succeeded, total, failed

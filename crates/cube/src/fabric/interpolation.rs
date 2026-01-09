@@ -130,7 +130,11 @@ pub fn calculate_child_quaternion(
 ///
 /// # Returns
 /// Quaternion with additive noise applied
-pub fn apply_additive_state(base_quat: Quat, additive_state: &AdditiveState, position: Vec3) -> Quat {
+pub fn apply_additive_state(
+    base_quat: Quat,
+    additive_state: &AdditiveState,
+    position: Vec3,
+) -> Quat {
     if additive_state.rotation == 0.0 && additive_state.magnitude == 0.0 {
         return base_quat;
     }
@@ -256,8 +260,8 @@ mod tests {
         // At surface_radius, magnitude should be ~1.0 (surface)
         // Actually it should be partway between root and boundary at surface_radius
         let mag_surface = magnitude_from_distance(config.surface_radius, &config);
-        let expected_at_surface = config.root_magnitude
-            + (config.boundary_magnitude - config.root_magnitude) * 1.0;
+        let expected_at_surface =
+            config.root_magnitude + (config.boundary_magnitude - config.root_magnitude) * 1.0;
         assert!((mag_surface - expected_at_surface).abs() < 0.001);
     }
 
@@ -282,14 +286,19 @@ mod tests {
         let parent_rotation = Quat::IDENTITY;
 
         // Child at origin should have small magnitude
-        let child_at_origin =
-            calculate_child_quaternion(parent_rotation, 0, Vec3::ZERO, &config);
-        assert!(child_at_origin.length() < 1.0, "Origin should be inside surface");
+        let child_at_origin = calculate_child_quaternion(parent_rotation, 0, Vec3::ZERO, &config);
+        assert!(
+            child_at_origin.length() < 1.0,
+            "Origin should be inside surface"
+        );
 
         // Child far from origin should have large magnitude
         let far_pos = Vec3::new(2.0, 2.0, 2.0);
         let child_far = calculate_child_quaternion(parent_rotation, 7, far_pos, &config);
-        assert!(child_far.length() > 1.0, "Far position should be outside surface");
+        assert!(
+            child_far.length() > 1.0,
+            "Far position should be outside surface"
+        );
     }
 
     #[test]

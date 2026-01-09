@@ -87,12 +87,7 @@ impl EguiIntegration {
     /// Run egui for one frame with the given UI function
     ///
     /// This is a convenience method that handles begin_frame, running UI, and end_frame.
-    pub fn run(
-        &mut self,
-        window: &Window,
-        size: [u32; 2],
-        run_ui: impl FnMut(&EguiContext),
-    ) {
+    pub fn run(&mut self, window: &Window, size: [u32; 2], run_ui: impl FnMut(&EguiContext)) {
         let raw_input = self.begin_frame(window);
         let full_output = self.ctx.run(raw_input, run_ui);
         self.end_frame(window, full_output, size);

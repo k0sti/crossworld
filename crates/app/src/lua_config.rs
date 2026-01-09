@@ -300,7 +300,9 @@ mod tests {
     #[test]
     fn test_vec3_creation() {
         let mut config = LuaConfig::new().unwrap();
-        config.load_string("test_vec = vec3(1.0, 2.0, 3.0)").unwrap();
+        config
+            .load_string("test_vec = vec3(1.0, 2.0, 3.0)")
+            .unwrap();
 
         let table: LuaTable = config.extract_value("test_vec").unwrap();
         let vec = parse_vec3(&table).unwrap();

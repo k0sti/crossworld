@@ -8,24 +8,48 @@ use egui::{Color32, Context as EguiContext, CornerRadius, Frame, Margin, Stroke}
 use crate::runner::ReviewConfig;
 
 /// Exit action from review overlay
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ReviewAction {
-    /// Continue reviewing
-    Continue,
-    /// Exit and send comment to stdout
-    ExitWithComment,
-    /// Exit without sending comment (ESC pressed)
-    ExitWithoutComment,
+    /// Continue reviewing (no action yet)
+    None,
+    /// APPROVE - Mark task as done
+    Approve,
+    /// CONTINUE: <message> - Continue with feedback
+    ContinueWithFeedback(String),
+    /// SPAWN: <title> - Create a new task
+    Spawn(String),
+    /// DISCARD - Cancel task and discard changes
+    Discard,
+    /// REBASE - Rebase onto main
+    Rebase,
+    /// MERGE - Merge branch to main
+    Merge,
+    /// Complete workflow: APPROVE + REBASE + MERGE
+    Complete,
+    /// Exit without sending any command (ESC pressed)
+    Cancel,
 }
 
 /// Render a review overlay panel
 ///
 /// Displays a semi-transparent, resizable, scrollable panel on the right side with
-/// markdown-formatted content and a text input field at the bottom for comments.
+/// markdown-formatted content and action buttons for review commands.
 ///
 /// Returns the action the user wants to take.
 pub fn render_review_overlay(egui_ctx: &EguiContext, review: &mut ReviewConfig) -> ReviewAction {
-    let mut action = ReviewAction::Continue;
+    let mut action = ReviewAction::None;
+
+    // Button colors
+    let green = Color32::from_rgb(46, 160, 67);
+    let green_hover = Color32::from_rgb(56, 180, 77);
+    let blue = Color32::from_rgb(56, 139, 253);
+    let blue_hover = Color32::from_rgb(76, 159, 255);
+    let orange = Color32::from_rgb(210, 153, 34);
+    let orange_hover = Color32::from_rgb(230, 173, 54);
+    let red = Color32::from_rgb(218, 54, 51);
+    let red_hover = Color32::from_rgb(238, 74, 71);
+    let gray = Color32::from_rgb(110, 118, 129);
+    let gray_hover = Color32::from_rgb(130, 138, 149);
 
     // Create a resizable window positioned on the right side
     egui::Window::new("Review")
@@ -37,7 +61,10 @@ pub fn render_review_overlay(egui_ctx: &EguiContext, review: &mut ReviewConfig) 
         .frame(
             Frame::default()
                 .fill(Color32::from_rgba_unmultiplied(20, 20, 30, 220))
-                .stroke(Stroke::new(1.0, Color32::from_rgba_unmultiplied(100, 100, 120, 180)))
+                .stroke(Stroke::new(
+                    1.0,
+                    Color32::from_rgba_unmultiplied(100, 100, 120, 180),
+                ))
                 .corner_radius(CornerRadius::same(8))
                 .inner_margin(Margin::same(16)),
         )
@@ -51,8 +78,8 @@ pub fn render_review_overlay(egui_ctx: &EguiContext, review: &mut ReviewConfig) 
             ui.heading(file_name);
             ui.separator();
 
-            // Calculate space needed for bottom UI (comment input + button + spacing)
-            let bottom_ui_height = 120.0;
+            // Calculate space needed for bottom UI (action buttons + comment + spacing)
+            let bottom_ui_height = 220.0;
             let available_height = ui.available_height() - bottom_ui_height;
 
             // Scrollable content area
@@ -65,50 +92,166 @@ pub fn render_review_overlay(egui_ctx: &EguiContext, review: &mut ReviewConfig) 
 
             ui.separator();
 
-            // Comment input area at the bottom
+            // Action buttons section
             ui.label(
-                egui::RichText::new("Review Comment:")
+                egui::RichText::new("Actions")
+                    .size(14.0)
+                    .strong()
                     .color(Color32::from_rgb(200, 200, 220)),
+            );
+            ui.add_space(4.0);
+
+            // Primary action row: Complete (APPROVE + REBASE + MERGE)
+            ui.horizontal(|ui| {
+                if colored_button(ui, "Complete", green, green_hover, "Ctrl+Shift+C").clicked() {
+                    action = ReviewAction::Complete;
+                }
+                ui.label(
+                    egui::RichText::new("APPROVE + REBASE + MERGE")
+                        .small()
+                        .color(Color32::from_rgb(150, 150, 160)),
+                );
+            });
+
+            ui.add_space(4.0);
+
+            // Secondary actions row
+            ui.horizontal(|ui| {
+                if colored_button(ui, "Approve", blue, blue_hover, "Ctrl+A").clicked() {
+                    action = ReviewAction::Approve;
+                }
+                if colored_button(ui, "Rebase", gray, gray_hover, "Ctrl+R").clicked() {
+                    action = ReviewAction::Rebase;
+                }
+                if colored_button(ui, "Merge", gray, gray_hover, "Ctrl+M").clicked() {
+                    action = ReviewAction::Merge;
+                }
+            });
+
+            ui.add_space(4.0);
+
+            // Tertiary actions
+            ui.horizontal(|ui| {
+                if colored_button(ui, "Discard", red, red_hover, "Ctrl+D").clicked() {
+                    action = ReviewAction::Discard;
+                }
+            });
+
+            ui.add_space(8.0);
+            ui.separator();
+
+            // Comment input for Continue/Spawn
+            ui.label(
+                egui::RichText::new("Feedback / New Task:").color(Color32::from_rgb(200, 200, 220)),
             );
 
             let text_edit_response = egui::TextEdit::multiline(&mut review.comment)
                 .desired_width(f32::INFINITY)
-                .desired_rows(3)
-                .hint_text("Enter your review comment here...")
+                .desired_rows(2)
+                .hint_text("Enter feedback or task title...")
                 .show(ui);
 
-            ui.add_space(8.0);
+            ui.add_space(4.0);
 
-            // Send & Exit button
-            if ui
-                .button(egui::RichText::new("Send & Exit").size(14.0))
-                .clicked()
-            {
-                action = ReviewAction::ExitWithComment;
-            }
+            ui.horizontal(|ui| {
+                let has_comment = !review.comment.trim().is_empty();
+
+                // Continue button (requires comment)
+                ui.add_enabled_ui(has_comment, |ui| {
+                    if colored_button(ui, "Continue", orange, orange_hover, "Ctrl+Enter").clicked()
+                    {
+                        action = ReviewAction::ContinueWithFeedback(review.comment.clone());
+                    }
+                });
+
+                // Spawn button (requires comment)
+                ui.add_enabled_ui(has_comment, |ui| {
+                    if colored_button(ui, "Spawn Task", blue, blue_hover, "Ctrl+S").clicked() {
+                        action = ReviewAction::Spawn(review.comment.clone());
+                    }
+                });
+            });
 
             ui.add_space(4.0);
 
             ui.label(
-                egui::RichText::new("Ctrl+Enter to send - ESC to cancel")
+                egui::RichText::new("ESC to cancel without action")
                     .small()
                     .color(Color32::from_rgb(150, 150, 160)),
             );
 
-            // Handle Ctrl+Enter to submit
-            if text_edit_response.response.has_focus()
-                && ui.input(|i| i.key_pressed(egui::Key::Enter) && i.modifiers.ctrl)
-            {
-                action = ReviewAction::ExitWithComment;
+            // Keyboard shortcuts
+            let input = ui.input(|i| i.clone());
+
+            // ESC to cancel
+            if input.key_pressed(egui::Key::Escape) {
+                action = ReviewAction::Cancel;
             }
 
-            // Handle ESC to exit without comment
-            if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-                action = ReviewAction::ExitWithoutComment;
+            // Ctrl+Shift+C for Complete
+            if input.key_pressed(egui::Key::C) && input.modifiers.ctrl && input.modifiers.shift {
+                action = ReviewAction::Complete;
             }
+
+            // Ctrl+A for Approve
+            if input.key_pressed(egui::Key::A) && input.modifiers.ctrl && !input.modifiers.shift {
+                action = ReviewAction::Approve;
+            }
+
+            // Ctrl+R for Rebase
+            if input.key_pressed(egui::Key::R) && input.modifiers.ctrl && !input.modifiers.shift {
+                action = ReviewAction::Rebase;
+            }
+
+            // Ctrl+M for Merge
+            if input.key_pressed(egui::Key::M) && input.modifiers.ctrl && !input.modifiers.shift {
+                action = ReviewAction::Merge;
+            }
+
+            // Ctrl+D for Discard
+            if input.key_pressed(egui::Key::D) && input.modifiers.ctrl && !input.modifiers.shift {
+                action = ReviewAction::Discard;
+            }
+
+            // Ctrl+Enter for Continue (if comment present)
+            if input.key_pressed(egui::Key::Enter)
+                && input.modifiers.ctrl
+                && !input.modifiers.shift
+                && !review.comment.trim().is_empty()
+            {
+                action = ReviewAction::ContinueWithFeedback(review.comment.clone());
+            }
+
+            // Ctrl+S for Spawn (if comment present)
+            if input.key_pressed(egui::Key::S)
+                && input.modifiers.ctrl
+                && !input.modifiers.shift
+                && !review.comment.trim().is_empty()
+            {
+                action = ReviewAction::Spawn(review.comment.clone());
+            }
+
+            // Keep text edit response to prevent unused warning
+            let _ = text_edit_response;
         });
 
     action
+}
+
+/// Create a colored button with hover effect and shortcut tooltip
+fn colored_button(
+    ui: &mut egui::Ui,
+    text: &str,
+    color: Color32,
+    _hover_color: Color32,
+    shortcut: &str,
+) -> egui::Response {
+    let button = egui::Button::new(egui::RichText::new(text).size(12.0).color(Color32::WHITE))
+        .fill(color)
+        .stroke(Stroke::NONE)
+        .corner_radius(4.0);
+
+    ui.add(button).on_hover_text(shortcut)
 }
 
 /// Render markdown-formatted text in the UI

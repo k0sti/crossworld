@@ -550,7 +550,11 @@ mod tests {
 
         for (r, i) in region_results.iter().zip(individual_results.iter()) {
             assert_eq!(r.0, i.0, "Position mismatch: {:?} vs {:?}", r.0, i.0);
-            assert_eq!(r.1, i.1, "Material mismatch at {:?}: {} vs {}", r.0, r.1, i.1);
+            assert_eq!(
+                r.1, i.1,
+                "Material mismatch at {:?}: {} vs {}",
+                r.0, r.1, i.1
+            );
         }
     }
 
@@ -664,5 +668,4 @@ mod tests {
 
         assert_eq!(count, 0); // Should not visit any cells
     }
-
 }

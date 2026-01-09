@@ -143,7 +143,7 @@ mod tests {
     #[test]
     fn test_is_surface_crossing() {
         // Inside to outside (surface exists)
-        let inside = Quat::from_xyzw(0.0, 0.0, 0.0, 0.5);  // magnitude 0.5 < 1
+        let inside = Quat::from_xyzw(0.0, 0.0, 0.0, 0.5); // magnitude 0.5 < 1
         let outside = Quat::from_xyzw(0.0, 0.0, 0.0, 1.5); // magnitude 1.5 > 1
         assert!(is_surface(inside, outside));
         assert!(is_surface(outside, inside));
@@ -186,11 +186,19 @@ mod tests {
         // At point (1, 0, 0), normal should point in -X direction
         // (gradient points +X, normal = -gradient)
         let normal = calculate_normal(Vec3::new(1.0, 0.0, 0.0), sphere_magnitude, 0.01);
-        assert!((normal - (-Vec3::X)).length() < 0.1, "Expected ~-X, got {:?}", normal);
+        assert!(
+            (normal - (-Vec3::X)).length() < 0.1,
+            "Expected ~-X, got {:?}",
+            normal
+        );
 
         // At point (0, 1, 0), normal should point in -Y direction
         let normal = calculate_normal(Vec3::new(0.0, 1.0, 0.0), sphere_magnitude, 0.01);
-        assert!((normal - (-Vec3::Y)).length() < 0.1, "Expected ~-Y, got {:?}", normal);
+        assert!(
+            (normal - (-Vec3::Y)).length() < 0.1,
+            "Expected ~-Y, got {:?}",
+            normal
+        );
     }
 
     #[test]

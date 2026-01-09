@@ -1,5 +1,5 @@
-use cube::{Cube, IVec3Ext, glam::IVec3};
 use cube::material::*;
+use cube::{Cube, IVec3Ext, glam::IVec3};
 use noise::{Fbm, NoiseFn, Perlin};
 use std::rc::Rc;
 

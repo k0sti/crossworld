@@ -3,8 +3,8 @@
 //! Provides CPU-based thumbnail rendering for voxel cubes
 
 use crate::camera::Camera;
-use crate::renderers::cpu_tracer::CpuTracer;
 use crate::renderer::Renderer;
+use crate::renderers::cpu_tracer::CpuTracer;
 use cube::Cube;
 use glam::Vec3;
 use image::{ImageBuffer, Rgb};
@@ -18,7 +18,8 @@ pub fn generate_placeholder(size: u32, hue: u8) -> ImageBuffer<Rgb<u8>, Vec<u8>>
     ImageBuffer::from_fn(size, size, |x, y| {
         // Create a simple pattern based on position
         let corner_dist = ((x as f32 - size as f32 / 2.0).powi(2)
-                         + (y as f32 - size as f32 / 2.0).powi(2)).sqrt();
+            + (y as f32 - size as f32 / 2.0).powi(2))
+        .sqrt();
         let max_dist = (size as f32 / 2.0) * 1.414;
         let brightness = (1.0 - corner_dist / max_dist).max(0.3);
 
@@ -61,10 +62,7 @@ pub fn generate_placeholder(size: u32, hue: u8) -> ImageBuffer<Rgb<u8>, Vec<u8>>
 ///
 /// # Returns
 /// An RGB image buffer containing the rendered thumbnail
-pub fn generate_thumbnail(
-    cube: Rc<Cube<u8>>,
-    size: u32,
-) -> ImageBuffer<Rgb<u8>, Vec<u8>> {
+pub fn generate_thumbnail(cube: Rc<Cube<u8>>, size: u32) -> ImageBuffer<Rgb<u8>, Vec<u8>> {
     let mut tracer = CpuTracer::new_with_cube(cube);
 
     // Setup camera to frame the cube nicely
@@ -94,7 +92,8 @@ pub fn generate_thumbnail(
     tracer.render_with_camera(size, size, &camera);
 
     // Extract image buffer
-    tracer.image_buffer()
+    tracer
+        .image_buffer()
         .expect("Thumbnail render failed")
         .clone()
 }

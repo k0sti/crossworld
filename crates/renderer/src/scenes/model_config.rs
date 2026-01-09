@@ -1,4 +1,4 @@
-use cube::{fabric::FabricConfig, Cube};
+use cube::{Cube, fabric::FabricConfig};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
@@ -155,8 +155,7 @@ impl ModelsConfig {
 pub fn get_renderer_config() -> &'static RendererConfig {
     RENDERER_CONFIG.get_or_init(|| {
         let config_path = concat!(env!("CARGO_MANIFEST_DIR"), "/config.ron");
-        RendererConfig::load_from_file(config_path)
-            .expect("Failed to load config.ron")
+        RendererConfig::load_from_file(config_path).expect("Failed to load config.ron")
     })
 }
 
@@ -168,7 +167,8 @@ pub fn get_models_config() -> &'static RendererConfig {
 /// Create a cube from a model ID
 pub fn create_cube_from_id(id: &str) -> Result<Rc<Cube<u8>>, String> {
     let config = get_renderer_config();
-    let model = config.get_model(id)
+    let model = config
+        .get_model(id)
         .ok_or_else(|| format!("Model '{}' not found", id))?;
     model.create_cube()
 }
@@ -206,19 +206,32 @@ mod tests {
     fn test_load_renderer_config() {
         let config_path = concat!(env!("CARGO_MANIFEST_DIR"), "/config.ron");
         let config = RendererConfig::load_from_file(config_path);
-        assert!(config.is_ok(), "Failed to load config.ron: {:?}", config.err());
+        assert!(
+            config.is_ok(),
+            "Failed to load config.ron: {:?}",
+            config.err()
+        );
 
         let config = config.unwrap();
         assert!(!config.models.is_empty(), "No models loaded");
 
         // Check that required models exist
         assert!(config.get_model("octa").is_some(), "Missing 'octa' model");
-        assert!(config.get_model("single").is_some(), "Missing 'single' model");
+        assert!(
+            config.get_model("single").is_some(),
+            "Missing 'single' model"
+        );
 
         // Check fabric config has defaults
-        assert!(config.fabric.max_depth > 0, "Fabric max_depth should be positive");
+        assert!(
+            config.fabric.max_depth > 0,
+            "Fabric max_depth should be positive"
+        );
 
         // Check single_cube config
-        assert!(config.single_cube.default_material > 0, "Single cube should have a material");
+        assert!(
+            config.single_cube.default_material > 0,
+            "Single cube should have a material"
+        );
     }
 }

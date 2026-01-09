@@ -1,5 +1,5 @@
-use glam::{Vec3, Quat};
 use crate::camera::CameraMode;
+use glam::{Quat, Vec3};
 
 /// UI state captured from app for rendering
 pub struct UiState {
@@ -51,8 +51,10 @@ pub fn render_debug_panel(ctx: &egui::Context, state: &mut UiState) {
                 ui.label(format!("Distance: {:.1}", state.camera_distance));
             }
             CameraMode::FirstPerson => {
-                ui.label(format!("Position: ({:.1}, {:.1}, {:.1})",
-                    state.camera_pos.x, state.camera_pos.y, state.camera_pos.z));
+                ui.label(format!(
+                    "Position: ({:.1}, {:.1}, {:.1})",
+                    state.camera_pos.x, state.camera_pos.y, state.camera_pos.z
+                ));
             }
         }
         ui.label(format!("Yaw: {:.2}", state.camera_yaw));
@@ -69,10 +71,14 @@ pub fn render_debug_panel(ctx: &egui::Context, state: &mut UiState) {
         if state.show_debug_info {
             ui.separator();
             ui.heading("Debug Info");
-            ui.label(format!("Cam Pos: ({:.1}, {:.1}, {:.1})",
-                state.camera_pos.x, state.camera_pos.y, state.camera_pos.z));
-            ui.label(format!("Cam Rot: ({:.2}, {:.2}, {:.2}, {:.2})",
-                state.camera_rot.x, state.camera_rot.y, state.camera_rot.z, state.camera_rot.w));
+            ui.label(format!(
+                "Cam Pos: ({:.1}, {:.1}, {:.1})",
+                state.camera_pos.x, state.camera_pos.y, state.camera_pos.z
+            ));
+            ui.label(format!(
+                "Cam Rot: ({:.2}, {:.2}, {:.2}, {:.2})",
+                state.camera_rot.x, state.camera_rot.y, state.camera_rot.z, state.camera_rot.w
+            ));
         }
 
         ui.separator();

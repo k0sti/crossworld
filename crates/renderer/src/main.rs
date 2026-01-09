@@ -155,8 +155,9 @@ impl ApplicationHandler for App {
         let painter = egui_glow::Painter::new(gl.clone(), "", None, false).unwrap();
 
         // Initialize cube renderer
-        let mut cube_renderer =
-            unsafe { CubeRendererApp::new_with_sync(&gl, self.sync_mode, self.model_name.as_deref()).unwrap() };
+        let mut cube_renderer = unsafe {
+            CubeRendererApp::new_with_sync(&gl, self.sync_mode, self.model_name.as_deref()).unwrap()
+        };
 
         // Set diff sources from CLI arguments
         if !self.diff_left.is_empty() && !self.diff_right.is_empty() {
@@ -414,7 +415,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                 if i + 1 >= args.len() {
                     eprintln!("Error: --model requires a model name");
                     eprintln!("Usage: --model <name>  (e.g., --model octa)");
-                    eprintln!("Available models: single, octa, extended, depth3, quad, layer, sdf, generated, test_expansion, vox_robot, vox_alien_bot, vox_eskimo");
+                    eprintln!(
+                        "Available models: single, octa, extended, depth3, quad, layer, sdf, generated, test_expansion, vox_robot, vox_alien_bot, vox_eskimo"
+                    );
                     return Ok(());
                 }
                 model_name = Some(args[i + 1].clone());
@@ -441,16 +444,14 @@ fn main() -> Result<(), Box<dyn Error>> {
                 eprintln!("  --model <name>     Select test model to render (default: octa)");
                 eprintln!();
                 eprintln!("Renderers: cpu, gl, bcf, compute (or gpu), mesh");
-                eprintln!("Models: single, octa, extended, depth3, quad, layer, sdf, generated, test_expansion, vox_robot, vox_alien_bot, vox_eskimo");
-                eprintln!();
                 eprintln!(
-                    "Default: Opens GUI with 5 renderers (CPU + GL + BCF + Compute + Mesh)"
+                    "Models: single, octa, extended, depth3, quad, layer, sdf, generated, test_expansion, vox_robot, vox_alien_bot, vox_eskimo"
                 );
+                eprintln!();
+                eprintln!("Default: Opens GUI with 5 renderers (CPU + GL + BCF + Compute + Mesh)");
                 eprintln!();
                 eprintln!("Examples:");
-                eprintln!(
-                    "  renderer --single                    # Render one frame and exit"
-                );
+                eprintln!("  renderer --single                    # Render one frame and exit");
                 eprintln!(
                     "  renderer --single --diff cpu mesh    # Render one frame with cpu vs mesh diff"
                 );

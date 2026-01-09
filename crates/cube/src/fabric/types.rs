@@ -31,7 +31,7 @@ impl Default for FabricConfig {
             boundary_magnitude: 2.0,
             surface_radius: 0.8,
             additive_states: vec![
-                AdditiveState::default(),    // depth 0
+                AdditiveState::default(),      // depth 0
                 AdditiveState::new(0.1, 0.05), // depth 1
                 AdditiveState::new(0.2, 0.1),  // depth 2
                 AdditiveState::new(0.3, 0.15), // depth 3

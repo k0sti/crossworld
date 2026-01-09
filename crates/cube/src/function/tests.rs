@@ -13,11 +13,19 @@ fn test_codegen_parity(source: &str) {
 
     // Compile to CPU
     let cpu_result = CpuFunction::compile(&ast);
-    assert!(cpu_result.is_ok(), "CPU compilation failed: {:?}", cpu_result);
+    assert!(
+        cpu_result.is_ok(),
+        "CPU compilation failed: {:?}",
+        cpu_result
+    );
 
     // Compile to GPU
     let gpu_result = GpuFunction::compile(&ast);
-    assert!(gpu_result.is_ok(), "GPU compilation failed: {:?}", gpu_result);
+    assert!(
+        gpu_result.is_ok(),
+        "GPU compilation failed: {:?}",
+        gpu_result
+    );
 
     let gpu_fn = gpu_result.unwrap();
 
@@ -160,7 +168,10 @@ fn test_wgsl_structure_with_noise() {
 
     // Should include noise function definitions
     assert!(shader.contains("fn noise3"), "Missing noise3 function");
-    assert!(shader.contains("fn grad_hash"), "Missing grad_hash function");
+    assert!(
+        shader.contains("fn grad_hash"),
+        "Missing grad_hash function"
+    );
     assert!(shader.contains("fn fade"), "Missing fade function");
 }
 

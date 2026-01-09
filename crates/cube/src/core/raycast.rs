@@ -76,7 +76,14 @@ impl<T: Copy + Default + PartialEq> Cube<T> {
         coord: CubeCoord,
         debug: Option<&mut RaycastDebugState>,
     ) -> Option<Hit<T>> {
-        self.raycast_with_options(ray_origin, ray_dir, normal, coord, debug, &RaycastOptions::default())
+        self.raycast_with_options(
+            ray_origin,
+            ray_dir,
+            normal,
+            coord,
+            debug,
+            &RaycastOptions::default(),
+        )
     }
 
     /// Raycast through octree with options (including max_depth)
@@ -232,7 +239,13 @@ impl<T: Copy + Default + PartialEq> Cube<T> {
         coord: CubeCoord,
         debug: Option<&mut RaycastDebugState>,
     ) -> Option<Hit<T>> {
-        self.raycast_axis_with_options(ray_origin, ray_axis, coord, debug, &RaycastOptions::default())
+        self.raycast_axis_with_options(
+            ray_origin,
+            ray_axis,
+            coord,
+            debug,
+            &RaycastOptions::default(),
+        )
     }
 
     /// Optimized raycast for axis-aligned rays with options (including max_depth)

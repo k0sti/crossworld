@@ -99,7 +99,8 @@ impl OrbitController {
         let to_target = self.target - camera.position;
         let distance = to_target.length();
         let zoom_amount = scroll_delta * self.config.zoom_sensitivity * 0.01;
-        let new_distance = (distance - zoom_amount).clamp(self.config.min_distance, self.config.max_distance);
+        let new_distance =
+            (distance - zoom_amount).clamp(self.config.min_distance, self.config.max_distance);
         let zoom_factor = new_distance / distance;
         camera.position = self.target - to_target * zoom_factor;
     }

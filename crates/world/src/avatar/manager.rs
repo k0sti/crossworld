@@ -1,4 +1,4 @@
-use cube::{load_vox_to_cubebox, Cube, CubeBox};
+use cube::{Cube, CubeBox, load_vox_to_cubebox};
 use glam::IVec3;
 
 /// Manages avatar loading from .vox files
