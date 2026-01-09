@@ -497,7 +497,7 @@ impl App for EditorApp {
         // Top panel with menu bar and title
         egui::TopBottomPanel::top("editor_top_panel").show(egui_ctx, |ui| {
             // Menu bar
-            egui::menu::bar(ui, |ui| {
+            egui::MenuBar::new().ui(ui, |ui| {
                 // File menu
                 if let Some(op) = ui::show_file_menu(ui, &self.file_state) {
                     file_operation = Some(op);
