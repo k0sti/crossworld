@@ -1,5 +1,5 @@
 use app::{App, CursorMode, FrameContext, InputState};
-// Hot-reload trigger: 1767203552400
+// Hot-reload trigger: 1767968902506
 use glam::{Quat, Vec3};
 use glow::*;
 use renderer::{Camera, MeshRenderer, SkyboxRenderer};

@@ -149,36 +149,32 @@ impl SkyboxRenderer {
             let inv_proj_view = (proj * view).inverse();
 
             // Upload uniforms
-            if let Some(loc) = gl.get_uniform_location(program, "u_invProjView") {
-                gl.uniform_matrix_4_f32_slice(Some(&loc), false, &inv_proj_view.to_cols_array());
-            }
+            let inv_proj_view_loc = gl.get_uniform_location(program, "u_invProjView");
+            gl.uniform_matrix_4_f32_slice(inv_proj_view_loc.as_ref(), false, &inv_proj_view.to_cols_array());
 
-            if let Some(loc) = gl.get_uniform_location(program, "u_cameraPos") {
-                gl.uniform_3_f32(Some(&loc), camera.position.x, camera.position.y, camera.position.z);
-            }
+            let camera_pos_loc = gl.get_uniform_location(program, "u_cameraPos");
+            gl.uniform_3_f32(camera_pos_loc.as_ref(), camera.position.x, camera.position.y, camera.position.z);
 
             // Upload sky gradient colors
-            if let Some(loc) = gl.get_uniform_location(program, "u_skyColorCount") {
-                gl.uniform_1_i32(Some(&loc), self.sky_colors.len() as i32);
-            }
+            let sky_count_loc = gl.get_uniform_location(program, "u_skyColorCount");
+            gl.uniform_1_i32(sky_count_loc.as_ref(), self.sky_colors.len() as i32);
+
             for (i, color) in self.sky_colors.iter().enumerate() {
                 if i >= 8 { break; } // Shader supports max 8 colors
                 let uniform_name = format!("u_skyColors[{}]", i);
-                if let Some(loc) = gl.get_uniform_location(program, &uniform_name) {
-                    gl.uniform_3_f32(Some(&loc), color[0], color[1], color[2]);
-                }
+                let color_loc = gl.get_uniform_location(program, &uniform_name);
+                gl.uniform_3_f32(color_loc.as_ref(), color[0], color[1], color[2]);
             }
 
             // Upload ground gradient colors
-            if let Some(loc) = gl.get_uniform_location(program, "u_groundColorCount") {
-                gl.uniform_1_i32(Some(&loc), self.ground_colors.len() as i32);
-            }
+            let ground_count_loc = gl.get_uniform_location(program, "u_groundColorCount");
+            gl.uniform_1_i32(ground_count_loc.as_ref(), self.ground_colors.len() as i32);
+
             for (i, color) in self.ground_colors.iter().enumerate() {
                 if i >= 8 { break; } // Shader supports max 8 colors
                 let uniform_name = format!("u_groundColors[{}]", i);
-                if let Some(loc) = gl.get_uniform_location(program, &uniform_name) {
-                    gl.uniform_3_f32(Some(&loc), color[0], color[1], color[2]);
-                }
+                let color_loc = gl.get_uniform_location(program, &uniform_name);
+                gl.uniform_3_f32(color_loc.as_ref(), color[0], color[1], color[2]);
             }
 
             // Draw fullscreen quad
