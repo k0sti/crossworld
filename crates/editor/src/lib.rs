@@ -78,6 +78,7 @@ pub struct EditorApp {
     // Cursor state
     cursor: CubeCursor,
     prev_tab_pressed: bool,
+    prev_space_pressed: bool,
     prev_left_mouse_pressed: bool,
 
     // Current mouse position (for 2D gizmo)
@@ -147,6 +148,7 @@ impl EditorApp {
             last_hit: None,
             cursor: CubeCursor::new(),
             prev_tab_pressed: false,
+            prev_space_pressed: false,
             prev_left_mouse_pressed: false,
             current_mouse_pos: None,
             color_palette: ColorPalette::new(),
@@ -558,12 +560,30 @@ impl App for EditorApp {
         }
         self.prev_tab_pressed = tab_pressed;
 
+        // Handle Space key to toggle Near/Far focus mode (alternative binding)
+        let space_pressed = effective_input.is_key_pressed(KeyCode::Space);
+        if space_pressed && !self.prev_space_pressed {
+            self.cursor.toggle_mode();
+            if self.test_config.is_some() {
+                let mode_name = match self.cursor.focus_mode {
+                    FocusMode::Near => "Near",
+                    FocusMode::Far => "Far",
+                };
+                println!("[DEBUG Frame {}] Toggled focus mode to: {}", ctx.frame, mode_name);
+            }
+        }
+        self.prev_space_pressed = space_pressed;
+
         // Store current mouse position for 2D gizmo rendering
         self.current_mouse_pos = effective_input.mouse_pos;
 
         // Update cursor from mouse raycast (only if mouse position is available)
         if let (Some(ref cube), Some(mouse_pos)) = (&self.cube, effective_input.mouse_pos) {
             let screen_size = Vec2::new(ctx.size.0 as f32, ctx.size.1 as f32);
+
+            // Use the cursor's current depth for raycast selection
+            let cursor_depth = self.cursor.coord.depth;
+
             if let Some(hit) = raycast_from_mouse(
                 mouse_pos,
                 screen_size,
@@ -573,10 +593,42 @@ impl App for EditorApp {
                 CUBE_SCALE,
                 Some(EDIT_DEPTH),
             ) {
-                self.cursor.update_from_raycast(
+                // Use the new coord selection logic that handles far/near based on boundary detection
+                // Select at cursor's depth, not EDIT_DEPTH
+                let far_mode = self.cursor.focus_mode == FocusMode::Far;
+                let (selected_coord, is_boundary) = hit.select_coord_at_depth(
+                    cursor_depth,
+                    far_mode,
+                    CUBE_POSITION,
+                    CUBE_SCALE,
+                );
+
+                // Debug logging for selected CubeCoord
+                if self.test_config.is_some() {
+                    let mode_name = if far_mode { "Far" } else { "Near" };
+                    let boundary_str = if is_boundary { "boundary" } else { "interior" };
+                    println!(
+                        "[DEBUG Frame {}] Raycast hit: world_pos=({:.3}, {:.3}, {:.3}), normal={:?}, hit_depth={}, cursor_depth={}, hit_voxel=({}, {}, {})",
+                        ctx.frame, hit.world_pos.x, hit.world_pos.y, hit.world_pos.z,
+                        hit.normal, hit.cube_coord.depth, cursor_depth,
+                        hit.voxel_coord.x, hit.voxel_coord.y, hit.voxel_coord.z
+                    );
+                    // Also log the voxel_at_depth result before far/near adjustment
+                    let base_voxel = hit.voxel_at_depth(cursor_depth, CUBE_POSITION, CUBE_SCALE);
+                    println!(
+                        "[DEBUG Frame {}] voxel_at_depth({})=({}, {}, {}), Selected=({}, {}, {}), mode={}, face_type={}",
+                        ctx.frame, cursor_depth, base_voxel.x, base_voxel.y, base_voxel.z,
+                        selected_coord.x, selected_coord.y, selected_coord.z,
+                        mode_name, boundary_str
+                    );
+                }
+
+                // Update cursor position without changing its depth
+                self.cursor.update_from_selected_coord_preserve_depth(
                     hit.world_pos,
-                    hit.normal_vec3(),
-                    hit.voxel_coord,
+                    hit.normal,
+                    selected_coord,
+                    is_boundary,
                 );
                 self.last_hit = Some(hit);
             } else {
@@ -590,21 +642,20 @@ impl App for EditorApp {
         let left_click = left_mouse_pressed && !self.prev_left_mouse_pressed;
         self.prev_left_mouse_pressed = left_mouse_pressed;
 
-        // Check if Shift is held (for removal in Near mode)
+        // Check if Shift is held (for removal mode)
         let shift_held = effective_input.is_key_pressed(KeyCode::ShiftLeft)
             || effective_input.is_key_pressed(KeyCode::ShiftRight);
 
-        if left_click {
-            if let Some(ref hit) = self.last_hit {
-                if shift_held && self.cursor.focus_mode == FocusMode::Near {
-                    // Shift+left-click in Near mode: remove the hit voxel
-                    let removal_pos = hit.voxel_at_depth(EDIT_DEPTH, CUBE_POSITION, CUBE_SCALE);
-                    self.remove_voxel(ctx.gl, removal_pos, EDIT_DEPTH);
-                } else if self.cursor.focus_mode == FocusMode::Far {
-                    // Left-click in Far mode: place voxel adjacent to hit face
-                    let placement_pos = hit.placement_at_depth(EDIT_DEPTH, CUBE_POSITION, CUBE_SCALE);
-                    self.place_voxel(ctx.gl, placement_pos, EDIT_DEPTH);
-                }
+        if left_click && self.cursor.valid {
+            // Use the cursor's selected coordinate (which already handles far/near mode)
+            let selected_pos = self.cursor.coord.pos;
+
+            if shift_held {
+                // Shift+left-click: remove voxel at selected position
+                self.remove_voxel(ctx.gl, selected_pos, EDIT_DEPTH);
+            } else {
+                // Left-click: place voxel at selected position
+                self.place_voxel(ctx.gl, selected_pos, EDIT_DEPTH);
             }
         }
     }
@@ -659,13 +710,25 @@ impl App for EditorApp {
             let cursor_size = self.cursor.world_size(CUBE_SCALE);
             let cursor_color = self.cursor.wireframe_color();
 
+            // Debug output for cursor rendering
+            if self.test_config.is_some() {
+                println!(
+                    "[DEBUG Frame {}] Cursor render: center=({:.3}, {:.3}, {:.3}), size=({:.3}, {:.3}, {:.3}), color=({:.1}, {:.1}, {:.1})",
+                    ctx.frame,
+                    cursor_center.x, cursor_center.y, cursor_center.z,
+                    cursor_size.x, cursor_size.y, cursor_size.z,
+                    cursor_color[0], cursor_color[1], cursor_color[2]
+                );
+            }
+
             unsafe {
+                // Render cursor at calculated position with cursor size
                 self.mesh_renderer.render_cubebox_wireframe_colored(
                     ctx.gl,
                     cursor_center,
                     Quat::IDENTITY,
                     Vec3::ONE, // Normalized size (full box)
-                    cursor_size.x, // Scale to cursor size (assuming uniform)
+                    cursor_size.x, // Scale to cursor size
                     cursor_color,
                     &self.camera,
                     width,

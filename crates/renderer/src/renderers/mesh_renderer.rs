@@ -735,8 +735,10 @@ impl MeshRenderer {
             };
 
             gl.use_program(Some(program));
-            gl.disable(DEPTH_TEST); // Always on top
+            gl.disable(DEPTH_TEST); // Render without depth test (always visible)
+            gl.depth_mask(false); // Don't write to depth buffer
             gl.disable(CULL_FACE);
+            gl.line_width(1.0); // Thin wireframe lines
 
             // Calculate matrices
             let aspect = viewport_width as f32 / viewport_height as f32;
@@ -786,8 +788,9 @@ impl MeshRenderer {
             gl.draw_elements(LINES, wireframe_mesh.index_count, UNSIGNED_INT, 0);
             gl.bind_vertex_array(None);
 
-            // Disable color override
+            // Restore GL state
             gl.uniform_1_i32(use_color_override_loc.as_ref(), 0);
+            gl.depth_mask(true); // Restore depth writing
         }
     }
 
