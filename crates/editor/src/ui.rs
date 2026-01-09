@@ -111,7 +111,7 @@ pub fn show_file_menu(ui: &mut Ui, _file_state: &FileState) -> Option<FileOperat
             .clicked()
         {
             operation = Some(FileOperation::New);
-            ui.close_menu();
+            ui.close();
         }
 
         ui.separator();
@@ -122,7 +122,7 @@ pub fn show_file_menu(ui: &mut Ui, _file_state: &FileState) -> Option<FileOperat
             .clicked()
         {
             operation = Some(FileOperation::Open);
-            ui.close_menu();
+            ui.close();
         }
 
         ui.separator();
@@ -133,7 +133,7 @@ pub fn show_file_menu(ui: &mut Ui, _file_state: &FileState) -> Option<FileOperat
             .clicked()
         {
             operation = Some(FileOperation::Save);
-            ui.close_menu();
+            ui.close();
         }
 
         // Save As (Ctrl+Shift+S)
@@ -142,7 +142,7 @@ pub fn show_file_menu(ui: &mut Ui, _file_state: &FileState) -> Option<FileOperat
             .clicked()
         {
             operation = Some(FileOperation::SaveAs);
-            ui.close_menu();
+            ui.close();
         }
 
         ui.separator();
@@ -150,7 +150,7 @@ pub fn show_file_menu(ui: &mut Ui, _file_state: &FileState) -> Option<FileOperat
         // Import VOX
         if ui.button("Import VOX...").clicked() {
             operation = Some(FileOperation::ImportVox);
-            ui.close_menu();
+            ui.close();
         }
     });
 
@@ -284,6 +284,7 @@ fn color_button(ui: &mut Ui, color: Color32, is_selected: bool) -> Response {
                 rect.expand(1.0),
                 0.0,
                 egui::Stroke::new(2.0, Color32::WHITE),
+                egui::StrokeKind::Inside,
             );
         } else if response.hovered() {
             // Subtle border on hover
@@ -291,6 +292,7 @@ fn color_button(ui: &mut Ui, color: Color32, is_selected: bool) -> Response {
                 rect,
                 0.0,
                 egui::Stroke::new(1.0, Color32::from_gray(200)),
+                egui::StrokeKind::Inside,
             );
         }
     }
@@ -439,7 +441,7 @@ fn material_list_item(
             (material.color.z * 255.0) as u8,
         );
         painter.rect_filled(swatch_rect, 2.0, color);
-        painter.rect_stroke(swatch_rect, 2.0, egui::Stroke::new(1.0, Color32::from_gray(80)));
+        painter.rect_stroke(swatch_rect, 2.0, egui::Stroke::new(1.0, Color32::from_gray(80)), egui::StrokeKind::Inside);
 
         // Material name
         let text_pos = rect.min + Vec2::new(MATERIAL_SWATCH_SIZE + 12.0, 2.0);
@@ -682,6 +684,7 @@ fn model_list_item(
             thumbnail_rect,
             4.0,
             egui::Stroke::new(1.0, Color32::from_gray(80)),
+            egui::StrokeKind::Inside,
         );
 
         // Model name and dimensions
