@@ -26,6 +26,10 @@ pub struct MeshRenderer {
     meshes: Vec<GlMesh>,
     /// Wireframe box mesh for bounding box rendering
     wireframe_box: Option<GlMesh>,
+    /// 2D shader program for screen-space rendering
+    program_2d: Option<NativeProgram>,
+    /// Axis arrows mesh for 3D gizmo
+    axis_arrows: Option<GlMesh>,
 }
 
 impl Default for MeshRenderer {
@@ -40,6 +44,8 @@ impl MeshRenderer {
             program: None,
             meshes: Vec::new(),
             wireframe_box: None,
+            program_2d: None,
+            axis_arrows: None,
         }
     }
 
@@ -54,8 +60,15 @@ impl MeshRenderer {
             let program = create_program(gl, VERTEX_SHADER, FRAGMENT_SHADER)?;
             self.program = Some(program);
 
+            // Create 2D shader program for screen-space rendering
+            let program_2d = create_program(gl, VERTEX_SHADER_2D, FRAGMENT_SHADER_2D)?;
+            self.program_2d = Some(program_2d);
+
             // Create wireframe box mesh (unit cube from 0 to 1)
             self.wireframe_box = Some(self.create_wireframe_box(gl)?);
+
+            // Create axis arrows mesh for 3D gizmo
+            self.axis_arrows = Some(self.create_axis_arrows(gl)?);
 
             Ok(())
         }
@@ -91,6 +104,131 @@ impl MeshRenderer {
                 4, 5,  5, 6,  6, 7,  7, 4,
                 // Connecting edges
                 0, 4,  1, 5,  2, 6,  3, 7,
+            ];
+
+            let vao = gl
+                .create_vertex_array()
+                .map_err(|e| format!("Failed to create VAO: {}", e))?;
+            gl.bind_vertex_array(Some(vao));
+
+            let vbo = gl
+                .create_buffer()
+                .map_err(|e| format!("Failed to create VBO: {}", e))?;
+            gl.bind_buffer(ARRAY_BUFFER, Some(vbo));
+            gl.buffer_data_u8_slice(ARRAY_BUFFER, bytemuck::cast_slice(&vertices), STATIC_DRAW);
+
+            // Position attribute (location 0)
+            gl.enable_vertex_attrib_array(0);
+            gl.vertex_attrib_pointer_f32(
+                0,
+                3,
+                FLOAT,
+                false,
+                9 * std::mem::size_of::<f32>() as i32,
+                0,
+            );
+
+            // Normal attribute (location 1)
+            gl.enable_vertex_attrib_array(1);
+            gl.vertex_attrib_pointer_f32(
+                1,
+                3,
+                FLOAT,
+                false,
+                9 * std::mem::size_of::<f32>() as i32,
+                3 * std::mem::size_of::<f32>() as i32,
+            );
+
+            // Color attribute (location 2)
+            gl.enable_vertex_attrib_array(2);
+            gl.vertex_attrib_pointer_f32(
+                2,
+                3,
+                FLOAT,
+                false,
+                9 * std::mem::size_of::<f32>() as i32,
+                6 * std::mem::size_of::<f32>() as i32,
+            );
+
+            let ebo = gl
+                .create_buffer()
+                .map_err(|e| format!("Failed to create EBO: {}", e))?;
+            gl.bind_buffer(ELEMENT_ARRAY_BUFFER, Some(ebo));
+            gl.buffer_data_u8_slice(
+                ELEMENT_ARRAY_BUFFER,
+                bytemuck::cast_slice(&indices),
+                STATIC_DRAW,
+            );
+
+            gl.bind_vertex_array(None);
+
+            Ok(GlMesh {
+                vao,
+                vbo,
+                ebo,
+                index_count: indices.len() as i32,
+            })
+        }
+    }
+
+    /// Create axis arrows mesh for 3D gizmo (X=red, Y=green, Z=blue)
+    unsafe fn create_axis_arrows(&self, gl: &Context) -> Result<GlMesh, String> {
+        unsafe {
+            // Each axis arrow: origin to tip line + small arrowhead lines
+            // Arrow length is 1.0 units
+            let arrow_len = 1.0f32;
+            let head_len = 0.15f32;
+            let head_spread = 0.05f32;
+            let normal = [0.0f32, 1.0, 0.0]; // Dummy normal
+
+            // Colors for each axis
+            let red = [1.0f32, 0.2, 0.2];
+            let green = [0.2f32, 1.0, 0.2];
+            let blue = [0.2f32, 0.2, 1.0];
+
+            // Build vertices: position (3) + normal (3) + color (3) = 9 floats per vertex
+            #[rustfmt::skip]
+            let vertices: Vec<f32> = vec![
+                // X axis (red) - main line
+                0.0, 0.0, 0.0,  normal[0], normal[1], normal[2],  red[0], red[1], red[2], // 0
+                arrow_len, 0.0, 0.0,  normal[0], normal[1], normal[2],  red[0], red[1], red[2], // 1
+                // X axis arrowhead
+                arrow_len - head_len, head_spread, 0.0,  normal[0], normal[1], normal[2],  red[0], red[1], red[2], // 2
+                arrow_len - head_len, -head_spread, 0.0,  normal[0], normal[1], normal[2],  red[0], red[1], red[2], // 3
+                arrow_len - head_len, 0.0, head_spread,  normal[0], normal[1], normal[2],  red[0], red[1], red[2], // 4
+                arrow_len - head_len, 0.0, -head_spread,  normal[0], normal[1], normal[2],  red[0], red[1], red[2], // 5
+
+                // Y axis (green) - main line
+                0.0, 0.0, 0.0,  normal[0], normal[1], normal[2],  green[0], green[1], green[2], // 6
+                0.0, arrow_len, 0.0,  normal[0], normal[1], normal[2],  green[0], green[1], green[2], // 7
+                // Y axis arrowhead
+                head_spread, arrow_len - head_len, 0.0,  normal[0], normal[1], normal[2],  green[0], green[1], green[2], // 8
+                -head_spread, arrow_len - head_len, 0.0,  normal[0], normal[1], normal[2],  green[0], green[1], green[2], // 9
+                0.0, arrow_len - head_len, head_spread,  normal[0], normal[1], normal[2],  green[0], green[1], green[2], // 10
+                0.0, arrow_len - head_len, -head_spread,  normal[0], normal[1], normal[2],  green[0], green[1], green[2], // 11
+
+                // Z axis (blue) - main line
+                0.0, 0.0, 0.0,  normal[0], normal[1], normal[2],  blue[0], blue[1], blue[2], // 12
+                0.0, 0.0, arrow_len,  normal[0], normal[1], normal[2],  blue[0], blue[1], blue[2], // 13
+                // Z axis arrowhead
+                head_spread, 0.0, arrow_len - head_len,  normal[0], normal[1], normal[2],  blue[0], blue[1], blue[2], // 14
+                -head_spread, 0.0, arrow_len - head_len,  normal[0], normal[1], normal[2],  blue[0], blue[1], blue[2], // 15
+                0.0, head_spread, arrow_len - head_len,  normal[0], normal[1], normal[2],  blue[0], blue[1], blue[2], // 16
+                0.0, -head_spread, arrow_len - head_len,  normal[0], normal[1], normal[2],  blue[0], blue[1], blue[2], // 17
+            ];
+
+            // Line indices for each axis (main line + 4 arrowhead lines)
+            #[rustfmt::skip]
+            let indices: Vec<u32> = vec![
+                // X axis
+                0, 1,   // main line
+                1, 2,  1, 3,  1, 4,  1, 5,  // arrowhead
+                // Y axis
+                6, 7,   // main line
+                7, 8,  7, 9,  7, 10,  7, 11,  // arrowhead
+                // Z axis
+                12, 13,  // main line
+                13, 14,  13, 15,  13, 16,  13, 17,  // arrowhead
             ];
 
             let vao = gl
@@ -312,7 +450,7 @@ impl MeshRenderer {
         }
     }
 
-    /// Render a mesh at given position with specified scale
+    /// Render a mesh at given position with specified uniform scale
     ///
     /// # Safety
     ///
@@ -335,9 +473,9 @@ impl MeshRenderer {
                 mesh_index,
                 position,
                 rotation,
-                scale,
-                glam::Vec3::ONE, // Default normalized_size (full octree)
-                false,           // wireframe
+                glam::Vec3::splat(scale), // Convert uniform scale to Vec3
+                glam::Vec3::ONE,          // Default normalized_size (full octree)
+                false,                    // wireframe
                 camera,
                 viewport_width,
                 viewport_height,
@@ -345,7 +483,7 @@ impl MeshRenderer {
         }
     }
 
-    /// Render a mesh at given position with specified scale and normalized size (for centering)
+    /// Render a mesh at given position with specified uniform scale and normalized size (for centering)
     ///
     /// # Safety
     ///
@@ -369,7 +507,7 @@ impl MeshRenderer {
                 mesh_index,
                 position,
                 rotation,
-                scale,
+                glam::Vec3::splat(scale), // Convert uniform scale to Vec3
                 normalized_size,
                 false, // wireframe
                 camera,
@@ -381,6 +519,10 @@ impl MeshRenderer {
 
     /// Render a mesh at given position with specified scale and wireframe option
     ///
+    /// # Arguments
+    /// * `scale` - Non-uniform scale to apply to the mesh (Vec3 for X/Y/Z independent scaling)
+    /// * `normalized_size` - Model size as fraction of octree (for centering offset)
+    ///
     /// # Safety
     ///
     /// Must be called with an active GL context on the current thread.
@@ -391,7 +533,7 @@ impl MeshRenderer {
         mesh_index: usize,
         position: glam::Vec3,
         rotation: glam::Quat,
-        scale: f32,
+        scale: glam::Vec3,
         normalized_size: glam::Vec3,
         wireframe: bool,
         camera: &Camera,
@@ -434,21 +576,25 @@ impl MeshRenderer {
             let target = camera.position + forward;
             let view = glam::Mat4::look_at_rh(camera.position, target, up);
 
-            // Mesh vertices are in [0, 1] space (visit_faces outputs normalized positions)
-            // The model occupies [0, normalized_size] in octree space.
-            // To center the model at 'position', we need to offset the mesh by -normalized_size/2
-            let mesh_offset = normalized_size * -0.5;
-
-            // Model matrix: translate to position, rotate, then scale mesh
+            // Transform mesh to match CubeBox position within mesh:
+            // 1. The mesh uses [0, normalized_size] space
+            // 2. To render mesh centered at 'position':
+            // - Scale unit [0,1] mesh by normalized_size to get actual mesh bounds
+            // - Apply -normalized_size/2 offset to center at origin
+            // - Apply world scale (non-uniform supported)
+            // - Apply rotation and translation
+            //
             // Order of operations (right to left):
-            // 1. Offset to center model: [0, normalized_size] -> [-normalized_size/2, normalized_size/2]
-            // 2. Scale by object scale
-            // 3. Apply rotation (if any)
-            // 4. Translate to world position
+            // 1. Scale by normalized_size (mesh occupies [0, normalized_size])
+            // 2. Offset to center: [0, normalized_size] -> [-normalized_size/2, normalized_size/2]
+            // 3. Scale by world scale (non-uniform)
+            // 4. Apply rotation
+            // 5. Translate to world position
             let model = glam::Mat4::from_translation(position)
                 * glam::Mat4::from_quat(rotation)
-                * glam::Mat4::from_scale(glam::Vec3::splat(scale))
-                * glam::Mat4::from_translation(mesh_offset);
+                * glam::Mat4::from_scale(scale)
+                * glam::Mat4::from_translation(normalized_size * -0.5)
+                * glam::Mat4::from_scale(normalized_size);
 
             // Upload uniforms
             let mvp = projection * view * model;
@@ -589,8 +735,10 @@ impl MeshRenderer {
             };
 
             gl.use_program(Some(program));
-            gl.disable(DEPTH_TEST); // Always on top
+            gl.disable(DEPTH_TEST); // Render without depth test (always visible)
+            gl.depth_mask(false); // Don't write to depth buffer
             gl.disable(CULL_FACE);
+            gl.line_width(1.0); // Thin wireframe lines
 
             // Calculate matrices
             let aspect = viewport_width as f32 / viewport_height as f32;
@@ -640,8 +788,9 @@ impl MeshRenderer {
             gl.draw_elements(LINES, wireframe_mesh.index_count, UNSIGNED_INT, 0);
             gl.bind_vertex_array(None);
 
-            // Disable color override
+            // Restore GL state
             gl.uniform_1_i32(use_color_override_loc.as_ref(), 0);
+            gl.depth_mask(true); // Restore depth writing
         }
     }
 
@@ -783,6 +932,271 @@ impl MeshRenderer {
         }
     }
 
+    /// Render a 2D crosshair gizmo at screen coordinates
+    ///
+    /// Draws a small crosshair (+) at the given screen position.
+    ///
+    /// # Arguments
+    /// * `screen_pos` - Position in window coordinates (pixels, origin top-left)
+    /// * `size` - Size of the crosshair in pixels
+    /// * `color` - RGB color for the crosshair [0.0-1.0]
+    /// * `viewport_width` - Window width in pixels
+    /// * `viewport_height` - Window height in pixels
+    ///
+    /// # Safety
+    ///
+    /// Must be called with an active GL context on the current thread.
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn render_2d_crosshair(
+        &self,
+        gl: &Context,
+        screen_pos: glam::Vec2,
+        size: f32,
+        color: [f32; 3],
+        viewport_width: i32,
+        viewport_height: i32,
+    ) {
+        unsafe {
+            let Some(program) = self.program_2d else { return };
+
+            gl.use_program(Some(program));
+            gl.disable(DEPTH_TEST);
+            gl.disable(CULL_FACE);
+
+            // Convert screen coordinates to NDC (-1 to 1)
+            // Screen origin is top-left, NDC origin is center
+            let x_ndc = (screen_pos.x / viewport_width as f32) * 2.0 - 1.0;
+            let y_ndc = 1.0 - (screen_pos.y / viewport_height as f32) * 2.0;
+            let half_w = size / viewport_width as f32;
+            let half_h = size / viewport_height as f32;
+
+            // Set uniforms
+            let color_loc = gl.get_uniform_location(program, "uColor");
+            gl.uniform_3_f32(color_loc.as_ref(), color[0], color[1], color[2]);
+
+            // Create crosshair vertices (horizontal and vertical lines)
+            #[rustfmt::skip]
+            let vertices: [f32; 8] = [
+                // Horizontal line
+                x_ndc - half_w, y_ndc,
+                x_ndc + half_w, y_ndc,
+                // Vertical line
+                x_ndc, y_ndc - half_h,
+                x_ndc, y_ndc + half_h,
+            ];
+
+            // Create temporary VAO/VBO for dynamic 2D geometry
+            let vao = gl.create_vertex_array().unwrap();
+            let vbo = gl.create_buffer().unwrap();
+
+            gl.bind_vertex_array(Some(vao));
+            gl.bind_buffer(ARRAY_BUFFER, Some(vbo));
+            gl.buffer_data_u8_slice(ARRAY_BUFFER, bytemuck::cast_slice(&vertices), DYNAMIC_DRAW);
+
+            gl.enable_vertex_attrib_array(0);
+            gl.vertex_attrib_pointer_f32(0, 2, FLOAT, false, 0, 0);
+
+            gl.draw_arrays(LINES, 0, 4);
+
+            gl.bind_vertex_array(None);
+            gl.delete_buffer(vbo);
+            gl.delete_vertex_array(vao);
+        }
+    }
+
+    /// Render a 2D pointer gizmo at screen coordinates
+    ///
+    /// Draws a circle or ring at the given screen position.
+    ///
+    /// # Arguments
+    /// * `screen_pos` - Position in window coordinates (pixels, origin top-left)
+    /// * `radius` - Radius of the circle in pixels
+    /// * `color` - RGB color for the circle [0.0-1.0]
+    /// * `viewport_width` - Window width in pixels
+    /// * `viewport_height` - Window height in pixels
+    ///
+    /// # Safety
+    ///
+    /// Must be called with an active GL context on the current thread.
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn render_2d_circle(
+        &self,
+        gl: &Context,
+        screen_pos: glam::Vec2,
+        radius: f32,
+        color: [f32; 3],
+        viewport_width: i32,
+        viewport_height: i32,
+    ) {
+        unsafe {
+            let Some(program) = self.program_2d else { return };
+
+            gl.use_program(Some(program));
+            gl.disable(DEPTH_TEST);
+            gl.disable(CULL_FACE);
+
+            // Convert screen coordinates to NDC
+            let x_ndc = (screen_pos.x / viewport_width as f32) * 2.0 - 1.0;
+            let y_ndc = 1.0 - (screen_pos.y / viewport_height as f32) * 2.0;
+            let r_x = radius / viewport_width as f32;
+            let r_y = radius / viewport_height as f32;
+
+            // Set uniforms
+            let color_loc = gl.get_uniform_location(program, "uColor");
+            gl.uniform_3_f32(color_loc.as_ref(), color[0], color[1], color[2]);
+
+            // Create circle vertices (line loop with 16 segments)
+            const SEGMENTS: usize = 16;
+            let mut vertices: Vec<f32> = Vec::with_capacity(SEGMENTS * 2);
+            for i in 0..SEGMENTS {
+                let angle = (i as f32 / SEGMENTS as f32) * std::f32::consts::TAU;
+                vertices.push(x_ndc + angle.cos() * r_x);
+                vertices.push(y_ndc + angle.sin() * r_y);
+            }
+
+            // Create temporary VAO/VBO for dynamic 2D geometry
+            let vao = gl.create_vertex_array().unwrap();
+            let vbo = gl.create_buffer().unwrap();
+
+            gl.bind_vertex_array(Some(vao));
+            gl.bind_buffer(ARRAY_BUFFER, Some(vbo));
+            gl.buffer_data_u8_slice(ARRAY_BUFFER, bytemuck::cast_slice(&vertices), DYNAMIC_DRAW);
+
+            gl.enable_vertex_attrib_array(0);
+            gl.vertex_attrib_pointer_f32(0, 2, FLOAT, false, 0, 0);
+
+            gl.draw_arrays(LINE_LOOP, 0, SEGMENTS as i32);
+
+            gl.bind_vertex_array(None);
+            gl.delete_buffer(vbo);
+            gl.delete_vertex_array(vao);
+        }
+    }
+
+    /// Render 3D axis arrows gizmo at world position
+    ///
+    /// Draws colored axis arrows (X=red, Y=green, Z=blue) at the given world position.
+    ///
+    /// # Arguments
+    /// * `position` - World position for the gizmo origin
+    /// * `scale` - Scale factor for the arrows
+    /// * `camera` - Camera for view/projection matrices
+    /// * `viewport_width` - Viewport width in pixels
+    /// * `viewport_height` - Viewport height in pixels
+    ///
+    /// # Safety
+    ///
+    /// Must be called with an active GL context on the current thread.
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn render_3d_axis_arrows(
+        &self,
+        gl: &Context,
+        position: glam::Vec3,
+        scale: f32,
+        camera: &Camera,
+        viewport_width: i32,
+        viewport_height: i32,
+    ) {
+        unsafe {
+            let Some(program) = self.program else { return };
+            let Some(ref axis_mesh) = self.axis_arrows else { return };
+
+            gl.use_program(Some(program));
+            gl.disable(DEPTH_TEST); // Always on top
+            gl.disable(CULL_FACE);
+
+            // Calculate matrices
+            let aspect = viewport_width as f32 / viewport_height as f32;
+            let projection = glam::Mat4::perspective_rh(camera.vfov, aspect, 1.0, 50000.0);
+
+            let forward = camera.rotation * glam::Vec3::NEG_Z;
+            let up = camera.rotation * glam::Vec3::Y;
+            let target = camera.position + forward;
+            let view = glam::Mat4::look_at_rh(camera.position, target, up);
+
+            // Simple translation and scale model matrix
+            let model = glam::Mat4::from_translation(position)
+                * glam::Mat4::from_scale(glam::Vec3::splat(scale));
+
+            // Upload uniforms
+            let mvp = projection * view * model;
+            let mvp_loc = gl.get_uniform_location(program, "uMVP");
+            gl.uniform_matrix_4_f32_slice(mvp_loc.as_ref(), false, mvp.as_ref());
+
+            let model_loc = gl.get_uniform_location(program, "uModel");
+            gl.uniform_matrix_4_f32_slice(model_loc.as_ref(), false, model.as_ref());
+
+            // Full brightness for gizmo (no lighting)
+            let ambient_loc = gl.get_uniform_location(program, "uAmbient");
+            gl.uniform_1_f32(ambient_loc.as_ref(), 1.0);
+
+            let diffuse_strength_loc = gl.get_uniform_location(program, "uDiffuseStrength");
+            gl.uniform_1_f32(diffuse_strength_loc.as_ref(), 0.0);
+
+            // Don't use color override - use vertex colors
+            let use_color_override_loc = gl.get_uniform_location(program, "uUseColorOverride");
+            gl.uniform_1_i32(use_color_override_loc.as_ref(), 0);
+
+            // Draw axis arrows using LINES
+            gl.bind_vertex_array(Some(axis_mesh.vao));
+            gl.draw_elements(LINES, axis_mesh.index_count, UNSIGNED_INT, 0);
+            gl.bind_vertex_array(None);
+        }
+    }
+
+    /// Save the current framebuffer to an image file
+    ///
+    /// # Arguments
+    /// * `gl` - OpenGL context
+    /// * `width` - Framebuffer width
+    /// * `height` - Framebuffer height
+    /// * `path` - Output file path (PNG format recommended)
+    ///
+    /// # Safety
+    ///
+    /// Must be called with an active GL context on the current thread.
+    pub fn save_framebuffer_to_file(
+        &self,
+        gl: &Context,
+        width: u32,
+        height: u32,
+        path: &str,
+    ) -> Result<(), String> {
+        // Read pixels from framebuffer
+        let mut pixels = vec![0u8; (width * height * 4) as usize];
+        unsafe {
+            gl.read_pixels(
+                0,
+                0,
+                width as i32,
+                height as i32,
+                glow::RGBA,
+                glow::UNSIGNED_BYTE,
+                glow::PixelPackData::Slice(Some(&mut pixels)),
+            );
+        }
+
+        // Convert RGBA to RGB
+        let rgb_pixels: Vec<u8> = pixels
+            .chunks(4)
+            .flat_map(|rgba| [rgba[0], rgba[1], rgba[2]])
+            .collect();
+
+        // Flip Y-axis (OpenGL has origin at bottom-left)
+        let mut flipped = vec![0u8; rgb_pixels.len()];
+        for y in 0..height {
+            let src_row = &rgb_pixels[(y * width * 3) as usize..((y + 1) * width * 3) as usize];
+            let dst_y = height - 1 - y;
+            let dst_row =
+                &mut flipped[(dst_y * width * 3) as usize..((dst_y + 1) * width * 3) as usize];
+            dst_row.copy_from_slice(src_row);
+        }
+
+        // Save to file
+        image::save_buffer(path, &flipped, width, height, image::ColorType::Rgb8)
+            .map_err(|e| e.to_string())
+    }
+
     /// Clear all uploaded meshes (keeps shader program)
     ///
     /// # Safety
@@ -810,6 +1224,16 @@ impl MeshRenderer {
 
             if let Some(program) = self.program.take() {
                 gl.delete_program(program);
+            }
+
+            if let Some(program) = self.program_2d.take() {
+                gl.delete_program(program);
+            }
+
+            if let Some(ref mesh) = self.axis_arrows.take() {
+                gl.delete_vertex_array(mesh.vao);
+                gl.delete_buffer(mesh.vbo);
+                gl.delete_buffer(mesh.ebo);
             }
         }
     }
@@ -866,6 +1290,30 @@ void main() {
 }
 "#;
 
+/// Simple 2D vertex shader for screen-space rendering
+const VERTEX_SHADER_2D: &str = r#"#version 300 es
+precision highp float;
+
+layout(location = 0) in vec2 aPosition;
+
+void main() {
+    gl_Position = vec4(aPosition, 0.0, 1.0);
+}
+"#;
+
+/// Simple 2D fragment shader with uniform color
+const FRAGMENT_SHADER_2D: &str = r#"#version 300 es
+precision highp float;
+
+uniform vec3 uColor;
+
+out vec4 FragColor;
+
+void main() {
+    FragColor = vec4(uColor, 1.0);
+}
+"#;
+
 impl crate::renderer::Renderer for MeshRenderer {
     fn render(&mut self, _width: u32, _height: u32, _time: f32) {
         panic!("MeshRenderer requires GL context. Use render_to_framebuffer() instead.");
@@ -919,7 +1367,7 @@ impl crate::renderer::Renderer for MeshRenderer {
                 height as i32,
                 glow::RGBA,
                 glow::UNSIGNED_BYTE,
-                glow::PixelPackData::Slice(&mut pixels),
+                glow::PixelPackData::Slice(Some(&mut pixels)),
             );
         }
 

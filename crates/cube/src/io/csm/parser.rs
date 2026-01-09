@@ -6,8 +6,8 @@ use nom::{
     character::complete::{char, multispace0, one_of, u8 as nom_u8},
     combinator::{map, opt, value},
     multi::many0,
-    sequence::{delimited, preceded, tuple},
-    IResult,
+    sequence::{delimited, preceded},
+    IResult, Parser,
 };
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -34,8 +34,8 @@ type Result<T> = std::result::Result<T, CsmError>;
 fn comment(input: &str) -> IResult<&str, ()> {
     value(
         (),
-        tuple((char('#'), take_while(|c| c != '\n'), opt(char('\n')))),
-    )(input)
+        (char('#'), take_while(|c| c != '\n'), opt(char('\n'))),
+    ).parse(input)
 }
 
 fn ws_or_comment(input: &str) -> IResult<&str, ()> {
@@ -50,31 +50,31 @@ fn ws_or_comment(input: &str) -> IResult<&str, ()> {
 
 // Path parsing (octant chars a-h)
 fn octant(input: &str) -> IResult<&str, usize> {
-    map(one_of("abcdefgh"), |c| octant_char_to_index(c).unwrap())(input)
+    map(one_of("abcdefgh"), |c| octant_char_to_index(c).unwrap()).parse(input)
 }
 
 fn path(input: &str) -> IResult<&str, Vec<usize>> {
-    many0(octant)(input)
+    many0(octant).parse(input)
 }
 
 // Axis parsing (x, y, z)
 fn axis(input: &str) -> IResult<&str, Axis> {
-    map(one_of("xyzXYZ"), |c| Axis::from_char(c).unwrap())(input)
+    map(one_of("xyzXYZ"), |c| Axis::from_char(c).unwrap()).parse(input)
 }
 
 // Swap parsing (^xyz)
 fn swap_axes(input: &str) -> IResult<&str, Vec<Axis>> {
-    preceded(char('^'), many0(axis))(input)
+    preceded(char('^'), many0(axis)).parse(input)
 }
 
 // Mirror parsing (/xyz)
 fn mirror_axes(input: &str) -> IResult<&str, Vec<Axis>> {
-    preceded(char('/'), many0(axis))(input)
+    preceded(char('/'), many0(axis)).parse(input)
 }
 
 // Cube value parsing
 fn cube_value(input: &str) -> IResult<&str, Cube<u8>> {
-    map(nom_u8, Cube::solid)(input)
+    map(nom_u8, Cube::solid).parse(input)
 }
 
 // Reference parsing (<path>)
@@ -169,7 +169,7 @@ fn parse_cube_inner<'a>(
             |i| cube_array(i, prev_epoch),
             |i| cube_reference(i, prev_epoch),
         )),
-    )(input)
+    ).parse(input)
 }
 
 // Statement parsing (>path cube)
@@ -187,7 +187,7 @@ fn statement<'a>(
 
 // Epoch separator (|)
 fn epoch_separator(input: &str) -> IResult<&str, ()> {
-    value((), delimited(ws_or_comment, char('|'), ws_or_comment))(input)
+    value((), delimited(ws_or_comment, char('|'), ws_or_comment)).parse(input)
 }
 
 // Epoch parsing

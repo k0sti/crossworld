@@ -2,6 +2,8 @@
 //!
 //! This binary watches the game library for changes and hot-reloads it.
 
+#![allow(clippy::type_complexity)]
+
 use app::{
     create_controller_backend, App, ControllerBackend, CursorMode, FrameContext,
     InputState, CREATE_APP_SYMBOL,
@@ -85,6 +87,7 @@ struct GameRuntime {
         >,
     >,
     last_reload_time: Option<Duration>,
+    last_lib_modified: Option<std::time::SystemTime>,
 }
 
 impl GameRuntime {
@@ -118,6 +121,7 @@ impl GameRuntime {
             egui: None,
             file_events,
             last_reload_time: None,
+            last_lib_modified: None,
         }
     }
 
@@ -138,6 +142,13 @@ impl GameRuntime {
             "[GameRuntime] Loading app library from: {}",
             lib_path.display()
         );
+
+        // Track modification time to prevent spurious reloads
+        if let Ok(metadata) = std::fs::metadata(&lib_path) {
+            if let Ok(modified) = metadata.modified() {
+                self.last_lib_modified = Some(modified);
+            }
+        }
 
         if !lib_path.exists() {
             eprintln!(
@@ -231,6 +242,9 @@ impl GameRuntime {
         // Capture current window size before unloading
         let current_size = self.window.as_ref().map(|w| w.inner_size());
 
+        // Drop old egui before unloading app to clean up GL resources properly
+        self.egui = None;
+
         self.unload_app();
 
         // Small delay to ensure file is fully written
@@ -238,8 +252,18 @@ impl GameRuntime {
 
         self.load_app();
 
+        // Reinitialize egui after reloading app with fresh GL state
+        if let (Some(window), Some(gl)) = (self.window.as_ref(), self.gl.as_ref()) {
+            self.egui = Some(app::EguiIntegration::new(window, Arc::clone(gl)));
+        }
+
         let reload_time = start_time.elapsed();
         self.last_reload_time = Some(reload_time);
+
+        // Clear any pending file events to prevent immediate reload cycles
+        if let Ok(rx) = self.file_events.lock() {
+            while rx.try_recv().is_ok() {}
+        }
 
         // Send resize event to new app instance to sync window size
         if let (Some(app), Some(size)) = (self.app_instance.as_mut(), current_size) {
@@ -465,11 +489,23 @@ impl ApplicationHandler for GameRuntime {
                             if let Ok(events) = events_result {
                                 for event in events {
                                     if event.path == lib_path {
-                                        println!(
-                                            "[FileWatcher] Detected change: {}",
-                                            event.path.display()
-                                        );
-                                        needs_reload = true;
+                                        // Only reload if modification time actually changed
+                                        if let Ok(metadata) = std::fs::metadata(&lib_path) {
+                                            if let Ok(modified) = metadata.modified() {
+                                                let has_changed = self.last_lib_modified
+                                                    .map(|last| modified > last)
+                                                    .unwrap_or(true);
+
+                                                if has_changed {
+                                                    println!(
+                                                        "[FileWatcher] Detected change: {}",
+                                                        event.path.display()
+                                                    );
+                                                    self.last_lib_modified = Some(modified);
+                                                    needs_reload = true;
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -607,7 +643,7 @@ fn main() {
     // Setup file watcher for hot-reload
     let (tx, rx) = channel();
     let mut _debouncer =
-        new_debouncer(Duration::from_millis(100), tx).expect("Failed to create file watcher");
+        new_debouncer(Duration::from_millis(500), tx).expect("Failed to create file watcher");
 
     // Watch the parent directory (watching the file directly doesn't work well with atomic writes)
     let watch_dir = lib_path.parent().unwrap();

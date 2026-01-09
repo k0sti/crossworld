@@ -26,7 +26,7 @@ rapier3d = { git = "https://github.com/dimforge/rapier.git" }
 cube = { path = "../cube" }
 
 # Math library (shared with rest of project)
-glam = { version = "0.29", features = ["serde"] }
+glam = { version = "0.30", features = ["serde"] }
 
 # WASM bindings (optional)
 wasm-bindgen = { version = "0.2", optional = true }
@@ -42,7 +42,7 @@ tracing-wasm = "0.2"
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3"
-criterion = "0.5"
+criterion = "0.8"
 
 [[bench]]
 name = "collision"

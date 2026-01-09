@@ -1,100 +1,112 @@
-use bevy::prelude::*;
-use bevy_egui::EguiPlugin;
+//! Crossworld Voxel Editor
+//!
+//! A native OpenGL voxel editor using the app framework with glow/egui/winit.
+//!
+//! # Usage
+//!
+//! ```bash
+//! # Normal interactive mode
+//! editor
+//!
+//! # Run with test configuration (automated mouse events, frame capture)
+//! editor --config crates/editor/config/test.lua
+//!
+//! # Debug mode: run N frames then exit
+//! editor --debug 100
+//! ```
 
-mod camera;
-mod config;
-mod voxel_scene;
-mod mesh_sync;
-mod raycast;
-mod cursor;
-mod editing;
-mod file_io;
-mod file_ops;
-mod ui;
-
-use camera::{CameraPlugin, OrbitCamera};
-use config::EditorConfig;
-use voxel_scene::VoxelScenePlugin;
-use mesh_sync::MeshSyncPlugin;
-use raycast::RaycastPlugin;
-use cursor::CursorPlugin;
-use editing::EditingPlugin;
-use file_io::FileIoPlugin;
-use file_ops::FileOpsPlugin;
-use ui::UiPlugin;
+use app::{run_app, AppConfig};
+use editor::EditorApp;
+use std::path::PathBuf;
 
 fn main() {
-    App::new()
-        .add_plugins(DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(Window {
-                title: "Crossworld Voxel Editor".to_string(),
-                resolution: (1280, 720).into(),
-                ..default()
-            }),
-            ..default()
-        }))
-        .add_plugins(EguiPlugin::default())
-        .init_resource::<EditorConfig>()
-        .add_plugins(CameraPlugin)
-        .add_plugins(VoxelScenePlugin)
-        .add_plugins(MeshSyncPlugin)
-        .add_plugins(RaycastPlugin)
-        .add_plugins(CursorPlugin)
-        .add_plugins(EditingPlugin)
-        .add_plugins(FileIoPlugin)
-        .add_plugins(FileOpsPlugin)
-        .add_plugins(UiPlugin)
-        .add_plugins(EditorPlugin)
-        .run();
-}
+    println!("=== Crossworld Voxel Editor ===\n");
 
-struct EditorPlugin;
+    // Parse command line arguments
+    let args: Vec<String> = std::env::args().collect();
+    let mut config_path: Option<PathBuf> = None;
+    let mut debug_frames: Option<u64> = None;
 
-impl Plugin for EditorPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_systems(Startup, setup_scene);
+    let mut i = 1;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--help" | "-h" => {
+                println!("Usage: editor [OPTIONS]");
+                println!();
+                println!("Options:");
+                println!("  --config PATH   Load test configuration from Lua file");
+                println!("  --debug N       Run only N frames then exit");
+                println!("  --help          Show this help message");
+                println!();
+                println!("Test Configuration:");
+                println!("  The Lua config file can define:");
+                println!("  - debug_frames: Number of frames to run");
+                println!("  - events: Mouse events to inject at specific frames");
+                println!("  - captures: Frame captures to save");
+                println!();
+                println!("Example Lua config:");
+                println!("  debug_frames = 60");
+                println!("  events = {{");
+                println!("    {{ frame = 10, type = \"mouse_move\", x = 400, y = 300 }},");
+                println!("    {{ frame = 20, type = \"mouse_click\", button = \"left\", pressed = true }},");
+                println!("  }}");
+                println!("  captures = {{");
+                println!("    {{ frame = 30, path = \"output/frame_030.png\" }},");
+                println!("  }}");
+                return;
+            }
+            "--config" | "-c" => {
+                if i + 1 < args.len() {
+                    config_path = Some(PathBuf::from(&args[i + 1]));
+                    println!("Using config file: {}\n", args[i + 1]);
+                    i += 1;
+                } else {
+                    eprintln!("Error: --config requires a path");
+                    return;
+                }
+            }
+            "--debug" => {
+                if i + 1 < args.len() {
+                    match args[i + 1].parse::<u64>() {
+                        Ok(n) => {
+                            debug_frames = Some(n);
+                            println!("Debug mode: running {} frames\n", n);
+                        }
+                        Err(_) => {
+                            eprintln!("Error: --debug requires a number of frames");
+                            return;
+                        }
+                    }
+                    i += 1;
+                } else {
+                    eprintln!("Error: --debug requires a number of frames");
+                    return;
+                }
+            }
+            _ => {
+                eprintln!("Unknown argument: {}", args[i]);
+                eprintln!("Use --help for usage information");
+                return;
+            }
+        }
+        i += 1;
     }
-}
 
-fn setup_scene(
-    mut commands: Commands,
-) {
-    // Spawn orbit camera at (10, 10, 10) looking at origin
-    let orbit_camera = OrbitCamera::new(Vec3::ZERO, 15.0);
-    commands.spawn((
-        Camera3d::default(),
-        orbit_camera.calculate_transform(),
-        orbit_camera,
-    ));
+    // Create editor app
+    let app = if let Some(path) = config_path {
+        EditorApp::from_config_file(&path)
+    } else if let Some(frames) = debug_frames {
+        // Create a minimal config with just debug_frames
+        let test_config = editor::lua_config::EditorTestConfig {
+            debug_frames: Some(frames),
+            ..Default::default()
+        };
+        EditorApp::new().with_test_config(test_config)
+    } else {
+        EditorApp::new()
+    };
 
-    // Add a directional light
-    commands.spawn((
-        DirectionalLight {
-            illuminance: 10000.0,
-            shadows_enabled: true,
-            ..default()
-        },
-        Transform::from_xyz(4.0, 8.0, 4.0).looking_at(Vec3::ZERO, Vec3::Y),
-    ));
+    let config = AppConfig::new("Crossworld Voxel Editor").with_size(1280, 800);
 
-    // Add an ambient light for better visibility
-    commands.insert_resource(AmbientLight {
-        color: Color::WHITE,
-        brightness: 200.0,
-        affects_lightmapped_meshes: false,
-    });
-
-    // Add a ground plane as a visual reference
-    // commands.spawn((
-    //     Mesh3d(meshes.add(Plane3d::default().mesh().size(20.0, 20.0))),
-    //     MeshMaterial3d(materials.add(StandardMaterial {
-    //         base_color: Color::srgb(0.3, 0.5, 0.3),
-    //         ..default()
-    //     })),
-    //     Transform::from_xyz(0.0, -0.5, 0.0),
-    // ));
-
-    info!("Crossworld Voxel Editor initialized");
-    info!("Camera positioned at (10, 10, 10) looking at origin");
-    info!("VoxelScene will generate terrain on first frame");
+    run_app(app, config);
 }

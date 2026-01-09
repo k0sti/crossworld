@@ -17,6 +17,7 @@ unsafe impl Send for ThreadSafeCube {}
 unsafe impl Sync for ThreadSafeCube {}
 
 impl ThreadSafeCube {
+    #[allow(clippy::arc_with_non_send_sync)]
     pub fn new(cube: Rc<Cube<u8>>) -> Self {
         Self {
             inner: Arc::new(Mutex::new(cube)),

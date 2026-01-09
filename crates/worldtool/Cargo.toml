@@ -9,13 +9,13 @@ path = "src/main.rs"
 
 [dependencies]
 # Nostr
-nostr-sdk = "0.37"
+nostr-sdk = "0.44"
 
 # CLI
 clap = { version = "4", features = ["derive"] }
 
 # Async runtime
-tokio = { version = "1.41", features = ["full"] }
+tokio = { version = "1.49", features = ["full"] }
 
 # Environment
 dotenvy = "0.15"

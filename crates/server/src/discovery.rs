@@ -89,7 +89,7 @@ impl DiscoveryService {
             .sign(&self.client.signer().await?)
             .await?;
 
-        self.client.send_event(event).await?;
+        self.client.send_event(&event).await?;
 
         tracing::info!(
             "Server announced: {} ({}/{})",

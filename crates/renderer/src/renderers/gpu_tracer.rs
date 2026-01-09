@@ -258,10 +258,10 @@ impl ComputeTracer {
             gl.use_program(Some(gl_state.compute_program));
 
             // Bind output texture as image (unit 0)
-            gl.bind_image_texture(0, gl_state.output_texture, 0, false, 0, WRITE_ONLY, RGBA8);
+            gl.bind_image_texture(0, Some(gl_state.output_texture), 0, false, 0, WRITE_ONLY, RGBA8);
 
             // Bind depth texture as image (unit 1)
-            gl.bind_image_texture(1, gl_state.depth_texture, 0, false, 0, WRITE_ONLY, R32F);
+            gl.bind_image_texture(1, Some(gl_state.depth_texture), 0, false, 0, WRITE_ONLY, R32F);
 
             // Bind octree data SSBO (binding = 0)
             gl.bind_buffer_base(SHADER_STORAGE_BUFFER, 0, Some(gl_state.octree_ssbo));
@@ -327,10 +327,10 @@ impl ComputeTracer {
             gl.use_program(Some(gl_state.compute_program));
 
             // Bind output texture as image (unit 0)
-            gl.bind_image_texture(0, gl_state.output_texture, 0, false, 0, WRITE_ONLY, RGBA8);
+            gl.bind_image_texture(0, Some(gl_state.output_texture), 0, false, 0, WRITE_ONLY, RGBA8);
 
             // Bind depth texture as image (unit 1)
-            gl.bind_image_texture(1, gl_state.depth_texture, 0, false, 0, WRITE_ONLY, R32F);
+            gl.bind_image_texture(1, Some(gl_state.depth_texture), 0, false, 0, WRITE_ONLY, R32F);
 
             // Bind octree data SSBO (binding = 0)
             gl.bind_buffer_base(SHADER_STORAGE_BUFFER, 0, Some(gl_state.octree_ssbo));
@@ -570,7 +570,7 @@ impl Renderer for ComputeTracer {
                 height as i32,
                 glow::RGBA,
                 glow::UNSIGNED_BYTE,
-                glow::PixelPackData::Slice(&mut pixels),
+                glow::PixelPackData::Slice(Some(&mut pixels)),
             );
         }
 

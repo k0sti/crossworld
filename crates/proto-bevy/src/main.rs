@@ -15,7 +15,6 @@
 //! Example: `cargo run --bin proto -- --debug 5`
 
 use std::f32::consts::PI;
-use std::path::Path;
 
 use clap::Parser;
 
@@ -34,6 +33,7 @@ use bevy::{
         render_resource::{Extent3d, TextureDimension, TextureFormat},
         view::screenshot::{save_to_disk, Screenshot},
     },
+    window::{CursorGrabMode, CursorOptions},
 };
 use bevy_rapier3d::prelude::*;
 
@@ -148,6 +148,9 @@ struct RaycastHitInfo {
 struct HitInfoText;
 
 #[derive(Component)]
+struct CameraDebugText;
+
+#[derive(Component)]
 struct Shape;
 
 fn main() {
@@ -181,6 +184,13 @@ fn main() {
     app.init_resource::<RaycastHitInfo>();
 
     let debug_mode = DebugMode::new(args.debug);
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        app.insert_resource(WireframeConfig {
+            global: debug_mode.enabled,
+            default_color: Color::srgb(0.0, 1.0, 0.0),
+        });
+    }
     if debug_mode.enabled {
         info!(
             "[DEBUG] Running {} frames ({} warmup + {})",
@@ -188,13 +198,6 @@ fn main() {
             RENDER_WARMUP_FRAMES,
             debug_mode.frames_after_warmup
         );
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            app.insert_resource(WireframeConfig {
-                global: true,
-                default_color: Color::srgb(0.0, 1.0, 0.0),
-            });
-        }
     }
     app.insert_resource(debug_mode);
 
@@ -208,6 +211,7 @@ fn main() {
                 update_raycast_info,
                 draw_mesh_intersections,
                 update_hit_info_text,
+                update_camera_debug_text,
                 #[cfg(not(target_arch = "wasm32"))]
                 toggle_wireframe,
             ),
@@ -227,13 +231,12 @@ fn debug_frame_counter(
     if debug_mode.frame_count >= total && !debug_mode.screenshot_triggered {
         debug_mode.screenshot_triggered = true;
 
-        let output_dir = Path::new("output");
-        if !output_dir.exists() && let Err(e) = std::fs::create_dir_all(output_dir) {
+        if let Err(e) = std::fs::create_dir_all("output") {
             error!("[DEBUG] Failed to create output directory: {}", e);
         }
 
-        let output_path = "output/exit_frame.png".to_string();
-        info!("[DEBUG] Capturing screenshot to: {}", output_path);
+        let output_path = std::path::PathBuf::from("output/exit_frame.png");
+        info!("[DEBUG] Capturing screenshot to: {:?}", output_path);
 
         commands
             .spawn(Screenshot::primary_window())
@@ -265,46 +268,54 @@ fn setup(
         ..default()
     });
 
+    // Bevy default primitive sizes:
+    // Cuboid: half_size = 0.5 (1x1x1 box)
+    // Sphere: radius = 0.5
+    // Capsule3d: radius = 0.25, half_length = 0.5 (total height = 1.5)
+    // Cylinder: radius = 0.5, half_height = 0.5 (total height = 1.0)
+    // Cone: radius = 0.5, height = 1.0
+    // Torus: minor_radius = 0.25, major_radius = 0.75
+    // Tetrahedron: edge length ~1.73 (vertices at distance 1.0 from center)
+    // ConicalFrustum: radius_top = 0.25, radius_bottom = 0.5, height = 0.5
     let shape_data: Vec<(Handle<Mesh>, Collider, &str)> = vec![
         (meshes.add(Cuboid::default()), Collider::cuboid(0.5, 0.5, 0.5), "Cuboid"),
         (
             meshes.add(Tetrahedron::default()),
-            Collider::convex_hull(&[
-                Vec3::new(-0.5, -0.289, -0.289),
-                Vec3::new(0.5, -0.289, -0.289),
-                Vec3::new(0.0, -0.289, 0.577),
-                Vec3::new(0.0, 0.577, 0.0),
-            ])
-            .unwrap_or_else(|| Collider::ball(0.5)),
+            create_tetrahedron_collider(),
             "Tetrahedron",
         ),
-        (meshes.add(Capsule3d::default()), Collider::capsule_y(0.5, 0.5), "Capsule3d"),
+        // Capsule3d: radius=0.25, half_length=0.5 → capsule_y(half_segment, radius)
+        (meshes.add(Capsule3d::default()), Collider::capsule_y(0.5, 0.25), "Capsule3d"),
         (meshes.add(Torus::default()), create_torus_collider(0.75, 0.25, 16), "Torus"),
         (meshes.add(Cylinder::default()), Collider::cylinder(0.5, 0.5), "Cylinder"),
+        // Cone: height=1.0 means half_height=0.5
         (meshes.add(Cone::default()), Collider::cone(0.5, 0.5), "Cone"),
-        (meshes.add(ConicalFrustum::default()), create_frustum_collider(0.5, 0.25, 0.5, 12), "ConicalFrustum"),
+        (meshes.add(ConicalFrustum::default()), create_frustum_collider(0.5, 0.25, 0.25, 12), "ConicalFrustum"),
         (meshes.add(Sphere::default().mesh().ico(5).unwrap()), Collider::ball(0.5), "Icosphere"),
         (meshes.add(Sphere::default().mesh().uv(32, 18)), Collider::ball(0.5), "UVSphere"),
     ];
 
+    // 2D shape defaults for extrusions:
+    // Rectangle: half_size = (0.5, 0.5)
+    // Capsule2d: radius = 0.25, half_length = 0.5
+    // Annulus: inner_radius = 0.25, outer_radius = 0.5
+    // Circle: radius = 0.5
+    // Ellipse: half_size = (0.5, 0.25)
+    // RegularPolygon: circumradius = 0.5, 6 sides
+    // Triangle2d: default equilateral with circumradius ~0.58
     let extrusion_data: Vec<(Handle<Mesh>, Collider, &str)> = vec![
         (meshes.add(Extrusion::new(Rectangle::default(), 1.)), Collider::cuboid(0.5, 0.5, 0.5), "RectExtrusion"),
-        (meshes.add(Extrusion::new(Capsule2d::default(), 1.)), Collider::capsule_z(0.5, 0.5), "CapsuleExtrusion"),
+        // Capsule2d extruded: radius=0.25, half_length=0.5, depth=0.5
+        (meshes.add(Extrusion::new(Capsule2d::default(), 1.)), Collider::capsule_z(0.5, 0.25), "CapsuleExtrusion"),
+        // Annulus: approximate with cylinder at outer radius
         (meshes.add(Extrusion::new(Annulus::default(), 1.)), Collider::cylinder(0.5, 0.5), "AnnulusExtrusion"),
         (meshes.add(Extrusion::new(Circle::default(), 1.)), Collider::cylinder(0.5, 0.5), "CircleExtrusion"),
+        // Ellipse: half_size = (0.5, 0.25)
         (meshes.add(Extrusion::new(Ellipse::default(), 1.)), create_ellipse_extrusion_collider(0.5, 0.25, 0.5, 12), "EllipseExtrusion"),
         (meshes.add(Extrusion::new(RegularPolygon::default(), 1.)), create_polygon_extrusion_collider(0.5, 6, 0.5), "PolygonExtrusion"),
         (
             meshes.add(Extrusion::new(Triangle2d::default(), 1.)),
-            Collider::convex_hull(&[
-                Vec3::new(-0.5, -0.289, -0.5),
-                Vec3::new(0.5, -0.289, -0.5),
-                Vec3::new(0.0, 0.577, -0.5),
-                Vec3::new(-0.5, -0.289, 0.5),
-                Vec3::new(0.5, -0.289, 0.5),
-                Vec3::new(0.0, 0.577, 0.5),
-            ])
-            .unwrap_or_else(|| Collider::cuboid(0.5, 0.5, 0.5)),
+            create_triangle_extrusion_collider(0.5),
             "TriangleExtrusion",
         ),
     ];
@@ -361,16 +372,17 @@ fn setup(
 
     let camera_pos = Vec3::new(0.0, 12., 24.0);
     let look_target = Vec3::new(0., 4., 0.);
-    let direction = (look_target - camera_pos).normalize();
-    let initial_yaw = direction.x.atan2(direction.z);
-    let initial_pitch = (-direction.y).asin();
+    let transform = Transform::from_translation(camera_pos).looking_at(look_target, Vec3::Y);
+
+    // Extract yaw/pitch from the actual transform rotation to ensure consistency
+    let (yaw, pitch, _roll) = transform.rotation.to_euler(EulerRot::YXZ);
 
     commands.spawn((
         Camera3d::default(),
-        Transform::from_translation(camera_pos).looking_at(look_target, Vec3::Y),
+        transform,
         FirstPersonCamera {
-            pitch: initial_pitch,
-            yaw: initial_yaw,
+            pitch,
+            yaw,
             ..default()
         },
     ));
@@ -395,6 +407,29 @@ fn setup(
             ..default()
         },
     ));
+
+    commands.spawn((
+        Text::new("Camera: ..."),
+        CameraDebugText,
+        Node {
+            position_type: PositionType::Absolute,
+            top: px(36.),
+            left: px(12.),
+            ..default()
+        },
+    ));
+}
+
+fn create_tetrahedron_collider() -> Collider {
+    // Bevy's Tetrahedron::default() vertices (regular tetrahedron)
+    let a = 1.0 / 3.0_f32.sqrt();
+    Collider::convex_hull(&[
+        Vec3::new(0.0, a, 0.0),
+        Vec3::new(-0.5, -a / 2.0, a * 0.866),
+        Vec3::new(-0.5, -a / 2.0, -a * 0.866),
+        Vec3::new(1.0, -a / 2.0, 0.0),
+    ])
+    .unwrap_or_else(|| Collider::ball(0.5))
 }
 
 fn create_torus_collider(major_radius: f32, minor_radius: f32, segments: usize) -> Collider {
@@ -447,6 +482,20 @@ fn create_polygon_extrusion_collider(radius: f32, sides: usize, half_depth: f32)
         points.push(Vec3::new(x, y, half_depth));
     }
     Collider::convex_hull(&points).unwrap_or_else(|| Collider::cylinder(half_depth, radius))
+}
+
+fn create_triangle_extrusion_collider(half_depth: f32) -> Collider {
+    // Triangle2d::default() is equilateral with vertices at:
+    // top: (0, 0.5), bottom-left: (-0.5, -0.5), bottom-right: (0.5, -0.5)
+    Collider::convex_hull(&[
+        Vec3::new(0.0, 0.5, -half_depth),
+        Vec3::new(-0.5, -0.5, -half_depth),
+        Vec3::new(0.5, -0.5, -half_depth),
+        Vec3::new(0.0, 0.5, half_depth),
+        Vec3::new(-0.5, -0.5, half_depth),
+        Vec3::new(0.5, -0.5, half_depth),
+    ])
+    .unwrap_or_else(|| Collider::cuboid(0.5, 0.5, half_depth))
 }
 
 fn uv_debug_texture() -> Image {
@@ -511,10 +560,25 @@ fn mouse_look(
     mouse_button: Res<ButtonInput<MouseButton>>,
     mouse_motion: Res<AccumulatedMouseMotion>,
     mut query: Query<(&mut Transform, &mut FirstPersonCamera)>,
+    mut cursor_options: Query<&mut CursorOptions>,
 ) {
+    let mut cursor = cursor_options.single_mut().unwrap();
+
+    // Handle cursor visibility and grab mode
+    if mouse_button.just_pressed(MouseButton::Right) {
+        cursor.visible = false;
+        cursor.grab_mode = CursorGrabMode::Locked;
+        return; // Skip first frame to avoid jump from accumulated motion
+    }
+    if mouse_button.just_released(MouseButton::Right) {
+        cursor.visible = true;
+        cursor.grab_mode = CursorGrabMode::None;
+        return;
+    }
     if !mouse_button.pressed(MouseButton::Right) {
         return;
     }
+
     let delta = mouse_motion.delta;
     if delta == Vec2::ZERO {
         return;
@@ -564,4 +628,28 @@ fn update_hit_info_text(hit_info: Res<RaycastHitInfo>, mut query: Query<&mut Tex
             **text = "Hit: None".to_string();
         }
     }
+}
+
+fn update_camera_debug_text(
+    camera_query: Query<(&Transform, &FirstPersonCamera)>,
+    mouse_button: Res<ButtonInput<MouseButton>>,
+    mouse_motion: Res<AccumulatedMouseMotion>,
+    mut text_query: Query<&mut Text, With<CameraDebugText>>,
+) {
+    let Ok((transform, cam)) = camera_query.single() else { return };
+    let Ok(mut text) = text_query.single_mut() else { return };
+
+    let pos = transform.translation;
+    let fwd = transform.forward();
+    let rmb = if mouse_button.pressed(MouseButton::Right) { "RMB" } else { "---" };
+    let delta = mouse_motion.delta;
+
+    **text = format!(
+        "Pos: ({:.1}, {:.1}, {:.1}) | Pitch: {:.2} Yaw: {:.2} | Fwd: ({:.2}, {:.2}, {:.2}) | {} | Delta: ({:.1}, {:.1})",
+        pos.x, pos.y, pos.z,
+        cam.pitch, cam.yaw,
+        fwd.x, fwd.y, fwd.z,
+        rmb,
+        delta.x, delta.y
+    );
 }

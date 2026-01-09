@@ -156,21 +156,6 @@ doc/
     └── server.md            # Game server design
 ```
 
-## OpenSpec System (openspec/)
-
-```
-openspec/
-├── project.md              # Project context and tech stack
-├── AGENTS.md               # OpenSpec workflow
-├── changes/                # Change proposals
-│   └── <change-id>/
-│       ├── proposal.md     # Change description
-│       ├── tasks.md        # Implementation tasks
-│       ├── design.md       # Design document (optional)
-│       └── specs/          # Spec deltas
-└── specs/                  # Main specifications (future)
-```
-
 ## Assets (assets/)
 
 **Static Assets**:

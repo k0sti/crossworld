@@ -98,15 +98,15 @@ pub fn spawn_cube_objects(
     physics_world: &mut PhysicsWorld,
 ) -> Vec<SpawnedObject> {
     let mut objects = Vec::new();
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
 
     for i in 0..config.spawn_count {
         // Random position centered at origin (0, 0, 0)
         // X and Z: random within spawn_radius of center
         // Y: random between min_height and max_height (above ground which is at y < 0)
-        let x = rng.gen_range(-config.spawn_radius..config.spawn_radius);
-        let y = rng.gen_range(config.min_height..config.max_height);
-        let z = rng.gen_range(-config.spawn_radius..config.spawn_radius);
+        let x = rng.random_range(-config.spawn_radius..config.spawn_radius);
+        let y = rng.random_range(config.min_height..config.max_height);
+        let z = rng.random_range(-config.spawn_radius..config.spawn_radius);
 
         // Random model
         let model = &models[i as usize % models.len()];

@@ -438,11 +438,12 @@ impl VoxelColliderBuilder {
                 center.z - u_offset.z + v_offset.z,
             ));
 
-            // Add 2 triangles (counter-clockwise winding)
-            // Triangle 1: v0, v1, v2
-            // Triangle 2: v0, v2, v3
-            indices.push([base_idx, base_idx + 1, base_idx + 2]);
-            indices.push([base_idx, base_idx + 2, base_idx + 3]);
+            // Add 2 triangles with winding that produces outward-facing normals
+            // Counter-clockwise when viewed from the face normal direction
+            // Triangle 1: v0, v2, v1 (reversed from original v0, v1, v2)
+            // Triangle 2: v0, v3, v2 (reversed from original v0, v2, v3)
+            indices.push([base_idx, base_idx + 2, base_idx + 1]);
+            indices.push([base_idx, base_idx + 3, base_idx + 2]);
         }
 
         // Use FIX_INTERNAL_EDGES to improve collision quality at face boundaries

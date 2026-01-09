@@ -19,20 +19,23 @@ app = { path = "../app", features = ["runtime"] }
 renderer = { path = "../renderer" }
 cube = { path = "../cube" }
 
+# World generation
+crossworld-world = { path = "../world" }
+
 # Core graphics (needed for App trait implementation in lib)
-glow = "0.14"
-glam = "0.29"
+glow = "0.16"
+glam = "0.30"
 winit = "0.30"
-egui = "0.29"
-egui_glow = "0.29"
+egui = "0.33"
+egui_glow = "0.33"
 
 # Hot-reload runtime dependencies (only used by binary)
 glutin = "0.32"
 glutin-winit = "0.5"
 raw-window-handle = "0.6"
-libloading = "0.8"
-notify = "6.1"
-notify-debouncer-mini = "0.4"
+libloading = "0.9"
+notify = "8.2"
+notify-debouncer-mini = "0.7"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 winit = { version = "0.30", features = ["x11"] }

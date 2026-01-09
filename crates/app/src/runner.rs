@@ -12,25 +12,66 @@ use glutin::prelude::*;
 use glutin::surface::{SurfaceAttributesBuilder, WindowSurface};
 use glutin_winit::DisplayBuilder;
 use raw_window_handle::HasWindowHandle;
-use std::collections::HashSet;
 use std::num::NonZeroU32;
 use std::sync::Arc;
 use std::time::Instant;
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, MouseButton, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
-use winit::keyboard::{KeyCode, PhysicalKey};
+use winit::keyboard::PhysicalKey;
 use winit::window::{CursorGrabMode, Window, WindowId};
 
 #[cfg(target_os = "linux")]
 use winit::platform::x11::EventLoopBuilderExtX11;
 
 use crate::{
-    create_controller_backend, App, ControllerBackend, CursorMode, FrameContext, GamepadState,
-    InputState, MouseButtons,
+    create_controller_backend, App, ControllerBackend, CursorMode, FrameContext,
+    InputState,
 };
 
 use super::EguiIntegration;
+
+/// Debug mode configuration
+#[derive(Debug, Clone, Copy)]
+pub struct DebugMode {
+    /// Number of frames to run before exiting
+    pub frames: u64,
+    /// Path to save the final frame screenshot
+    pub output_path: &'static str,
+}
+
+impl DebugMode {
+    /// Create a new debug mode configuration
+    pub fn new(frames: u64) -> Self {
+        Self {
+            frames,
+            output_path: "output/frame_last.png",
+        }
+    }
+}
+
+/// Review panel configuration
+#[derive(Clone, Debug)]
+pub struct ReviewConfig {
+    /// Path to the review document file
+    pub file_path: std::path::PathBuf,
+    /// Document content (loaded from file, Arc for efficient cloning)
+    pub content: std::sync::Arc<str>,
+    /// User comment input buffer
+    pub comment: String,
+}
+
+impl ReviewConfig {
+    /// Create a new review configuration by loading a file
+    pub fn new(file_path: std::path::PathBuf) -> std::io::Result<Self> {
+        let content = std::fs::read_to_string(&file_path)?;
+        Ok(Self {
+            file_path,
+            content: content.into(),
+            comment: String::new(),
+        })
+    }
+}
 
 /// Configuration for the application window
 #[derive(Clone)]
@@ -45,6 +86,12 @@ pub struct AppConfig {
     pub gl_major: u8,
     /// OpenGL minor version
     pub gl_minor: u8,
+    /// Optional debug mode configuration
+    pub debug_mode: Option<DebugMode>,
+    /// Optional note message to display as overlay (supports markdown)
+    pub note: Option<String>,
+    /// Optional review panel configuration
+    pub review: Option<ReviewConfig>,
 }
 
 impl Default for AppConfig {
@@ -55,6 +102,9 @@ impl Default for AppConfig {
             height: 600,
             gl_major: 4,
             gl_minor: 3,
+            debug_mode: None,
+            note: None,
+            review: None,
         }
     }
 }
@@ -80,6 +130,24 @@ impl AppConfig {
         self.gl_major = major;
         self.gl_minor = minor;
         self
+    }
+
+    /// Enable debug mode with the specified number of frames
+    pub fn with_debug_mode(mut self, frames: u64) -> Self {
+        self.debug_mode = Some(DebugMode::new(frames));
+        self
+    }
+
+    /// Set a note message to display as overlay (supports markdown)
+    pub fn with_note(mut self, note: impl Into<String>) -> Self {
+        self.note = Some(note.into());
+        self
+    }
+
+    /// Set a review panel from a file path
+    pub fn with_review(mut self, file_path: std::path::PathBuf) -> std::io::Result<Self> {
+        self.review = Some(ReviewConfig::new(file_path)?);
+        Ok(self)
     }
 }
 
@@ -175,6 +243,48 @@ impl<A: App> AppRuntime<A> {
                 }
             }
         }
+    }
+
+    /// Capture the current framebuffer and save to file
+    fn capture_frame(
+        &self,
+        gl: &Context,
+        size: winit::dpi::PhysicalSize<u32>,
+        output_path: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        use image::{ImageBuffer, Rgba};
+
+        let width = size.width as usize;
+        let height = size.height as usize;
+        let mut pixels = vec![0u8; width * height * 4];
+
+        unsafe {
+            gl.read_pixels(
+                0,
+                0,
+                size.width as i32,
+                size.height as i32,
+                glow::RGBA,
+                glow::UNSIGNED_BYTE,
+                glow::PixelPackData::Slice(Some(&mut pixels)),
+            );
+        }
+
+        // Flip image vertically (OpenGL has origin at bottom-left)
+        let mut flipped = vec![0u8; width * height * 4];
+        for y in 0..height {
+            let src_offset = y * width * 4;
+            let dst_offset = (height - 1 - y) * width * 4;
+            flipped[dst_offset..dst_offset + width * 4]
+                .copy_from_slice(&pixels[src_offset..src_offset + width * 4]);
+        }
+
+        let img: ImageBuffer<Rgba<u8>, Vec<u8>> =
+            ImageBuffer::from_raw(width as u32, height as u32, flipped)
+                .ok_or("Failed to create image buffer")?;
+
+        img.save(output_path)?;
+        Ok(())
     }
 }
 
@@ -299,6 +409,18 @@ impl<A: App> ApplicationHandler for AppRuntime<A> {
         _window_id: WindowId,
         event: WindowEvent,
     ) {
+        // Always update mouse button state to keep it synchronized
+        // This prevents the state from becoming stuck when egui consumes events
+        if let WindowEvent::MouseInput { state, button, .. } = &event {
+            let pressed = *state == ElementState::Pressed;
+            match button {
+                MouseButton::Left => self.input_state.mouse_buttons.left = pressed,
+                MouseButton::Right => self.input_state.mouse_buttons.right = pressed,
+                MouseButton::Middle => self.input_state.mouse_buttons.middle = pressed,
+                _ => {}
+            }
+        }
+
         // Let egui handle events first
         if let (Some(window), Some(egui)) = (self.window.as_ref(), self.egui.as_mut()) {
             if egui.on_window_event(window, &event) {
@@ -321,14 +443,8 @@ impl<A: App> ApplicationHandler for AppRuntime<A> {
                 self.input_state.mouse_pos = None;
                 self.last_mouse_pos = None;
             }
-            WindowEvent::MouseInput { state, button, .. } => {
-                let pressed = *state == ElementState::Pressed;
-                match button {
-                    MouseButton::Left => self.input_state.mouse_buttons.left = pressed,
-                    MouseButton::Right => self.input_state.mouse_buttons.right = pressed,
-                    MouseButton::Middle => self.input_state.mouse_buttons.middle = pressed,
-                    _ => {}
-                }
+            WindowEvent::MouseInput { .. } => {
+                // Mouse button state already handled above before egui
             }
             WindowEvent::MouseWheel { delta, .. } => {
                 let scroll = match delta {
@@ -426,6 +542,14 @@ impl<A: App> ApplicationHandler for AppRuntime<A> {
                     // Update app logic
                     self.app.update(&ctx, &self.input_state);
 
+                    // Check if app wants to exit
+                    if self.app.should_exit() {
+                        println!("[AppRuntime] App requested exit");
+                        self.app.shutdown(&ctx);
+                        event_loop.exit();
+                        return;
+                    }
+
                     // Apply cursor mode
                     self.apply_cursor_mode(window);
 
@@ -441,9 +565,54 @@ impl<A: App> ApplicationHandler for AppRuntime<A> {
                             gl.blend_func(glow::SRC_ALPHA, glow::ONE_MINUS_SRC_ALPHA);
                         }
 
+                        // Get note for rendering in the closure
+                        let note = self.config.note.clone();
+                        let mut review = self.config.review.clone();
+                        let mut review_action = super::review_overlay::ReviewAction::Continue;
+
                         egui.run(window, [size.width, size.height], |egui_ctx| {
                             self.app.ui(&ctx, egui_ctx);
+
+                            // Render note overlay if configured
+                            if let Some(ref note_text) = note {
+                                super::note_overlay::render_note_overlay(egui_ctx, note_text);
+                            }
+
+                            // Render review overlay if configured
+                            if let Some(ref mut review_config) = review {
+                                review_action = super::review_overlay::render_review_overlay(
+                                    egui_ctx,
+                                    review_config,
+                                );
+                            }
                         });
+
+                        // Update review config from closure
+                        if let Some(review_config) = review {
+                            self.config.review = Some(review_config);
+                        }
+
+                        // Handle review action
+                        match review_action {
+                            super::review_overlay::ReviewAction::Continue => {
+                                // Keep running
+                            }
+                            super::review_overlay::ReviewAction::ExitWithComment => {
+                                if let Some(ref review_config) = self.config.review {
+                                    // Write comment to stdout
+                                    println!("{}", review_config.comment);
+                                }
+                                self.app.shutdown(&ctx);
+                                event_loop.exit();
+                                return;
+                            }
+                            super::review_overlay::ReviewAction::ExitWithoutComment => {
+                                // Exit without printing comment
+                                self.app.shutdown(&ctx);
+                                event_loop.exit();
+                                return;
+                            }
+                        }
 
                         // Restore GL state
                         unsafe {
@@ -453,9 +622,47 @@ impl<A: App> ApplicationHandler for AppRuntime<A> {
                     }
 
                     gl_surface.swap_buffers(gl_context).unwrap();
-                    window.request_redraw();
 
                     self.frame_count += 1;
+
+                    // Check debug mode exit condition
+                    if let Some(debug_mode) = self.config.debug_mode {
+                        if self.frame_count >= debug_mode.frames {
+                            println!(
+                                "[DEBUG] Frame {}/{} - Capturing screenshot and exiting",
+                                self.frame_count, debug_mode.frames
+                            );
+
+                            // Create output directory if it doesn't exist
+                            if let Some(parent) = std::path::Path::new(debug_mode.output_path).parent() {
+                                let _ = std::fs::create_dir_all(parent);
+                            }
+
+                            // Capture framebuffer and save
+                            if let Err(e) = self.capture_frame(gl, size, debug_mode.output_path) {
+                                eprintln!("[DEBUG] Failed to capture frame: {}", e);
+                            } else {
+                                println!("[DEBUG] Screenshot saved to: {}", debug_mode.output_path);
+                            }
+
+                            // Shutdown and exit
+                            let ctx = FrameContext {
+                                gl,
+                                window,
+                                delta_time,
+                                elapsed,
+                                frame: self.frame_count,
+                                size: (size.width, size.height),
+                            };
+                            self.app.shutdown(&ctx);
+                            event_loop.exit();
+                            return;
+                        } else {
+                            println!("[DEBUG] Frame {}/{}", self.frame_count, debug_mode.frames);
+                        }
+                    }
+
+                    window.request_redraw();
                     self.reset_frame_deltas();
                 }
             }

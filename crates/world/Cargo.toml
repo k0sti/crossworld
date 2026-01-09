@@ -38,7 +38,7 @@ cube = { path = "../cube" }
 crossworld-physics = { path = "../physics" }
 
 # Math types
-glam = "0.29"
+glam = "0.30"
 
 # Noise functions for terrain generation
 noise = "0.9"

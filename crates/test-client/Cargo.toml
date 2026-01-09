@@ -23,10 +23,10 @@ glam = { version = "0.30", features = ["serde"] }
 
 # Utilities
 anyhow = "1.0"
-clap = { version = "4.0", features = ["derive"] }
+clap = { version = "4.5", features = ["derive"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-rand = "0.8"
+rand = "0.9"
 
 # Share message types with server
 crossworld-server = { path = "../server" }
