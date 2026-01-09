@@ -19,7 +19,7 @@ use winit::keyboard::KeyCode;
 
 use crate::cursor::{CubeCursor, FocusMode};
 use crate::editing::EditorState;
-use crate::palette::{ColorPalette, ModelPalette};
+use crate::palette::{ColorPalette, MaterialPalette, ModelPalette};
 use crate::raycast::{raycast_from_mouse, EditorHit};
 use crate::ui::{FileOperation, FileState};
 
@@ -51,6 +51,7 @@ pub struct EditorApp {
 
     // Palette state
     color_palette: ColorPalette,
+    material_palette: MaterialPalette,
     model_palette: ModelPalette,
 
     // File state
@@ -91,6 +92,7 @@ impl EditorApp {
             prev_tab_pressed: false,
             prev_left_mouse_pressed: false,
             color_palette: ColorPalette::new(),
+            material_palette: MaterialPalette::new(),
             model_palette: ModelPalette::new(),
             file_state: FileState::new(),
         }
@@ -533,7 +535,10 @@ impl App for EditorApp {
         // Color palette panel on the right side
         ui::show_color_palette_panel(egui_ctx, &mut self.color_palette, &mut self.editor_state);
 
-        // Model palette panel on the left side
+        // Material palette panel on the left side
+        ui::show_material_palette_panel(egui_ctx, &mut self.material_palette, &mut self.editor_state);
+
+        // Model palette panel on the left side (below materials)
         ui::show_model_palette_panel(egui_ctx, &mut self.model_palette);
 
         // Handle file operations after UI rendering

@@ -29,7 +29,7 @@ pub struct PaletteColor {
 impl PaletteColor {
     /// Create a new palette color from R2G3B2 components
     pub const fn new(r_bits: u8, g_bits: u8, b_bits: u8) -> Self {
-        let index = 128 + ((r_bits & 0b11) << 5) | ((g_bits & 0b111) << 2) | (b_bits & 0b11);
+        let index = (128 + ((r_bits & 0b11) << 5)) | ((g_bits & 0b111) << 2) | (b_bits & 0b11);
         let color = decode_r2g3b2_const(r_bits, g_bits, b_bits);
         Self {
             index,
@@ -42,7 +42,7 @@ impl PaletteColor {
 
     /// Create a palette color from a material index (128-255)
     pub const fn from_index(index: u8) -> Self {
-        let bits = if index >= 128 { index - 128 } else { 0 };
+        let bits = index.saturating_sub(128);
         let r_bits = (bits >> 5) & 0b11;
         let g_bits = (bits >> 2) & 0b111;
         let b_bits = bits & 0b11;

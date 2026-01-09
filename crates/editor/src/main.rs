@@ -11,7 +11,7 @@ fn main() {
     // Parse command line arguments
     let args: Vec<String> = std::env::args().collect();
 
-    for arg in args.iter().skip(1) {
+    if let Some(arg) = args.get(1) {
         match arg.as_str() {
             "--help" | "-h" => {
                 println!("Usage: editor [OPTIONS]");
