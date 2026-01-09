@@ -64,10 +64,7 @@ fn demonstrate_shader(source: &str) {
             // Count noise functions if used
             if gpu_fn.uses_noise {
                 let noise_funcs = ["fn noise3", "fn fbm", "fn turbulence"];
-                let count = noise_funcs
-                    .iter()
-                    .filter(|&f| shader.contains(f))
-                    .count();
+                let count = noise_funcs.iter().filter(|&f| shader.contains(f)).count();
                 println!("    - Noise functions: {} defined", count);
             }
         }

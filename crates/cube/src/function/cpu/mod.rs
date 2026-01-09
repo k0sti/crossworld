@@ -125,9 +125,13 @@ impl CpuFunction {
                 "fbm" if args.len() == 4 => {
                     Some(fbm(args[0], args[1], args[2], args[3] as u32, ctx.seed))
                 }
-                "turbulence" if args.len() == 4 => {
-                    Some(turbulence(args[0], args[1], args[2], args[3] as u32, ctx.seed))
-                }
+                "turbulence" if args.len() == 4 => Some(turbulence(
+                    args[0],
+                    args[1],
+                    args[2],
+                    args[3] as u32,
+                    ctx.seed,
+                )),
 
                 // Additional math functions not in fasteval
                 "step" if args.len() == 2 => Some(if args[1] < args[0] { 0.0 } else { 1.0 }),
@@ -153,9 +157,7 @@ impl CpuFunction {
             }
         };
 
-        self.compiled
-            .eval(&self.slab, &mut ns)
-            .unwrap_or(0.0)
+        self.compiled.eval(&self.slab, &mut ns).unwrap_or(0.0)
     }
 
     /// Evaluate to a material index (clamped to u8 range)
@@ -210,10 +212,8 @@ fn ast_to_fasteval(expr: &Expr) -> Result<String, CpuCompileError> {
         }
 
         Expr::Call { func, args } => {
-            let arg_strs: Vec<String> = args
-                .iter()
-                .map(ast_to_fasteval)
-                .collect::<Result<_, _>>()?;
+            let arg_strs: Vec<String> =
+                args.iter().map(ast_to_fasteval).collect::<Result<_, _>>()?;
 
             let func_name = match func {
                 // These are handled as custom functions in the namespace
@@ -370,7 +370,10 @@ fn substitute_user_var(expr: &Expr, name: &str, replacement: &Expr) -> Expr {
             cases: cases
                 .iter()
                 .map(|(pat, case_expr)| {
-                    (pat.clone(), substitute_user_var(case_expr, name, replacement))
+                    (
+                        pat.clone(),
+                        substitute_user_var(case_expr, name, replacement),
+                    )
                 })
                 .collect(),
             default: Box::new(substitute_user_var(default, name, replacement)),

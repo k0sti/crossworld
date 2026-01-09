@@ -184,9 +184,9 @@ impl PhysicsWorld {
     pub fn add_static_collider(&mut self, collider: Collider) -> (RigidBodyHandle, ColliderHandle) {
         let body = RigidBodyBuilder::fixed().build();
         let body_handle = self.rigid_body_set.insert(body);
-        let collider_handle = self
-            .collider_set
-            .insert_with_parent(collider, body_handle, &mut self.rigid_body_set);
+        let collider_handle =
+            self.collider_set
+                .insert_with_parent(collider, body_handle, &mut self.rigid_body_set);
         (body_handle, collider_handle)
     }
 

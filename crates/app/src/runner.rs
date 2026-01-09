@@ -25,8 +25,7 @@ use winit::window::{CursorGrabMode, Window, WindowId};
 use winit::platform::x11::EventLoopBuilderExtX11;
 
 use crate::{
-    create_controller_backend, App, ControllerBackend, CursorMode, FrameContext,
-    InputState,
+    create_controller_backend, App, ControllerBackend, CursorMode, FrameContext, InputState,
 };
 
 use super::EguiIntegration;
@@ -568,7 +567,7 @@ impl<A: App> ApplicationHandler for AppRuntime<A> {
                         // Get note for rendering in the closure
                         let note = self.config.note.clone();
                         let mut review = self.config.review.clone();
-                        let mut review_action = super::review_overlay::ReviewAction::Continue;
+                        let mut review_action = super::review_overlay::ReviewAction::None;
 
                         egui.run(window, [size.width, size.height], |egui_ctx| {
                             self.app.ui(&ctx, egui_ctx);
@@ -592,22 +591,58 @@ impl<A: App> ApplicationHandler for AppRuntime<A> {
                             self.config.review = Some(review_config);
                         }
 
-                        // Handle review action
+                        // Handle review action - output commands to stdout
                         match review_action {
-                            super::review_overlay::ReviewAction::Continue => {
+                            super::review_overlay::ReviewAction::None => {
                                 // Keep running
                             }
-                            super::review_overlay::ReviewAction::ExitWithComment => {
-                                if let Some(ref review_config) = self.config.review {
-                                    // Write comment to stdout
-                                    println!("{}", review_config.comment);
-                                }
+                            super::review_overlay::ReviewAction::Approve => {
+                                println!("APPROVE");
                                 self.app.shutdown(&ctx);
                                 event_loop.exit();
                                 return;
                             }
-                            super::review_overlay::ReviewAction::ExitWithoutComment => {
-                                // Exit without printing comment
+                            super::review_overlay::ReviewAction::ContinueWithFeedback(msg) => {
+                                println!("CONTINUE: {}", msg);
+                                self.app.shutdown(&ctx);
+                                event_loop.exit();
+                                return;
+                            }
+                            super::review_overlay::ReviewAction::Spawn(title) => {
+                                println!("SPAWN: {}", title);
+                                self.app.shutdown(&ctx);
+                                event_loop.exit();
+                                return;
+                            }
+                            super::review_overlay::ReviewAction::Discard => {
+                                println!("DISCARD");
+                                self.app.shutdown(&ctx);
+                                event_loop.exit();
+                                return;
+                            }
+                            super::review_overlay::ReviewAction::Rebase => {
+                                println!("REBASE");
+                                self.app.shutdown(&ctx);
+                                event_loop.exit();
+                                return;
+                            }
+                            super::review_overlay::ReviewAction::Merge => {
+                                println!("MERGE");
+                                self.app.shutdown(&ctx);
+                                event_loop.exit();
+                                return;
+                            }
+                            super::review_overlay::ReviewAction::Complete => {
+                                // Complete = APPROVE + REBASE + MERGE
+                                println!("APPROVE");
+                                println!("REBASE");
+                                println!("MERGE");
+                                self.app.shutdown(&ctx);
+                                event_loop.exit();
+                                return;
+                            }
+                            super::review_overlay::ReviewAction::Cancel => {
+                                // Exit without printing any command
                                 self.app.shutdown(&ctx);
                                 event_loop.exit();
                                 return;
@@ -634,7 +669,9 @@ impl<A: App> ApplicationHandler for AppRuntime<A> {
                             );
 
                             // Create output directory if it doesn't exist
-                            if let Some(parent) = std::path::Path::new(debug_mode.output_path).parent() {
+                            if let Some(parent) =
+                                std::path::Path::new(debug_mode.output_path).parent()
+                            {
                                 let _ = std::fs::create_dir_all(parent);
                             }
 

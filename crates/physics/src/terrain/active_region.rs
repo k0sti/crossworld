@@ -62,10 +62,7 @@ impl ActiveRegionTracker {
         // First time initialization or significant change
         if !self.initialized || !self.contains(&new_aabb) {
             // Expand current region with additional margin for hysteresis
-            self.current_aabb = Aabb::new(
-                new_aabb.mins - margin_vec,
-                new_aabb.maxs + margin_vec,
-            );
+            self.current_aabb = Aabb::new(new_aabb.mins - margin_vec, new_aabb.maxs + margin_vec);
             self.initialized = true;
             Some(self.current_aabb)
         } else {
@@ -142,7 +139,10 @@ mod tests {
         // Small movement within margin - should not trigger rebuild
         let aabb2 = make_aabb([0.5, 0.5, 0.5], [1.5, 1.5, 1.5]);
         let result2 = tracker.update(&[aabb2]);
-        assert!(result2.is_none(), "Small movement should not trigger rebuild");
+        assert!(
+            result2.is_none(),
+            "Small movement should not trigger rebuild"
+        );
     }
 
     #[test]

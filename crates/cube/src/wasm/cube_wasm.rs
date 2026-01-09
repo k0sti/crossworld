@@ -469,7 +469,9 @@ impl WasmCubeBox {
         scale: i32,
     ) -> WasmCube {
         let position = IVec3::new(x, y, z);
-        let result = self.inner.place_in(&target.inner, target_depth, position, scale);
+        let result = self
+            .inner
+            .place_in(&target.inner, target_depth, position, scale);
         WasmCube {
             inner: Rc::new(result),
         }

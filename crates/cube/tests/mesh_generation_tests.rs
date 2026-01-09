@@ -61,13 +61,7 @@ fn test_single_leaf_cube_with_empty_borders() {
     let mut builder = DefaultMeshBuilder::new();
     let border_materials = [0, 0, 0, 0]; // All empty borders
 
-    generate_face_mesh(
-        &cube,
-        &mut builder,
-        test_color_mapper,
-        border_materials,
-        0,
-    );
+    generate_face_mesh(&cube, &mut builder, test_color_mapper, border_materials, 0);
 
     // Should generate 24 faces (one per side * 4 sub-faces due to octree subdivision)
     let face_count = count_faces(&builder);
@@ -127,13 +121,7 @@ fn test_single_leaf_cube_vertex_positions() {
     let mut builder = DefaultMeshBuilder::new();
     let border_materials = [0, 0, 0, 0];
 
-    generate_face_mesh(
-        &cube,
-        &mut builder,
-        test_color_mapper,
-        border_materials,
-        0,
-    );
+    generate_face_mesh(&cube, &mut builder, test_color_mapper, border_materials, 0);
 
     // A cube should have 96 vertices (4 per face * 24 faces)
     let vertex_count = builder.vertices.len() / 3;
@@ -178,13 +166,7 @@ fn test_single_leaf_cube_normals() {
     let mut builder = DefaultMeshBuilder::new();
     let border_materials = [0, 0, 0, 0];
 
-    generate_face_mesh(
-        &cube,
-        &mut builder,
-        test_color_mapper,
-        border_materials,
-        0,
-    );
+    generate_face_mesh(&cube, &mut builder, test_color_mapper, border_materials, 0);
 
     // Verify normals are unit vectors
     for normal_chunk in builder.normals.chunks(3) {
@@ -226,7 +208,6 @@ fn test_single_leaf_cube_normals() {
 // Depth 1 Tests
 // ============================================================================
 
-
 #[test]
 fn test_all_solid_cube_face_count() {
     // All solid cube should only have boundary faces (with empty borders)
@@ -234,13 +215,7 @@ fn test_all_solid_cube_face_count() {
     let mut builder = DefaultMeshBuilder::new();
     let border_materials = [0, 0, 0, 0];
 
-    generate_face_mesh(
-        &cube,
-        &mut builder,
-        test_color_mapper,
-        border_materials,
-        1,
-    );
+    generate_face_mesh(&cube, &mut builder, test_color_mapper, border_materials, 1);
 
     let face_count = count_faces(&builder);
 
@@ -262,13 +237,7 @@ fn test_all_empty_cube_face_count() {
     let mut builder = DefaultMeshBuilder::new();
     let border_materials = [0, 0, 0, 0];
 
-    generate_face_mesh(
-        &cube,
-        &mut builder,
-        test_color_mapper,
-        border_materials,
-        1,
-    );
+    generate_face_mesh(&cube, &mut builder, test_color_mapper, border_materials, 1);
 
     let face_count = count_faces(&builder);
 
@@ -286,13 +255,7 @@ fn test_checkerboard_cube_internal_faces() {
     let mut builder = DefaultMeshBuilder::new();
     let border_materials = [0, 0, 0, 0];
 
-    generate_face_mesh(
-        &cube,
-        &mut builder,
-        test_color_mapper,
-        border_materials,
-        1,
-    );
+    generate_face_mesh(&cube, &mut builder, test_color_mapper, border_materials, 1);
 
     let face_count = count_faces(&builder);
 
@@ -314,13 +277,7 @@ fn test_single_solid_in_empty_face_count() {
     let mut builder = DefaultMeshBuilder::new();
     let border_materials = [0, 0, 0, 0];
 
-    generate_face_mesh(
-        &cube,
-        &mut builder,
-        test_color_mapper,
-        border_materials,
-        1,
-    );
+    generate_face_mesh(&cube, &mut builder, test_color_mapper, border_materials, 1);
 
     let face_count = count_faces(&builder);
 
@@ -335,7 +292,6 @@ fn test_single_solid_in_empty_face_count() {
         face_count
     );
 }
-
 
 // ============================================================================
 // Issue Demonstration Tests
@@ -442,13 +398,7 @@ fn test_empty_octree_generates_no_faces() {
     let mut builder = DefaultMeshBuilder::new();
     let border_materials = [0, 0, 0, 0];
 
-    generate_face_mesh(
-        &cube,
-        &mut builder,
-        test_color_mapper,
-        border_materials,
-        0,
-    );
+    generate_face_mesh(&cube, &mut builder, test_color_mapper, border_materials, 0);
 
     assert_eq!(
         count_faces(&builder),

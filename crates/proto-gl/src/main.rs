@@ -1,7 +1,7 @@
-use std::error::Error;
 use clap::Parser;
-use winit::event_loop::EventLoop;
 use proto_gl::ProtoGlApp;
+use std::error::Error;
+use winit::event_loop::EventLoop;
 
 #[derive(Parser, Debug)]
 #[command(name = "proto-gl")]

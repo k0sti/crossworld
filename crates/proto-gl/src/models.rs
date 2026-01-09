@@ -1,9 +1,9 @@
 use std::path::Path;
 use std::rc::Rc;
 
-use cube::{Cube, CubeBox, load_vox_to_cubebox_compact};
-use crossworld_physics::collision::Aabb;
 use crossworld_physics::CubeObject;
+use crossworld_physics::collision::Aabb;
+use cube::{Cube, CubeBox, load_vox_to_cubebox_compact};
 use glam::IVec3;
 use serde::Deserialize;
 
@@ -173,4 +173,3 @@ fn create_fallback_models() -> Vec<VoxModel> {
         },
     ]
 }
-

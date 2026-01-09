@@ -19,7 +19,10 @@ pub fn render_note_overlay(egui_ctx: &EguiContext, note: &str) {
         .frame(
             Frame::default()
                 .fill(Color32::from_rgba_unmultiplied(20, 20, 30, 220))
-                .stroke(Stroke::new(1.0, Color32::from_rgba_unmultiplied(100, 100, 120, 180)))
+                .stroke(Stroke::new(
+                    1.0,
+                    Color32::from_rgba_unmultiplied(100, 100, 120, 180),
+                ))
                 .corner_radius(CornerRadius::same(8))
                 .inner_margin(Margin::same(16)),
         )
@@ -136,7 +139,7 @@ fn render_inline_markdown(ui: &mut egui::Ui, text: &str) {
                 // Check for bold (**) vs italic (*)
                 if chars.peek() == Some(&'*') {
                     chars.next(); // consume second *
-                    // Flush current text
+                                  // Flush current text
                     if !current_text.is_empty() {
                         job.append(&current_text, 0.0, default_format.clone());
                         current_text.clear();

@@ -571,8 +571,8 @@ impl Cube<u8> {
         std::array::from_fn(|i| {
             // from_octant_index returns 0/1, offset is also in 0/1-based coords
             let o: IVec3 = IVec3::from_octant_index(i) + offset;
-            let parent: IVec3 = o >> 1;  // Parent octant (still 0/1)
-            let child: IVec3 = o & 1;     // Child within parent (0/1)
+            let parent: IVec3 = o >> 1; // Parent octant (still 0/1)
+            let child: IVec3 = o & 1; // Child within parent (0/1)
             let parent_idx = parent.to_octant_index();
             let child_idx = child.to_octant_index();
 
@@ -879,13 +879,7 @@ impl Cube<u8> {
     pub fn max_depth(&self) -> usize {
         match self {
             Cube::Solid(_) => 0,
-            Cube::Cubes(children) => {
-                1 + children
-                    .iter()
-                    .map(|c| c.max_depth())
-                    .max()
-                    .unwrap_or(0)
-            }
+            Cube::Cubes(children) => 1 + children.iter().map(|c| c.max_depth()).max().unwrap_or(0),
             _ => 0,
         }
     }
@@ -955,7 +949,11 @@ impl Cube<u8> {
         let materials = self.collect_materials();
         let mut materials_vec: Vec<u8> = materials.iter().copied().collect();
         materials_vec.sort();
-        eprintln!("Unique materials: {} - {:?}", materials.len(), materials_vec);
+        eprintln!(
+            "Unique materials: {} - {:?}",
+            materials.len(),
+            materials_vec
+        );
 
         // Root type
         match self {
@@ -1350,7 +1348,6 @@ mod tests {
         }
     }
 
-
     #[test]
     fn test_expand() {
         // Test basic expansion
@@ -1376,7 +1373,10 @@ mod tests {
         assert_eq!(*top, Cube::Solid(0), "Top should be air");
 
         // The structure should be a Cubes variant (not solid/uniform)
-        assert!(matches!(expanded, Cube::Cubes(_)), "Expanded cube should be subdivided");
+        assert!(
+            matches!(expanded, Cube::Cubes(_)),
+            "Expanded cube should be subdivided"
+        );
     }
 
     #[test]
@@ -1404,7 +1404,7 @@ mod tests {
         let coord_root = CubeCoord::new(IVec3::new(0, 0, 0), 0);
         let mut coord = coord_root;
         for _ in 0..4 {
-            coord = coord.child(0);  // Keep going to child[0] (bottom-left-back)
+            coord = coord.child(0); // Keep going to child[0] (bottom-left-back)
         }
 
         let bottom = expanded.get(coord);
@@ -1534,14 +1534,38 @@ mod tests {
     fn test_from_voxels_all_octants() {
         // Place one voxel in each octant of a depth-1 cube
         let voxels = vec![
-            Voxel { pos: IVec3::new(0, 0, 0), material: 1 },
-            Voxel { pos: IVec3::new(1, 0, 0), material: 2 },
-            Voxel { pos: IVec3::new(0, 1, 0), material: 3 },
-            Voxel { pos: IVec3::new(1, 1, 0), material: 4 },
-            Voxel { pos: IVec3::new(0, 0, 1), material: 5 },
-            Voxel { pos: IVec3::new(1, 0, 1), material: 6 },
-            Voxel { pos: IVec3::new(0, 1, 1), material: 7 },
-            Voxel { pos: IVec3::new(1, 1, 1), material: 8 },
+            Voxel {
+                pos: IVec3::new(0, 0, 0),
+                material: 1,
+            },
+            Voxel {
+                pos: IVec3::new(1, 0, 0),
+                material: 2,
+            },
+            Voxel {
+                pos: IVec3::new(0, 1, 0),
+                material: 3,
+            },
+            Voxel {
+                pos: IVec3::new(1, 1, 0),
+                material: 4,
+            },
+            Voxel {
+                pos: IVec3::new(0, 0, 1),
+                material: 5,
+            },
+            Voxel {
+                pos: IVec3::new(1, 0, 1),
+                material: 6,
+            },
+            Voxel {
+                pos: IVec3::new(0, 1, 1),
+                material: 7,
+            },
+            Voxel {
+                pos: IVec3::new(1, 1, 1),
+                material: 8,
+            },
         ];
         let cube = Cube::from_voxels(&voxels, 1, 0);
 
@@ -1549,12 +1573,7 @@ mod tests {
         // Octant index = x + y*2 + z*4
         for (i, voxel) in voxels.iter().enumerate() {
             let retrieved = cube.get(CubeCoord::new(voxel.pos, 1));
-            assert_eq!(
-                retrieved.id(),
-                voxel.material,
-                "Octant {} mismatch",
-                i
-            );
+            assert_eq!(retrieved.id(), voxel.material, "Octant {} mismatch", i);
         }
     }
 
@@ -1562,9 +1581,18 @@ mod tests {
     fn test_from_voxels_sparse() {
         // Sparse voxels in a depth-3 cube (8x8x8)
         let voxels = vec![
-            Voxel { pos: IVec3::new(0, 0, 0), material: 100 },
-            Voxel { pos: IVec3::new(7, 7, 7), material: 200 },
-            Voxel { pos: IVec3::new(3, 4, 5), material: 150 },
+            Voxel {
+                pos: IVec3::new(0, 0, 0),
+                material: 100,
+            },
+            Voxel {
+                pos: IVec3::new(7, 7, 7),
+                material: 200,
+            },
+            Voxel {
+                pos: IVec3::new(3, 4, 5),
+                material: 150,
+            },
         ];
         let cube = Cube::from_voxels(&voxels, 3, 0);
 
@@ -1597,11 +1625,26 @@ mod tests {
     fn test_from_voxels_matches_update() {
         // Verify from_voxels produces same result as multiple update() calls
         let voxels = vec![
-            Voxel { pos: IVec3::new(0, 0, 0), material: 10 },
-            Voxel { pos: IVec3::new(1, 0, 0), material: 20 },
-            Voxel { pos: IVec3::new(0, 1, 0), material: 30 },
-            Voxel { pos: IVec3::new(2, 2, 2), material: 40 },
-            Voxel { pos: IVec3::new(3, 3, 3), material: 50 },
+            Voxel {
+                pos: IVec3::new(0, 0, 0),
+                material: 10,
+            },
+            Voxel {
+                pos: IVec3::new(1, 0, 0),
+                material: 20,
+            },
+            Voxel {
+                pos: IVec3::new(0, 1, 0),
+                material: 30,
+            },
+            Voxel {
+                pos: IVec3::new(2, 2, 2),
+                material: 40,
+            },
+            Voxel {
+                pos: IVec3::new(3, 3, 3),
+                material: 50,
+            },
         ];
         let depth = 2;
 
@@ -1638,8 +1681,14 @@ mod tests {
     fn test_from_voxels_auto_depth() {
         // Test auto depth calculation
         let voxels = vec![
-            Voxel { pos: IVec3::new(0, 0, 0), material: 1 },
-            Voxel { pos: IVec3::new(15, 15, 15), material: 2 },
+            Voxel {
+                pos: IVec3::new(0, 0, 0),
+                material: 1,
+            },
+            Voxel {
+                pos: IVec3::new(15, 15, 15),
+                material: 2,
+            },
         ];
         let (cube, depth) = Cube::from_voxels_auto_depth(&voxels, 0);
 
@@ -1648,6 +1697,9 @@ mod tests {
 
         // Verify voxels are accessible
         assert_eq!(cube.get(CubeCoord::new(IVec3::new(0, 0, 0), depth)).id(), 1);
-        assert_eq!(cube.get(CubeCoord::new(IVec3::new(15, 15, 15), depth)).id(), 2);
+        assert_eq!(
+            cube.get(CubeCoord::new(IVec3::new(15, 15, 15), depth)).id(),
+            2
+        );
     }
 }

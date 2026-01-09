@@ -608,7 +608,10 @@ fn test_octa_pointers_ssss0_1byte() {
     // Verify it uses small pointers (SSSS=0 or SSSS=1)
     // The exact SSSS value depends on the serializer's offset calculations
     let ssss = bytes[12] & 0x0F;
-    assert!(ssss <= 1, "Should use 1 or 2-byte pointers for small structure");
+    assert!(
+        ssss <= 1,
+        "Should use 1 or 2-byte pointers for small structure"
+    );
 
     // Should fit in small pointer range
     assert!(bytes.len() < 512, "Should be a small structure");
@@ -857,11 +860,7 @@ fn test_type_byte_bit_operations() {
     let extended_leaf = Cube::Solid(200u8); // 200 > 127, needs extended encoding
     let bytes = serialize_bcf(&extended_leaf);
     let type_byte = bytes[12];
-    assert_eq!(
-        type_byte & 0x80,
-        0x80,
-        "Extended leaf should have MSB=1"
-    );
+    assert_eq!(type_byte & 0x80, 0x80, "Extended leaf should have MSB=1");
     assert_eq!(
         type_byte & 0x70,
         0x00,
@@ -902,11 +901,7 @@ fn test_type_byte_bit_operations() {
         "Octa-pointers should have type ID=2 (0x20 in bits 4-6)"
     );
     let ssss = type_byte & 0x0F;
-    assert!(
-        ssss <= 3,
-        "SSSS should be in range 0-3, got {}",
-        ssss
-    );
+    assert!(ssss <= 3, "SSSS should be in range 0-3, got {}", ssss);
 }
 
 // File Size Comparison Test (Task 6.22)

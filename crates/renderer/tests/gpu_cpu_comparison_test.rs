@@ -12,8 +12,8 @@ use glutin::surface::{Surface, SurfaceAttributesBuilder, WindowSurface};
 use glutin_winit::DisplayBuilder;
 use image::{ImageBuffer, Rgb, Rgba};
 use raw_window_handle::HasWindowHandle;
-use renderer::gpu_tracer::ComputeTracer;
 use renderer::Camera;
+use renderer::gpu_tracer::ComputeTracer;
 use renderer::scenes::create_octa_cube;
 use renderer::{CpuTracer, Renderer};
 use std::num::NonZeroU32;
@@ -78,7 +78,11 @@ fn create_test_context() -> Option<(
         .with_context_api(ContextApi::OpenGl(Some(Version::new(4, 3))))
         .build(window_handle);
 
-    let gl_context = unsafe { gl_display.create_context(&gl_config, &context_attributes).ok()? };
+    let gl_context = unsafe {
+        gl_display
+            .create_context(&gl_config, &context_attributes)
+            .ok()?
+    };
 
     let size = window.inner_size();
     let attrs = SurfaceAttributesBuilder::<WindowSurface>::new().build(
@@ -270,7 +274,12 @@ fn test_gpu_cpu_tracer_comparison() {
             PixelPackData::Slice(Some(&mut gpu_pixels)),
         );
     }
-    save_debug_png_rgba(&gpu_pixels, width, height, "gpu_tracer_comparison_output.png");
+    save_debug_png_rgba(
+        &gpu_pixels,
+        width,
+        height,
+        "gpu_tracer_comparison_output.png",
+    );
     println!("  GPU tracer rendered successfully");
     println!();
 
