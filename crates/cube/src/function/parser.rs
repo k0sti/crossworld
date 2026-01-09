@@ -16,8 +16,8 @@ use nom::{
     combinator::{cut, map, opt, recognize, value},
     multi::{many0, separated_list0},
     number::complete::double,
-    sequence::{delimited, pair, preceded, separated_pair, terminated, tuple},
-    IResult,
+    sequence::{delimited, pair, preceded, separated_pair, terminated},
+    IResult, Parser,
 };
 use std::collections::HashMap;
 use thiserror::Error;
@@ -84,8 +84,8 @@ fn ws(input: &str) -> IResult<&str, ()> {
     // Handle line comments
     let mut remaining = input;
     while remaining.starts_with("//") || remaining.starts_with('#') {
-        let (input, _) = take_while(|c| c != '\n')(remaining)?;
-        let (input, _) = opt(char('\n'))(input)?;
+        let (input, _) = take_while(|c| c != '\n').parse(remaining)?;
+        let (input, _) = opt(char('\n')).parse(input)?;
         let (input, _) = multispace0(input)?;
         remaining = input;
     }
@@ -97,12 +97,12 @@ fn identifier(input: &str) -> IResult<&str, &str> {
     recognize(pair(
         take_while1(|c: char| c.is_alphabetic() || c == '_'),
         take_while(|c: char| c.is_alphanumeric() || c == '_'),
-    ))(input)
+    )).parse(input)
 }
 
 /// Parse a number literal
 fn number_literal(input: &str) -> IResult<&str, Expr> {
-    map(double, Expr::Number)(input)
+    map(double, Expr::Number).parse(input)
 }
 
 /// Parse a variable or constant
@@ -137,9 +137,9 @@ fn function_call(input: &str) -> IResult<&str, Expr> {
 
     let (input, args) = delimited(
         pair(char('('), ws),
-        separated_list0(tuple((ws, char(','), ws)), expr),
+        separated_list0((ws, char(','), ws), expr),
         pair(ws, cut(char(')'))),
-    )(input)?;
+    ).parse(input)?;
 
     // Look up the function
     if let Some(func) = BuiltinFunc::from_name(name) {
@@ -167,39 +167,39 @@ fn paren_expr(input: &str) -> IResult<&str, Expr> {
         pair(char('('), ws),
         expr,
         pair(ws, cut(char(')'))),
-    )(input)
+    ).parse(input)
 }
 
 /// Parse an if-then-else expression
 fn if_expr(input: &str) -> IResult<&str, Expr> {
-    let (input, _) = tag_no_case("if")(input)?;
+    let (input, _) = tag_no_case("if").parse(input)?;
     let (input, _) = ws(input)?;
-    let (input, cond) = cut(expr)(input)?;
+    let (input, cond) = cut(expr).parse(input)?;
     let (input, _) = ws(input)?;
-    let (input, _) = cut(tag_no_case("then"))(input)?;
+    let (input, _) = cut(tag_no_case("then")).parse(input)?;
     let (input, _) = ws(input)?;
-    let (input, then_expr) = cut(expr)(input)?;
+    let (input, then_expr) = cut(expr).parse(input)?;
     let (input, _) = ws(input)?;
-    let (input, _) = cut(tag_no_case("else"))(input)?;
+    let (input, _) = cut(tag_no_case("else")).parse(input)?;
     let (input, _) = ws(input)?;
-    let (input, else_expr) = cut(expr)(input)?;
+    let (input, else_expr) = cut(expr).parse(input)?;
 
     Ok((input, Expr::if_then_else(cond, then_expr, else_expr)))
 }
 
 /// Parse a let binding: let name = value; body
 fn let_expr(input: &str) -> IResult<&str, Expr> {
-    let (input, _) = tag_no_case("let")(input)?;
+    let (input, _) = tag_no_case("let").parse(input)?;
     let (input, _) = ws(input)?;
-    let (input, name) = cut(identifier)(input)?;
+    let (input, name) = cut(identifier).parse(input)?;
     let (input, _) = ws(input)?;
-    let (input, _) = cut(char('='))(input)?;
+    let (input, _) = cut(char('=')).parse(input)?;
     let (input, _) = ws(input)?;
-    let (input, value) = cut(expr)(input)?;
+    let (input, value) = cut(expr).parse(input)?;
     let (input, _) = ws(input)?;
-    let (input, _) = cut(char(';'))(input)?;
+    let (input, _) = cut(char(';')).parse(input)?;
     let (input, _) = ws(input)?;
-    let (input, body) = cut(expr)(input)?;
+    let (input, body) = cut(expr).parse(input)?;
 
     Ok((input, Expr::let_in(name.to_string(), value, body)))
 }
@@ -209,19 +209,19 @@ fn match_pattern(input: &str) -> IResult<&str, MatchPattern> {
     alt((
         // Range pattern: n..m
         map(
-            separated_pair(double, tuple((ws, tag(".."), ws)), double),
+            separated_pair(double, (ws, tag(".."), ws), double),
             |(low, high)| MatchPattern::Range { low, high },
         ),
         // Number pattern
         map(double, MatchPattern::Number),
-    ))(input)
+    )).parse(input)
 }
 
 /// Parse a match case: pattern => expr
 fn match_case(input: &str) -> IResult<&str, (MatchPattern, Expr)> {
     let (input, pattern) = match_pattern(input)?;
     let (input, _) = ws(input)?;
-    let (input, _) = tag("=>")(input)?;
+    let (input, _) = tag("=>").parse(input)?;
     let (input, _) = ws(input)?;
     let (input, result) = expr(input)?;
     Ok((input, (pattern, result)))
@@ -229,30 +229,30 @@ fn match_case(input: &str) -> IResult<&str, (MatchPattern, Expr)> {
 
 /// Parse a match expression: match expr { cases... }
 fn match_expr(input: &str) -> IResult<&str, Expr> {
-    let (input, _) = tag_no_case("match")(input)?;
+    let (input, _) = tag_no_case("match").parse(input)?;
     let (input, _) = ws(input)?;
-    let (input, match_value) = cut(expr)(input)?;
+    let (input, match_value) = cut(expr).parse(input)?;
     let (input, _) = ws(input)?;
-    let (input, _) = cut(char('{'))(input)?;
+    let (input, _) = cut(char('{')).parse(input)?;
     let (input, _) = ws(input)?;
 
     // Parse cases
     let (input, cases) = many0(terminated(
         match_case,
-        tuple((ws, char(','), ws)),
-    ))(input)?;
+        (ws, char(','), ws),
+    )).parse(input)?;
 
     // Parse default case: _ => expr
     let (input, _) = ws(input)?;
-    let (input, _) = cut(char('_'))(input)?;
+    let (input, _) = cut(char('_')).parse(input)?;
     let (input, _) = ws(input)?;
-    let (input, _) = cut(tag("=>"))(input)?;
+    let (input, _) = cut(tag("=>")).parse(input)?;
     let (input, _) = ws(input)?;
-    let (input, default) = cut(expr)(input)?;
+    let (input, default) = cut(expr).parse(input)?;
     let (input, _) = ws(input)?;
-    let (input, _) = opt(char(','))(input)?;
+    let (input, _) = opt(char(',')).parse(input)?;
     let (input, _) = ws(input)?;
-    let (input, _) = cut(char('}'))(input)?;
+    let (input, _) = cut(char('}')).parse(input)?;
 
     Ok((
         input,
@@ -277,7 +277,7 @@ fn primary(input: &str) -> IResult<&str, Expr> {
             number_literal,
             variable_or_constant,
         )),
-    )(input)
+    ).parse(input)
 }
 
 /// Parse a unary expression: -expr, not expr
@@ -291,12 +291,12 @@ fn unary(input: &str) -> IResult<&str, Expr> {
             }),
             // Logical not: not expr
             map(
-                preceded(tuple((tag_no_case("not"), ws)), unary),
+                preceded((tag_no_case("not"), ws), unary),
                 |e| Expr::unary(UnaryOpKind::Not, e),
             ),
             primary,
         )),
-    )(input)
+    ).parse(input)
 }
 
 /// Parse power operator (right-associative)
@@ -316,7 +316,7 @@ fn power(input: &str) -> IResult<&str, Expr> {
 /// Parse multiplication/division/modulo
 fn term(input: &str) -> IResult<&str, Expr> {
     let (input, first) = power(input)?;
-    let (input, rest) = many0(tuple((
+    let (input, rest) = many0((
         ws,
         alt((
             value(BinOpKind::Mul, char('*')),
@@ -325,7 +325,7 @@ fn term(input: &str) -> IResult<&str, Expr> {
         )),
         ws,
         power,
-    )))(input)?;
+    )).parse(input)?;
 
     let result = rest
         .into_iter()
@@ -337,7 +337,7 @@ fn term(input: &str) -> IResult<&str, Expr> {
 /// Parse addition/subtraction
 fn additive(input: &str) -> IResult<&str, Expr> {
     let (input, first) = term(input)?;
-    let (input, rest) = many0(tuple((
+    let (input, rest) = many0((
         ws,
         alt((
             value(BinOpKind::Add, char('+')),
@@ -345,7 +345,7 @@ fn additive(input: &str) -> IResult<&str, Expr> {
         )),
         ws,
         term,
-    )))(input)?;
+    )).parse(input)?;
 
     let result = rest
         .into_iter()
@@ -357,7 +357,7 @@ fn additive(input: &str) -> IResult<&str, Expr> {
 /// Parse comparison operators
 fn comparison(input: &str) -> IResult<&str, Expr> {
     let (input, first) = additive(input)?;
-    let (input, rest) = many0(tuple((
+    let (input, rest) = many0((
         ws,
         alt((
             value(BinOpKind::Le, tag("<=")),
@@ -369,7 +369,7 @@ fn comparison(input: &str) -> IResult<&str, Expr> {
         )),
         ws,
         additive,
-    )))(input)?;
+    )).parse(input)?;
 
     let result = rest
         .into_iter()
@@ -381,12 +381,12 @@ fn comparison(input: &str) -> IResult<&str, Expr> {
 /// Parse logical and
 fn logical_and(input: &str) -> IResult<&str, Expr> {
     let (input, first) = comparison(input)?;
-    let (input, rest) = many0(tuple((
+    let (input, rest) = many0((
         ws,
         value(BinOpKind::And, tag_no_case("and")),
         ws,
         comparison,
-    )))(input)?;
+    )).parse(input)?;
 
     let result = rest
         .into_iter()
@@ -398,12 +398,12 @@ fn logical_and(input: &str) -> IResult<&str, Expr> {
 /// Parse logical or
 fn logical_or(input: &str) -> IResult<&str, Expr> {
     let (input, first) = logical_and(input)?;
-    let (input, rest) = many0(tuple((
+    let (input, rest) = many0((
         ws,
         value(BinOpKind::Or, tag_no_case("or")),
         ws,
         logical_and,
-    )))(input)?;
+    )).parse(input)?;
 
     let result = rest
         .into_iter()
@@ -419,7 +419,7 @@ fn expr(input: &str) -> IResult<&str, Expr> {
 
 /// Parse an expression string into an AST
 pub fn parse_expr(input: &str) -> Result<Expr, ParseError> {
-    let (remaining, result) = preceded(ws, expr)(input).map_err(|e| match e {
+    let (remaining, result) = preceded(ws, expr).parse(input).map_err(|e| match e {
         nom::Err::Incomplete(_) => ParseError::UnexpectedEof,
         nom::Err::Error(e) | nom::Err::Failure(e) => {
             let position = input.len() - e.input.len();

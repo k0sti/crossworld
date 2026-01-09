@@ -1,25 +1,25 @@
 {
   "active": true,
-  "spec": "018-gl-renderer-fix",
+  "spec": "007-the-editor",
   "state": "building",
   "subtasks": {
-    "completed": 3,
-    "total": 7,
+    "completed": 20,
+    "total": 26,
     "in_progress": 1,
     "failed": 0
   },
   "phase": {
-    "current": "Background Color Gamma Fix",
+    "current": "egui UI Panels",
     "id": null,
-    "total": 2
+    "total": 4
   },
   "workers": {
     "active": 0,
     "max": 1
   },
   "session": {
-    "number": 4,
-    "started_at": "2026-01-02T16:25:13.991282"
+    "number": 8,
+    "started_at": "2026-01-09T10:55:18.626877"
   },
-  "last_update": "2026-01-02T16:30:24.830032"
+  "last_update": "2026-01-09T11:17:38.451509"
 }

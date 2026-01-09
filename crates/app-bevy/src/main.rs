@@ -129,7 +129,7 @@ fn setup(
     commands.insert_resource(AmbientLight {
         color: Color::WHITE,
         brightness: 300.0,
-        ..default()
+        affects_lightmapped_meshes: false,
     });
 
     // Camera

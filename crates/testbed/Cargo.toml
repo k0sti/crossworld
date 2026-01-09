@@ -12,7 +12,7 @@ name = "testbed"
 path = "src/lib.rs"
 
 [dependencies]
-# Core app framework with runtime support
+# Core app framework with runtime and Lua support
 app = { path = "../app", features = ["runtime"] }
 
 # Physics and rendering
@@ -21,11 +21,11 @@ cube = { path = "../cube" }
 crossworld-physics = { path = "../physics" }
 
 # Core graphics (needed for App trait implementation)
-glow = "0.14"
-glam = "0.29"
+glow = "0.16"
+glam = "0.30"
 winit = "0.30"
-egui = "0.29"
-egui_glow = "0.29"
+egui = "0.33"
+egui_glow = "0.33"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 winit = { version = "0.30", features = ["x11"] }

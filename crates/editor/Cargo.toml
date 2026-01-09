@@ -3,30 +3,44 @@ name = "editor"
 version = "0.1.0"
 edition = "2021"
 authors = ["Crossworld Contributors"]
-description = "Native voxel editor for Crossworld using Bevy"
+description = "Native voxel editor for Crossworld using glow/egui/winit"
 license = "MIT OR Apache-2.0"
 
 [[bin]]
 name = "editor"
 path = "src/main.rs"
 
-[dependencies]
-# Bevy game engine
-bevy = { version = "0.17.3", features = ["dynamic_linking"] }
-bevy_egui = "0.38.0"
-bevy_mesh = "0.17.3"
+[lib]
+name = "editor"
+path = "src/lib.rs"
 
-# Voxel infrastructure
+[dependencies]
+# Core app framework with runtime support
+app = { path = "../app", features = ["runtime"] }
+
+# Rendering and voxel core
+renderer = { path = "../renderer" }
 cube = { path = "../cube" }
 
-# Serialization
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+# Core graphics (needed for App trait implementation)
+glow = "0.16"
+glam = "0.30"
+winit = "0.30"
+egui = "0.33"
+egui_glow = "0.33"
 
-# File dialogs
+# Native file dialogs
 rfd = "0.15"
 
-# Math
-glam = "0.29"
+# Configuration
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"
+dirs = "6.0"
+
+# Image processing
+image = "0.25"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+winit = { version = "0.30", features = ["x11"] }
 
 [dev-dependencies]

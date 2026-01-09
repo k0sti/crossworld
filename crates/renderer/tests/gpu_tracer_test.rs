@@ -285,7 +285,7 @@ fn test_gpu_tracer_comprehensive() {
             height,
             RGBA,
             UNSIGNED_BYTE,
-            PixelPackData::Slice(&mut pixels),
+            PixelPackData::Slice(Some(&mut pixels)),
         );
     }
 

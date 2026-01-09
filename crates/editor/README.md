@@ -189,11 +189,10 @@ This ensures compatibility between native editor and web application.
 
 When adding features:
 
-1. Follow the phase structure in `openspec/changes/create-bevy-voxel-editor/tasks.md`
-2. Add Bevy systems to `EditorPlugin`
-3. Keep resources and components organized by feature
-4. Test integration with `cube` and `crossworld-world` crates
-5. Update this README with new features
+1. Add Bevy systems to `EditorPlugin`
+2. Keep resources and components organized by feature
+3. Test integration with `cube` and `crossworld-world` crates
+4. Update this README with new features
 
 ## Troubleshooting
 
