@@ -367,7 +367,8 @@ pub fn show_material_palette(
                 ui.collapsing(format_category_name(category), |ui| {
                     let materials = material_palette.get_category(category);
                     for material in materials {
-                        let is_selected = material.index == material_palette.selected_material_index();
+                        let is_selected =
+                            material.index == material_palette.selected_material_index();
 
                         if material_list_item(ui, material, is_selected).clicked() {
                             material_palette.select_by_material(material.index);
@@ -429,7 +430,12 @@ fn material_list_item(
             (material.color.z * 255.0) as u8,
         );
         painter.rect_filled(swatch_rect, 2.0, color);
-        painter.rect_stroke(swatch_rect, 2.0, egui::Stroke::new(1.0, Color32::from_gray(80)), egui::StrokeKind::Inside);
+        painter.rect_stroke(
+            swatch_rect,
+            2.0,
+            egui::Stroke::new(1.0, Color32::from_gray(80)),
+            egui::StrokeKind::Inside,
+        );
 
         // Material name
         let text_pos = rect.min + Vec2::new(MATERIAL_SWATCH_SIZE + 12.0, 2.0);
@@ -566,7 +572,8 @@ pub fn show_model_palette(ui: &mut Ui, model_palette: &mut ModelPalette) -> bool
         ui.horizontal(|ui| {
             // Model icon placeholder (colored square)
             let (rect, _) = ui.allocate_exact_size(Vec2::splat(24.0), Sense::hover());
-            ui.painter().rect_filled(rect, 2.0, Color32::from_rgb(100, 149, 237));
+            ui.painter()
+                .rect_filled(rect, 2.0, Color32::from_rgb(100, 149, 237));
 
             ui.vertical(|ui| {
                 ui.label(format!("Selected: {}", selected.name));
@@ -925,7 +932,8 @@ pub fn show_unified_sidebar(
 
                     // Material Palette section
                     ui.collapsing("Materials", |ui| {
-                        result.material_selected = show_material_palette(ui, material_palette, editor_state);
+                        result.material_selected =
+                            show_material_palette(ui, material_palette, editor_state);
                     });
 
                     ui.add_space(8.0);
@@ -1090,7 +1098,10 @@ mod tests {
     fn test_format_material_name() {
         assert_eq!(format_material_name("stone"), "Stone");
         assert_eq!(format_material_name("dark_oak"), "Dark Oak");
-        assert_eq!(format_material_name("stained_glass_red"), "Stained Glass Red");
+        assert_eq!(
+            format_material_name("stained_glass_red"),
+            "Stained Glass Red"
+        );
         assert_eq!(format_material_name(""), "");
     }
 
