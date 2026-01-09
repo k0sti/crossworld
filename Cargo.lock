@@ -284,6 +284,7 @@ dependencies = [
  "glow",
  "glutin",
  "glutin-winit",
+ "image",
  "mlua",
  "raw-window-handle",
  "winit",

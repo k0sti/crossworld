@@ -39,7 +39,7 @@ mod runner;
 #[cfg(feature = "runtime")]
 pub use egui_integration::EguiIntegration;
 #[cfg(feature = "runtime")]
-pub use runner::{create_event_loop, run_app, AppConfig, AppRuntime};
+pub use runner::{create_event_loop, run_app, AppConfig, AppRuntime, DebugMode};
 
 // Re-export egui when runtime feature is enabled
 #[cfg(feature = "runtime")]
