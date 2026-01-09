@@ -11,12 +11,8 @@ path = "src/main.rs"
 name = "testbed"
 path = "src/lib.rs"
 
-[features]
-default = ["steel"]
-steel = ["app/steel"]
-
 [dependencies]
-# Core app framework with runtime and steel support
+# Core app framework with runtime and Lua support
 app = { path = "../app", features = ["runtime"] }
 
 # Physics and rendering

@@ -22,17 +22,14 @@ runtime = [
     "dep:egui_glow",
 ]
 
-# Steel feature enables configuration via Steel (embedded Scheme)
-steel = ["dep:steel-core"]
-
 [dependencies]
 glow = "0.16"
 winit = "0.30"
 glam = "0.30"
 gilrs = { version = "0.11", optional = true }
 
-# Optional Steel dependency for configuration
-steel-core = { version = "0.7", optional = true }
+# Lua for configuration
+mlua = { version = "0.11", features = ["lua54", "vendored"] }
 
 # Optional runtime dependencies
 glutin = { version = "0.32", optional = true }
