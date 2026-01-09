@@ -368,6 +368,18 @@ impl<A: App> ApplicationHandler for AppRuntime<A> {
         _window_id: WindowId,
         event: WindowEvent,
     ) {
+        // Always update mouse button state to keep it synchronized
+        // This prevents the state from becoming stuck when egui consumes events
+        if let WindowEvent::MouseInput { state, button, .. } = &event {
+            let pressed = *state == ElementState::Pressed;
+            match button {
+                MouseButton::Left => self.input_state.mouse_buttons.left = pressed,
+                MouseButton::Right => self.input_state.mouse_buttons.right = pressed,
+                MouseButton::Middle => self.input_state.mouse_buttons.middle = pressed,
+                _ => {}
+            }
+        }
+
         // Let egui handle events first
         if let (Some(window), Some(egui)) = (self.window.as_ref(), self.egui.as_mut()) {
             if egui.on_window_event(window, &event) {
@@ -390,14 +402,8 @@ impl<A: App> ApplicationHandler for AppRuntime<A> {
                 self.input_state.mouse_pos = None;
                 self.last_mouse_pos = None;
             }
-            WindowEvent::MouseInput { state, button, .. } => {
-                let pressed = *state == ElementState::Pressed;
-                match button {
-                    MouseButton::Left => self.input_state.mouse_buttons.left = pressed,
-                    MouseButton::Right => self.input_state.mouse_buttons.right = pressed,
-                    MouseButton::Middle => self.input_state.mouse_buttons.middle = pressed,
-                    _ => {}
-                }
+            WindowEvent::MouseInput { .. } => {
+                // Mouse button state already handled above before egui
             }
             WindowEvent::MouseWheel { delta, .. } => {
                 let scroll = match delta {
