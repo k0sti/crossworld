@@ -31,6 +31,8 @@ use std::sync::Arc;
 use std::time::Instant;
 
 pub mod lua_scene;
+pub mod ui;
+
 use lua_scene::{CameraConfig, GroundConfig, TestbedConfig};
 
 /// Physics state for display
@@ -708,36 +710,6 @@ impl PhysicsTestbed {
         }
     }
 
-    /// Render status overlay for a scene
-    fn render_status_overlay(painter: &egui::Painter, scene: &PhysicsScene, rect: egui::Rect) {
-        let text = scene
-            .states
-            .first()
-            .map(|state| {
-                format!(
-                    "{}: {}",
-                    scene.collider_type.label(),
-                    state.format_compact()
-                )
-            })
-            .unwrap_or_else(|| format!("{}: N/A", scene.collider_type.label()));
-        let color = scene.collider_type.color();
-
-        // Position at bottom-left of the viewport rect with some padding
-        let pos = egui::pos2(rect.min.x + 5.0, rect.max.y - 18.0);
-
-        // Draw background for readability
-        let text_galley = painter.layout_no_wrap(text, egui::FontId::monospace(11.0), color);
-        let bg_rect = egui::Rect::from_min_size(
-            egui::pos2(pos.x - 2.0, pos.y - 2.0),
-            egui::vec2(text_galley.size().x + 4.0, text_galley.size().y + 4.0),
-        );
-        painter.rect_filled(bg_rect, 2.0, egui::Color32::from_black_alpha(180));
-
-        // Draw text
-        painter.galley(pos, text_galley, color);
-    }
-
     /// Handle orbit camera input (right mouse button for orbit, scroll for zoom)
     fn handle_orbit_input(&mut self, input: &InputState) {
         // Handle camera orbit with RIGHT mouse drag
@@ -819,7 +791,7 @@ impl App for PhysicsTestbed {
         let height = ctx.size.1 as i32;
 
         // Reserve space for top bar only (status is now overlay in each view)
-        let top_bar_height = 40;
+        let top_bar_height = ui::TOP_BAR_HEIGHT as i32;
         let render_height = height - top_bar_height;
         let half_width = width / 2;
         let half_height = render_height / 2;
@@ -900,50 +872,19 @@ impl App for PhysicsTestbed {
             });
         });
 
-        // Central panel for status overlays
+        // Central panel for scene overlays (titles and status)
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE)
             .show(egui_ctx, |ui| {
                 let painter = ui.painter();
-
-                // Calculate quadrant rects for status overlays
                 let width = ctx.size.0 as f32;
                 let height = ctx.size.1 as f32;
-                let top_bar_height = 40.0;
-                let render_height = height - top_bar_height;
-                let half_width = width / 2.0;
-                let half_height = render_height / 2.0;
 
-                // Quadrant rects in egui coordinates (Y increases downward)
-                let quadrant_rects = [
-                    // Top-left (Cuboid)
-                    egui::Rect::from_min_size(
-                        egui::pos2(0.0, top_bar_height),
-                        egui::vec2(half_width, half_height),
-                    ),
-                    // Top-right (Mesh)
-                    egui::Rect::from_min_size(
-                        egui::pos2(half_width, top_bar_height),
-                        egui::vec2(half_width, half_height),
-                    ),
-                    // Bottom-left (Terrain)
-                    egui::Rect::from_min_size(
-                        egui::pos2(0.0, top_bar_height + half_height),
-                        egui::vec2(half_width, half_height),
-                    ),
-                    // Bottom-right (Empty)
-                    egui::Rect::from_min_size(
-                        egui::pos2(half_width, top_bar_height + half_height),
-                        egui::vec2(half_width, half_height),
-                    ),
-                ];
+                // Calculate quadrant rects using UI module
+                let quadrant_rects = ui::calculate_quadrant_rects(width, height);
 
-                // Render status overlay for each scene
-                for (i, scene_opt) in self.scenes.iter().enumerate() {
-                    if let Some(scene) = scene_opt {
-                        Self::render_status_overlay(painter, scene, quadrant_rects[i]);
-                    }
-                }
+                // Render all scene overlays (titles + status)
+                ui::render_scene_overlays(painter, &self.scenes, &quadrant_rects);
             });
     }
 }
