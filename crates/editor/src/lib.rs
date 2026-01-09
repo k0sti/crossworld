@@ -20,6 +20,40 @@ use std::rc::Rc;
 use winit::keyboard::KeyCode;
 
 use crate::lua_config::{EditorTestConfig, MouseEvent};
+use std::sync::mpsc::{channel, Receiver};
+use cube::io::vox::load_vox_to_cubebox_compact;
+use image::ImageBuffer;
+
+/// Load a model thumbnail in background thread
+fn load_model_thumbnail(path: &PathBuf) -> Result<(IVec3, ImageBuffer<image::Rgb<u8>, Vec<u8>>), String> {
+    // Load VOX file
+    let bytes = std::fs::read(path).map_err(|e| format!("Failed to read file: {}", e))?;
+    let cubebox = load_vox_to_cubebox_compact(&bytes)?;
+    let size = cubebox.size;
+
+    // Generate thumbnail
+    let cube_rc = Rc::new(cubebox.cube.clone());
+    let thumbnail = renderer::thumbnail::generate_thumbnail_default(cube_rc);
+
+    Ok((size, thumbnail))
+}
+
+/// Message from background model loading thread
+#[derive(Debug)]
+enum ModelLoadMessage {
+    /// A model has been loaded with its size and thumbnail
+    ModelLoaded {
+        id: usize,
+        size: IVec3,
+        thumbnail: image::ImageBuffer<image::Rgb<u8>, Vec<u8>>,
+    },
+    /// Loading completed for all models
+    LoadingComplete {
+        total: usize,
+        succeeded: usize,
+        failed: usize,
+    },
+}
 
 /// Gizmo display options
 #[derive(Debug, Clone, Copy)]
@@ -106,6 +140,11 @@ pub struct EditorApp {
 
     // Whether we've requested exit (for debug mode)
     exit_requested: bool,
+
+    // Model loading progress
+    model_load_receiver: Option<Receiver<ModelLoadMessage>>,
+    models_loading: bool,
+    models_loaded_count: usize,
 }
 
 impl Default for EditorApp {
@@ -160,6 +199,9 @@ impl EditorApp {
             test_config: None,
             injected_input: None,
             exit_requested: false,
+            model_load_receiver: None,
+            models_loading: false,
+            models_loaded_count: 0,
         }
     }
 
@@ -371,31 +413,137 @@ impl EditorApp {
         }
     }
 
-    /// Import a VOX file into the model palette
-    fn import_vox(&mut self, path: PathBuf) {
-        // Read file bytes
-        let bytes = match std::fs::read(&path) {
-            Ok(b) => b,
+    /// Load model filenames from the assets/models/vox directory
+    fn load_models_from_assets(&mut self) {
+        let assets_path = PathBuf::from("assets/models/vox");
+
+        // Check if the directory exists
+        if !assets_path.exists() || !assets_path.is_dir() {
+            eprintln!("[Editor] Models directory not found: {:?}", assets_path);
+            return;
+        }
+
+        // Read all files in the directory
+        let entries = match std::fs::read_dir(&assets_path) {
+            Ok(entries) => entries,
             Err(e) => {
-                eprintln!("[Editor] Failed to read VOX file {:?}: {}", path, e);
+                eprintln!("[Editor] Failed to read models directory: {}", e);
                 return;
             }
         };
 
-        // Get filename for display
-        let name = path
-            .file_stem()
-            .and_then(|n| n.to_str())
-            .unwrap_or("unnamed")
-            .to_string();
+        let mut count = 0;
+        for entry in entries {
+            let entry = match entry {
+                Ok(e) => e,
+                Err(_) => continue,
+            };
 
-        // Load into model palette
-        match self.model_palette.load_from_bytes(&bytes, &name) {
-            Ok(id) => {
-                println!("[Editor] Imported VOX model '{}' (id: {})", name, id);
+            let path = entry.path();
+
+            // Only process .vox files
+            if path.extension().and_then(|s| s.to_str()) != Some("vox") {
+                continue;
             }
-            Err(e) => {
-                eprintln!("[Editor] Failed to load VOX file {:?}: {}", path, e);
+
+            // Get filename for display
+            let name = path
+                .file_stem()
+                .and_then(|n| n.to_str())
+                .unwrap_or("unnamed")
+                .to_string();
+
+            // Add model entry to palette (without loading the file)
+            match self.model_palette.add_model(path, &name) {
+                Ok(_id) => {
+                    count += 1;
+                }
+                Err(e) => {
+                    eprintln!("[Editor] Failed to add model '{}': {}", name, e);
+                }
+            }
+        }
+
+        println!("[Editor] Found {} VOX models in {:?}", count, assets_path);
+        println!("[Editor] Placeholder thumbnails generated, starting background loading...");
+
+        // Start background thread to load thumbnails
+        self.start_background_loading();
+    }
+
+    /// Start a background thread to load model thumbnails
+    fn start_background_loading(&mut self) {
+        // Create channel for communication
+        let (tx, rx) = channel();
+        self.model_load_receiver = Some(rx);
+        self.models_loading = true;
+
+        // Collect model loading info (id and path)
+        let models_to_load: Vec<(usize, PathBuf)> = self
+            .model_palette
+            .iter()
+            .map(|model| (model.id, model.file_path.clone()))
+            .collect();
+
+        let total_models = models_to_load.len();
+        println!("[Editor] Starting background loading for {} models", total_models);
+
+        // Spawn background thread
+        std::thread::spawn(move || {
+            let mut succeeded = 0;
+            let mut failed = 0;
+
+            for (id, path) in models_to_load {
+                // Load model and generate thumbnail
+                match load_model_thumbnail(&path) {
+                    Ok((size, thumbnail)) => {
+                        // Send loaded data back
+                        if tx.send(ModelLoadMessage::ModelLoaded { id, size, thumbnail }).is_err() {
+                            eprintln!("[Editor] Background thread: failed to send loaded model {}", id);
+                            break;
+                        }
+                        succeeded += 1;
+                    }
+                    Err(e) => {
+                        eprintln!("[Editor] Background thread: failed to load model {}: {}", id, e);
+                        failed += 1;
+                    }
+                }
+            }
+
+            // Send completion message
+            let _ = tx.send(ModelLoadMessage::LoadingComplete {
+                total: total_models,
+                succeeded,
+                failed,
+            });
+        });
+    }
+
+    /// Check for model loading updates from the background thread
+    fn process_model_loading_updates(&mut self) {
+        let Some(ref receiver) = self.model_load_receiver else {
+            return;
+        };
+
+        // Process all available messages (non-blocking)
+        while let Ok(msg) = receiver.try_recv() {
+            match msg {
+                ModelLoadMessage::ModelLoaded { id, size, thumbnail } => {
+                    // Update the model in the palette
+                    if let Some(model) = self.model_palette.get_model_by_id_mut(id) {
+                        model.size = Some(size);
+                        model.thumbnail = Some(thumbnail);
+                        self.models_loaded_count += 1;
+                    }
+                }
+                ModelLoadMessage::LoadingComplete { total, succeeded, failed } => {
+                    println!(
+                        "[Editor] Model loading complete: {}/{} succeeded, {} failed",
+                        succeeded, total, failed
+                    );
+                    self.models_loading = false;
+                }
             }
         }
     }
@@ -441,16 +589,6 @@ impl EditorApp {
                     self.save_csm(path);
                 }
             }
-            FileOperation::ImportVox => {
-                // Open file dialog for VOX files
-                if let Some(path) = rfd::FileDialog::new()
-                    .add_filter("VOX files", &["vox"])
-                    .add_filter("All files", &["*"])
-                    .pick_file()
-                {
-                    self.import_vox(path);
-                }
-            }
         }
     }
 }
@@ -464,6 +602,9 @@ impl App for EditorApp {
             eprintln!("[Editor] Failed to initialize mesh renderer: {}", e);
             return;
         }
+
+        // Load all VOX models from assets directory
+        self.load_models_from_assets();
 
         // Try to load the last opened model, or create a fresh one
         if let Some(ref last_path) = self.config.last_model_path.clone() {
@@ -499,6 +640,9 @@ impl App for EditorApp {
     }
 
     fn update(&mut self, ctx: &FrameContext, input: &InputState) {
+        // Process model loading updates from background thread
+        self.process_model_loading_updates();
+
         // Process test configuration events if present
         if let Some(ref test_config) = self.test_config {
             // Check if we should exit

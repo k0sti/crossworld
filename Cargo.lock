@@ -3230,6 +3230,7 @@ dependencies = [
  "egui_glow",
  "glam 0.30.10",
  "glow",
+ "image",
  "renderer",
  "rfd",
  "serde",

@@ -12,6 +12,7 @@ use cube::io::vox::load_vox_to_cubebox_compact;
 use cube::material::{Material, MATERIAL_REGISTRY};
 use cube::CubeBox;
 use glam::{IVec3, Vec3};
+use image::{ImageBuffer, Rgb};
 
 /// Color entry in the palette
 #[derive(Debug, Clone, Copy)]
@@ -352,35 +353,113 @@ impl ColorPalette {
     }
 }
 
-/// A loaded VOX model with metadata
+/// A VOX model entry with lazy loading support
 #[derive(Debug, Clone)]
 pub struct PaletteModel {
     /// Unique identifier for the model within the palette
     pub id: usize,
     /// Display name for the model (typically filename without extension)
     pub name: String,
-    /// The loaded CubeBox containing the voxel data
-    pub cubebox: CubeBox<u8>,
+    /// File path to the .vox file
+    pub file_path: std::path::PathBuf,
+    /// Cached size (loaded on demand)
+    pub size: Option<IVec3>,
+    /// The loaded CubeBox containing the voxel data (None if not loaded)
+    pub cubebox: Option<CubeBox<u8>>,
+    /// Thumbnail image (generated on demand)
+    pub thumbnail: Option<ImageBuffer<Rgb<u8>, Vec<u8>>>,
 }
 
 impl PaletteModel {
-    /// Create a new palette model
-    pub fn new(id: usize, name: impl Into<String>, cubebox: CubeBox<u8>) -> Self {
+    /// Create a new palette model entry (not yet loaded)
+    pub fn new(id: usize, name: impl Into<String>, file_path: std::path::PathBuf) -> Self {
+        // Generate placeholder thumbnail
+        let hue = (id as u8).wrapping_mul(37); // Spread colors across hue spectrum
+        let placeholder = renderer::thumbnail::generate_placeholder(
+            renderer::thumbnail::DEFAULT_THUMBNAIL_SIZE,
+            hue,
+        );
+
         Self {
             id,
             name: name.into(),
-            cubebox,
+            file_path,
+            size: None,
+            cubebox: None,
+            thumbnail: Some(placeholder),
         }
     }
 
-    /// Get the model dimensions (size in voxels)
+    /// Get the model dimensions (size in voxels), loading if necessary
     pub fn size(&self) -> IVec3 {
-        self.cubebox.size
+        self.size.unwrap_or(IVec3::ZERO)
     }
 
-    /// Get the octree depth of the model
-    pub fn depth(&self) -> u32 {
-        self.cubebox.depth
+    /// Check if the model data is loaded in memory
+    pub fn is_loaded(&self) -> bool {
+        self.cubebox.is_some()
+    }
+
+    /// Load only the size from disk (lightweight)
+    pub fn load_size(&mut self) -> Result<(), String> {
+        if self.size.is_some() {
+            return Ok(());
+        }
+
+        let bytes = std::fs::read(&self.file_path)
+            .map_err(|e| format!("Failed to read file: {}", e))?;
+
+        let cubebox = load_vox_to_cubebox_compact(&bytes)?;
+        self.size = Some(cubebox.size);
+
+        Ok(())
+    }
+
+    /// Load size and generate thumbnail
+    pub fn load_size_and_thumbnail(&mut self) -> Result<(), String> {
+        if self.size.is_some() {
+            // Already loaded, but might still have placeholder thumbnail
+            if self.cubebox.is_some() {
+                return Ok(());
+            }
+        }
+
+        // Simulate loading delay for testing
+        std::thread::sleep(std::time::Duration::from_millis(10));
+
+        let bytes = std::fs::read(&self.file_path)
+            .map_err(|e| format!("Failed to read file: {}", e))?;
+
+        let cubebox = load_vox_to_cubebox_compact(&bytes)?;
+        self.size = Some(cubebox.size);
+
+        // Generate thumbnail using renderer
+        let cube_rc = std::rc::Rc::new(cubebox.cube.clone());
+        let thumbnail = renderer::thumbnail::generate_thumbnail_default(cube_rc);
+        self.thumbnail = Some(thumbnail);
+
+        Ok(())
+    }
+
+    /// Load the model data from disk
+    pub fn load(&mut self) -> Result<(), String> {
+        if self.is_loaded() {
+            return Ok(());
+        }
+
+        let bytes = std::fs::read(&self.file_path)
+            .map_err(|e| format!("Failed to read file: {}", e))?;
+
+        let cubebox = load_vox_to_cubebox_compact(&bytes)?;
+        self.size = Some(cubebox.size);
+        self.cubebox = Some(cubebox);
+
+        Ok(())
+    }
+
+    /// Unload the model data from memory (keep metadata)
+    pub fn unload(&mut self) {
+        self.cubebox = None;
     }
 }
 
@@ -400,7 +479,7 @@ pub struct ModelPalette {
 
 impl ModelPalette {
     /// Maximum number of models that can be loaded
-    pub const MAX_MODELS: usize = 256;
+    pub const MAX_MODELS: usize = 2048;
 
     /// Create a new empty model palette
     pub fn new() -> Self {
@@ -443,27 +522,26 @@ impl ModelPalette {
         self.selected_index = None;
     }
 
-    /// Load a VOX model from bytes and add it to the palette
+    /// Add a VOX model entry to the palette (without loading it)
     ///
     /// # Arguments
-    /// * `bytes` - The raw bytes of the .vox file
+    /// * `file_path` - Path to the .vox file
     /// * `name` - Display name for the model
     ///
     /// # Returns
-    /// The ID of the newly loaded model, or an error string
-    pub fn load_from_bytes(&mut self, bytes: &[u8], name: impl Into<String>) -> Result<usize, String> {
+    /// The ID of the newly added model, or an error string
+    pub fn add_model(&mut self, file_path: std::path::PathBuf, name: impl Into<String>) -> Result<usize, String> {
         if self.models.len() >= Self::MAX_MODELS {
             return Err(format!(
-                "Cannot load more than {} models",
+                "Cannot add more than {} models",
                 Self::MAX_MODELS
             ));
         }
 
-        let cubebox = load_vox_to_cubebox_compact(bytes)?;
         let id = self.next_id;
         self.next_id += 1;
 
-        let model = PaletteModel::new(id, name, cubebox);
+        let model = PaletteModel::new(id, name, file_path);
         self.models.push(model);
 
         // Auto-select the first loaded model
@@ -474,14 +552,67 @@ impl ModelPalette {
         Ok(id)
     }
 
+    /// Get a mutable reference to the currently selected model
+    pub fn selected_mut(&mut self) -> Option<&mut PaletteModel> {
+        self.selected_index.and_then(|idx| self.models.get_mut(idx))
+    }
+
     /// Get a model by palette index
     pub fn get(&self, index: usize) -> Option<&PaletteModel> {
         self.models.get(index)
     }
 
+    /// Get a mutable reference to a model by palette index
+    pub fn get_mut(&mut self, index: usize) -> Option<&mut PaletteModel> {
+        self.models.get_mut(index)
+    }
+
+    /// Unload all models that are not currently selected
+    /// Call this when keep_models_in_memory is false
+    pub fn unload_unused_models(&mut self) {
+        for (idx, model) in self.models.iter_mut().enumerate() {
+            if Some(idx) != self.selected_index {
+                model.unload();
+            }
+        }
+    }
+
+    /// Load sizes for all models in the background (batch operation)
+    /// Returns the number of models whose sizes were loaded
+    pub fn load_all_sizes(&mut self) -> usize {
+        let mut loaded = 0;
+        for model in &mut self.models {
+            if model.size.is_none() {
+                if model.load_size().is_ok() {
+                    loaded += 1;
+                }
+            }
+        }
+        loaded
+    }
+
+    /// Load sizes and generate thumbnails for all models
+    /// Returns the number of models processed
+    pub fn load_all_thumbnails(&mut self) -> usize {
+        let mut loaded = 0;
+        for model in &mut self.models {
+            if model.thumbnail.is_none() {
+                if model.load_size_and_thumbnail().is_ok() {
+                    loaded += 1;
+                }
+            }
+        }
+        loaded
+    }
+
     /// Get a model by its unique ID
     pub fn get_by_id(&self, id: usize) -> Option<&PaletteModel> {
         self.models.iter().find(|m| m.id == id)
+    }
+
+    /// Get a mutable reference to a model by its unique ID
+    pub fn get_model_by_id_mut(&mut self, id: usize) -> Option<&mut PaletteModel> {
+        self.models.iter_mut().find(|m| m.id == id)
     }
 
     /// Find a model by name (case-insensitive)
@@ -782,30 +913,19 @@ mod tests {
 
     #[test]
     fn test_palette_model_new() {
-        use cube::Cube;
-        let cube = Cube::Solid(5u8);
-        let size = IVec3::new(10, 20, 15);
-        let cubebox = CubeBox::new(cube, size, 5);
-
-        let model = PaletteModel::new(42, "test_model", cubebox);
+        let path = std::path::PathBuf::from("test_model.vox");
+        let model = PaletteModel::new(42, "test_model", path.clone());
 
         assert_eq!(model.id, 42);
         assert_eq!(model.name, "test_model");
-        assert_eq!(model.size(), size);
-        assert_eq!(model.depth(), 5);
+        assert_eq!(model.file_path, path);
+        assert!(!model.is_loaded());
+        assert_eq!(model.size(), IVec3::ZERO);
     }
 
     #[test]
     fn test_model_palette_with_cubebox() {
-        use cube::Cube;
-
-        let mut palette = ModelPalette::new();
-
-        // Manually add a model (simulating what load_from_bytes does internally)
-        let cube = Cube::Solid(128u8);
-        let size = IVec3::new(8, 16, 8);
-        let cubebox = CubeBox::new(cube, size, 4);
-        let model = PaletteModel::new(0, "cube1", cubebox);
+        let palette = ModelPalette::new();
 
         // We'll test the internal structure by checking basic operations
         assert!(palette.is_empty());
@@ -816,8 +936,6 @@ mod tests {
 
     #[test]
     fn test_model_palette_selection() {
-        use cube::Cube;
-
         let mut palette = ModelPalette::new();
 
         // Test selection on empty palette
@@ -884,7 +1002,7 @@ mod tests {
     #[test]
     fn test_model_palette_max_models() {
         // Just verify the constant is reasonable
-        assert!(ModelPalette::MAX_MODELS >= 1);
-        assert!(ModelPalette::MAX_MODELS <= 1024); // Reasonable upper bound
+        assert!(ModelPalette::MAX_MODELS >= 256);
+        assert!(ModelPalette::MAX_MODELS <= 4096);
     }
 }

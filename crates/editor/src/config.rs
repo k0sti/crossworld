@@ -21,6 +21,13 @@ pub struct EditorConfig {
     pub show_grid: bool,
     /// Axis helper visibility
     pub show_axes: bool,
+    /// Keep model data in memory after loading (uses more RAM)
+    #[serde(default = "default_keep_models_in_memory")]
+    pub keep_models_in_memory: bool,
+}
+
+fn default_keep_models_in_memory() -> bool {
+    false
 }
 
 impl Default for EditorConfig {
@@ -31,6 +38,7 @@ impl Default for EditorConfig {
             camera_distance: 10.0,
             show_grid: true,
             show_axes: true,
+            keep_models_in_memory: false,
         }
     }
 }
