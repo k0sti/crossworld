@@ -142,7 +142,8 @@ impl GameConfig {
     }
 
     /// Apply 2D map to world cube
-    /// Maps the 2D layout onto the XZ plane at y=0, scaled by 2^macro_depth
+    /// Maps the 2D layout onto the XZ plane at y=0
+    /// At macro_depth, each voxel = 1 world unit (1 meter)
     pub fn apply_map_to_world(&self, world: &mut crossworld_world::NativeWorldCube) -> Option<Vec3> {
         let mut spawn_pos = None;
 
@@ -151,40 +152,36 @@ impl GameConfig {
             return spawn_pos;
         }
 
-        // Scale factor: voxels at macro_depth correspond to world units
-        // Each voxel at macro_depth = 2^macro_depth world units
-        let scale = 1 << self.world.macro_depth;
-
+        // At macro_depth, coordinates map directly to world units (1 voxel = 1 meter)
         // Calculate map dimensions
         let height = layout.len() as i32;
         let width = layout.iter().map(|s| s.len()).max().unwrap_or(0) as i32;
 
-        // Calculate center offset to center map on origin (in world coordinates)
-        let offset_x = -(width * scale) / 2;
-        let offset_z = -(height * scale) / 2;
+        // Center offset to place map centered on origin
+        let offset_x = -width / 2;
+        let offset_z = -height / 2;
 
         // Iterate through map and place voxels at macro_depth
         for (z_idx, row) in layout.iter().enumerate() {
             for (x_idx, ch) in row.chars().enumerate() {
                 if let Some(map_char) = self.map.chars.get(&ch) {
                     // Position in voxel coordinates at macro_depth
-                    let x = x_idx as i32;
-                    let z = z_idx as i32;
-                    let y = 0_i32; // Place at y=0 in voxel coordinates
+                    // Each coordinate = 1 world unit
+                    let x = x_idx as i32 + offset_x;
+                    let z = z_idx as i32 + offset_z;
+                    let y = 0_i32; // Place at y=0
 
                     // Get material ID
                     if let Some(&material_id) = self.map.materials.get(&map_char.material) {
                         if material_id > 0 {
-                            // Place voxel at macro_depth (matches terrain scale)
+                            // Place voxel at macro_depth (1 voxel = 1 world unit)
                             world.set_voxel_at_depth(x, y, z, self.world.macro_depth, material_id);
                         }
                     }
 
-                    // Track spawn position (in world coordinates)
+                    // Track spawn position (in world coordinates, same as voxel coords at macro_depth)
                     if map_char.is_spawn {
-                        let world_x = offset_x as f32 + (x as f32 + 0.5) * scale as f32;
-                        let world_z = offset_z as f32 + (z as f32 + 0.5) * scale as f32;
-                        spawn_pos = Some(Vec3::new(world_x, 1.0, world_z));
+                        spawn_pos = Some(Vec3::new(x as f32 + 0.5, 1.0, z as f32 + 0.5));
                     }
                 }
             }
