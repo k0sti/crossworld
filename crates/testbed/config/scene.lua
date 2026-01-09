@@ -1,20 +1,24 @@
 -- Testbed Scene Configuration
 -- This file configures the physics testbed scene using Lua 5.4
+--
+-- The testbed now shows 4 viewports comparing different collider types:
+--   1. Cuboid collider (top-left)
+--   2. Mesh collider via VoxelColliderBuilder (top-right)
+--   3. Terrain collider via VoxelTerrainCollider (bottom-left)
+--   4. Empty/future implementation (bottom-right)
 
 -- =============================================================================
--- Ground Configurations
+-- Ground Configuration (shared by all 4 scenes)
 -- =============================================================================
 
--- Test 1: CSM-style solid cube ground
+-- Solid cube ground with octree-style configuration
 -- - material: 32 (green-ish color from palette)
 -- - size_shift: 3 (2^3 = 8 units cube edge)
 -- - center: (0, -4, 0) - positioned so top face is at Y=0
-ground_1 = ground_cube(32, 3, vec3(0, -4, 0))
+ground = ground_cube(32, 3, vec3(0, -4, 0))
 
--- Test 2: Simple cuboid ground
--- - Dimensions: 8 units (width used for cube size)
--- - center: (0, -4, 0) - positioned so top face is at Y=0
-ground_2 = ground_cuboid(8, vec3(0, -4, 0))
+-- Alternative: Load ground from CSM file (uncomment to use)
+-- ground = ground_csm("terrain.csm", 3, vec3(0, -4, 0))
 
 -- =============================================================================
 -- Scene Objects
@@ -73,31 +77,10 @@ scene_objects = generate_cubes(10)
 -- Camera Configuration
 -- =============================================================================
 
--- Camera setup for observing the scene
--- - Position: (0, 6, -3) - eye level, slightly back
--- - Look-at: (0, 0, 4) - looking towards ground center, forward
+-- Camera setup for observing all 4 scenes
+-- - Position: (15, 12, 15) - elevated view for wider viewports
+-- - Look-at: (0, 0, 0) - looking at ground center
 scene_camera = camera(
-    vec3(0, 6, -3),
-    vec3(0, 0, 4)
+    vec3(15, 12, 15),
+    vec3(0, 0, 0)
 )
-
--- =============================================================================
--- Complete Scene Definitions
--- =============================================================================
-
--- Scene 1: Using solid cube ground (CSM-style)
-scene_1 = scene(
-    ground_1,
-    scene_objects,
-    scene_camera
-)
-
--- Scene 2: Using cuboid ground
-scene_2 = scene(
-    ground_2,
-    scene_objects,
-    scene_camera
-)
-
--- Default scene (used if no specific scene is requested)
-default_scene = scene_1
