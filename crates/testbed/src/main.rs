@@ -18,6 +18,7 @@ fn main() {
     let mut debug_frames: Option<u64> = None;
     let mut config_path: Option<PathBuf> = None;
     let mut note_message: Option<String> = None;
+    let mut review_path: Option<PathBuf> = None;
 
     let mut i = 1;
     while i < args.len() {
@@ -60,6 +61,16 @@ fn main() {
                     return;
                 }
             }
+            "--review" | "-r" => {
+                if i + 1 < args.len() {
+                    review_path = Some(PathBuf::from(&args[i + 1]));
+                    println!("Review document: {}\n", args[i + 1]);
+                    i += 1;
+                } else {
+                    eprintln!("Error: --review requires a file path");
+                    return;
+                }
+            }
             "--help" | "-h" => {
                 println!("Usage: testbed [OPTIONS]");
                 println!();
@@ -67,6 +78,7 @@ fn main() {
                 println!("  --debug N       Run only N frames with debug output");
                 println!("  --config PATH   Load scene configuration from Lua (.lua) file");
                 println!("  --note MESSAGE  Display a note overlay with markdown text");
+                println!("  --review PATH   Display a review panel with markdown document");
                 println!("  --help          Show this help message");
                 return;
             }
@@ -104,6 +116,17 @@ fn main() {
     // Apply note overlay if requested
     if let Some(note) = note_message {
         config = config.with_note(note);
+    }
+
+    // Apply review panel if requested
+    if let Some(path) = review_path {
+        match config.with_review(path) {
+            Ok(cfg) => config = cfg,
+            Err(e) => {
+                eprintln!("Error: Failed to load review document: {}", e);
+                return;
+            }
+        }
     }
 
     run_app(app, config);
