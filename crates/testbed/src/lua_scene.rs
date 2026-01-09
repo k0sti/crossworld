@@ -3,8 +3,8 @@
 //! Extends the base Lua configuration from `app` with physics and scene types.
 
 use app::lua_config::{
-    extract_u32, extract_u8, lua_val_to_f64, parse_quat, parse_vec3, LuaConfig,
-    QuatConfig, Vec3Config,
+    extract_u32, extract_u8, lua_val_to_f64, parse_quat, parse_vec3, LuaConfig, QuatConfig,
+    Vec3Config,
 };
 // Re-export from app's lua re-exports
 use app::lua_config::mlua::prelude::*;
@@ -19,8 +19,12 @@ pub enum GroundConfig {
         size_shift: u32,
         center: Vec3Config,
     },
-    /// Simple cuboid with dimensions
-    Cuboid { width: f32, center: Vec3Config },
+    /// Ground loaded from CSM file
+    CsmFile {
+        path: String,
+        size_shift: u32,
+        center: Vec3Config,
+    },
 }
 
 /// Object configuration in the scene
@@ -98,17 +102,18 @@ impl TestbedConfig {
         )?;
         lua.globals().set("ground_cube", ground_cube_fn)?;
 
-        // Register ground_cuboid
-        let ground_cuboid_fn = lua.create_function(
-            |lua, (width, center): (LuaValue, LuaTable)| {
+        // Register ground_csm
+        let ground_csm_fn = lua.create_function(
+            |lua, (path, size_shift, center): (String, LuaValue, LuaTable)| {
                 let table = lua.create_table()?;
-                table.set("type", "ground_cuboid")?;
-                table.set("width", lua_val_to_f64(&width)? as f32)?;
+                table.set("type", "ground_csm")?;
+                table.set("path", path)?;
+                table.set("size_shift", extract_u32(&size_shift)?)?;
                 table.set("center", center)?;
                 Ok(table)
             },
         )?;
-        lua.globals().set("ground_cuboid", ground_cuboid_fn)?;
+        lua.globals().set("ground_csm", ground_csm_fn)?;
 
         // Register object
         let object_fn = lua.create_function(
@@ -174,24 +179,22 @@ impl TestbedConfig {
         lua.globals().set("rand_01", rand_01_fn)?;
 
         // rand_range(min, max) - return random float [min, max) and advance state
-        let rand_range_fn = lua.create_function(
-            |lua, (min, max): (LuaValue, LuaValue)| {
-                const A: u64 = 1664525;
-                const C: u64 = 1013904223;
-                const M: u64 = 2u64.pow(32);
+        let rand_range_fn = lua.create_function(|lua, (min, max): (LuaValue, LuaValue)| {
+            const A: u64 = 1664525;
+            const C: u64 = 1013904223;
+            const M: u64 = 2u64.pow(32);
 
-                let current_seed: i64 = lua.globals().get("_rand_state")?;
-                let next = (A.wrapping_mul(current_seed as u64).wrapping_add(C)) % M;
-                lua.globals().set("_rand_state", next as i64)?;
+            let current_seed: i64 = lua.globals().get("_rand_state")?;
+            let next = (A.wrapping_mul(current_seed as u64).wrapping_add(C)) % M;
+            lua.globals().set("_rand_state", next as i64)?;
 
-                let normalized = next as f64 / M as f64;
-                let min_val = lua_val_to_f64(&min)?;
-                let max_val = lua_val_to_f64(&max)?;
-                let ranged = min_val + normalized * (max_val - min_val);
+            let normalized = next as f64 / M as f64;
+            let min_val = lua_val_to_f64(&min)?;
+            let max_val = lua_val_to_f64(&max)?;
+            let ranged = min_val + normalized * (max_val - min_val);
 
-                Ok(ranged)
-            },
-        )?;
+            Ok(ranged)
+        })?;
         lua.globals().set("rand_range", rand_range_fn)?;
 
         Ok(Self { config })
@@ -253,8 +256,8 @@ fn parse_camera_config(table: &LuaTable) -> Result<CameraConfig, String> {
 
     let position = parse_vec3(&position_table)
         .map_err(|e| format!("Failed to parse camera position: {}", e))?;
-    let look_at = parse_vec3(&look_at_table)
-        .map_err(|e| format!("Failed to parse camera look_at: {}", e))?;
+    let look_at =
+        parse_vec3(&look_at_table).map_err(|e| format!("Failed to parse camera look_at: {}", e))?;
 
     Ok(CameraConfig { position, look_at })
 }
@@ -284,17 +287,24 @@ fn parse_ground_config(table: &LuaTable) -> Result<GroundConfig, String> {
                 center,
             })
         }
-        "ground_cuboid" => {
-            let width: f32 = table
-                .get("width")
-                .map_err(|e| format!("ground_cuboid missing width: {}", e))?;
+        "ground_csm" => {
+            let path: String = table
+                .get("path")
+                .map_err(|e| format!("ground_csm missing path: {}", e))?;
+            let size_shift: u32 = table
+                .get("size_shift")
+                .map_err(|e| format!("ground_csm missing size_shift: {}", e))?;
             let center_table: LuaTable = table
                 .get("center")
-                .map_err(|e| format!("ground_cuboid missing center: {}", e))?;
+                .map_err(|e| format!("ground_csm missing center: {}", e))?;
             let center = parse_vec3(&center_table)
                 .map_err(|e| format!("Failed to parse ground center: {}", e))?;
 
-            Ok(GroundConfig::Cuboid { width, center })
+            Ok(GroundConfig::CsmFile {
+                path,
+                size_shift,
+                center,
+            })
         }
         _ => Err(format!("Unknown ground type: {}", type_str)),
     }
@@ -329,8 +339,8 @@ fn parse_object_config(table: &LuaTable) -> Result<ObjectConfig, String> {
         .map_err(|e| format!("Failed to parse object position: {}", e))?;
     let rotation = parse_quat(&rotation_table)
         .map_err(|e| format!("Failed to parse object rotation: {}", e))?;
-    let size = parse_vec3(&size_table)
-        .map_err(|e| format!("Failed to parse object size: {}", e))?;
+    let size =
+        parse_vec3(&size_table).map_err(|e| format!("Failed to parse object size: {}", e))?;
 
     Ok(ObjectConfig {
         position,
@@ -346,14 +356,9 @@ fn parse_objects_config(table: &LuaTable) -> Result<Vec<ObjectConfig>, String> {
 
     // Lua tables are 1-indexed
     let mut index = 1;
-    loop {
-        match table.get::<LuaTable>(index) {
-            Ok(obj_table) => {
-                objects.push(parse_object_config(&obj_table)?);
-                index += 1;
-            }
-            Err(_) => break,
-        }
+    while let Ok(obj_table) = table.get::<LuaTable>(index) {
+        objects.push(parse_object_config(&obj_table)?);
+        index += 1;
     }
 
     Ok(objects)
@@ -409,19 +414,24 @@ mod tests {
     }
 
     #[test]
-    fn test_ground_cuboid_config() {
+    fn test_ground_csm_config() {
         let mut config = TestbedConfig::new().unwrap();
         config
-            .load_string("test_ground = ground_cuboid(8, vec3(0, -4, 0))")
+            .load_string(r#"test_ground = ground_csm("terrain.csm", 3, vec3(0, -4, 0))"#)
             .unwrap();
 
         let ground = config.extract_ground("test_ground").unwrap();
         match ground {
-            GroundConfig::Cuboid { width, center } => {
-                assert_eq!(width, 8.0);
+            GroundConfig::CsmFile {
+                path,
+                size_shift,
+                center,
+            } => {
+                assert_eq!(path, "terrain.csm");
+                assert_eq!(size_shift, 3);
                 assert_eq!(center.y, -4.0);
             }
-            _ => panic!("Expected Cuboid"),
+            _ => panic!("Expected CsmFile"),
         }
     }
 

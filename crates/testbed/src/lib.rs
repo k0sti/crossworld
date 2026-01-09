@@ -1,8 +1,10 @@
 //! Physics Component Testbed
 //!
-//! Compares physics behavior between:
-//! - Left: Simple flat ground using cuboid collider
-//! - Right: Flat ground constructed from Cube objects using terrain collider
+//! Compares physics behavior between 4 different collider strategies:
+//! - Scene 1: Cuboid collider - Simple box collider from ground cube
+//! - Scene 2: Mesh collider - Triangle mesh from Cube using VoxelColliderBuilder
+//! - Scene 3: Terrain collider - VoxelTerrainCollider with lazy triangle generation
+//! - Scene 4: Empty - Reserved for future implementation
 //!
 //! Scene configuration can be loaded from Lua files when the
 //! `lua` feature is enabled. See `config/scene.lua` for an example.
@@ -12,15 +14,20 @@
 use app::{App, FrameContext, InputState};
 use crossworld_physics::{
     create_box_collider,
-    rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder},
+    rapier3d::{
+        self,
+        prelude::{ColliderBuilder, RigidBodyBuilder},
+    },
+    terrain::VoxelTerrainCollider,
     CubeObject, PhysicsWorld, VoxelColliderBuilder,
 };
-use cube::Cube;
+use cube::{io::csm::parse_csm, Cube};
 use glam::{Quat, Vec3};
 use glow::{Context, HasContext, COLOR_BUFFER_BIT, DEPTH_BUFFER_BIT, SCISSOR_TEST};
 use renderer::{Camera, MeshRenderer, OrbitController, OrbitControllerConfig};
 use std::path::Path;
 use std::rc::Rc;
+use std::sync::Arc;
 use std::time::Instant;
 
 pub mod lua_scene;
@@ -44,15 +51,49 @@ impl PhysicsState {
     }
 }
 
-/// Physics testbed state for one side (left = cuboid, right = terrain)
+/// Collider type for each scene
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ColliderType {
+    /// Simple cuboid collider
+    Cuboid,
+    /// Triangle mesh from VoxelColliderBuilder
+    Mesh,
+    /// Terrain collider with lazy triangle generation
+    Terrain,
+    /// Empty scene (no collider)
+    Empty,
+}
+
+impl ColliderType {
+    pub fn label(&self) -> &'static str {
+        match self {
+            ColliderType::Cuboid => "Cuboid",
+            ColliderType::Mesh => "Mesh",
+            ColliderType::Terrain => "Terrain",
+            ColliderType::Empty => "Empty",
+        }
+    }
+
+    pub fn color(&self) -> egui::Color32 {
+        match self {
+            ColliderType::Cuboid => egui::Color32::LIGHT_GREEN,
+            ColliderType::Mesh => egui::Color32::LIGHT_BLUE,
+            ColliderType::Terrain => egui::Color32::LIGHT_YELLOW,
+            ColliderType::Empty => egui::Color32::GRAY,
+        }
+    }
+}
+
+/// Physics testbed state for one scene
 pub struct PhysicsScene {
     pub world: PhysicsWorld,
     pub falling_objects: Vec<CubeObject>,
     pub ground_mesh_index: Option<usize>,
     pub falling_mesh_indices: Vec<usize>,
-    #[allow(dead_code)]
-    pub ground_collider_type: &'static str,
+    pub collider_type: ColliderType,
     pub states: Vec<PhysicsState>,
+    /// Terrain collider for scene type Terrain (optional)
+    pub terrain_collider: Option<VoxelTerrainCollider>,
 }
 
 /// Ground configuration for scene creation
@@ -60,10 +101,12 @@ pub struct PhysicsScene {
 pub struct GroundSettings {
     /// Size of ground cube edge (default 8.0)
     pub size: f32,
-    /// Material/color index for ground
+    /// Material/color index for ground (used when csm_cube is None)
     pub material: u8,
     /// Center position of the ground (default: origin-centered with top at Y=0)
     pub center: Vec3,
+    /// Optional CSM-loaded cube (takes precedence over material)
+    pub csm_cube: Option<Rc<Cube<u8>>>,
 }
 
 impl Default for GroundSettings {
@@ -73,6 +116,7 @@ impl Default for GroundSettings {
             size,
             material: 32,
             center: Vec3::new(0.0, -size / 2.0, 0.0),
+            csm_cube: None,
         }
     }
 }
@@ -111,19 +155,16 @@ pub struct PhysicsTestbed {
     camera: Camera,
     orbit_controller: OrbitController,
 
-    // Physics scenes
-    left_scene: Option<PhysicsScene>,  // Cuboid ground
-    right_scene: Option<PhysicsScene>, // Terrain collider ground
+    // Physics scenes (4 quadrants)
+    scenes: [Option<PhysicsScene>; 4],
 
-    // Cubes for rendering (one for each scene with different materials)
-    left_ground_cube: Option<Rc<Cube<u8>>>,
-    right_ground_cube: Option<Rc<Cube<u8>>>,
+    // Cubes for rendering (one for each scene)
+    ground_cubes: [Option<Rc<Cube<u8>>>; 4],
     #[allow(dead_code)]
     falling_cube: Option<Rc<Cube<u8>>>,
 
-    // Ground configuration (separate for left and right scenes)
-    left_ground_settings: GroundSettings,
-    right_ground_settings: GroundSettings,
+    // Ground configuration (shared for all scenes)
+    ground_settings: GroundSettings,
 
     // Object configurations (multiple objects supported)
     object_settings: Vec<ObjectSettings>,
@@ -148,27 +189,24 @@ impl PhysicsTestbed {
         // Camera target is the top of the ground cube (Y=0)
         let camera_target = Vec3::new(0.0, 0.0, 0.0);
         // Camera positioned above and to the side, looking at ground top
-        let camera_position = Vec3::new(10.0, 8.0, 10.0);
+        let camera_position = Vec3::new(15.0, 12.0, 15.0);
 
         // Configure orbit controller with appropriate limits
         let orbit_config = OrbitControllerConfig {
             mouse_sensitivity: 0.005,
             zoom_sensitivity: 0.5,
             min_distance: 2.0,
-            max_distance: 30.0,
+            max_distance: 50.0,
         };
 
         Self {
             mesh_renderer: MeshRenderer::new(),
             camera: Camera::look_at(camera_position, camera_target, Vec3::Y),
             orbit_controller: OrbitController::new(camera_target, orbit_config),
-            left_scene: None,
-            right_scene: None,
-            left_ground_cube: None,
-            right_ground_cube: None,
+            scenes: [None, None, None, None],
+            ground_cubes: [None, None, None, None],
             falling_cube: None,
-            left_ground_settings: GroundSettings::default(),
-            right_ground_settings: GroundSettings::default(),
+            ground_settings: GroundSettings::default(),
             object_settings: vec![ObjectSettings::default()],
             reset_requested: false,
             frame_count: 0,
@@ -185,7 +223,10 @@ impl PhysicsTestbed {
         match Self::try_from_config_file(path) {
             Ok(testbed) => testbed,
             Err(e) => {
-                eprintln!("[Testbed] Warning: Failed to load config from {:?}: {}", path, e);
+                eprintln!(
+                    "[Testbed] Warning: Failed to load config from {:?}: {}",
+                    path, e
+                );
                 eprintln!("[Testbed] Using default configuration");
                 Self::new()
             }
@@ -194,17 +235,15 @@ impl PhysicsTestbed {
 
     /// Try to load configuration from a Lua file
     pub fn try_from_config_file(path: &Path) -> Result<Self, String> {
-        let mut config = TestbedConfig::new().map_err(|e| format!("Failed to create Lua config: {}", e))?;
+        let mut config =
+            TestbedConfig::new().map_err(|e| format!("Failed to create Lua config: {}", e))?;
         config.load_file(path)?;
 
         // Extract camera configuration
         let camera_config = config.extract_camera("scene_camera")?;
 
-        // Extract ground configurations:
-        // - Left scene uses cuboid collider, so it needs ground_2 (ground_cuboid)
-        // - Right scene uses terrain collider, so it needs ground_1 (ground_cube)
-        let left_ground_config = config.extract_ground("ground_2")?;
-        let right_ground_config = config.extract_ground("ground_1")?;
+        // Extract single ground configuration (used for all scenes)
+        let ground_config = config.extract_ground("ground")?;
 
         // Extract object configurations from scene_objects
         let objects = config.extract_objects("scene_objects")?;
@@ -212,11 +251,14 @@ impl PhysicsTestbed {
             return Err("scene_objects must contain at least one object".to_string());
         }
 
-        Self::from_config(path, &camera_config, &left_ground_config, &right_ground_config, &objects)
+        Self::from_config(path, &camera_config, &ground_config, &objects)
     }
 
     /// Convert a GroundConfig to GroundSettings (Lua version)
-    fn ground_config_to_settings(ground_config: &GroundConfig) -> GroundSettings {
+    fn ground_config_to_settings(
+        ground_config: &GroundConfig,
+        config_dir: Option<&Path>,
+    ) -> GroundSettings {
         match ground_config {
             GroundConfig::SolidCube {
                 material,
@@ -226,15 +268,42 @@ impl PhysicsTestbed {
                 size: (1 << size_shift) as f32,
                 material: *material,
                 center: center.to_vec3(),
+                csm_cube: None,
             },
-            GroundConfig::Cuboid {
-                width,
+            GroundConfig::CsmFile {
+                path,
+                size_shift,
                 center,
-            } => GroundSettings {
-                size: *width,
-                material: 32,
-                center: center.to_vec3(),
-            },
+            } => {
+                // Resolve path relative to config directory
+                let csm_path = if let Some(dir) = config_dir {
+                    dir.join(path)
+                } else {
+                    std::path::PathBuf::from(path)
+                };
+
+                // Try to load CSM file
+                let csm_cube = match std::fs::read_to_string(&csm_path) {
+                    Ok(content) => match parse_csm(&content) {
+                        Ok(cube) => Some(Rc::new(cube)),
+                        Err(e) => {
+                            eprintln!("[Testbed] Failed to parse CSM file {:?}: {}", csm_path, e);
+                            None
+                        }
+                    },
+                    Err(e) => {
+                        eprintln!("[Testbed] Failed to read CSM file {:?}: {}", csm_path, e);
+                        None
+                    }
+                };
+
+                GroundSettings {
+                    size: (1 << size_shift) as f32,
+                    material: 32, // Default material if CSM loading fails
+                    center: center.to_vec3(),
+                    csm_cube,
+                }
+            }
         }
     }
 
@@ -251,18 +320,19 @@ impl PhysicsTestbed {
 
     /// Create testbed from camera and ground configurations (Lua version)
     fn from_config(
-        _path: &Path,
+        path: &Path,
         camera_config: &CameraConfig,
-        left_ground_config: &GroundConfig,
-        right_ground_config: &GroundConfig,
+        ground_config: &GroundConfig,
         object_configs: &[lua_scene::ObjectConfig],
     ) -> Result<Self, String> {
         let camera_position = camera_config.position.to_vec3();
         let camera_target = camera_config.look_at.to_vec3();
 
-        // Convert ground configs to settings
-        let left_ground_settings = Self::ground_config_to_settings(left_ground_config);
-        let right_ground_settings = Self::ground_config_to_settings(right_ground_config);
+        // Get config directory for resolving relative paths
+        let config_dir = path.parent();
+
+        // Convert ground config to settings
+        let ground_settings = Self::ground_config_to_settings(ground_config, config_dir);
 
         // Convert all object configs to settings
         let object_settings: Vec<ObjectSettings> = object_configs
@@ -274,20 +344,17 @@ impl PhysicsTestbed {
             mouse_sensitivity: 0.005,
             zoom_sensitivity: 0.5,
             min_distance: 2.0,
-            max_distance: 30.0,
+            max_distance: 50.0,
         };
 
         Ok(Self {
             mesh_renderer: MeshRenderer::new(),
             camera: Camera::look_at(camera_position, camera_target, Vec3::Y),
             orbit_controller: OrbitController::new(camera_target, orbit_config),
-            left_scene: None,
-            right_scene: None,
-            left_ground_cube: None,
-            right_ground_cube: None,
+            scenes: [None, None, None, None],
+            ground_cubes: [None, None, None, None],
             falling_cube: None,
-            left_ground_settings,
-            right_ground_settings,
+            ground_settings,
             object_settings,
             reset_requested: false,
             frame_count: 0,
@@ -296,78 +363,150 @@ impl PhysicsTestbed {
         })
     }
 
+    /// Get the ground cube (from CSM or solid material)
+    fn get_ground_cube(&self) -> Rc<Cube<u8>> {
+        self.ground_settings
+            .csm_cube
+            .clone()
+            .unwrap_or_else(|| Rc::new(Cube::Solid(self.ground_settings.material)))
+    }
 
-    /// Create physics scene with simple cuboid ground collider (left scene, uses ground-1)
-    fn create_cuboid_ground_scene(&self) -> PhysicsScene {
+    /// Create falling objects for a scene
+    fn create_falling_objects(
+        &self,
+        world: &mut PhysicsWorld,
+    ) -> (Vec<CubeObject>, Vec<PhysicsState>) {
+        let mut falling_objects = Vec::with_capacity(self.object_settings.len());
+        let mut states = Vec::with_capacity(self.object_settings.len());
+
+        for obj_settings in &self.object_settings {
+            let mut falling_object =
+                CubeObject::new_dynamic(world, obj_settings.position, obj_settings.mass);
+            falling_object.set_rotation(world, obj_settings.rotation);
+            let falling_collider = create_box_collider(obj_settings.size);
+            falling_object.attach_collider(world, falling_collider);
+            falling_objects.push(falling_object);
+            states.push(PhysicsState::default());
+        }
+
+        (falling_objects, states)
+    }
+
+    /// Scene 1: Create physics scene with simple cuboid ground collider
+    fn create_cuboid_scene(&self) -> PhysicsScene {
         let mut world = PhysicsWorld::new(Vec3::new(0.0, -9.81, 0.0));
 
-        let half_size = self.left_ground_settings.size / 2.0;
-        let center = self.left_ground_settings.center;
+        let half_size = self.ground_settings.size / 2.0;
+        let center = self.ground_settings.center;
         let ground_collider = ColliderBuilder::cuboid(half_size, half_size, half_size)
             .translation([center.x, center.y, center.z].into())
             .build();
         world.add_static_collider(ground_collider);
 
-        // Create all falling objects from config
-        let mut falling_objects = Vec::with_capacity(self.object_settings.len());
-        let mut states = Vec::with_capacity(self.object_settings.len());
-
-        for obj_settings in &self.object_settings {
-            let mut falling_object = CubeObject::new_dynamic(&mut world, obj_settings.position, obj_settings.mass);
-            // Apply rotation from config
-            falling_object.set_rotation(&mut world, obj_settings.rotation);
-            let falling_collider = create_box_collider(obj_settings.size);
-            falling_object.attach_collider(&mut world, falling_collider);
-            falling_objects.push(falling_object);
-            states.push(PhysicsState::default());
-        }
+        let (falling_objects, states) = self.create_falling_objects(&mut world);
 
         PhysicsScene {
             world,
             falling_objects,
             ground_mesh_index: None,
             falling_mesh_indices: Vec::new(),
-            ground_collider_type: "Cuboid",
+            collider_type: ColliderType::Cuboid,
             states,
+            terrain_collider: None,
         }
     }
 
-    /// Create physics scene with terrain collider from Cube objects (right scene, uses ground-2)
-    fn create_terrain_ground_scene(&self, ground_cube: &Rc<Cube<u8>>) -> PhysicsScene {
+    /// Scene 2: Create physics scene with mesh collider from Cube (VoxelColliderBuilder)
+    fn create_mesh_scene(&self, ground_cube: &Rc<Cube<u8>>) -> PhysicsScene {
         let mut world = PhysicsWorld::new(Vec3::new(0.0, -9.81, 0.0));
 
-        let scale = self.right_ground_settings.size;
-        let center = self.right_ground_settings.center;
+        let scale = self.ground_settings.size;
+        let center = self.ground_settings.center;
 
-        let terrain_collider = VoxelColliderBuilder::from_cube_scaled(ground_cube, 0, scale);
+        let mesh_collider = VoxelColliderBuilder::from_cube_scaled(ground_cube, 0, scale);
 
-        let terrain_body = RigidBodyBuilder::fixed()
+        let ground_body = RigidBodyBuilder::fixed()
             .translation([center.x, center.y, center.z].into())
             .build();
-        let terrain_body_handle = world.add_rigid_body(terrain_body);
-        world.add_collider(terrain_collider, terrain_body_handle);
+        let ground_body_handle = world.add_rigid_body(ground_body);
+        world.add_collider(mesh_collider, ground_body_handle);
 
-        // Create all falling objects from config
-        let mut falling_objects = Vec::with_capacity(self.object_settings.len());
-        let mut states = Vec::with_capacity(self.object_settings.len());
-
-        for obj_settings in &self.object_settings {
-            let mut falling_object = CubeObject::new_dynamic(&mut world, obj_settings.position, obj_settings.mass);
-            // Apply rotation from config
-            falling_object.set_rotation(&mut world, obj_settings.rotation);
-            let falling_collider = create_box_collider(obj_settings.size);
-            falling_object.attach_collider(&mut world, falling_collider);
-            falling_objects.push(falling_object);
-            states.push(PhysicsState::default());
-        }
+        let (falling_objects, states) = self.create_falling_objects(&mut world);
 
         PhysicsScene {
             world,
             falling_objects,
             ground_mesh_index: None,
             falling_mesh_indices: Vec::new(),
-            ground_collider_type: "Terrain (Cube)",
+            collider_type: ColliderType::Mesh,
             states,
+            terrain_collider: None,
+        }
+    }
+
+    /// Scene 3: Create physics scene with terrain collider (VoxelTerrainCollider)
+    fn create_terrain_scene(&self, ground_cube: &Rc<Cube<u8>>) -> PhysicsScene {
+        let mut world = PhysicsWorld::new(Vec3::new(0.0, -9.81, 0.0));
+
+        let scale = self.ground_settings.size;
+        let center = self.ground_settings.center;
+
+        // Create VoxelTerrainCollider
+        #[allow(clippy::arc_with_non_send_sync)]
+        let arc_cube = Arc::new((**ground_cube).clone());
+        let mut terrain_collider = VoxelTerrainCollider::new(
+            arc_cube,
+            scale,
+            2,            // region_depth
+            [1, 1, 0, 0], // border_materials
+        );
+
+        // Update the triangle BVH for the active area
+        let half_world = scale / 2.0;
+        let active_aabb = rapier3d::parry::bounding_volume::Aabb::new(
+            [-half_world, -half_world, -half_world].into(),
+            [half_world, half_world, half_world].into(),
+        );
+        terrain_collider.update_triangle_bvh(&active_aabb);
+
+        // Create a trimesh collider from the terrain if we have triangles
+        if let Some(shape) = terrain_collider.to_trimesh() {
+            let ground_collider = ColliderBuilder::new(shape)
+                .translation([center.x, center.y, center.z].into())
+                .build();
+            let ground_body = RigidBodyBuilder::fixed()
+                .translation([center.x, center.y, center.z].into())
+                .build();
+            let ground_body_handle = world.add_rigid_body(ground_body);
+            world.add_collider(ground_collider, ground_body_handle);
+        }
+
+        let (falling_objects, states) = self.create_falling_objects(&mut world);
+
+        PhysicsScene {
+            world,
+            falling_objects,
+            ground_mesh_index: None,
+            falling_mesh_indices: Vec::new(),
+            collider_type: ColliderType::Terrain,
+            states,
+            terrain_collider: Some(terrain_collider),
+        }
+    }
+
+    /// Scene 4: Create empty physics scene (placeholder for future)
+    fn create_empty_scene(&self) -> PhysicsScene {
+        let mut world = PhysicsWorld::new(Vec3::new(0.0, -9.81, 0.0));
+        let (falling_objects, states) = self.create_falling_objects(&mut world);
+
+        PhysicsScene {
+            world,
+            falling_objects,
+            ground_mesh_index: None,
+            falling_mesh_indices: Vec::new(),
+            collider_type: ColliderType::Empty,
+            states,
+            terrain_collider: None,
         }
     }
 
@@ -376,15 +515,19 @@ impl PhysicsTestbed {
     /// # Safety
     /// The GL context must be current when this is called.
     unsafe fn reset_scenes(&mut self, gl: &Context) {
-        // Create ground cubes with their respective materials
-        let left_ground_cube = Rc::new(Cube::Solid(self.left_ground_settings.material));
-        let right_ground_cube = Rc::new(Cube::Solid(self.right_ground_settings.material));
-        self.left_ground_cube = Some(left_ground_cube);
-        self.right_ground_cube = Some(right_ground_cube.clone());
+        // Get ground cube (from CSM or solid material)
+        let ground_cube = self.get_ground_cube();
 
-        // Recreate physics scenes
-        self.left_scene = Some(self.create_cuboid_ground_scene());
-        self.right_scene = Some(self.create_terrain_ground_scene(&right_ground_cube));
+        // Create all 4 ground cubes (same cube for all scenes)
+        for i in 0..4 {
+            self.ground_cubes[i] = Some(ground_cube.clone());
+        }
+
+        // Recreate all 4 physics scenes
+        self.scenes[0] = Some(self.create_cuboid_scene());
+        self.scenes[1] = Some(self.create_mesh_scene(&ground_cube));
+        self.scenes[2] = Some(self.create_terrain_scene(&ground_cube));
+        self.scenes[3] = Some(self.create_empty_scene());
 
         // Re-upload meshes
         self.upload_meshes(gl);
@@ -395,46 +538,25 @@ impl PhysicsTestbed {
     /// # Safety
     /// The GL context must be current when this is called.
     unsafe fn upload_meshes(&mut self, gl: &Context) {
-        // Create ground cubes with configured material colors (separate for left and right)
-        let left_ground_cube = Rc::new(Cube::Solid(self.left_ground_settings.material));
-        let right_ground_cube = Rc::new(Cube::Solid(self.right_ground_settings.material));
-        self.left_ground_cube = Some(left_ground_cube.clone());
-        self.right_ground_cube = Some(right_ground_cube.clone());
+        // Get ground cube (from CSM or solid material)
+        let ground_cube = self.get_ground_cube();
 
-        // Upload left ground mesh
-        match self.mesh_renderer.upload_mesh(gl, &left_ground_cube, 1) {
-            Ok(idx) => {
-                if let Some(scene) = &mut self.left_scene {
-                    scene.ground_mesh_index = Some(idx);
-                }
-            }
-            Err(e) => eprintln!("Failed to upload left ground mesh: {}", e),
-        }
+        // Upload ground mesh for all 4 scenes
+        for i in 0..4 {
+            self.ground_cubes[i] = Some(ground_cube.clone());
 
-        // Upload right ground mesh
-        match self.mesh_renderer.upload_mesh(gl, &right_ground_cube, 1) {
-            Ok(idx) => {
-                if let Some(scene) = &mut self.right_scene {
-                    scene.ground_mesh_index = Some(idx);
+            match self.mesh_renderer.upload_mesh(gl, &ground_cube, 1) {
+                Ok(idx) => {
+                    if let Some(scene) = &mut self.scenes[i] {
+                        scene.ground_mesh_index = Some(idx);
+                    }
                 }
-            }
-            Err(e) => eprintln!("Failed to upload right ground mesh: {}", e),
-        }
-
-        // Upload falling cube meshes for each object (for left scene)
-        if let Some(scene) = &mut self.left_scene {
-            scene.falling_mesh_indices.clear();
-            for obj_settings in &self.object_settings {
-                let falling_cube = Rc::new(Cube::Solid(obj_settings.material));
-                match self.mesh_renderer.upload_mesh(gl, &falling_cube, 1) {
-                    Ok(idx) => scene.falling_mesh_indices.push(idx),
-                    Err(e) => eprintln!("Failed to upload falling mesh: {}", e),
-                }
+                Err(e) => eprintln!("Failed to upload ground mesh for scene {}: {}", i, e),
             }
         }
 
-        // Upload falling cube meshes for each object (for right scene)
-        if let Some(scene) = &mut self.right_scene {
+        // Upload falling cube meshes for each scene
+        for scene in self.scenes.iter_mut().flatten() {
             scene.falling_mesh_indices.clear();
             for obj_settings in &self.object_settings {
                 let falling_cube = Rc::new(Cube::Solid(obj_settings.material));
@@ -451,7 +573,7 @@ impl PhysicsTestbed {
         }
     }
 
-    /// Step physics for both scenes
+    /// Step physics for all scenes
     fn step_physics(&mut self) {
         let now = Instant::now();
         let elapsed = (now - self.last_physics_update).as_secs_f32();
@@ -460,7 +582,7 @@ impl PhysicsTestbed {
         if elapsed >= self.physics_dt {
             self.last_physics_update = now;
 
-            if let Some(scene) = &mut self.left_scene {
+            for scene in self.scenes.iter_mut().flatten() {
                 scene.world.step(self.physics_dt);
 
                 // Update physics state for all objects
@@ -477,92 +599,6 @@ impl PhysicsTestbed {
                         };
                     }
                 }
-            }
-            if let Some(scene) = &mut self.right_scene {
-                scene.world.step(self.physics_dt);
-
-                // Update physics state for all objects
-                for (i, falling_object) in scene.falling_objects.iter().enumerate() {
-                    let pos = falling_object.position(&scene.world);
-                    let vel = falling_object.velocity(&scene.world);
-                    let is_on_ground = vel.y.abs() < 0.1 && pos.y < 1.0;
-
-                    if i < scene.states.len() {
-                        scene.states[i] = PhysicsState {
-                            falling_position: pos,
-                            falling_velocity: vel,
-                            is_on_ground,
-                        };
-                    }
-                }
-            }
-        }
-    }
-
-    /// Print debug information about physics state
-    fn print_debug_info(&self) {
-
-        let num_objects = self.object_settings.len();
-
-        for obj_idx in 0..num_objects {
-            let left_pos = self
-                .left_scene
-                .as_ref()
-                .and_then(|s| s.falling_objects.get(obj_idx).map(|o| o.position(&s.world)))
-                .unwrap_or(Vec3::ZERO);
-
-            let right_pos = self
-                .right_scene
-                .as_ref()
-                .and_then(|s| s.falling_objects.get(obj_idx).map(|o| o.position(&s.world)))
-                .unwrap_or(Vec3::ZERO);
-
-            let left_vel = self
-                .left_scene
-                .as_ref()
-                .and_then(|s| s.falling_objects.get(obj_idx).map(|o| o.velocity(&s.world)))
-                .unwrap_or(Vec3::ZERO);
-
-            let right_vel = self
-                .right_scene
-                .as_ref()
-                .and_then(|s| s.falling_objects.get(obj_idx).map(|o| o.velocity(&s.world)))
-                .unwrap_or(Vec3::ZERO);
-
-            let left_rot = self
-                .left_scene
-                .as_ref()
-                .and_then(|s| s.falling_objects.get(obj_idx).map(|o| o.rotation(&s.world)))
-                .unwrap_or(Quat::IDENTITY);
-
-            let right_rot = self
-                .right_scene
-                .as_ref()
-                .and_then(|s| s.falling_objects.get(obj_idx).map(|o| o.rotation(&s.world)))
-                .unwrap_or(Quat::IDENTITY);
-
-            let pos_diff = left_pos - right_pos;
-            let vel_diff = left_vel - right_vel;
-
-            println!(
-                "Frame {} Obj[{}]: Left(Cuboid) pos={:.4},{:.4},{:.4} rot=({:.4},{:.4},{:.4},{:.4}) vel={:.4},{:.4},{:.4}",
-                self.frame_count, obj_idx,
-                left_pos.x, left_pos.y, left_pos.z,
-                left_rot.x, left_rot.y, left_rot.z, left_rot.w,
-                left_vel.x, left_vel.y, left_vel.z,
-            );
-            println!(
-                "               Right(Terrain) pos={:.4},{:.4},{:.4} rot=({:.4},{:.4},{:.4},{:.4}) vel={:.4},{:.4},{:.4}",
-                right_pos.x, right_pos.y, right_pos.z,
-                right_rot.x, right_rot.y, right_rot.z, right_rot.w,
-                right_vel.x, right_vel.y, right_vel.z,
-            );
-
-            if pos_diff.length() > 0.001 || vel_diff.length() > 0.001 {
-                println!(
-                    "  DIFF: pos_delta={:.6},{:.6},{:.6} vel_delta={:.6},{:.6},{:.6}",
-                    pos_diff.x, pos_diff.y, pos_diff.z, vel_diff.x, vel_diff.y, vel_diff.z,
-                );
             }
         }
     }
@@ -573,12 +609,10 @@ impl PhysicsTestbed {
         scene: &PhysicsScene,
         mesh_renderer: &MeshRenderer,
         camera: &Camera,
-        camera_target: Vec3,
         viewport_x: i32,
         viewport_y: i32,
         viewport_width: i32,
         viewport_height: i32,
-        x_offset: f32,
         ground_size: f32,
         ground_center: Vec3,
         object_sizes: &[Vec3],
@@ -594,38 +628,32 @@ impl PhysicsTestbed {
             gl.clear(COLOR_BUFFER_BIT | DEPTH_BUFFER_BIT);
         }
 
-        // Create camera for this scene with offset position
-        let offset_position = camera.position + Vec3::new(x_offset, 0.0, 0.0);
-        let offset_target = camera_target + Vec3::new(x_offset, 0.0, 0.0);
-        let scene_camera = Camera::look_at(offset_position, offset_target, Vec3::Y);
-
-        if let Some(ground_idx) = scene.ground_mesh_index {
-            let ground_pos = ground_center + Vec3::new(x_offset, 0.0, 0.0);
-            unsafe {
-                mesh_renderer.render_mesh_with_options(
-                    gl,
-                    ground_idx,
-                    ground_pos,
-                    Quat::IDENTITY,
-                    Vec3::splat(ground_size),
-                    Vec3::ONE,
-                    false,
-                    &scene_camera,
-                    viewport_width,
-                    viewport_height,
-                );
+        // Only render ground if not empty scene
+        if scene.collider_type != ColliderType::Empty {
+            if let Some(ground_idx) = scene.ground_mesh_index {
+                unsafe {
+                    mesh_renderer.render_mesh_with_options(
+                        gl,
+                        ground_idx,
+                        ground_center,
+                        Quat::IDENTITY,
+                        Vec3::splat(ground_size),
+                        Vec3::ONE,
+                        false,
+                        camera,
+                        viewport_width,
+                        viewport_height,
+                    );
+                }
             }
         }
 
         // Render all falling cubes with configured sizes and collision wireframes
         for (i, falling_object) in scene.falling_objects.iter().enumerate() {
             if let Some(&falling_idx) = scene.falling_mesh_indices.get(i) {
-                let falling_pos = falling_object.position(&scene.world) + Vec3::new(x_offset, 0.0, 0.0);
+                let falling_pos = falling_object.position(&scene.world);
                 let falling_rot = falling_object.rotation(&scene.world);
-                // Get object half-extents and calculate full box dimensions
                 let object_size = object_sizes.get(i).copied().unwrap_or(Vec3::splat(0.4));
-                // Use object_size * 2 as normalized_size (full physics box dimensions)
-                // This matches the wireframe rendering which also uses object_size * 2 for box_size
                 let normalized_size = object_size * 2.0;
                 unsafe {
                     mesh_renderer.render_mesh_with_normalized_size(
@@ -633,9 +661,9 @@ impl PhysicsTestbed {
                         falling_idx,
                         falling_pos,
                         falling_rot,
-                        1.0, // scale: 1.0 since normalized_size already contains full dimensions
+                        1.0,
                         normalized_size,
-                        &scene_camera,
+                        camera,
                         viewport_width,
                         viewport_height,
                     );
@@ -657,9 +685,6 @@ impl PhysicsTestbed {
                     [0.2, 1.0, 0.2] // Green
                 };
 
-                // Render oriented bounding box wireframe with rotation
-                // object_size is half-extents, full box dimensions are object_size * 2
-                // Use Vec3::ONE as normalized size and object_size * 2 as scale to get proper non-uniform dimensions
                 let box_size = object_size * 2.0;
 
                 unsafe {
@@ -667,10 +692,10 @@ impl PhysicsTestbed {
                         gl,
                         falling_pos,
                         falling_rot,
-                        box_size, // normalized_size: full box dimensions
-                        1.0,      // scale: 1.0 since we've already scaled normalized_size
+                        box_size,
+                        1.0,
                         wireframe_color,
-                        &scene_camera,
+                        camera,
                         viewport_width,
                         viewport_height,
                     );
@@ -683,49 +708,93 @@ impl PhysicsTestbed {
         }
     }
 
+    /// Render status overlay for a scene
+    fn render_status_overlay(
+        painter: &egui::Painter,
+        scene: &PhysicsScene,
+        rect: egui::Rect,
+    ) {
+        let text = scene
+            .states
+            .first()
+            .map(|state| {
+                format!(
+                    "{}: {}",
+                    scene.collider_type.label(),
+                    state.format_compact()
+                )
+            })
+            .unwrap_or_else(|| format!("{}: N/A", scene.collider_type.label()));
+        let color = scene.collider_type.color();
 
-    /// Handle orbit camera input from egui response
+        // Position at bottom-left of the viewport rect with some padding
+        let pos = egui::pos2(rect.min.x + 5.0, rect.max.y - 18.0);
+
+        // Draw background for readability
+        let text_galley = painter.layout_no_wrap(text, egui::FontId::monospace(11.0), color);
+        let bg_rect = egui::Rect::from_min_size(
+            egui::pos2(pos.x - 2.0, pos.y - 2.0),
+            egui::vec2(text_galley.size().x + 4.0, text_galley.size().y + 4.0),
+        );
+        painter.rect_filled(bg_rect, 2.0, egui::Color32::from_black_alpha(180));
+
+        // Draw text
+        painter.galley(pos, text_galley, color);
+    }
+
+    /// Handle orbit camera input (right mouse button for orbit, scroll for zoom)
     fn handle_orbit_input(&mut self, input: &InputState) {
-        // Handle camera orbit with left mouse drag
-        if input.mouse_buttons.left && input.mouse_delta.length() > 0.0 {
+        // Handle camera orbit with RIGHT mouse drag
+        if input.mouse_buttons.right && input.mouse_delta.length() > 0.0 {
             let delta = input.mouse_delta * self.orbit_controller.config.mouse_sensitivity;
-            self.orbit_controller.rotate(delta.x, delta.y, &mut self.camera);
+            self.orbit_controller
+                .rotate(delta.x, delta.y, &mut self.camera);
         }
 
         // Handle zoom with scroll
         if input.scroll_delta.y.abs() > 0.0 {
-            self.orbit_controller.zoom(input.scroll_delta.y * self.orbit_controller.config.zoom_sensitivity, &mut self.camera);
+            self.orbit_controller.zoom(
+                input.scroll_delta.y * self.orbit_controller.config.zoom_sensitivity,
+                &mut self.camera,
+            );
         }
     }
 }
 
 impl App for PhysicsTestbed {
     fn init(&mut self, ctx: &FrameContext) {
-        println!("[Testbed] Initializing physics testbed");
+        println!("[Testbed] Initializing physics testbed with 4 scenes");
 
         // Initialize mesh renderer
         if let Err(e) = unsafe { self.mesh_renderer.init_gl(ctx.gl) } {
             eprintln!("[Testbed] Failed to initialize mesh renderer: {}", e);
         }
 
-        // Create ground cubes with their respective materials from config
-        let left_ground_cube = Rc::new(Cube::Solid(self.left_ground_settings.material));
-        let right_ground_cube = Rc::new(Cube::Solid(self.right_ground_settings.material));
-        self.left_ground_cube = Some(left_ground_cube);
-        self.right_ground_cube = Some(right_ground_cube.clone());
+        // Get ground cube (from CSM or solid material)
+        let ground_cube = self.get_ground_cube();
 
-        // Create physics scenes
-        self.left_scene = Some(self.create_cuboid_ground_scene());
-        self.right_scene = Some(self.create_terrain_ground_scene(&right_ground_cube));
+        // Create all 4 ground cubes (same cube for all scenes)
+        for i in 0..4 {
+            self.ground_cubes[i] = Some(ground_cube.clone());
+        }
+
+        // Create all 4 physics scenes
+        self.scenes[0] = Some(self.create_cuboid_scene());
+        self.scenes[1] = Some(self.create_mesh_scene(&ground_cube));
+        self.scenes[2] = Some(self.create_terrain_scene(&ground_cube));
+        self.scenes[3] = Some(self.create_empty_scene());
 
         // Upload meshes
         unsafe { self.upload_meshes(ctx.gl) };
 
         self.last_physics_update = Instant::now();
 
-        println!("[Testbed] Physics scenes initialized");
-        println!("  Left:  Cuboid ground (ground-2), size={}", self.left_ground_settings.size);
-        println!("  Right: Terrain ground (ground-1), size={}", self.right_ground_settings.size);
+        println!("[Testbed] Physics scenes initialized:");
+        println!("  Scene 1: Cuboid collider");
+        println!("  Scene 2: Mesh collider (VoxelColliderBuilder)");
+        println!("  Scene 3: Terrain collider (VoxelTerrainCollider)");
+        println!("  Scene 4: Empty (future implementation)");
+        println!("  Ground size: {}", self.ground_settings.size);
     }
 
     fn shutdown(&mut self, ctx: &FrameContext) {
@@ -734,14 +803,11 @@ impl App for PhysicsTestbed {
     }
 
     fn update(&mut self, ctx: &FrameContext, input: &InputState) {
-        // Handle orbit camera
+        // Handle orbit camera (right mouse button)
         self.handle_orbit_input(input);
 
         // Step physics
         self.step_physics();
-
-        // Print debug info
-        self.print_debug_info();
 
         // Handle reset after the frame
         if self.reset_requested {
@@ -756,11 +822,11 @@ impl App for PhysicsTestbed {
         let width = ctx.size.0 as i32;
         let height = ctx.size.1 as i32;
 
-        // Reserve space for top bar
+        // Reserve space for top bar only (status is now overlay in each view)
         let top_bar_height = 40;
-        let label_height = 25;
-        let render_height = height - top_bar_height - label_height;
+        let render_height = height - top_bar_height;
         let half_width = width / 2;
+        let half_height = render_height / 2;
 
         // Clear the entire window first
         unsafe {
@@ -769,82 +835,64 @@ impl App for PhysicsTestbed {
             ctx.gl.clear(COLOR_BUFFER_BIT | DEPTH_BUFFER_BIT);
         }
 
-        // Get camera target for consistent rendering
-        let camera_target = self.orbit_controller.target;
-
         // Collect object sizes for rendering
         let object_sizes: Vec<Vec3> = self.object_settings.iter().map(|s| s.size).collect();
 
-        // Render left scene (cuboid ground, uses ground-1)
-        if let Some(scene) = &self.left_scene {
-            Self::render_scene(
-                ctx.gl,
-                scene,
-                &self.mesh_renderer,
-                &self.camera,
-                camera_target,
-                0,
-                0,
-                half_width,
-                render_height,
-                -6.0,
-                self.left_ground_settings.size,
-                self.left_ground_settings.center,
-                &object_sizes,
-            );
+        // Quadrant layout (0=top-left, 1=top-right, 2=bottom-left, 3=bottom-right)
+        let quadrants = [
+            (0, half_height),          // Scene 0: Top-left (Cuboid)
+            (half_width, half_height), // Scene 1: Top-right (Mesh)
+            (0, 0),                    // Scene 2: Bottom-left (Terrain)
+            (half_width, 0),           // Scene 3: Bottom-right (Empty)
+        ];
+
+        // Render all 4 scenes with shared camera
+        for (i, scene_opt) in self.scenes.iter().enumerate() {
+            if let Some(scene) = scene_opt {
+                let (vp_x, vp_y) = quadrants[i];
+                Self::render_scene(
+                    ctx.gl,
+                    scene,
+                    &self.mesh_renderer,
+                    &self.camera,
+                    vp_x,
+                    vp_y,
+                    half_width,
+                    half_height,
+                    self.ground_settings.size,
+                    self.ground_settings.center,
+                    &object_sizes,
+                );
+            }
         }
 
-        // Render right scene (terrain ground, uses ground-2)
-        if let Some(scene) = &self.right_scene {
-            Self::render_scene(
-                ctx.gl,
-                scene,
-                &self.mesh_renderer,
-                &self.camera,
-                camera_target,
-                half_width,
-                0,
-                half_width,
-                render_height,
-                6.0,
-                self.right_ground_settings.size,
-                self.right_ground_settings.center,
-                &object_sizes,
-            );
-        }
-
-        // Draw divider line between viewports
+        // Draw divider lines between quadrants
         unsafe {
             ctx.gl.viewport(0, 0, width, height);
+
+            // Vertical divider
             ctx.gl.scissor(half_width - 1, 0, 2, render_height);
             ctx.gl.enable(SCISSOR_TEST);
             ctx.gl.clear_color(0.4, 0.4, 0.4, 1.0);
             ctx.gl.clear(COLOR_BUFFER_BIT);
+
+            // Horizontal divider
+            ctx.gl.scissor(0, half_height - 1, width, 2);
+            ctx.gl.clear(COLOR_BUFFER_BIT);
+
             ctx.gl.disable(SCISSOR_TEST);
         }
     }
 
-    fn ui(&mut self, _ctx: &FrameContext, egui_ctx: &egui::Context) {
-        // Show first object state for status display (could be expanded to show all)
-        let left_state_text = self
-            .left_scene
-            .as_ref()
-            .and_then(|s| s.states.first().map(|state| format!("Cuboid: {}", state.format_compact())))
-            .unwrap_or_else(|| "Cuboid: N/A".to_string());
-        let right_state_text = self
-            .right_scene
-            .as_ref()
-            .and_then(|s| s.states.first().map(|state| format!("Terrain: {}", state.format_compact())))
-            .unwrap_or_else(|| "Terrain: N/A".to_string());
+    fn ui(&mut self, ctx: &FrameContext, egui_ctx: &egui::Context) {
         let frame_count = self.frame_count;
-        let label_height_f = 25.0;
 
-        // Top bar with dropdown
+        // Top bar
         egui::TopBottomPanel::top("top_panel").show(egui_ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.heading("Physics Testbed");
                 ui.separator();
-                ui.label("Setup: Single Falling Cube");
+                ui.label("4-Scene Collider Comparison");
                 ui.separator();
 
                 if ui.button("Reset").clicked() {
@@ -856,63 +904,50 @@ impl App for PhysicsTestbed {
             });
         });
 
-        // Physics state labels above viewports
-        egui::TopBottomPanel::bottom("state_panel")
-            .frame(egui::Frame::NONE.fill(egui::Color32::from_gray(30)))
-            .show(egui_ctx, |ui| {
-                ui.set_height(label_height_f);
-                ui.horizontal(|ui| {
-                    let available_width = ui.available_width();
-                    let half = available_width / 2.0;
-
-                    // Left scene state
-                    ui.allocate_ui_with_layout(
-                        egui::vec2(half - 5.0, label_height_f),
-                        egui::Layout::left_to_right(egui::Align::Center),
-                        |ui| {
-                            ui.label(
-                                egui::RichText::new(&left_state_text)
-                                    .monospace()
-                                    .color(egui::Color32::LIGHT_GREEN),
-                            );
-                        },
-                    );
-
-                    ui.separator();
-
-                    // Right scene state
-                    ui.allocate_ui_with_layout(
-                        egui::vec2(half - 5.0, label_height_f),
-                        egui::Layout::left_to_right(egui::Align::Center),
-                        |ui| {
-                            ui.label(
-                                egui::RichText::new(&right_state_text)
-                                    .monospace()
-                                    .color(egui::Color32::LIGHT_BLUE),
-                            );
-                        },
-                    );
-                });
-            });
-
-        // Central panel for camera control hint
+        // Central panel for status overlays
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE)
             .show(egui_ctx, |ui| {
-                let rect = ui.available_rect_before_wrap();
+                let painter = ui.painter();
 
-                // Show hint at bottom
-                let hint_rect = egui::Rect::from_min_size(
-                    egui::pos2(rect.min.x + 5.0, rect.max.y - 20.0),
-                    egui::vec2(300.0, 20.0),
-                );
-                ui.painter().text(
-                    hint_rect.min,
-                    egui::Align2::LEFT_TOP,
-                    "(Drag: orbit, Scroll: zoom)",
-                    egui::FontId::proportional(12.0),
-                    egui::Color32::from_gray(120),
-                );
+                // Calculate quadrant rects for status overlays
+                let width = ctx.size.0 as f32;
+                let height = ctx.size.1 as f32;
+                let top_bar_height = 40.0;
+                let render_height = height - top_bar_height;
+                let half_width = width / 2.0;
+                let half_height = render_height / 2.0;
+
+                // Quadrant rects in egui coordinates (Y increases downward)
+                let quadrant_rects = [
+                    // Top-left (Cuboid)
+                    egui::Rect::from_min_size(
+                        egui::pos2(0.0, top_bar_height),
+                        egui::vec2(half_width, half_height),
+                    ),
+                    // Top-right (Mesh)
+                    egui::Rect::from_min_size(
+                        egui::pos2(half_width, top_bar_height),
+                        egui::vec2(half_width, half_height),
+                    ),
+                    // Bottom-left (Terrain)
+                    egui::Rect::from_min_size(
+                        egui::pos2(0.0, top_bar_height + half_height),
+                        egui::vec2(half_width, half_height),
+                    ),
+                    // Bottom-right (Empty)
+                    egui::Rect::from_min_size(
+                        egui::pos2(half_width, top_bar_height + half_height),
+                        egui::vec2(half_width, half_height),
+                    ),
+                ];
+
+                // Render status overlay for each scene
+                for (i, scene_opt) in self.scenes.iter().enumerate() {
+                    if let Some(scene) = scene_opt {
+                        Self::render_status_overlay(painter, scene, quadrant_rects[i]);
+                    }
+                }
             });
     }
 }

@@ -6,8 +6,8 @@
 //! Use `--config <path>` to specify a config file.
 
 use app::{run_app, AppConfig};
-use testbed::PhysicsTestbed;
 use std::path::PathBuf;
+use testbed::PhysicsTestbed;
 
 fn main() {
     println!("=== Physics Component Testbed ===");
