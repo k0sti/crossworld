@@ -35,7 +35,10 @@ pub enum MouseEvent {
     /// Move mouse to position
     Move { x: f32, y: f32 },
     /// Click or release a mouse button
-    Click { button: MouseButtonType, pressed: bool },
+    Click {
+        button: MouseButtonType,
+        pressed: bool,
+    },
 }
 
 /// A scheduled input event
@@ -72,7 +75,8 @@ pub struct EditorTestConfig {
 impl EditorTestConfig {
     /// Load configuration from a Lua file
     pub fn from_file(path: &Path) -> Result<Self, String> {
-        let mut lua_config = LuaConfig::new().map_err(|e| format!("Failed to create Lua: {}", e))?;
+        let mut lua_config =
+            LuaConfig::new().map_err(|e| format!("Failed to create Lua: {}", e))?;
 
         // Load the file
         lua_config.load_file(path)?;
@@ -86,14 +90,15 @@ impl EditorTestConfig {
         let globals = lua.globals();
 
         // Parse debug_frames
-        let debug_frames: Option<u64> = globals
-            .get::<LuaValue>("debug_frames")
-            .ok()
-            .and_then(|v| match v {
-                LuaValue::Integer(i) if i > 0 => Some(i as u64),
-                LuaValue::Number(n) if n > 0.0 => Some(n as u64),
-                _ => None,
-            });
+        let debug_frames: Option<u64> =
+            globals
+                .get::<LuaValue>("debug_frames")
+                .ok()
+                .and_then(|v| match v {
+                    LuaValue::Integer(i) if i > 0 => Some(i as u64),
+                    LuaValue::Number(n) if n > 0.0 => Some(n as u64),
+                    _ => None,
+                });
 
         // Parse events
         let events = Self::parse_events(&globals)?;
@@ -102,19 +107,16 @@ impl EditorTestConfig {
         let captures = Self::parse_captures(&globals, base_dir)?;
 
         // Parse output_dir
-        let output_dir: Option<PathBuf> = globals
-            .get::<String>("output_dir")
-            .ok()
-            .map(|s| {
-                let p = PathBuf::from(&s);
-                if p.is_absolute() {
-                    p
-                } else if let Some(base) = base_dir {
-                    base.join(p)
-                } else {
-                    p
-                }
-            });
+        let output_dir: Option<PathBuf> = globals.get::<String>("output_dir").ok().map(|s| {
+            let p = PathBuf::from(&s);
+            if p.is_absolute() {
+                p
+            } else if let Some(base) = base_dir {
+                base.join(p)
+            } else {
+                p
+            }
+        });
 
         Ok(Self {
             debug_frames,
@@ -139,7 +141,8 @@ impl EditorTestConfig {
             let frame_val: LuaValue = event_table
                 .get("frame")
                 .map_err(|e| format!("Event missing 'frame': {}", e))?;
-            let frame = extract_u32(&frame_val).map_err(|e| format!("Invalid frame: {}", e))? as u64;
+            let frame =
+                extract_u32(&frame_val).map_err(|e| format!("Invalid frame: {}", e))? as u64;
 
             let event_type: String = event_table
                 .get("type")
@@ -183,7 +186,10 @@ impl EditorTestConfig {
     }
 
     /// Parse capture requests from Lua table
-    fn parse_captures(globals: &LuaTable, base_dir: Option<&Path>) -> Result<Vec<ScheduledCapture>, String> {
+    fn parse_captures(
+        globals: &LuaTable,
+        base_dir: Option<&Path>,
+    ) -> Result<Vec<ScheduledCapture>, String> {
         let captures_table: Option<LuaTable> = globals.get("captures").ok();
         let Some(table) = captures_table else {
             return Ok(Vec::new());
@@ -197,7 +203,8 @@ impl EditorTestConfig {
             let frame_val: LuaValue = capture_table
                 .get("frame")
                 .map_err(|e| format!("Capture missing 'frame': {}", e))?;
-            let frame = extract_u32(&frame_val).map_err(|e| format!("Invalid frame: {}", e))? as u64;
+            let frame =
+                extract_u32(&frame_val).map_err(|e| format!("Invalid frame: {}", e))? as u64;
 
             let path_str: String = capture_table
                 .get("path")

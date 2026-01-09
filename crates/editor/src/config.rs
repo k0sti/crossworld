@@ -75,8 +75,8 @@ impl EditorConfig {
                 .map_err(|e| format!("Failed to create config directory: {}", e))?;
         }
 
-        let content =
-            toml::to_string_pretty(self).map_err(|e| format!("Failed to serialize config: {}", e))?;
+        let content = toml::to_string_pretty(self)
+            .map_err(|e| format!("Failed to serialize config: {}", e))?;
 
         std::fs::write(&path, content).map_err(|e| format!("Failed to write config: {}", e))?;
 

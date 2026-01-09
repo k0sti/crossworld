@@ -1,12 +1,19 @@
 //! Hot-reload runtime for the game library
 //!
 //! This binary watches the game library for changes and hot-reloads it.
+//!
+//! Usage:
+//!   cargo run -p game                          # Normal hot-reload mode
+//!   cargo run -p game -- --debug N             # Run N frames with debug output
+//!   cargo run -p game -- --review PATH         # Run with review panel
+//!
+//! In debug mode, additional logging is output for world/cube state verification.
 
 #![allow(clippy::type_complexity)]
 
 use app::{
-    create_controller_backend, App, ControllerBackend, CursorMode, FrameContext,
-    InputState, CREATE_APP_SYMBOL,
+    create_controller_backend, App, ControllerBackend, CursorMode, FrameContext, InputState,
+    CREATE_APP_SYMBOL,
 };
 use glam::Vec2;
 use glow::{Context, HasContext};
@@ -31,6 +38,101 @@ use winit::window::{CursorGrabMode, Window, WindowId};
 
 #[cfg(target_os = "linux")]
 use winit::platform::x11::EventLoopBuilderExtX11;
+
+/// Debug mode configuration
+#[derive(Debug, Clone)]
+struct DebugConfig {
+    /// Number of frames to run before exiting
+    frames: u64,
+}
+
+/// Review panel configuration
+#[derive(Debug, Clone)]
+struct ReviewConfig {
+    /// Path to the review document (kept for reference)
+    #[allow(dead_code)]
+    path: PathBuf,
+    /// Content of the review document
+    content: String,
+    /// User comment input buffer
+    comment: String,
+}
+
+/// Command line configuration
+#[derive(Debug, Clone, Default)]
+struct CliConfig {
+    debug: Option<DebugConfig>,
+    review: Option<ReviewConfig>,
+}
+
+fn parse_args() -> CliConfig {
+    let args: Vec<String> = std::env::args().collect();
+    let mut config = CliConfig::default();
+
+    let mut i = 1;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--debug" => {
+                if i + 1 < args.len() {
+                    match args[i + 1].parse::<u64>() {
+                        Ok(n) => {
+                            config.debug = Some(DebugConfig { frames: n });
+                            println!("[Game] Debug mode: running {} frames", n);
+                        }
+                        Err(_) => {
+                            eprintln!("Error: --debug requires a number of frames");
+                            std::process::exit(1);
+                        }
+                    }
+                    i += 1;
+                } else {
+                    eprintln!("Error: --debug requires a number of frames");
+                    std::process::exit(1);
+                }
+            }
+            "--review" | "-r" => {
+                if i + 1 < args.len() {
+                    let path = PathBuf::from(&args[i + 1]);
+                    match std::fs::read_to_string(&path) {
+                        Ok(content) => {
+                            config.review = Some(ReviewConfig {
+                                path: path.clone(),
+                                content,
+                                comment: String::new(),
+                            });
+                            println!("[Game] Review document: {}", path.display());
+                        }
+                        Err(e) => {
+                            eprintln!("Error: Failed to read review document: {}", e);
+                            std::process::exit(1);
+                        }
+                    }
+                    i += 1;
+                } else {
+                    eprintln!("Error: --review requires a file path");
+                    std::process::exit(1);
+                }
+            }
+            "--help" | "-h" => {
+                println!("Usage: game [OPTIONS]");
+                println!();
+                println!("Options:");
+                println!("  --debug N       Run only N frames with debug output");
+                println!("  --review PATH   Display a review panel with markdown document");
+                println!("  --help          Show this help message");
+                std::process::exit(0);
+            }
+            _ => {
+                eprintln!("Unknown argument: {}", args[i]);
+                eprintln!("Use --help for usage information");
+                std::process::exit(1);
+            }
+        }
+        i += 1;
+    }
+
+    config
+}
 
 /// Get the platform-specific library filename
 fn get_lib_name() -> &'static str {
@@ -88,6 +190,9 @@ struct GameRuntime {
     >,
     last_reload_time: Option<Duration>,
     last_lib_modified: Option<std::time::SystemTime>,
+
+    // CLI configuration
+    cli_config: CliConfig,
 }
 
 impl GameRuntime {
@@ -95,13 +200,11 @@ impl GameRuntime {
         file_events: Arc<
             Mutex<
                 Receiver<
-                    std::result::Result<
-                        Vec<DebouncedEvent>,
-                        notify_debouncer_mini::notify::Error,
-                    >,
+                    std::result::Result<Vec<DebouncedEvent>, notify_debouncer_mini::notify::Error>,
                 >,
             >,
         >,
+        cli_config: CliConfig,
     ) -> Self {
         let controller_backend = create_controller_backend();
 
@@ -122,6 +225,21 @@ impl GameRuntime {
             file_events,
             last_reload_time: None,
             last_lib_modified: None,
+            cli_config,
+        }
+    }
+
+    /// Check if debug mode is enabled
+    fn is_debug_mode(&self) -> bool {
+        self.cli_config.debug.is_some()
+    }
+
+    /// Check if we should exit due to debug frame limit
+    fn should_exit_debug(&self) -> bool {
+        if let Some(ref debug) = self.cli_config.debug {
+            self.frame_count >= debug.frames
+        } else {
+            false
         }
     }
 
@@ -211,9 +329,11 @@ impl GameRuntime {
     unsafe fn unload_app(&mut self) {
         println!("[GameRuntime] Unloading app library");
 
-        if let (Some(mut app), Some(window), Some(gl)) =
-            (self.app_instance.take(), self.window.as_ref(), self.gl.as_ref())
-        {
+        if let (Some(mut app), Some(window), Some(gl)) = (
+            self.app_instance.take(),
+            self.window.as_ref(),
+            self.gl.as_ref(),
+        ) {
             println!("[GameRuntime] Calling app.shutdown()");
             let size = window.inner_size();
             let ctx = FrameContext {
@@ -301,8 +421,7 @@ impl ApplicationHandler for GameRuntime {
             .with_alpha_size(8)
             .with_transparency(false);
 
-        let display_builder =
-            DisplayBuilder::new().with_window_attributes(Some(window_attributes));
+        let display_builder = DisplayBuilder::new().with_window_attributes(Some(window_attributes));
 
         let (window, gl_config) = display_builder
             .build(event_loop, template, |configs| {
@@ -492,7 +611,8 @@ impl ApplicationHandler for GameRuntime {
                                         // Only reload if modification time actually changed
                                         if let Ok(metadata) = std::fs::metadata(&lib_path) {
                                             if let Ok(modified) = metadata.modified() {
-                                                let has_changed = self.last_lib_modified
+                                                let has_changed = self
+                                                    .last_lib_modified
                                                     .map(|last| modified > last)
                                                     .unwrap_or(true);
 
@@ -520,13 +640,7 @@ impl ApplicationHandler for GameRuntime {
                     }
                 }
 
-                if let (
-                    Some(window),
-                    Some(gl),
-                    Some(app),
-                    Some(gl_context),
-                    Some(gl_surface),
-                ) = (
+                if let (Some(window), Some(gl), Some(app), Some(gl_context), Some(gl_surface)) = (
                     self.window.as_ref(),
                     self.gl.as_ref(),
                     self.app_instance.as_mut(),
@@ -588,6 +702,9 @@ impl ApplicationHandler for GameRuntime {
                     }
 
                     // Render egui UI
+                    let mut should_exit = false;
+                    let mut exit_comment: Option<String> = None;
+
                     if let Some(egui) = &mut self.egui {
                         unsafe {
                             gl.disable(glow::DEPTH_TEST);
@@ -595,8 +712,67 @@ impl ApplicationHandler for GameRuntime {
                             gl.blend_func(glow::SRC_ALPHA, glow::ONE_MINUS_SRC_ALPHA);
                         }
 
+                        let review_config = &mut self.cli_config.review;
+
                         egui.run(window, [size.width, size.height], |egui_ctx| {
                             app.ui(&ctx, egui_ctx);
+
+                            // Render review overlay if configured
+                            if let Some(ref mut review) = review_config {
+                                use egui::{
+                                    Align2, Area, Color32, Frame, Margin, RichText, ScrollArea,
+                                    TextEdit,
+                                };
+
+                                Area::new(egui::Id::new("review_panel"))
+                                    .anchor(Align2::RIGHT_TOP, [-10.0, 10.0])
+                                    .show(egui_ctx, |ui| {
+                                        Frame::popup(ui.style())
+                                            .fill(Color32::from_rgba_unmultiplied(20, 20, 30, 240))
+                                            .inner_margin(Margin::same(16))
+                                            .show(ui, |ui| {
+                                                ui.set_max_width(400.0);
+                                                ui.set_max_height(500.0);
+
+                                                ui.heading(
+                                                    RichText::new("Review").color(Color32::WHITE),
+                                                );
+                                                ui.separator();
+
+                                                ScrollArea::vertical().max_height(300.0).show(
+                                                    ui,
+                                                    |ui| {
+                                                        ui.label(
+                                                            RichText::new(&*review.content)
+                                                                .color(Color32::LIGHT_GRAY),
+                                                        );
+                                                    },
+                                                );
+
+                                                ui.separator();
+                                                ui.label(
+                                                    RichText::new("Response:")
+                                                        .color(Color32::WHITE),
+                                                );
+                                                ui.add(
+                                                    TextEdit::multiline(&mut review.comment)
+                                                        .desired_width(380.0)
+                                                        .desired_rows(4)
+                                                        .hint_text("Enter your response..."),
+                                                );
+
+                                                ui.horizontal(|ui| {
+                                                    if ui.button("Submit").clicked() {
+                                                        should_exit = true;
+                                                        exit_comment = Some(review.comment.clone());
+                                                    }
+                                                    if ui.button("Cancel").clicked() {
+                                                        should_exit = true;
+                                                    }
+                                                });
+                                            });
+                                    });
+                            }
                         });
 
                         unsafe {
@@ -606,9 +782,44 @@ impl ApplicationHandler for GameRuntime {
                     }
 
                     gl_surface.swap_buffers(gl_context).unwrap();
-                    window.request_redraw();
 
                     self.frame_count += 1;
+
+                    // Check debug mode exit condition
+                    if self.should_exit_debug() {
+                        if let Some(ref debug) = self.cli_config.debug {
+                            println!(
+                                "[DEBUG] Frame {}/{} - Exiting debug mode",
+                                self.frame_count, debug.frames
+                            );
+                        }
+                        unsafe {
+                            self.unload_app();
+                        }
+                        event_loop.exit();
+                        return;
+                    }
+
+                    // Check review panel exit
+                    if should_exit {
+                        if let Some(comment) = exit_comment {
+                            println!("{}", comment);
+                        }
+                        unsafe {
+                            self.unload_app();
+                        }
+                        event_loop.exit();
+                        return;
+                    }
+
+                    // Debug frame logging
+                    if self.is_debug_mode() {
+                        if let Some(ref debug) = self.cli_config.debug {
+                            println!("[DEBUG] Frame {}/{}", self.frame_count, debug.frames);
+                        }
+                    }
+
+                    window.request_redraw();
                     self.reset_frame_deltas();
                 }
             }
@@ -632,13 +843,18 @@ impl Drop for GameRuntime {
 }
 
 fn main() {
+    // Parse command line arguments
+    let cli_config = parse_args();
+
+    // Set environment variable for debug mode so the library can detect it
+    if cli_config.debug.is_some() {
+        std::env::set_var("GAME_DEBUG", "1");
+    }
+
     println!("[GameRuntime] Starting hot-reload runtime");
 
     let lib_path = get_lib_path();
-    println!(
-        "[GameRuntime] Watching for changes: {}",
-        lib_path.display()
-    );
+    println!("[GameRuntime] Watching for changes: {}", lib_path.display());
 
     // Setup file watcher for hot-reload
     let (tx, rx) = channel();
@@ -668,7 +884,7 @@ fn main() {
 
     event_loop.set_control_flow(ControlFlow::Poll);
 
-    let mut game_runtime = GameRuntime::new(file_events);
+    let mut game_runtime = GameRuntime::new(file_events, cli_config);
 
     event_loop
         .run_app(&mut game_runtime)

@@ -48,7 +48,8 @@ impl EditorHit {
         let scale_factor = 1.0 / (1 << depth) as f32; // 1 / 2^depth
 
         // Voxel center in root's [-1,1]³ space
-        let voxel_center_root = (hit.coord.pos.as_vec3() + Vec3::splat(0.5)) * 2.0 * scale_factor - Vec3::ONE;
+        let voxel_center_root =
+            (hit.coord.pos.as_vec3() + Vec3::splat(0.5)) * 2.0 * scale_factor - Vec3::ONE;
 
         // Hit offset from voxel center, scaled to root space
         let hit_offset_root = hit.pos * scale_factor;
@@ -174,7 +175,7 @@ impl EditorHit {
 
         // A position is on a boundary if it's very close to an integer
         let frac = pos_on_axis - pos_on_axis.floor();
-        let is_boundary = frac < 0.001 || frac > 0.999;
+        let is_boundary = !(0.001..=0.999).contains(&frac);
 
         // Also check: if hit depth equals cursor depth, it's definitely a boundary case
         // because we hit a voxel face at exactly the cursor's resolution
@@ -344,7 +345,11 @@ mod tests {
         // Ray direction should be forward (towards target)
         let expected_dir = (Vec3::ZERO - camera.position).normalize();
         let dot = ray.direction.dot(expected_dir);
-        assert!(dot > 0.99, "Ray direction should be mostly forward, got dot={}", dot);
+        assert!(
+            dot > 0.99,
+            "Ray direction should be mostly forward, got dot={}",
+            dot
+        );
     }
 
     #[test]
