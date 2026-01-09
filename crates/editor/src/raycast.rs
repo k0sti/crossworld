@@ -29,10 +29,13 @@ impl EditorHit {
     /// # Arguments
     /// * `hit` - The hit result from cube raycast
     /// * `cube_position` - World position of the cube's center
-    /// * `cube_scale` - Scale factor of the cube in world space
+    /// * `cube_scale` - Scale factor of the cube in world space (edge size)
     pub fn from_cube_hit(hit: Hit<u8>, cube_position: Vec3, cube_scale: f32) -> Self {
         // Convert hit position from cube's [-1,1]³ space to world space
-        let world_pos = cube_position + hit.pos * cube_scale;
+        // The mesh occupies [-0.5, 0.5] * cube_scale in world space,
+        // so we multiply by cube_scale/2 (half-extent)
+        let half_scale = cube_scale * 0.5;
+        let world_pos = cube_position + hit.pos * half_scale;
 
         // Voxel coordinate comes directly from the cube coordinate
         let voxel_coord = hit.coord.pos;
@@ -64,10 +67,13 @@ impl EditorHit {
     /// # Arguments
     /// * `depth` - Target depth level (e.g., 4 for 16x16x16)
     /// * `cube_position` - World position of the cube's center
-    /// * `cube_scale` - Scale factor of the cube in world space
+    /// * `cube_scale` - Scale factor of the cube in world space (edge size)
     pub fn voxel_at_depth(&self, depth: u32, cube_position: Vec3, cube_scale: f32) -> IVec3 {
         // Convert world position back to cube's [-1,1]³ space
-        let cube_pos = (self.world_pos - cube_position) / cube_scale;
+        // World space: cube_position + [-0.5, 0.5] * cube_scale
+        // Raycast space: [-1, 1]
+        let half_scale = cube_scale * 0.5;
+        let cube_pos = (self.world_pos - cube_position) / half_scale;
 
         // Convert to [0, 2^depth] range and floor to get voxel index
         // cube space: [-1, 1] → voxel space: [0, 2^depth]
@@ -159,7 +165,7 @@ pub fn mouse_to_ray(mouse_pos: Vec2, screen_size: Vec2, camera: &Camera) -> Ray 
 /// * `ray` - The ray to cast
 /// * `cube` - The cube to raycast against
 /// * `cube_position` - World position of the cube's center
-/// * `cube_scale` - Scale factor of the cube in world space
+/// * `cube_scale` - Scale factor of the cube in world space (edge size)
 /// * `max_depth` - Optional maximum depth to traverse (for LOD)
 ///
 /// # Returns
@@ -172,7 +178,10 @@ pub fn raycast_cube(
     max_depth: Option<u32>,
 ) -> Option<EditorHit> {
     // Transform ray from world space to cube's [-1,1]³ space
-    let cube_origin = (ray.origin - cube_position) / cube_scale;
+    // The mesh occupies [-0.5, 0.5] * cube_scale in world space,
+    // which maps to [-1, 1] in raycast space
+    let half_scale = cube_scale * 0.5;
+    let cube_origin = (ray.origin - cube_position) / half_scale;
     let cube_direction = ray.direction; // Direction doesn't need scaling
 
     // Set up raycast options
@@ -284,13 +293,14 @@ mod tests {
         let cube = Cube::Solid(42u8);
         let ray = Ray::new(Vec3::new(-5.0, 0.0, 0.0), Vec3::X);
 
-        // With scale 2.0, cube extends from -2 to 2 in world space
+        // With scale 2.0, cube extends from -1 to 1 in world space
+        // (cube_scale is edge size, so half-extent = cube_scale/2 = 1.0)
         let hit = raycast_cube(&ray, &cube, Vec3::ZERO, 2.0, None);
 
         assert!(hit.is_some());
         let hit = hit.unwrap();
-        // Hit should be at x = -2.0 (edge of scaled cube)
-        assert!((hit.world_pos.x - (-2.0)).abs() < 0.01);
+        // Hit should be at x = -1.0 (edge of scaled cube)
+        assert!((hit.world_pos.x - (-1.0)).abs() < 0.01);
     }
 
     #[test]
@@ -299,12 +309,13 @@ mod tests {
         let cube_position = Vec3::new(10.0, 0.0, 0.0);
         let ray = Ray::new(Vec3::new(5.0, 0.0, 0.0), Vec3::X);
 
-        // Cube at x=10, ray starts at x=5, should hit at x=9
+        // Cube centered at x=10 with scale 1.0, so extends from 9.5 to 10.5
+        // Ray starts at x=5, pointing +X, should hit at x=9.5
         let hit = raycast_cube(&ray, &cube, cube_position, 1.0, None);
 
         assert!(hit.is_some());
         let hit = hit.unwrap();
-        assert!((hit.world_pos.x - 9.0).abs() < 0.01);
+        assert!((hit.world_pos.x - 9.5).abs() < 0.01);
     }
 
     #[test]

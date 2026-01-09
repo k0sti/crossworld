@@ -2,6 +2,7 @@
 //!
 //! A native OpenGL voxel editor using glow/egui/winit.
 
+pub mod config;
 pub mod cursor;
 pub mod editing;
 pub mod palette;
@@ -17,6 +18,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use winit::keyboard::KeyCode;
 
+use crate::config::EditorConfig;
 use crate::cursor::{CubeCursor, FocusMode};
 use crate::editing::EditorState;
 use crate::palette::{ColorPalette, MaterialPalette, ModelPalette};
@@ -24,8 +26,10 @@ use crate::raycast::{raycast_from_mouse, EditorHit};
 use crate::ui::{FileOperation, FileState};
 
 /// Constants for the edited cube
+/// Position is the CENTER of the cube (renderer uses center-aligned coordinates)
 const CUBE_POSITION: Vec3 = Vec3::ZERO;
-const CUBE_SCALE: f32 = 2.0;
+/// World scale - edge size of 1 unit
+const CUBE_SCALE: f32 = 1.0;
 /// Depth for edited cube (4 = 16x16x16 voxels)
 const EDIT_DEPTH: u32 = 4;
 
@@ -56,6 +60,9 @@ pub struct EditorApp {
 
     // File state
     file_state: FileState,
+
+    // Editor configuration (persisted)
+    config: EditorConfig,
 }
 
 impl Default for EditorApp {
@@ -67,10 +74,18 @@ impl Default for EditorApp {
 impl EditorApp {
     /// Create a new editor application
     pub fn new() -> Self {
+        // Load configuration from file
+        let config = EditorConfig::load();
+
         // Camera target at origin (where voxel editing typically happens)
         let camera_target = Vec3::ZERO;
         // Camera positioned above and to the side, looking at the editing area
-        let camera_position = Vec3::new(5.0, 4.0, 5.0);
+        let camera_distance = config.camera_distance;
+        let camera_position = Vec3::new(
+            camera_distance * 0.7,
+            camera_distance * 0.5,
+            camera_distance * 0.7,
+        );
 
         // Configure orbit controller for editor-friendly controls
         let orbit_config = OrbitControllerConfig {
@@ -95,6 +110,7 @@ impl EditorApp {
             material_palette: MaterialPalette::new(),
             model_palette: ModelPalette::new(),
             file_state: FileState::new(),
+            config,
         }
     }
 
@@ -225,6 +241,9 @@ impl EditorApp {
         self.cube = Some(Rc::clone(&cube));
         self.file_state.set_file(path.clone());
 
+        // Update config with last model path
+        self.config.set_last_model_path(Some(path.clone()));
+
         // Re-upload mesh
         unsafe {
             self.mesh_renderer.clear_meshes(gl);
@@ -252,6 +271,8 @@ impl EditorApp {
         match std::fs::write(&path, content) {
             Ok(()) => {
                 self.file_state.set_file(path.clone());
+                // Update config with last model path
+                self.config.set_last_model_path(Some(path.clone()));
                 println!("[Editor] Saved CSM file: {:?}", path);
             }
             Err(e) => {
@@ -354,6 +375,20 @@ impl App for EditorApp {
             return;
         }
 
+        // Try to load the last opened model, or create a fresh one
+        if let Some(ref last_path) = self.config.last_model_path.clone() {
+            if last_path.exists() {
+                println!("[Editor] Loading last model: {:?}", last_path);
+                self.load_csm(ctx.gl, last_path.clone());
+                return;
+            } else {
+                println!(
+                    "[Editor] Last model not found: {:?}, creating new cube",
+                    last_path
+                );
+            }
+        }
+
         // Create initial cube - solid with a colorful material (material index 156 = green-ish)
         let cube = Rc::new(Cube::Solid(156u8));
         self.cube = Some(Rc::clone(&cube));
@@ -382,8 +417,11 @@ impl App for EditorApp {
         }
 
         // Handle camera zoom with scroll wheel
+        // Scale scroll delta to get reasonable zoom amount
+        // (OrbitController's apply_zoom uses 0.01 multiplier designed for egui smooth_scroll)
         if input.scroll_delta.y.abs() > 0.01 {
-            self.orbit_controller.zoom(input.scroll_delta.y, &mut self.camera);
+            let zoom_delta = input.scroll_delta.y * 100.0; // Scale up for OrbitController
+            self.orbit_controller.zoom(zoom_delta, &mut self.camera);
         }
 
         // Handle Tab key to toggle Near/Far focus mode
@@ -468,12 +506,27 @@ impl App for EditorApp {
             }
         }
 
+        // Render white wireframe around the ground cube
+        // CUBE_POSITION is already the center (renderer uses center-aligned coordinates)
+        unsafe {
+            self.mesh_renderer.render_cubebox_wireframe_colored(
+                ctx.gl,
+                CUBE_POSITION,
+                Quat::IDENTITY,
+                Vec3::ONE,
+                CUBE_SCALE,
+                [1.0, 1.0, 1.0], // White
+                &self.camera,
+                width,
+                height,
+            );
+        }
+
         // Render cursor wireframe when valid
         if self.cursor.valid {
-            // Calculate cursor wireframe position and size
-            // The cursor position is the corner of the voxel, we need to center the wireframe
-            let cursor_size = self.cursor.render_size();
-            let cursor_center = self.cursor.position + cursor_size * 0.5;
+            // Get cursor position and size in world space
+            let cursor_center = self.cursor.world_center(CUBE_POSITION, CUBE_SCALE);
+            let cursor_size = self.cursor.world_size(CUBE_SCALE);
             let cursor_color = self.cursor.wireframe_color();
 
             unsafe {
@@ -482,7 +535,7 @@ impl App for EditorApp {
                     cursor_center,
                     Quat::IDENTITY,
                     Vec3::ONE, // Normalized size (full box)
-                    cursor_size.x, // Scale to cursor size
+                    cursor_size.x, // Scale to cursor size (assuming uniform)
                     cursor_color,
                     &self.camera,
                     width,
@@ -532,14 +585,16 @@ impl App for EditorApp {
             ui::StatusBarInfo::from_state(&self.cursor, &self.editor_state, ctx.delta_time);
         ui::show_status_bar(egui_ctx, &status_info);
 
-        // Color palette panel on the right side
-        ui::show_color_palette_panel(egui_ctx, &mut self.color_palette, &mut self.editor_state);
-
-        // Material palette panel on the left side
-        ui::show_material_palette_panel(egui_ctx, &mut self.material_palette, &mut self.editor_state);
-
-        // Model palette panel on the left side (below materials)
-        ui::show_model_palette_panel(egui_ctx, &mut self.model_palette);
+        // Unified sidebar on the left with all palettes and cursor info
+        let _sidebar_result = ui::show_unified_sidebar(
+            egui_ctx,
+            &mut self.cursor,
+            EDIT_DEPTH,
+            &mut self.color_palette,
+            &mut self.material_palette,
+            &mut self.model_palette,
+            &mut self.editor_state,
+        );
 
         // Handle file operations after UI rendering
         if let Some(operation) = file_operation {
