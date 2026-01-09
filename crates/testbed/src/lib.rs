@@ -709,11 +709,7 @@ impl PhysicsTestbed {
     }
 
     /// Render status overlay for a scene
-    fn render_status_overlay(
-        painter: &egui::Painter,
-        scene: &PhysicsScene,
-        rect: egui::Rect,
-    ) {
+    fn render_status_overlay(painter: &egui::Painter, scene: &PhysicsScene, rect: egui::Rect) {
         let text = scene
             .states
             .first()
