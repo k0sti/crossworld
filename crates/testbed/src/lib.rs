@@ -4,8 +4,8 @@
 //! - Left: Simple flat ground using cuboid collider
 //! - Right: Flat ground constructed from Cube objects using terrain collider
 //!
-//! Scene configuration can be loaded from Steel (Scheme) files when the
-//! `steel` feature is enabled. See `config/scene.scm` for an example.
+//! Scene configuration can be loaded from Lua files when the
+//! `lua` feature is enabled. See `config/scene.lua` for an example.
 
 #![allow(clippy::too_many_arguments)]
 
@@ -19,15 +19,12 @@ use cube::Cube;
 use glam::{Quat, Vec3};
 use glow::{Context, HasContext, COLOR_BUFFER_BIT, DEPTH_BUFFER_BIT, SCISSOR_TEST};
 use renderer::{Camera, MeshRenderer, OrbitController, OrbitControllerConfig};
+use std::path::Path;
 use std::rc::Rc;
 use std::time::Instant;
 
-#[cfg(feature = "steel")]
-mod steel_scene;
-#[cfg(feature = "steel")]
-use steel_scene::{CameraConfig, GroundConfig, TestbedConfig};
-#[cfg(feature = "steel")]
-use std::path::Path;
+pub mod lua_scene;
+use lua_scene::{CameraConfig, GroundConfig, TestbedConfig};
 
 /// Physics state for display
 #[derive(Default, Clone)]
@@ -132,7 +129,6 @@ pub struct PhysicsTestbed {
     object_settings: Vec<ObjectSettings>,
 
     // Config file path for reloading
-    #[cfg(feature = "steel")]
     config_path: Option<std::path::PathBuf>,
 
     // UI state
@@ -178,7 +174,6 @@ impl PhysicsTestbed {
             left_ground_settings: GroundSettings::default(),
             right_ground_settings: GroundSettings::default(),
             object_settings: vec![ObjectSettings::default()],
-            #[cfg(feature = "steel")]
             config_path: None,
             reset_requested: false,
             frame_count: 0,
@@ -193,11 +188,10 @@ impl PhysicsTestbed {
         self
     }
 
-    /// Load configuration from a Steel file
+    /// Load configuration from a Lua file
     ///
-    /// Returns a new PhysicsTestbed configured from the Steel scene configuration.
+    /// Returns a new PhysicsTestbed configured from the Lua scene configuration.
     /// Falls back to default configuration if the file doesn't exist or fails to parse.
-    #[cfg(feature = "steel")]
     pub fn from_config_file(path: &Path) -> Self {
         match Self::try_from_config_file(path) {
             Ok(testbed) => testbed,
@@ -209,32 +203,30 @@ impl PhysicsTestbed {
         }
     }
 
-    /// Try to load configuration from a Steel file
-    #[cfg(feature = "steel")]
+    /// Try to load configuration from a Lua file
     pub fn try_from_config_file(path: &Path) -> Result<Self, String> {
-        let mut config = TestbedConfig::new();
+        let mut config = TestbedConfig::new().map_err(|e| format!("Failed to create Lua config: {}", e))?;
         config.load_file(path)?;
 
         // Extract camera configuration
-        let camera_config = config.extract_camera("scene-camera")?;
+        let camera_config = config.extract_camera("scene_camera")?;
 
         // Extract ground configurations:
-        // - Left scene uses cuboid collider, so it needs ground-2 (ground-cuboid)
-        // - Right scene uses terrain collider, so it needs ground-1 (ground-cube)
-        let left_ground_config = config.extract_ground("ground-2")?;
-        let right_ground_config = config.extract_ground("ground-1")?;
+        // - Left scene uses cuboid collider, so it needs ground_2 (ground_cuboid)
+        // - Right scene uses terrain collider, so it needs ground_1 (ground_cube)
+        let left_ground_config = config.extract_ground("ground_2")?;
+        let right_ground_config = config.extract_ground("ground_1")?;
 
-        // Extract object configurations from scene-objects
-        let objects = config.extract_objects("scene-objects")?;
+        // Extract object configurations from scene_objects
+        let objects = config.extract_objects("scene_objects")?;
         if objects.is_empty() {
-            return Err("scene-objects must contain at least one object".to_string());
+            return Err("scene_objects must contain at least one object".to_string());
         }
 
         Self::from_config(path, &camera_config, &left_ground_config, &right_ground_config, &objects)
     }
 
-    /// Convert a GroundConfig to GroundSettings
-    #[cfg(feature = "steel")]
+    /// Convert a GroundConfig to GroundSettings (Lua version)
     fn ground_config_to_settings(ground_config: &GroundConfig) -> GroundSettings {
         match ground_config {
             GroundConfig::SolidCube {
@@ -257,9 +249,8 @@ impl PhysicsTestbed {
         }
     }
 
-    /// Convert an ObjectConfig to ObjectSettings
-    #[cfg(feature = "steel")]
-    fn object_config_to_settings(object_config: &steel_scene::ObjectConfig) -> ObjectSettings {
+    /// Convert an ObjectConfig to ObjectSettings (Lua version)
+    fn object_config_to_settings(object_config: &lua_scene::ObjectConfig) -> ObjectSettings {
         ObjectSettings {
             position: object_config.position.to_vec3(),
             rotation: object_config.rotation.to_quat(),
@@ -269,14 +260,13 @@ impl PhysicsTestbed {
         }
     }
 
-    /// Create testbed from camera and ground configurations
-    #[cfg(feature = "steel")]
+    /// Create testbed from camera and ground configurations (Lua version)
     fn from_config(
         path: &Path,
         camera_config: &CameraConfig,
         left_ground_config: &GroundConfig,
         right_ground_config: &GroundConfig,
-        object_configs: &[steel_scene::ObjectConfig],
+        object_configs: &[lua_scene::ObjectConfig],
     ) -> Result<Self, String> {
         let camera_position = camera_config.position.to_vec3();
         let camera_target = camera_config.look_at.to_vec3();
@@ -319,18 +309,24 @@ impl PhysicsTestbed {
         })
     }
 
-    /// Reload configuration from the config file (if available)
-    #[cfg(feature = "steel")]
+    /// Reload configuration from the config file (if available) (Lua version)
     fn reload_config(&mut self) {
         if let Some(path) = &self.config_path.clone() {
-            let mut config = TestbedConfig::new();
+            let mut config = match TestbedConfig::new() {
+                Ok(c) => c,
+                Err(e) => {
+                    eprintln!("[Testbed] Warning: Failed to create Lua config: {}", e);
+                    return;
+                }
+            };
+
             if let Err(e) = config.load_file(path) {
                 eprintln!("[Testbed] Warning: Failed to reload config: {}", e);
                 return;
             }
 
             // Reload camera configuration
-            if let Ok(camera_config) = config.extract_camera("scene-camera") {
+            if let Ok(camera_config) = config.extract_camera("scene_camera") {
                 let camera_position = camera_config.position.to_vec3();
                 let camera_target = camera_config.look_at.to_vec3();
                 self.camera = Camera::look_at(camera_position, camera_target, Vec3::Y);
@@ -338,12 +334,12 @@ impl PhysicsTestbed {
             }
 
             // Reload ground configurations:
-            // - Left scene uses cuboid collider, so it needs ground-2 (ground-cuboid)
-            // - Right scene uses terrain collider, so it needs ground-1 (ground-cube)
-            if let Ok(left_ground_config) = config.extract_ground("ground-2") {
+            // - Left scene uses cuboid collider, so it needs ground_2 (ground_cuboid)
+            // - Right scene uses terrain collider, so it needs ground_1 (ground_cube)
+            if let Ok(left_ground_config) = config.extract_ground("ground_2") {
                 self.left_ground_settings = Self::ground_config_to_settings(&left_ground_config);
             }
-            if let Ok(right_ground_config) = config.extract_ground("ground-1") {
+            if let Ok(right_ground_config) = config.extract_ground("ground_1") {
                 self.right_ground_settings = Self::ground_config_to_settings(&right_ground_config);
             }
 
@@ -447,10 +443,6 @@ impl PhysicsTestbed {
     /// # Safety
     /// The GL context must be current when this is called.
     unsafe fn reset_scenes(&mut self, gl: &Context) {
-        // Reload configuration from file if available
-        #[cfg(feature = "steel")]
-        self.reload_config();
-
         // Create ground cubes with their respective materials
         let left_ground_cube = Rc::new(Cube::Solid(self.left_ground_settings.material));
         let right_ground_cube = Rc::new(Cube::Solid(self.right_ground_settings.material));

@@ -20,9 +20,8 @@ use winit::window::Window;
 
 pub mod controller;
 
-// Steel configuration module (requires steel feature)
-#[cfg(feature = "steel")]
-pub mod steel_config;
+// Lua configuration module
+pub mod lua_config;
 
 pub use controller::{
     create_controller_backend, ControllerBackend, ControllerInfo, ControllerInput, GamepadState,

@@ -2,13 +2,11 @@
 //!
 //! Compares physics behavior between cuboid and terrain colliders.
 //!
-//! Scene configuration can be loaded from Steel (Scheme) files when the
-//! `steel` feature is enabled. Use `--config <path>` to specify a config file.
+//! Scene configuration can be loaded from Lua files.
+//! Use `--config <path>` to specify a config file.
 
 use app::{run_app, AppConfig};
 use testbed::PhysicsTestbed;
-
-#[cfg(feature = "steel")]
 use std::path::PathBuf;
 
 fn main() {
@@ -18,7 +16,6 @@ fn main() {
     // Parse command line arguments
     let args: Vec<String> = std::env::args().collect();
     let mut debug_frames: Option<u64> = None;
-    #[cfg(feature = "steel")]
     let mut config_path: Option<PathBuf> = None;
 
     let mut i = 1;
@@ -42,7 +39,6 @@ fn main() {
                     return;
                 }
             }
-            #[cfg(feature = "steel")]
             "--config" | "-c" => {
                 if i + 1 < args.len() {
                     config_path = Some(PathBuf::from(&args[i + 1]));
@@ -58,8 +54,7 @@ fn main() {
                 println!();
                 println!("Options:");
                 println!("  --debug N       Run only N frames with debug output");
-                #[cfg(feature = "steel")]
-                println!("  --config PATH   Load scene configuration from Steel file");
+                println!("  --config PATH   Load scene configuration from Lua (.lua) file");
                 println!("  --help          Show this help message");
                 return;
             }
@@ -73,13 +68,12 @@ fn main() {
     }
 
     // Create testbed, optionally from config file
-    #[cfg(feature = "steel")]
     let app = {
         let base = if let Some(path) = config_path {
             PhysicsTestbed::from_config_file(&path)
         } else {
             // Try default config location
-            let default_config = PathBuf::from("crates/testbed/config/scene.scm");
+            let default_config = PathBuf::from("crates/testbed/config/scene.lua");
             if default_config.exists() {
                 println!("Loading default config: {:?}", default_config);
                 PhysicsTestbed::from_config_file(&default_config)
@@ -89,9 +83,6 @@ fn main() {
         };
         base.with_debug_frames(debug_frames)
     };
-
-    #[cfg(not(feature = "steel"))]
-    let app = PhysicsTestbed::new().with_debug_frames(debug_frames);
 
     let config = AppConfig::new("Physics Testbed - Left: Cuboid | Right: Terrain Collider")
         .with_size(1200, 700);
