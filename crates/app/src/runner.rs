@@ -31,6 +31,25 @@ use crate::{
 
 use super::EguiIntegration;
 
+/// Debug mode configuration
+#[derive(Debug, Clone, Copy)]
+pub struct DebugMode {
+    /// Number of frames to run before exiting
+    pub frames: u64,
+    /// Path to save the final frame screenshot
+    pub output_path: &'static str,
+}
+
+impl DebugMode {
+    /// Create a new debug mode configuration
+    pub fn new(frames: u64) -> Self {
+        Self {
+            frames,
+            output_path: "output/frame_last.png",
+        }
+    }
+}
+
 /// Configuration for the application window
 #[derive(Clone)]
 pub struct AppConfig {
@@ -44,6 +63,8 @@ pub struct AppConfig {
     pub gl_major: u8,
     /// OpenGL minor version
     pub gl_minor: u8,
+    /// Optional debug mode configuration
+    pub debug_mode: Option<DebugMode>,
 }
 
 impl Default for AppConfig {
@@ -54,6 +75,7 @@ impl Default for AppConfig {
             height: 600,
             gl_major: 4,
             gl_minor: 3,
+            debug_mode: None,
         }
     }
 }
@@ -78,6 +100,12 @@ impl AppConfig {
     pub fn with_gl_version(mut self, major: u8, minor: u8) -> Self {
         self.gl_major = major;
         self.gl_minor = minor;
+        self
+    }
+
+    /// Enable debug mode with the specified number of frames
+    pub fn with_debug_mode(mut self, frames: u64) -> Self {
+        self.debug_mode = Some(DebugMode::new(frames));
         self
     }
 }
@@ -174,6 +202,48 @@ impl<A: App> AppRuntime<A> {
                 }
             }
         }
+    }
+
+    /// Capture the current framebuffer and save to file
+    fn capture_frame(
+        &self,
+        gl: &Context,
+        size: winit::dpi::PhysicalSize<u32>,
+        output_path: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        use image::{ImageBuffer, Rgba};
+
+        let width = size.width as usize;
+        let height = size.height as usize;
+        let mut pixels = vec![0u8; width * height * 4];
+
+        unsafe {
+            gl.read_pixels(
+                0,
+                0,
+                size.width as i32,
+                size.height as i32,
+                glow::RGBA,
+                glow::UNSIGNED_BYTE,
+                glow::PixelPackData::Slice(Some(&mut pixels)),
+            );
+        }
+
+        // Flip image vertically (OpenGL has origin at bottom-left)
+        let mut flipped = vec![0u8; width * height * 4];
+        for y in 0..height {
+            let src_offset = y * width * 4;
+            let dst_offset = (height - 1 - y) * width * 4;
+            flipped[dst_offset..dst_offset + width * 4]
+                .copy_from_slice(&pixels[src_offset..src_offset + width * 4]);
+        }
+
+        let img: ImageBuffer<Rgba<u8>, Vec<u8>> =
+            ImageBuffer::from_raw(width as u32, height as u32, flipped)
+                .ok_or("Failed to create image buffer")?;
+
+        img.save(output_path)?;
+        Ok(())
     }
 }
 
@@ -452,9 +522,47 @@ impl<A: App> ApplicationHandler for AppRuntime<A> {
                     }
 
                     gl_surface.swap_buffers(gl_context).unwrap();
-                    window.request_redraw();
 
                     self.frame_count += 1;
+
+                    // Check debug mode exit condition
+                    if let Some(debug_mode) = self.config.debug_mode {
+                        if self.frame_count >= debug_mode.frames {
+                            println!(
+                                "[DEBUG] Frame {}/{} - Capturing screenshot and exiting",
+                                self.frame_count, debug_mode.frames
+                            );
+
+                            // Create output directory if it doesn't exist
+                            if let Some(parent) = std::path::Path::new(debug_mode.output_path).parent() {
+                                let _ = std::fs::create_dir_all(parent);
+                            }
+
+                            // Capture framebuffer and save
+                            if let Err(e) = self.capture_frame(gl, size, debug_mode.output_path) {
+                                eprintln!("[DEBUG] Failed to capture frame: {}", e);
+                            } else {
+                                println!("[DEBUG] Screenshot saved to: {}", debug_mode.output_path);
+                            }
+
+                            // Shutdown and exit
+                            let ctx = FrameContext {
+                                gl,
+                                window,
+                                delta_time,
+                                elapsed,
+                                frame: self.frame_count,
+                                size: (size.width, size.height),
+                            };
+                            self.app.shutdown(&ctx);
+                            event_loop.exit();
+                            return;
+                        } else {
+                            println!("[DEBUG] Frame {}/{}", self.frame_count, debug_mode.frames);
+                        }
+                    }
+
+                    window.request_redraw();
                     self.reset_frame_deltas();
                 }
             }

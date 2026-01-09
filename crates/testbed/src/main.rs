@@ -68,24 +68,26 @@ fn main() {
     }
 
     // Create testbed, optionally from config file
-    let app = {
-        let base = if let Some(path) = config_path {
-            PhysicsTestbed::from_config_file(&path)
+    let app = if let Some(path) = config_path {
+        PhysicsTestbed::from_config_file(&path)
+    } else {
+        // Try default config location
+        let default_config = PathBuf::from("crates/testbed/config/scene.lua");
+        if default_config.exists() {
+            println!("Loading default config: {:?}", default_config);
+            PhysicsTestbed::from_config_file(&default_config)
         } else {
-            // Try default config location
-            let default_config = PathBuf::from("crates/testbed/config/scene.lua");
-            if default_config.exists() {
-                println!("Loading default config: {:?}", default_config);
-                PhysicsTestbed::from_config_file(&default_config)
-            } else {
-                PhysicsTestbed::new()
-            }
-        };
-        base.with_debug_frames(debug_frames)
+            PhysicsTestbed::new()
+        }
     };
 
-    let config = AppConfig::new("Physics Testbed - Left: Cuboid | Right: Terrain Collider")
+    let mut config = AppConfig::new("Physics Testbed - Left: Cuboid | Right: Terrain Collider")
         .with_size(1200, 700);
+
+    // Apply debug mode if requested
+    if let Some(frames) = debug_frames {
+        config = config.with_debug_mode(frames);
+    }
 
     run_app(app, config);
 }

@@ -128,15 +128,11 @@ pub struct PhysicsTestbed {
     // Object configurations (multiple objects supported)
     object_settings: Vec<ObjectSettings>,
 
-    // Config file path for reloading
-    config_path: Option<std::path::PathBuf>,
-
     // UI state
     reset_requested: bool,
 
     // Timing
     frame_count: u64,
-    debug_frames: Option<u64>,
     physics_dt: f32,
     last_physics_update: Instant,
 }
@@ -174,18 +170,11 @@ impl PhysicsTestbed {
             left_ground_settings: GroundSettings::default(),
             right_ground_settings: GroundSettings::default(),
             object_settings: vec![ObjectSettings::default()],
-            config_path: None,
             reset_requested: false,
             frame_count: 0,
-            debug_frames: None,
             physics_dt: 1.0 / 60.0,
             last_physics_update: Instant::now(),
         }
-    }
-
-    pub fn with_debug_frames(mut self, frames: Option<u64>) -> Self {
-        self.debug_frames = frames;
-        self
     }
 
     /// Load configuration from a Lua file
@@ -262,7 +251,7 @@ impl PhysicsTestbed {
 
     /// Create testbed from camera and ground configurations (Lua version)
     fn from_config(
-        path: &Path,
+        _path: &Path,
         camera_config: &CameraConfig,
         left_ground_config: &GroundConfig,
         right_ground_config: &GroundConfig,
@@ -300,52 +289,13 @@ impl PhysicsTestbed {
             left_ground_settings,
             right_ground_settings,
             object_settings,
-            config_path: Some(path.to_path_buf()),
             reset_requested: false,
             frame_count: 0,
-            debug_frames: None,
             physics_dt: 1.0 / 60.0,
             last_physics_update: Instant::now(),
         })
     }
 
-    /// Reload configuration from the config file (if available) (Lua version)
-    fn reload_config(&mut self) {
-        if let Some(path) = &self.config_path.clone() {
-            let mut config = match TestbedConfig::new() {
-                Ok(c) => c,
-                Err(e) => {
-                    eprintln!("[Testbed] Warning: Failed to create Lua config: {}", e);
-                    return;
-                }
-            };
-
-            if let Err(e) = config.load_file(path) {
-                eprintln!("[Testbed] Warning: Failed to reload config: {}", e);
-                return;
-            }
-
-            // Reload camera configuration
-            if let Ok(camera_config) = config.extract_camera("scene_camera") {
-                let camera_position = camera_config.position.to_vec3();
-                let camera_target = camera_config.look_at.to_vec3();
-                self.camera = Camera::look_at(camera_position, camera_target, Vec3::Y);
-                self.orbit_controller.target = camera_target;
-            }
-
-            // Reload ground configurations:
-            // - Left scene uses cuboid collider, so it needs ground_2 (ground_cuboid)
-            // - Right scene uses terrain collider, so it needs ground_1 (ground_cube)
-            if let Ok(left_ground_config) = config.extract_ground("ground_2") {
-                self.left_ground_settings = Self::ground_config_to_settings(&left_ground_config);
-            }
-            if let Ok(right_ground_config) = config.extract_ground("ground_1") {
-                self.right_ground_settings = Self::ground_config_to_settings(&right_ground_config);
-            }
-
-            println!("[Testbed] Configuration reloaded from {:?}", path);
-        }
-    }
 
     /// Create physics scene with simple cuboid ground collider (left scene, uses ground-1)
     fn create_cuboid_ground_scene(&self) -> PhysicsScene {
@@ -389,24 +339,7 @@ impl PhysicsTestbed {
         let scale = self.right_ground_settings.size;
         let center = self.right_ground_settings.center;
 
-        if self.debug_frames.is_some() {
-            println!("[DEBUG] Creating terrain collider:");
-            println!("  Ground cube: {:?}", ground_cube);
-            println!("  Scale: {}", scale);
-            println!("  Center: {:?}", center);
-        }
-
         let terrain_collider = VoxelColliderBuilder::from_cube_scaled(ground_cube, 0, scale);
-
-        if self.debug_frames.is_some() {
-            // Print collider info
-            if let Some(trimesh) = terrain_collider.shape().as_trimesh() {
-                println!("  Terrain collider: {} vertices, {} triangles",
-                    trimesh.vertices().len(), trimesh.indices().len());
-            } else {
-                println!("  WARNING: Terrain collider is not a trimesh!");
-            }
-        }
 
         let terrain_body = RigidBodyBuilder::fixed()
             .translation([center.x, center.y, center.z].into())
@@ -568,9 +501,6 @@ impl PhysicsTestbed {
 
     /// Print debug information about physics state
     fn print_debug_info(&self) {
-        if self.debug_frames.is_none() {
-            return;
-        }
 
         let num_objects = self.object_settings.len();
 
@@ -753,42 +683,6 @@ impl PhysicsTestbed {
         }
     }
 
-    fn check_debug_exit(&mut self) {
-        if let Some(max_frames) = self.debug_frames {
-            if self.frame_count >= max_frames {
-                println!("\n[Testbed] Reached {} frames, exiting", max_frames);
-
-                // Print final comparison for all objects
-                if let (Some(left), Some(right)) = (&self.left_scene, &self.right_scene) {
-                    println!("\n=== Final Comparison ===");
-
-                    let mut has_significant_diff = false;
-                    for (i, (left_obj, right_obj)) in left.falling_objects.iter().zip(right.falling_objects.iter()).enumerate() {
-                        let left_pos = left_obj.position(&left.world);
-                        let right_pos = right_obj.position(&right.world);
-                        let diff = left_pos - right_pos;
-
-                        println!("Object[{}]:", i);
-                        println!("  Left (Cuboid):   Y = {:.6}", left_pos.y);
-                        println!("  Right (Terrain): Y = {:.6}", right_pos.y);
-                        println!("  Difference:      Y = {:.6}", diff.y);
-
-                        if diff.length() > 0.01 {
-                            has_significant_diff = true;
-                        }
-                    }
-
-                    if has_significant_diff {
-                        println!("\nWARNING: Significant physics difference detected!");
-                    } else {
-                        println!("\nPhysics behavior is consistent between both collider types.");
-                    }
-                }
-
-                std::process::exit(0);
-            }
-        }
-    }
 
     /// Handle orbit camera input from egui response
     fn handle_orbit_input(&mut self, input: &InputState) {
@@ -832,9 +726,6 @@ impl App for PhysicsTestbed {
         println!("[Testbed] Physics scenes initialized");
         println!("  Left:  Cuboid ground (ground-2), size={}", self.left_ground_settings.size);
         println!("  Right: Terrain ground (ground-1), size={}", self.right_ground_settings.size);
-        if let Some(frames) = self.debug_frames {
-            println!("  Debug mode: running {} frames", frames);
-        }
     }
 
     fn shutdown(&mut self, ctx: &FrameContext) {
@@ -843,9 +734,6 @@ impl App for PhysicsTestbed {
     }
 
     fn update(&mut self, ctx: &FrameContext, input: &InputState) {
-        // Check debug frame limit (exits if reached)
-        self.check_debug_exit();
-
         // Handle orbit camera
         self.handle_orbit_input(input);
 
