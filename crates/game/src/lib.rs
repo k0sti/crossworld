@@ -8,6 +8,13 @@ use renderer::{Camera, MeshRenderer, SkyboxRenderer};
 use std::path::PathBuf;
 use winit::keyboard::KeyCode;
 
+/// Check if debug mode is enabled via environment variable
+fn is_debug_mode() -> bool {
+    std::env::var("GAME_DEBUG")
+        .map(|v| v == "1" || v.to_lowercase() == "true")
+        .unwrap_or(false)
+}
+
 /// Camera control state
 pub struct CameraController {
     pub move_speed: f32,
@@ -142,9 +149,13 @@ impl VoxelGame {
         match GameConfig::from_file(&config_path) {
             Ok(config) => {
                 println!("[Game] Loaded config from: {}", config_path.display());
-                println!("[Game] World config: macro_depth={}, micro_depth={}, border_depth={}, seed={}",
-                    config.world.macro_depth, config.world.micro_depth,
-                    config.world.border_depth, config.world.seed);
+                println!(
+                    "[Game] World config: macro_depth={}, micro_depth={}, border_depth={}, seed={}",
+                    config.world.macro_depth,
+                    config.world.micro_depth,
+                    config.world.border_depth,
+                    config.world.seed
+                );
                 println!("[Game] Map layout: {} rows", config.map.layout.len());
                 self.config = config;
             }
@@ -158,6 +169,19 @@ impl VoxelGame {
 
     /// Initialize the voxel world from config
     fn init_world(&mut self) {
+        let debug = is_debug_mode();
+
+        if debug {
+            println!("[Game] Initializing world in DEBUG mode");
+            println!(
+                "[Game] World config: macro_depth={}, micro_depth={}, border_depth={}, seed={}",
+                self.config.world.macro_depth,
+                self.config.world.micro_depth,
+                self.config.world.border_depth,
+                self.config.world.seed
+            );
+        }
+
         let mut world = crossworld_world::NativeWorldCube::new(
             self.config.world.macro_depth,
             self.config.world.micro_depth,
@@ -165,11 +189,27 @@ impl VoxelGame {
             self.config.world.seed,
         );
 
+        if debug {
+            println!("[Game] World cube created, applying 2D map...");
+        }
+
         // Apply 2D map to world
-        if let Some(spawn) = self.config.apply_map_to_world(&mut world) {
+        if let Some(spawn) = self.config.apply_map_to_world(&mut world, debug) {
             self.spawn_position = spawn;
             self.camera.position = spawn + Vec3::new(0.0, 1.6, 0.0); // Eye height
             println!("[Game] Spawn position set to: {:?}", self.spawn_position);
+        }
+
+        // Debug: Log cube model structure
+        if debug {
+            let csm = cube::serialize_csm(world.root());
+            let csm_preview = if csm.len() > 500 {
+                format!("{}... (truncated, {} total chars)", &csm[..500], csm.len())
+            } else {
+                csm.clone()
+            };
+            println!("[Game] Resulting cube model (CSM):");
+            println!("{}", csm_preview);
         }
 
         self.world = Some(world);
@@ -185,7 +225,9 @@ impl VoxelGame {
             let cube_rc = Rc::new(world.root().clone());
 
             unsafe {
-                let depth = self.config.world.macro_depth + self.config.world.micro_depth + self.config.world.border_depth;
+                let depth = self.config.world.macro_depth
+                    + self.config.world.micro_depth
+                    + self.config.world.border_depth;
                 match self.mesh_renderer.upload_mesh(gl, &cube_rc, depth) {
                     Ok(mesh_index) => {
                         self.world_mesh_index = Some(mesh_index);
@@ -260,7 +302,8 @@ impl App for VoxelGame {
                 let sensitivity = 3.0 * ctx.delta_time;
                 let delta_x = -gamepad.right_stick.x * sensitivity;
                 let delta_y = gamepad.right_stick.y * sensitivity;
-                self.camera_controller.apply_camera_rotation(&mut self.camera, delta_x, delta_y);
+                self.camera_controller
+                    .apply_camera_rotation(&mut self.camera, delta_x, delta_y);
             }
         }
 
@@ -269,7 +312,7 @@ impl App for VoxelGame {
             self.camera_controller.handle_mouse_move(
                 &mut self.camera,
                 input.raw_mouse_delta.x,
-                input.raw_mouse_delta.y
+                input.raw_mouse_delta.y,
             );
         }
 
@@ -279,10 +322,12 @@ impl App for VoxelGame {
         let left = input.is_key_pressed(KeyCode::KeyA);
         let right = input.is_key_pressed(KeyCode::KeyD);
         let up = input.is_key_pressed(KeyCode::Space);
-        let down = input.is_key_pressed(KeyCode::ShiftLeft) || input.is_key_pressed(KeyCode::ShiftRight);
+        let down =
+            input.is_key_pressed(KeyCode::ShiftLeft) || input.is_key_pressed(KeyCode::ShiftRight);
 
         // Get controller movement input
-        let (controller_x, controller_y_vertical, controller_z) = input.gamepad
+        let (controller_x, controller_y_vertical, controller_z) = input
+            .gamepad
             .as_ref()
             .map(|g| {
                 let vertical = g.right_trigger - g.left_trigger;
@@ -291,10 +336,21 @@ impl App for VoxelGame {
             .unwrap_or((0.0, 0.0, 0.0));
 
         // Combine keyboard and controller input
-        let mut total_velocity = self.camera_controller.calculate_velocity(&self.camera, forward, backward, left, right, up, down);
+        let mut total_velocity = self.camera_controller.calculate_velocity(
+            &self.camera,
+            forward,
+            backward,
+            left,
+            right,
+            up,
+            down,
+        );
 
         // Add controller movement
-        if controller_x.abs() > 0.01 || controller_z.abs() > 0.01 || controller_y_vertical.abs() > 0.01 {
+        if controller_x.abs() > 0.01
+            || controller_z.abs() > 0.01
+            || controller_y_vertical.abs() > 0.01
+        {
             let fwd = self.camera.forward();
             let fwd_xz = Vec3::new(fwd.x, 0.0, fwd.z).normalize_or_zero();
             let rgt = self.camera.right();
@@ -317,12 +373,8 @@ impl App for VoxelGame {
             ctx.gl.clear_color(0.1, 0.1, 0.1, 1.0);
             ctx.gl.clear(COLOR_BUFFER_BIT | DEPTH_BUFFER_BIT);
 
-            self.skybox_renderer.render(
-                ctx.gl,
-                &self.camera,
-                ctx.size.0 as i32,
-                ctx.size.1 as i32,
-            );
+            self.skybox_renderer
+                .render(ctx.gl, &self.camera, ctx.size.0 as i32, ctx.size.1 as i32);
 
             if let Some(mesh_index) = self.world_mesh_index {
                 self.mesh_renderer.render_mesh(
@@ -348,9 +400,11 @@ impl App for VoxelGame {
             .resizable(false)
             .movable(false)
             .title_bar(false)
-            .frame(egui::Frame::NONE
-                .fill(egui::Color32::from_rgba_premultiplied(0, 0, 0, 180))
-                .inner_margin(egui::Margin::same(10)))
+            .frame(
+                egui::Frame::NONE
+                    .fill(egui::Color32::from_rgba_premultiplied(0, 0, 0, 180))
+                    .inner_margin(egui::Margin::same(10)),
+            )
             .show(egui_ctx, |ui| {
                 ui.heading("Voxel World Demo");
                 ui.separator();
@@ -359,7 +413,10 @@ impl App for VoxelGame {
 
                 ui.separator();
                 ui.heading("Camera");
-                ui.label(format!("Pos: ({:.1}, {:.1}, {:.1})", camera_pos.x, camera_pos.y, camera_pos.z));
+                ui.label(format!(
+                    "Pos: ({:.1}, {:.1}, {:.1})",
+                    camera_pos.x, camera_pos.y, camera_pos.z
+                ));
                 if mouse_captured {
                     ui.colored_label(egui::Color32::GREEN, "Mouse captured");
                 } else {

@@ -24,8 +24,11 @@ use std::sync::mpsc::{channel, Receiver};
 use cube::io::vox::load_vox_to_cubebox_compact;
 use image::ImageBuffer;
 
+/// Type alias for thumbnail image
+type ThumbnailImage = ImageBuffer<image::Rgb<u8>, Vec<u8>>;
+
 /// Load a model thumbnail in background thread
-fn load_model_thumbnail(path: &PathBuf) -> Result<(IVec3, ImageBuffer<image::Rgb<u8>, Vec<u8>>), String> {
+fn load_model_thumbnail(path: &PathBuf) -> Result<(IVec3, ThumbnailImage), String> {
     // Load VOX file
     let bytes = std::fs::read(path).map_err(|e| format!("Failed to read file: {}", e))?;
     let cubebox = load_vox_to_cubebox_compact(&bytes)?;
@@ -83,7 +86,7 @@ use crate::config::EditorConfig;
 use crate::cursor::{CubeCursor, FocusMode};
 use crate::editing::EditorState;
 use crate::palette::{ColorPalette, MaterialPalette, ModelPalette};
-use crate::raycast::{raycast_from_mouse, EditorHit};
+use crate::raycast::{mouse_to_ray, raycast_from_mouse, EditorHit};
 use crate::ui::{FileOperation, FileState};
 
 /// Constants for the edited cube
@@ -93,6 +96,96 @@ const CUBE_POSITION: Vec3 = Vec3::ZERO;
 const CUBE_SCALE: f32 = 1.0;
 /// Depth for edited cube (4 = 16x16x16 voxels)
 const EDIT_DEPTH: u32 = 4;
+/// Line width/strength for all wireframes and gizmo lines (relative to voxel size)
+const LINE_WIDTH_FACTOR: f32 = 0.01;
+
+/// Edit plane for drag operations
+#[derive(Debug, Clone)]
+struct EditPlane {
+    /// Origin point of the plane in world space
+    origin: Vec3,
+    /// Normal of the plane
+    normal: Vec3,
+    /// Depth at which editing occurs
+    depth: u32,
+    /// Right vector for plane coordinates
+    right: Vec3,
+    /// Up vector for plane coordinates
+    up: Vec3,
+    /// Original raycast hit position
+    hit_pos: Vec3,
+}
+
+impl EditPlane {
+    /// Create a new edit plane from cursor position (which already accounts for Far/Near mode)
+    fn from_cursor(
+        cursor_pos: IVec3,
+        normal: Vec3,
+        depth: u32,
+        cube_position: Vec3,
+        cube_scale: f32,
+        hit_pos: Vec3,
+    ) -> Self {
+        // Calculate right and up vectors for the plane
+        let (right, up) = if normal.x.abs() > 0.5 {
+            // Normal is mostly along X axis
+            (Vec3::new(0.0, 1.0, 0.0), Vec3::new(0.0, 0.0, 1.0))
+        } else if normal.y.abs() > 0.5 {
+            // Normal is mostly along Y axis
+            (Vec3::new(1.0, 0.0, 0.0), Vec3::new(0.0, 0.0, 1.0))
+        } else {
+            // Normal is mostly along Z axis
+            (Vec3::new(1.0, 0.0, 0.0), Vec3::new(0.0, 1.0, 0.0))
+        };
+
+        // Convert cursor voxel position to world space (this is the voxel center)
+        let half_scale = cube_scale * 0.5;
+        let scale = (1 << depth) as f32 / 2.0;
+        let cube_pos = Vec3::new(
+            (cursor_pos.x as f32 + 0.5) / scale - 1.0,
+            (cursor_pos.y as f32 + 0.5) / scale - 1.0,
+            (cursor_pos.z as f32 + 0.5) / scale - 1.0,
+        );
+        let origin = cube_position + cube_pos * half_scale;
+
+        Self {
+            origin,
+            normal,
+            depth,
+            right,
+            up,
+            hit_pos,
+        }
+    }
+
+    /// Project a ray onto the plane and return the intersection point
+    fn project_ray(&self, ray_origin: Vec3, ray_direction: Vec3) -> Option<Vec3> {
+        let denom = ray_direction.dot(self.normal);
+        if denom.abs() < 1e-6 {
+            return None; // Ray is parallel to plane
+        }
+
+        let t = (self.origin - ray_origin).dot(self.normal) / denom;
+        if t < 0.0 {
+            return None; // Plane is behind ray origin
+        }
+
+        Some(ray_origin + ray_direction * t)
+    }
+
+    /// Convert world position on plane to voxel coordinate at the plane's depth
+    fn world_to_voxel(&self, world_pos: Vec3, cube_position: Vec3, cube_scale: f32) -> IVec3 {
+        let half_scale = cube_scale * 0.5;
+        let cube_pos = (world_pos - cube_position) / half_scale;
+
+        let scale = (1 << self.depth) as f32 / 2.0;
+        IVec3::new(
+            ((cube_pos.x + 1.0) * scale).floor() as i32,
+            ((cube_pos.y + 1.0) * scale).floor() as i32,
+            ((cube_pos.z + 1.0) * scale).floor() as i32,
+        )
+    }
+}
 
 /// Main editor application struct
 pub struct EditorApp {
@@ -114,6 +207,9 @@ pub struct EditorApp {
     prev_tab_pressed: bool,
     prev_space_pressed: bool,
     prev_left_mouse_pressed: bool,
+
+    // Edit plane state (for drag operations)
+    edit_plane: Option<EditPlane>,
 
     // Current mouse position (for 2D gizmo)
     current_mouse_pos: Option<Vec2>,
@@ -189,6 +285,7 @@ impl EditorApp {
             prev_tab_pressed: false,
             prev_space_pressed: false,
             prev_left_mouse_pressed: false,
+            edit_plane: None,
             current_mouse_pos: None,
             color_palette: ColorPalette::new(),
             material_palette: MaterialPalette::new(),
@@ -257,9 +354,12 @@ impl EditorApp {
 
         // Check bounds
         let max_coord = 1 << depth;
-        if pos.x < 0 || pos.x >= max_coord
-            || pos.y < 0 || pos.y >= max_coord
-            || pos.z < 0 || pos.z >= max_coord
+        if pos.x < 0
+            || pos.x >= max_coord
+            || pos.y < 0
+            || pos.y >= max_coord
+            || pos.z < 0
+            || pos.z >= max_coord
         {
             return;
         }
@@ -297,9 +397,12 @@ impl EditorApp {
 
         // Check bounds
         let max_coord = 1 << depth;
-        if pos.x < 0 || pos.x >= max_coord
-            || pos.y < 0 || pos.y >= max_coord
-            || pos.z < 0 || pos.z >= max_coord
+        if pos.x < 0
+            || pos.x >= max_coord
+            || pos.y < 0
+            || pos.y >= max_coord
+            || pos.z < 0
+            || pos.z >= max_coord
         {
             return;
         }
@@ -658,7 +761,9 @@ impl App for EditorApp {
                 let injected = self.injected_input.get_or_insert_with(|| {
                     let mut state = InputState::default();
                     // Initialize with last known mouse position
-                    if let Some(pos) = test_config.mouse_position_at_frame(ctx.frame.saturating_sub(1)) {
+                    if let Some(pos) =
+                        test_config.mouse_position_at_frame(ctx.frame.saturating_sub(1))
+                    {
                         state.mouse_pos = Some(pos);
                     }
                     state
@@ -667,11 +772,17 @@ impl App for EditorApp {
                 for event in events {
                     match &event.event {
                         MouseEvent::Move { x, y } => {
-                            println!("[Editor] Frame {}: Injecting mouse move to ({}, {})", ctx.frame, x, y);
+                            println!(
+                                "[Editor] Frame {}: Injecting mouse move to ({}, {})",
+                                ctx.frame, x, y
+                            );
                             injected.inject_mouse_pos(*x, *y);
                         }
                         MouseEvent::Click { button, pressed } => {
-                            println!("[Editor] Frame {}: Injecting {:?} click (pressed={})", ctx.frame, button, pressed);
+                            println!(
+                                "[Editor] Frame {}: Injecting {:?} click (pressed={})",
+                                ctx.frame, button, pressed
+                            );
                             injected.inject_mouse_click(*button, *pressed);
                         }
                     }
@@ -684,9 +795,12 @@ impl App for EditorApp {
 
         // Handle camera orbit with right-mouse drag
         if effective_input.is_right_mouse_pressed() {
-            let yaw_delta = -effective_input.mouse_delta.x * self.orbit_controller.config.mouse_sensitivity;
-            let pitch_delta = -effective_input.mouse_delta.y * self.orbit_controller.config.mouse_sensitivity;
-            self.orbit_controller.rotate(yaw_delta, pitch_delta, &mut self.camera);
+            let yaw_delta =
+                -effective_input.mouse_delta.x * self.orbit_controller.config.mouse_sensitivity;
+            let pitch_delta =
+                -effective_input.mouse_delta.y * self.orbit_controller.config.mouse_sensitivity;
+            self.orbit_controller
+                .rotate(yaw_delta, pitch_delta, &mut self.camera);
         }
 
         // Handle camera zoom with scroll wheel
@@ -713,7 +827,10 @@ impl App for EditorApp {
                     FocusMode::Near => "Near",
                     FocusMode::Far => "Far",
                 };
-                println!("[DEBUG Frame {}] Toggled focus mode to: {}", ctx.frame, mode_name);
+                println!(
+                    "[DEBUG Frame {}] Toggled focus mode to: {}",
+                    ctx.frame, mode_name
+                );
             }
         }
         self.prev_space_pressed = space_pressed;
@@ -740,12 +857,8 @@ impl App for EditorApp {
                 // Use the new coord selection logic that handles far/near based on boundary detection
                 // Select at cursor's depth, not EDIT_DEPTH
                 let far_mode = self.cursor.focus_mode == FocusMode::Far;
-                let (selected_coord, is_boundary) = hit.select_coord_at_depth(
-                    cursor_depth,
-                    far_mode,
-                    CUBE_POSITION,
-                    CUBE_SCALE,
-                );
+                let (selected_coord, is_boundary) =
+                    hit.select_coord_at_depth(cursor_depth, far_mode, CUBE_POSITION, CUBE_SCALE);
 
                 // Debug logging for selected CubeCoord
                 if self.test_config.is_some() {
@@ -781,27 +894,74 @@ impl App for EditorApp {
             }
         }
 
-        // Handle left-click for voxel placement/removal
+        // Handle left-click and drag for voxel placement/removal
         let left_mouse_pressed = effective_input.is_left_mouse_pressed();
         let left_click = left_mouse_pressed && !self.prev_left_mouse_pressed;
-        self.prev_left_mouse_pressed = left_mouse_pressed;
+        let left_release = !left_mouse_pressed && self.prev_left_mouse_pressed;
 
         // Check if Shift is held (for removal mode)
         let shift_held = effective_input.is_key_pressed(KeyCode::ShiftLeft)
             || effective_input.is_key_pressed(KeyCode::ShiftRight);
 
-        if left_click && self.cursor.valid {
-            // Use the cursor's selected coordinate (which already handles far/near mode)
-            let selected_pos = self.cursor.coord.pos;
+        // Extract mouse position before mutable borrows
+        let mouse_pos = effective_input.mouse_pos;
 
-            if shift_held {
-                // Shift+left-click: remove voxel at selected position
-                self.remove_voxel(ctx.gl, selected_pos, EDIT_DEPTH);
-            } else {
-                // Left-click: place voxel at selected position
-                self.place_voxel(ctx.gl, selected_pos, EDIT_DEPTH);
+        // On mouse down: create edit plane from cursor (which respects Far/Near mode)
+        if left_click && self.cursor.valid {
+            if let Some(ref hit) = self.last_hit {
+                let cursor_pos = self.cursor.coord.pos;
+                let cursor_depth = self.cursor.coord.depth;
+                let normal = hit.normal.to_vec3();
+
+                self.edit_plane = Some(EditPlane::from_cursor(
+                    cursor_pos,
+                    normal,
+                    cursor_depth,
+                    CUBE_POSITION,
+                    CUBE_SCALE,
+                    hit.world_pos,
+                ));
+
+                // Place/remove first voxel
+                if shift_held {
+                    self.remove_voxel(ctx.gl, cursor_pos, cursor_depth);
+                } else {
+                    self.place_voxel(ctx.gl, cursor_pos, cursor_depth);
+                }
             }
         }
+
+        // On mouse drag: project mouse to edit plane and place voxels
+        if left_mouse_pressed && !left_click {
+            if let (Some(ref plane), Some(mouse_pos)) = (&self.edit_plane, mouse_pos) {
+                let screen_size = Vec2::new(ctx.size.0 as f32, ctx.size.1 as f32);
+                let ray = mouse_to_ray(mouse_pos, screen_size, &self.camera);
+
+                if let Some(world_pos) = plane.project_ray(ray.origin, ray.direction) {
+                    let voxel_coord = plane.world_to_voxel(world_pos, CUBE_POSITION, CUBE_SCALE);
+                    let cursor_depth = plane.depth;
+
+                    // Update cursor to show where we're drawing
+                    self.cursor.coord.pos = voxel_coord;
+                    self.cursor.coord.depth = cursor_depth;
+                    self.cursor.valid = true;
+
+                    // Place/remove voxel at projected position
+                    if shift_held {
+                        self.remove_voxel(ctx.gl, voxel_coord, cursor_depth);
+                    } else {
+                        self.place_voxel(ctx.gl, voxel_coord, cursor_depth);
+                    }
+                }
+            }
+        }
+
+        // On mouse release: clear edit plane
+        if left_release {
+            self.edit_plane = None;
+        }
+
+        self.prev_left_mouse_pressed = left_mouse_pressed;
     }
 
     fn render(&mut self, ctx: &FrameContext) {
@@ -812,7 +972,8 @@ impl App for EditorApp {
         unsafe {
             ctx.gl.viewport(0, 0, width, height);
             ctx.gl.clear_color(0.1, 0.1, 0.15, 1.0);
-            ctx.gl.clear(glow::COLOR_BUFFER_BIT | glow::DEPTH_BUFFER_BIT);
+            ctx.gl
+                .clear(glow::COLOR_BUFFER_BIT | glow::DEPTH_BUFFER_BIT);
         }
 
         // Render the cube mesh at the center
@@ -847,6 +1008,151 @@ impl App for EditorApp {
             );
         }
 
+        // Render edit plane 2D grid when active (during drag)
+        if let Some(ref plane) = self.edit_plane {
+            let grid_size = 5; // Draw 5x5 voxel grid
+            let voxel_size = CUBE_SCALE / (1 << plane.depth) as f32;
+            let line_thickness = voxel_size * LINE_WIDTH_FACTOR;
+
+            // Snap grid origin to voxel grid at cursor depth
+            let half_scale = CUBE_SCALE * 0.5;
+            let cube_pos = (plane.hit_pos - CUBE_POSITION) / half_scale;
+            let scale = (1 << plane.depth) as f32 / 2.0;
+
+            // Round to nearest voxel grid intersection
+            let voxel_x = (cube_pos.x * scale).round();
+            let voxel_y = (cube_pos.y * scale).round();
+            let voxel_z = (cube_pos.z * scale).round();
+
+            // Convert back to world space
+            let snapped_cube_pos = Vec3::new(voxel_x / scale, voxel_y / scale, voxel_z / scale);
+            let grid_origin = CUBE_POSITION + snapped_cube_pos * half_scale;
+
+            unsafe {
+                // Draw grid lines parallel to right axis
+                for i in -grid_size..=grid_size {
+                    let offset = plane.up * (i as f32 * voxel_size);
+                    let start =
+                        grid_origin - plane.right * (grid_size as f32 * voxel_size) + offset;
+                    let end = grid_origin + plane.right * (grid_size as f32 * voxel_size) + offset;
+
+                    let line_center = (start + end) * 0.5;
+
+                    // Calculate distance-based opacity for fade at edges (zero at distance 4)
+                    let dist_from_hit = (line_center - plane.hit_pos).length();
+                    let max_dist = 4.0 * voxel_size;
+                    let alpha = (1.0 - (dist_from_hit / max_dist)).clamp(0.0, 1.0);
+
+                    // Skip lines beyond fade distance
+                    if alpha < 0.01 {
+                        continue;
+                    }
+
+                    let line_length = (end - start).length();
+                    let line_dir = (end - start).normalize();
+                    let rotation = Quat::from_rotation_arc(Vec3::X, line_dir);
+
+                    // Fade by blending toward white (simulates transparency against light background)
+                    let base_color = [0.3, 0.6, 1.0];
+                    let white = [1.0, 1.0, 1.0];
+                    let color = [
+                        base_color[0] * alpha + white[0] * (1.0 - alpha),
+                        base_color[1] * alpha + white[1] * (1.0 - alpha),
+                        base_color[2] * alpha + white[2] * (1.0 - alpha),
+                    ];
+
+                    self.mesh_renderer.render_cubebox_wireframe_colored(
+                        ctx.gl,
+                        line_center,
+                        rotation,
+                        Vec3::new(line_length, line_thickness, line_thickness),
+                        1.0,
+                        color,
+                        &self.camera,
+                        width,
+                        height,
+                    );
+                }
+
+                // Draw grid lines parallel to up axis
+                for j in -grid_size..=grid_size {
+                    let offset = plane.right * (j as f32 * voxel_size);
+                    let start = grid_origin - plane.up * (grid_size as f32 * voxel_size) + offset;
+                    let end = grid_origin + plane.up * (grid_size as f32 * voxel_size) + offset;
+
+                    let line_center = (start + end) * 0.5;
+
+                    // Calculate distance-based opacity for fade at edges (zero at distance 4)
+                    let dist_from_hit = (line_center - plane.hit_pos).length();
+                    let max_dist = 4.0 * voxel_size;
+                    let alpha = (1.0 - (dist_from_hit / max_dist)).clamp(0.0, 1.0);
+
+                    // Skip lines beyond fade distance
+                    if alpha < 0.01 {
+                        continue;
+                    }
+
+                    let line_length = (end - start).length();
+                    let line_dir = (end - start).normalize();
+                    let rotation = Quat::from_rotation_arc(Vec3::X, line_dir);
+
+                    // Fade by blending toward white (simulates transparency against light background)
+                    let base_color = [0.3, 0.6, 1.0];
+                    let white = [1.0, 1.0, 1.0];
+                    let color = [
+                        base_color[0] * alpha + white[0] * (1.0 - alpha),
+                        base_color[1] * alpha + white[1] * (1.0 - alpha),
+                        base_color[2] * alpha + white[2] * (1.0 - alpha),
+                    ];
+
+                    self.mesh_renderer.render_cubebox_wireframe_colored(
+                        ctx.gl,
+                        line_center,
+                        rotation,
+                        Vec3::new(line_length, line_thickness, line_thickness),
+                        1.0,
+                        color,
+                        &self.camera,
+                        width,
+                        height,
+                    );
+                }
+
+                // Draw gizmo dot at raycast hit point
+                self.mesh_renderer.render_cubebox_wireframe_colored(
+                    ctx.gl,
+                    plane.hit_pos,
+                    Quat::IDENTITY,
+                    Vec3::ONE,
+                    voxel_size * 0.1,
+                    [1.0, 1.0, 0.0], // Yellow
+                    &self.camera,
+                    width,
+                    height,
+                );
+
+                // Draw short line from hit point toward camera
+                let line_length = voxel_size * 2.0;
+                let to_camera = (self.camera.position - plane.hit_pos).normalize();
+                let line_end = plane.hit_pos + to_camera * line_length;
+                let line_center = (plane.hit_pos + line_end) * 0.5;
+                let line_dir = to_camera;
+                let rotation = Quat::from_rotation_arc(Vec3::X, line_dir);
+
+                self.mesh_renderer.render_cubebox_wireframe_colored(
+                    ctx.gl,
+                    line_center,
+                    rotation,
+                    Vec3::new(line_length, line_thickness * 2.0, line_thickness * 2.0),
+                    1.0,
+                    [1.0, 1.0, 0.0], // Yellow
+                    &self.camera,
+                    width,
+                    height,
+                );
+            }
+        }
+
         // Render cursor wireframe when valid
         if self.cursor.valid {
             // Get cursor position and size in world space
@@ -871,7 +1177,7 @@ impl App for EditorApp {
                     ctx.gl,
                     cursor_center,
                     Quat::IDENTITY,
-                    Vec3::ONE, // Normalized size (full box)
+                    Vec3::ONE,     // Normalized size (full box)
                     cursor_size.x, // Scale to cursor size
                     cursor_color,
                     &self.camera,
@@ -918,7 +1224,10 @@ impl App for EditorApp {
         if let Some(ref test_config) = self.test_config {
             let captures = test_config.captures_for_frame(ctx.frame);
             for capture in captures {
-                println!("[Editor] Frame {}: Capturing to {:?}", ctx.frame, capture.path);
+                println!(
+                    "[Editor] Frame {}: Capturing to {:?}",
+                    ctx.frame, capture.path
+                );
 
                 // Ensure parent directory exists
                 if let Some(parent) = capture.path.parent() {
@@ -932,12 +1241,10 @@ impl App for EditorApp {
 
                 // Use the renderer's save function
                 let path_str = capture.path.to_string_lossy();
-                if let Err(e) = self.mesh_renderer.save_framebuffer_to_file(
-                    ctx.gl,
-                    ctx.size.0,
-                    ctx.size.1,
-                    &path_str,
-                ) {
+                if let Err(e) = self
+                    .mesh_renderer
+                    .save_framebuffer_to_file(ctx.gl, ctx.size.0, ctx.size.1, &path_str)
+                {
                     eprintln!("[Editor] Failed to capture frame: {}", e);
                 }
             }

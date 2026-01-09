@@ -582,10 +582,8 @@ impl ModelPalette {
     pub fn load_all_sizes(&mut self) -> usize {
         let mut loaded = 0;
         for model in &mut self.models {
-            if model.size.is_none() {
-                if model.load_size().is_ok() {
-                    loaded += 1;
-                }
+            if model.size.is_none() && model.load_size().is_ok() {
+                loaded += 1;
             }
         }
         loaded
@@ -596,10 +594,8 @@ impl ModelPalette {
     pub fn load_all_thumbnails(&mut self) -> usize {
         let mut loaded = 0;
         for model in &mut self.models {
-            if model.thumbnail.is_none() {
-                if model.load_size_and_thumbnail().is_ok() {
-                    loaded += 1;
-                }
+            if model.thumbnail.is_none() && model.load_size_and_thumbnail().is_ok() {
+                loaded += 1;
             }
         }
         loaded

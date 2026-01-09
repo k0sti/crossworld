@@ -229,11 +229,12 @@ impl CubeCursor {
     pub fn world_corner(&self, cube_position: Vec3, cube_scale: f32) -> Vec3 {
         let voxel_size = cube_scale / (1 << self.coord.depth) as f32;
         let cube_corner = cube_position - Vec3::splat(cube_scale * 0.5);
-        cube_corner + Vec3::new(
-            self.coord.pos.x as f32 * voxel_size,
-            self.coord.pos.y as f32 * voxel_size,
-            self.coord.pos.z as f32 * voxel_size,
-        )
+        cube_corner
+            + Vec3::new(
+                self.coord.pos.x as f32 * voxel_size,
+                self.coord.pos.y as f32 * voxel_size,
+                self.coord.pos.z as f32 * voxel_size,
+            )
     }
 
     /// Get cursor center position in world space
@@ -312,7 +313,12 @@ impl CubeCursor {
     }
 
     /// Legacy: Update cursor position based on raycast result (Vec3 normal)
-    pub fn update_from_raycast(&mut self, hit_position: Vec3, face_normal: Vec3, voxel_coord: IVec3) {
+    pub fn update_from_raycast(
+        &mut self,
+        hit_position: Vec3,
+        face_normal: Vec3,
+        voxel_coord: IVec3,
+    ) {
         // Convert Vec3 normal to Axis
         let face = if face_normal.x > 0.5 {
             Axis::PosX
