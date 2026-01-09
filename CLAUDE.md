@@ -333,6 +333,98 @@ During build, Vite plugin copies assets to `dist/assets/` and serves them during
 - **BufferGeometry**: Efficient Three.js mesh storage
 - **Release mode**: Always use `just build-wasm` for production
 
+## Vibe-Kanban Review Workflow
+
+When completing a vibe-kanban task, use the review workflow to get user approval before marking work as done.
+
+### Review Process
+
+1. **Prepare for Review**
+   - Ensure all changes are committed
+   - Run checks: `just check`
+   - Update task status: `mcp__vibe_kanban__update_task(task_id, status: "inreview")`
+
+2. **Generate Review Document**
+   Create `doc/review/current.md` using the template at `doc/templates/review.md`
+
+3. **Launch Review**
+   ```bash
+   cargo run --bin testbed -- --review doc/review/current.md
+   ```
+
+4. **Parse and Execute Response**
+   The response contains one or more commands (one per line). You MUST execute ALL commands.
+
+### Response Commands
+
+| Command | Example | Action |
+|---------|---------|--------|
+| `APPROVE` | `APPROVE` | Mark task done |
+| `CONTINUE` | `CONTINUE: add error handling` | Update status to inprogress, implement feedback |
+| `SPAWN` | `SPAWN: Fix related bug in module X` | Create new task |
+| `DISCARD` | `DISCARD` | Cancel task, discard changes |
+| `REBASE` | `REBASE` | Rebase onto main |
+| `MERGE` | `MERGE` | Merge branch to main |
+| `COMMENT` | `COMMENT: Good progress so far` | Record comment |
+
+### Command Validation Rules
+
+1. **At least one command required** - Empty response is invalid
+2. **Mutually exclusive statuses** - Cannot combine `APPROVE` + `DISCARD` or `APPROVE` + `CONTINUE`
+3. **Order matters** - Commands executed in order (e.g., `REBASE` before `MERGE`)
+4. **Multiple `SPAWN` allowed** - Can create multiple follow-up tasks
+5. **`COMMENT` is additive** - Can combine with any other command
+
+### Executing Commands
+
+For each command in the response, execute the corresponding action:
+
+| Command | Required Agent Actions |
+|---------|------------------------|
+| `APPROVE` | `mcp__vibe_kanban__update_task(task_id, status: "done")` |
+| `CONTINUE` | `mcp__vibe_kanban__update_task(task_id, status: "inprogress")`, incorporate feedback |
+| `SPAWN` | `mcp__vibe_kanban__create_task(project_id, title: "<spawn argument>")` for each SPAWN |
+| `DISCARD` | `mcp__vibe_kanban__update_task(task_id, status: "cancelled")`, `git checkout main`, delete branch |
+| `REBASE` | `git fetch origin main && git rebase origin/main` |
+| `MERGE` | `git checkout main && git merge <branch> --no-ff && git push origin main` |
+| `COMMENT` | Log comment, optionally add to task description |
+
+### Example Response Handling
+
+Response from reviewer:
+```
+APPROVE
+SPAWN: Add integration tests
+SPAWN: Update README with new feature
+MERGE
+```
+
+Agent must execute:
+1. `mcp__vibe_kanban__update_task(task_id, status: "done")`
+2. `mcp__vibe_kanban__create_task(project_id, title: "Add integration tests")`
+3. `mcp__vibe_kanban__create_task(project_id, title: "Update README with new feature")`
+4. `git checkout main && git merge <branch> --no-ff && git push origin main`
+
+### Example Complete Workflow
+
+```
+# 1. Agent completes work and runs checks
+$ just check
+✓ All checks passed
+
+# 2. Update task status to inreview
+mcp__vibe_kanban__update_task(task_id="abc123", status="inreview")
+
+# 3. Create review document at doc/review/current.md
+
+# 4. Launch review
+$ cargo run --bin testbed -- --review doc/review/current.md
+
+# 5. User reviews and responds with commands
+
+# 6. Agent parses response and executes all commands
+```
+
 ## Common Issues and Solutions
 
 ### WASM not found or import errors
