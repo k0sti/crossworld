@@ -495,6 +495,14 @@ impl<A: App> ApplicationHandler for AppRuntime<A> {
                     // Update app logic
                     self.app.update(&ctx, &self.input_state);
 
+                    // Check if app wants to exit
+                    if self.app.should_exit() {
+                        println!("[AppRuntime] App requested exit");
+                        self.app.shutdown(&ctx);
+                        event_loop.exit();
+                        return;
+                    }
+
                     // Apply cursor mode
                     self.apply_cursor_mode(window);
 

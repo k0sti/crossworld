@@ -107,6 +107,58 @@ impl InputState {
     pub fn is_right_mouse_pressed(&self) -> bool {
         self.mouse_buttons.right
     }
+
+    /// Inject a mouse position event
+    ///
+    /// Used for automated testing and config-driven input.
+    pub fn inject_mouse_pos(&mut self, x: f32, y: f32) {
+        let new_pos = Vec2::new(x, y);
+        if let Some(old_pos) = self.mouse_pos {
+            self.mouse_delta = new_pos - old_pos;
+        }
+        self.mouse_pos = Some(new_pos);
+    }
+
+    /// Inject a mouse click event
+    ///
+    /// Used for automated testing and config-driven input.
+    pub fn inject_mouse_click(&mut self, button: MouseButtonType, pressed: bool) {
+        match button {
+            MouseButtonType::Left => self.mouse_buttons.left = pressed,
+            MouseButtonType::Right => self.mouse_buttons.right = pressed,
+            MouseButtonType::Middle => self.mouse_buttons.middle = pressed,
+        }
+    }
+
+    /// Inject a key press event
+    ///
+    /// Used for automated testing and config-driven input.
+    pub fn inject_key(&mut self, key: KeyCode, pressed: bool) {
+        if pressed {
+            self.keys.insert(key);
+        } else {
+            self.keys.remove(&key);
+        }
+    }
+
+    /// Clear all input state
+    pub fn clear(&mut self) {
+        self.keys.clear();
+        self.mouse_pos = None;
+        self.mouse_delta = Vec2::ZERO;
+        self.raw_mouse_delta = Vec2::ZERO;
+        self.scroll_delta = Vec2::ZERO;
+        self.mouse_buttons = MouseButtons::default();
+        self.gamepad = None;
+    }
+}
+
+/// Mouse button type for injection
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MouseButtonType {
+    Left,
+    Right,
+    Middle,
 }
 
 /// Cursor mode for the application
@@ -203,6 +255,14 @@ pub trait App {
     /// Called each frame to check cursor behavior.
     fn cursor_mode(&self) -> CursorMode {
         CursorMode::Normal
+    }
+
+    /// Request to exit the application (optional)
+    ///
+    /// Called each frame after update. Return true to request application exit.
+    /// This is useful for automated testing or scripted runs.
+    fn should_exit(&self) -> bool {
+        false
     }
 }
 
