@@ -5,6 +5,7 @@
 pub mod config;
 pub mod cursor;
 pub mod editing;
+pub mod lua_config;
 pub mod palette;
 pub mod raycast;
 pub mod ui;
@@ -17,6 +18,32 @@ use renderer::{Camera, MeshRenderer, OrbitController, OrbitControllerConfig};
 use std::path::PathBuf;
 use std::rc::Rc;
 use winit::keyboard::KeyCode;
+
+use crate::lua_config::{EditorTestConfig, MouseEvent};
+
+/// Gizmo display options
+#[derive(Debug, Clone, Copy)]
+pub struct GizmoOptions {
+    /// Show 2D mouse pointer crosshair at screen coordinates
+    pub show_2d_pointer: bool,
+    /// Show 3D axis arrows at world hit position
+    pub show_3d_pointer: bool,
+    /// Size of 2D crosshair in pixels
+    pub crosshair_size: f32,
+    /// Scale of 3D axis arrows
+    pub axis_scale: f32,
+}
+
+impl Default for GizmoOptions {
+    fn default() -> Self {
+        Self {
+            show_2d_pointer: true,
+            show_3d_pointer: true,
+            crosshair_size: 15.0,
+            axis_scale: 0.1,
+        }
+    }
+}
 
 use crate::config::EditorConfig;
 use crate::cursor::{CubeCursor, FocusMode};
@@ -53,6 +80,9 @@ pub struct EditorApp {
     prev_tab_pressed: bool,
     prev_left_mouse_pressed: bool,
 
+    // Current mouse position (for 2D gizmo)
+    current_mouse_pos: Option<Vec2>,
+
     // Palette state
     color_palette: ColorPalette,
     material_palette: MaterialPalette,
@@ -63,6 +93,18 @@ pub struct EditorApp {
 
     // Editor configuration (persisted)
     config: EditorConfig,
+
+    // Gizmo options
+    gizmo_options: GizmoOptions,
+
+    // Test configuration (optional, for automated testing)
+    test_config: Option<EditorTestConfig>,
+
+    // Injected input state for testing
+    injected_input: Option<InputState>,
+
+    // Whether we've requested exit (for debug mode)
+    exit_requested: bool,
 }
 
 impl Default for EditorApp {
@@ -106,12 +148,58 @@ impl EditorApp {
             cursor: CubeCursor::new(),
             prev_tab_pressed: false,
             prev_left_mouse_pressed: false,
+            current_mouse_pos: None,
             color_palette: ColorPalette::new(),
             material_palette: MaterialPalette::new(),
             model_palette: ModelPalette::new(),
             file_state: FileState::new(),
             config,
+            gizmo_options: GizmoOptions::default(),
+            test_config: None,
+            injected_input: None,
+            exit_requested: false,
         }
+    }
+
+    /// Create an editor with test configuration from a Lua file
+    pub fn with_test_config(mut self, config: EditorTestConfig) -> Self {
+        self.test_config = Some(config);
+        self
+    }
+
+    /// Load test configuration from a file
+    pub fn from_config_file(path: &std::path::Path) -> Self {
+        let mut editor = Self::new();
+        match EditorTestConfig::from_file(path) {
+            Ok(test_config) => {
+                println!("[Editor] Loaded test config from {:?}", path);
+                if let Some(frames) = test_config.debug_frames {
+                    println!("[Editor] Debug mode: running {} frames", frames);
+                }
+                println!("[Editor] {} scheduled events", test_config.events.len());
+                println!("[Editor] {} scheduled captures", test_config.captures.len());
+                editor.test_config = Some(test_config);
+            }
+            Err(e) => {
+                eprintln!("[Editor] Failed to load test config: {}", e);
+            }
+        }
+        editor
+    }
+
+    /// Check if exit has been requested (for debug mode)
+    pub fn exit_requested(&self) -> bool {
+        self.exit_requested
+    }
+
+    /// Get mutable access to gizmo options
+    pub fn gizmo_options_mut(&mut self) -> &mut GizmoOptions {
+        &mut self.gizmo_options
+    }
+
+    /// Get access to gizmo options
+    pub fn gizmo_options(&self) -> &GizmoOptions {
+        &self.gizmo_options
     }
 
     /// Place a voxel at the given position and re-upload the mesh
@@ -409,30 +497,72 @@ impl App for EditorApp {
     }
 
     fn update(&mut self, ctx: &FrameContext, input: &InputState) {
+        // Process test configuration events if present
+        if let Some(ref test_config) = self.test_config {
+            // Check if we should exit
+            if test_config.should_exit(ctx.frame) {
+                println!("[Editor] Debug mode: exiting after {} frames", ctx.frame);
+                self.exit_requested = true;
+            }
+
+            // Process scheduled events for this frame
+            let events = test_config.events_for_frame(ctx.frame);
+            if !events.is_empty() {
+                // Create or get injected input state
+                let injected = self.injected_input.get_or_insert_with(|| {
+                    let mut state = InputState::default();
+                    // Initialize with last known mouse position
+                    if let Some(pos) = test_config.mouse_position_at_frame(ctx.frame.saturating_sub(1)) {
+                        state.mouse_pos = Some(pos);
+                    }
+                    state
+                });
+
+                for event in events {
+                    match &event.event {
+                        MouseEvent::Move { x, y } => {
+                            println!("[Editor] Frame {}: Injecting mouse move to ({}, {})", ctx.frame, x, y);
+                            injected.inject_mouse_pos(*x, *y);
+                        }
+                        MouseEvent::Click { button, pressed } => {
+                            println!("[Editor] Frame {}: Injecting {:?} click (pressed={})", ctx.frame, button, pressed);
+                            injected.inject_mouse_click(*button, *pressed);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Use injected input if available, otherwise use real input
+        let effective_input = self.injected_input.as_ref().unwrap_or(input);
+
         // Handle camera orbit with right-mouse drag
-        if input.is_right_mouse_pressed() {
-            let yaw_delta = -input.mouse_delta.x * self.orbit_controller.config.mouse_sensitivity;
-            let pitch_delta = -input.mouse_delta.y * self.orbit_controller.config.mouse_sensitivity;
+        if effective_input.is_right_mouse_pressed() {
+            let yaw_delta = -effective_input.mouse_delta.x * self.orbit_controller.config.mouse_sensitivity;
+            let pitch_delta = -effective_input.mouse_delta.y * self.orbit_controller.config.mouse_sensitivity;
             self.orbit_controller.rotate(yaw_delta, pitch_delta, &mut self.camera);
         }
 
         // Handle camera zoom with scroll wheel
         // Scale scroll delta to get reasonable zoom amount
         // (OrbitController's apply_zoom uses 0.01 multiplier designed for egui smooth_scroll)
-        if input.scroll_delta.y.abs() > 0.01 {
-            let zoom_delta = input.scroll_delta.y * 100.0; // Scale up for OrbitController
+        if effective_input.scroll_delta.y.abs() > 0.01 {
+            let zoom_delta = effective_input.scroll_delta.y * 100.0; // Scale up for OrbitController
             self.orbit_controller.zoom(zoom_delta, &mut self.camera);
         }
 
         // Handle Tab key to toggle Near/Far focus mode
-        let tab_pressed = input.is_key_pressed(KeyCode::Tab);
+        let tab_pressed = effective_input.is_key_pressed(KeyCode::Tab);
         if tab_pressed && !self.prev_tab_pressed {
             self.cursor.toggle_mode();
         }
         self.prev_tab_pressed = tab_pressed;
 
+        // Store current mouse position for 2D gizmo rendering
+        self.current_mouse_pos = effective_input.mouse_pos;
+
         // Update cursor from mouse raycast (only if mouse position is available)
-        if let (Some(ref cube), Some(mouse_pos)) = (&self.cube, input.mouse_pos) {
+        if let (Some(ref cube), Some(mouse_pos)) = (&self.cube, effective_input.mouse_pos) {
             let screen_size = Vec2::new(ctx.size.0 as f32, ctx.size.1 as f32);
             if let Some(hit) = raycast_from_mouse(
                 mouse_pos,
@@ -456,13 +586,13 @@ impl App for EditorApp {
         }
 
         // Handle left-click for voxel placement/removal
-        let left_mouse_pressed = input.is_left_mouse_pressed();
+        let left_mouse_pressed = effective_input.is_left_mouse_pressed();
         let left_click = left_mouse_pressed && !self.prev_left_mouse_pressed;
         self.prev_left_mouse_pressed = left_mouse_pressed;
 
         // Check if Shift is held (for removal in Near mode)
-        let shift_held = input.is_key_pressed(KeyCode::ShiftLeft)
-            || input.is_key_pressed(KeyCode::ShiftRight);
+        let shift_held = effective_input.is_key_pressed(KeyCode::ShiftLeft)
+            || effective_input.is_key_pressed(KeyCode::ShiftRight);
 
         if left_click {
             if let Some(ref hit) = self.last_hit {
@@ -543,6 +673,72 @@ impl App for EditorApp {
                 );
             }
         }
+
+        // Render 3D axis arrows gizmo at hit position
+        if self.gizmo_options.show_3d_pointer {
+            if let Some(ref hit) = self.last_hit {
+                unsafe {
+                    self.mesh_renderer.render_3d_axis_arrows(
+                        ctx.gl,
+                        hit.world_pos,
+                        self.gizmo_options.axis_scale,
+                        &self.camera,
+                        width,
+                        height,
+                    );
+                }
+            }
+        }
+
+        // Render 2D crosshair gizmo at mouse position
+        if self.gizmo_options.show_2d_pointer {
+            if let Some(mouse_pos) = self.current_mouse_pos {
+                // Yellow crosshair at mouse position
+                unsafe {
+                    self.mesh_renderer.render_2d_crosshair(
+                        ctx.gl,
+                        mouse_pos,
+                        self.gizmo_options.crosshair_size,
+                        [1.0, 1.0, 0.0], // Yellow
+                        width,
+                        height,
+                    );
+                }
+            }
+        }
+
+        // Handle frame captures from test configuration
+        if let Some(ref test_config) = self.test_config {
+            let captures = test_config.captures_for_frame(ctx.frame);
+            for capture in captures {
+                println!("[Editor] Frame {}: Capturing to {:?}", ctx.frame, capture.path);
+
+                // Ensure parent directory exists
+                if let Some(parent) = capture.path.parent() {
+                    if !parent.exists() {
+                        if let Err(e) = std::fs::create_dir_all(parent) {
+                            eprintln!("[Editor] Failed to create output directory: {}", e);
+                            continue;
+                        }
+                    }
+                }
+
+                // Use the renderer's save function
+                let path_str = capture.path.to_string_lossy();
+                if let Err(e) = self.mesh_renderer.save_framebuffer_to_file(
+                    ctx.gl,
+                    ctx.size.0,
+                    ctx.size.1,
+                    &path_str,
+                ) {
+                    eprintln!("[Editor] Failed to capture frame: {}", e);
+                }
+            }
+        }
+    }
+
+    fn should_exit(&self) -> bool {
+        self.exit_requested
     }
 
     fn ui(&mut self, ctx: &FrameContext, egui_ctx: &egui::Context) {
