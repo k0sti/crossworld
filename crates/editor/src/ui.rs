@@ -3,10 +3,180 @@
 //! Provides UI panels for palette selection, status display, and editor controls.
 
 use egui::{Color32, Rect, Response, Sense, Ui, Vec2};
+use std::path::PathBuf;
 
 use crate::cursor::{CubeCursor, FocusMode};
 use crate::editing::EditorState;
 use crate::palette::{ColorPalette, MaterialPalette, ModelPalette};
+
+// ============================================================================
+// File State and Operations
+// ============================================================================
+
+/// Tracks the current file state for the editor
+#[derive(Debug, Clone)]
+pub struct FileState {
+    /// Path to the currently open file (None if new/unsaved)
+    pub current_file: Option<PathBuf>,
+    /// Whether the file has unsaved changes
+    pub dirty: bool,
+}
+
+impl Default for FileState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl FileState {
+    /// Create a new file state (no file, not dirty)
+    pub fn new() -> Self {
+        Self {
+            current_file: None,
+            dirty: false,
+        }
+    }
+
+    /// Mark the file as having unsaved changes
+    pub fn mark_dirty(&mut self) {
+        self.dirty = true;
+    }
+
+    /// Mark the file as clean (just saved)
+    pub fn mark_clean(&mut self) {
+        self.dirty = false;
+    }
+
+    /// Set the current file path
+    pub fn set_file(&mut self, path: PathBuf) {
+        self.current_file = Some(path);
+        self.dirty = false;
+    }
+
+    /// Clear the current file (new file)
+    pub fn clear(&mut self) {
+        self.current_file = None;
+        self.dirty = false;
+    }
+
+    /// Get display name for the title bar
+    pub fn display_name(&self) -> String {
+        let name = self
+            .current_file
+            .as_ref()
+            .and_then(|p| p.file_name())
+            .and_then(|n| n.to_str())
+            .unwrap_or("Untitled");
+
+        if self.dirty {
+            format!("{}*", name)
+        } else {
+            name.to_string()
+        }
+    }
+}
+
+/// File operations that can be triggered from the UI
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FileOperation {
+    /// Create a new empty cube
+    New,
+    /// Open an existing CSM file
+    Open,
+    /// Save to current file (or Save As if no file)
+    Save,
+    /// Save to a new file
+    SaveAs,
+    /// Import a VOX file into model palette
+    ImportVox,
+}
+
+/// Show the file menu in the top menu bar
+///
+/// Returns the file operation if one was triggered, or None
+///
+/// # Arguments
+/// * `ui` - The egui UI context
+/// * `file_state` - Current file state (for enabling/disabling menu items)
+///
+/// # Returns
+/// Option<FileOperation> - the operation to perform, if any
+pub fn show_file_menu(ui: &mut Ui, file_state: &FileState) -> Option<FileOperation> {
+    let mut operation = None;
+
+    ui.menu_button("File", |ui| {
+        // New (Ctrl+N)
+        if ui
+            .add(egui::Button::new("New").shortcut_text("Ctrl+N"))
+            .clicked()
+        {
+            operation = Some(FileOperation::New);
+            ui.close_menu();
+        }
+
+        ui.separator();
+
+        // Open (Ctrl+O)
+        if ui
+            .add(egui::Button::new("Open...").shortcut_text("Ctrl+O"))
+            .clicked()
+        {
+            operation = Some(FileOperation::Open);
+            ui.close_menu();
+        }
+
+        ui.separator();
+
+        // Save (Ctrl+S)
+        if ui
+            .add(egui::Button::new("Save").shortcut_text("Ctrl+S"))
+            .clicked()
+        {
+            operation = Some(FileOperation::Save);
+            ui.close_menu();
+        }
+
+        // Save As (Ctrl+Shift+S)
+        if ui
+            .add(egui::Button::new("Save As...").shortcut_text("Ctrl+Shift+S"))
+            .clicked()
+        {
+            operation = Some(FileOperation::SaveAs);
+            ui.close_menu();
+        }
+
+        ui.separator();
+
+        // Import VOX
+        if ui.button("Import VOX...").clicked() {
+            operation = Some(FileOperation::ImportVox);
+            ui.close_menu();
+        }
+    });
+
+    // Handle keyboard shortcuts
+    let ctx = ui.ctx();
+    let modifiers = ctx.input(|i| i.modifiers);
+
+    if modifiers.ctrl && !modifiers.shift {
+        if ctx.input(|i| i.key_pressed(egui::Key::N)) {
+            operation = Some(FileOperation::New);
+        } else if ctx.input(|i| i.key_pressed(egui::Key::O)) {
+            operation = Some(FileOperation::Open);
+        } else if ctx.input(|i| i.key_pressed(egui::Key::S)) {
+            operation = Some(FileOperation::Save);
+        }
+    } else if modifiers.ctrl && modifiers.shift {
+        if ctx.input(|i| i.key_pressed(egui::Key::S)) {
+            operation = Some(FileOperation::SaveAs);
+        }
+    }
+
+    // Suppress warning about unused file_state - it's used for future enhancements
+    let _ = file_state;
+
+    operation
+}
 
 /// Size of each color cell in the palette grid (pixels)
 const COLOR_CELL_SIZE: f32 = 16.0;
@@ -827,5 +997,105 @@ mod tests {
 
         // Should handle zero delta gracefully
         assert_eq!(info.fps, 0.0);
+    }
+
+    // ========================================================================
+    // FileState tests
+    // ========================================================================
+
+    #[test]
+    fn test_file_state_new() {
+        let state = FileState::new();
+        assert!(state.current_file.is_none());
+        assert!(!state.dirty);
+    }
+
+    #[test]
+    fn test_file_state_default() {
+        let state = FileState::default();
+        assert!(state.current_file.is_none());
+        assert!(!state.dirty);
+    }
+
+    #[test]
+    fn test_file_state_mark_dirty() {
+        let mut state = FileState::new();
+        assert!(!state.dirty);
+
+        state.mark_dirty();
+        assert!(state.dirty);
+    }
+
+    #[test]
+    fn test_file_state_mark_clean() {
+        let mut state = FileState::new();
+        state.mark_dirty();
+        assert!(state.dirty);
+
+        state.mark_clean();
+        assert!(!state.dirty);
+    }
+
+    #[test]
+    fn test_file_state_set_file() {
+        let mut state = FileState::new();
+        state.mark_dirty();
+
+        let path = PathBuf::from("/tmp/test.csm");
+        state.set_file(path.clone());
+
+        assert_eq!(state.current_file, Some(path));
+        assert!(!state.dirty); // set_file clears dirty flag
+    }
+
+    #[test]
+    fn test_file_state_clear() {
+        let mut state = FileState::new();
+        state.set_file(PathBuf::from("/tmp/test.csm"));
+        state.mark_dirty();
+
+        state.clear();
+
+        assert!(state.current_file.is_none());
+        assert!(!state.dirty);
+    }
+
+    #[test]
+    fn test_file_state_display_name_untitled() {
+        let state = FileState::new();
+        assert_eq!(state.display_name(), "Untitled");
+    }
+
+    #[test]
+    fn test_file_state_display_name_with_file() {
+        let mut state = FileState::new();
+        state.set_file(PathBuf::from("/path/to/my_model.csm"));
+        assert_eq!(state.display_name(), "my_model.csm");
+    }
+
+    #[test]
+    fn test_file_state_display_name_dirty() {
+        let mut state = FileState::new();
+        state.mark_dirty();
+        assert_eq!(state.display_name(), "Untitled*");
+
+        state.set_file(PathBuf::from("/path/to/test.csm"));
+        state.mark_dirty();
+        assert_eq!(state.display_name(), "test.csm*");
+    }
+
+    #[test]
+    fn test_file_operation_variants() {
+        // Ensure all variants are distinct
+        assert_ne!(FileOperation::New, FileOperation::Open);
+        assert_ne!(FileOperation::Save, FileOperation::SaveAs);
+        assert_ne!(FileOperation::SaveAs, FileOperation::ImportVox);
+
+        // Test equality
+        assert_eq!(FileOperation::New, FileOperation::New);
+        assert_eq!(FileOperation::Open, FileOperation::Open);
+        assert_eq!(FileOperation::Save, FileOperation::Save);
+        assert_eq!(FileOperation::SaveAs, FileOperation::SaveAs);
+        assert_eq!(FileOperation::ImportVox, FileOperation::ImportVox);
     }
 }

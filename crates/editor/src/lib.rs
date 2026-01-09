@@ -13,6 +13,7 @@ use cube::Cube;
 use glam::{IVec3, Quat, Vec2, Vec3};
 use glow::HasContext;
 use renderer::{Camera, MeshRenderer, OrbitController, OrbitControllerConfig};
+use std::path::PathBuf;
 use std::rc::Rc;
 use winit::keyboard::KeyCode;
 
@@ -20,6 +21,7 @@ use crate::cursor::{CubeCursor, FocusMode};
 use crate::editing::EditorState;
 use crate::palette::{ColorPalette, ModelPalette};
 use crate::raycast::{raycast_from_mouse, EditorHit};
+use crate::ui::{FileOperation, FileState};
 
 /// Constants for the edited cube
 const CUBE_POSITION: Vec3 = Vec3::ZERO;
@@ -50,6 +52,9 @@ pub struct EditorApp {
     // Palette state
     color_palette: ColorPalette,
     model_palette: ModelPalette,
+
+    // File state
+    file_state: FileState,
 }
 
 impl Default for EditorApp {
@@ -87,6 +92,7 @@ impl EditorApp {
             prev_left_mouse_pressed: false,
             color_palette: ColorPalette::new(),
             model_palette: ModelPalette::new(),
+            file_state: FileState::new(),
         }
     }
 
@@ -112,6 +118,9 @@ impl EditorApp {
         let material = self.editor_state.material();
         let new_cube = Rc::new(cube.set_voxel(pos.x, pos.y, pos.z, depth, material));
         self.cube = Some(new_cube.clone());
+
+        // Mark file as dirty
+        self.file_state.mark_dirty();
 
         // Re-upload mesh
         unsafe {
@@ -149,6 +158,9 @@ impl EditorApp {
         let new_cube = Rc::new(cube.set_voxel(pos.x, pos.y, pos.z, depth, 0));
         self.cube = Some(new_cube.clone());
 
+        // Mark file as dirty
+        self.file_state.mark_dirty();
+
         // Re-upload mesh
         unsafe {
             self.mesh_renderer.clear_meshes(gl);
@@ -157,6 +169,174 @@ impl EditorApp {
                     self.cube_mesh_index = Some(idx);
                 }
                 Err(e) => eprintln!("[Editor] Failed to re-upload mesh: {}", e),
+            }
+        }
+    }
+
+    // ========================================================================
+    // File Operations
+    // ========================================================================
+
+    /// Create a new empty cube and reset file state
+    fn new_cube(&mut self, gl: &glow::Context) {
+        // Create fresh solid cube (same as init)
+        let cube = Rc::new(Cube::Solid(156u8));
+        self.cube = Some(cube.clone());
+
+        // Clear file state
+        self.file_state.clear();
+
+        // Re-upload mesh
+        unsafe {
+            self.mesh_renderer.clear_meshes(gl);
+            match self.mesh_renderer.upload_mesh(gl, &cube, EDIT_DEPTH) {
+                Ok(idx) => {
+                    self.cube_mesh_index = Some(idx);
+                    println!("[Editor] New cube created");
+                }
+                Err(e) => eprintln!("[Editor] Failed to create new cube mesh: {}", e),
+            }
+        }
+    }
+
+    /// Load a CSM file and replace the current cube
+    fn load_csm(&mut self, gl: &glow::Context, path: PathBuf) {
+        // Read file contents
+        let content = match std::fs::read_to_string(&path) {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("[Editor] Failed to read file {:?}: {}", path, e);
+                return;
+            }
+        };
+
+        // Parse CSM
+        let cube = match cube::parse_csm(&content) {
+            Ok(c) => Rc::new(c),
+            Err(e) => {
+                eprintln!("[Editor] Failed to parse CSM file {:?}: {}", path, e);
+                return;
+            }
+        };
+
+        // Update editor state
+        self.cube = Some(cube.clone());
+        self.file_state.set_file(path.clone());
+
+        // Re-upload mesh
+        unsafe {
+            self.mesh_renderer.clear_meshes(gl);
+            match self.mesh_renderer.upload_mesh(gl, &cube, EDIT_DEPTH) {
+                Ok(idx) => {
+                    self.cube_mesh_index = Some(idx);
+                    println!("[Editor] Loaded CSM file: {:?}", path);
+                }
+                Err(e) => eprintln!("[Editor] Failed to upload loaded cube mesh: {}", e),
+            }
+        }
+    }
+
+    /// Save the current cube to a CSM file
+    fn save_csm(&mut self, path: PathBuf) {
+        let Some(ref cube) = self.cube else {
+            eprintln!("[Editor] No cube to save");
+            return;
+        };
+
+        // Serialize to CSM format
+        let content = cube::serialize_csm(cube);
+
+        // Write to file
+        match std::fs::write(&path, content) {
+            Ok(()) => {
+                self.file_state.set_file(path.clone());
+                println!("[Editor] Saved CSM file: {:?}", path);
+            }
+            Err(e) => {
+                eprintln!("[Editor] Failed to write file {:?}: {}", path, e);
+            }
+        }
+    }
+
+    /// Import a VOX file into the model palette
+    fn import_vox(&mut self, path: PathBuf) {
+        // Read file bytes
+        let bytes = match std::fs::read(&path) {
+            Ok(b) => b,
+            Err(e) => {
+                eprintln!("[Editor] Failed to read VOX file {:?}: {}", path, e);
+                return;
+            }
+        };
+
+        // Get filename for display
+        let name = path
+            .file_stem()
+            .and_then(|n| n.to_str())
+            .unwrap_or("unnamed")
+            .to_string();
+
+        // Load into model palette
+        match self.model_palette.load_from_bytes(&name, &bytes) {
+            Ok(id) => {
+                println!("[Editor] Imported VOX model '{}' (id: {})", name, id);
+            }
+            Err(e) => {
+                eprintln!("[Editor] Failed to load VOX file {:?}: {}", path, e);
+            }
+        }
+    }
+
+    /// Handle a file operation triggered from the UI
+    fn handle_file_operation(&mut self, gl: &glow::Context, operation: FileOperation) {
+        match operation {
+            FileOperation::New => {
+                self.new_cube(gl);
+            }
+            FileOperation::Open => {
+                // Open file dialog for CSM files
+                if let Some(path) = rfd::FileDialog::new()
+                    .add_filter("CSM files", &["csm"])
+                    .add_filter("All files", &["*"])
+                    .pick_file()
+                {
+                    self.load_csm(gl, path);
+                }
+            }
+            FileOperation::Save => {
+                // Save to current file or prompt for new file
+                if let Some(path) = self.file_state.current_file.clone() {
+                    self.save_csm(path);
+                } else {
+                    // No current file, do Save As
+                    if let Some(path) = rfd::FileDialog::new()
+                        .add_filter("CSM files", &["csm"])
+                        .set_file_name("untitled.csm")
+                        .save_file()
+                    {
+                        self.save_csm(path);
+                    }
+                }
+            }
+            FileOperation::SaveAs => {
+                // Always prompt for new file
+                if let Some(path) = rfd::FileDialog::new()
+                    .add_filter("CSM files", &["csm"])
+                    .set_file_name("untitled.csm")
+                    .save_file()
+                {
+                    self.save_csm(path);
+                }
+            }
+            FileOperation::ImportVox => {
+                // Open file dialog for VOX files
+                if let Some(path) = rfd::FileDialog::new()
+                    .add_filter("VOX files", &["vox"])
+                    .add_filter("All files", &["*"])
+                    .pick_file()
+                {
+                    self.import_vox(path);
+                }
             }
         }
     }
@@ -311,11 +491,29 @@ impl App for EditorApp {
     }
 
     fn ui(&mut self, ctx: &FrameContext, egui_ctx: &egui::Context) {
-        // Top panel with title
+        // Track file operation to handle after UI
+        let mut file_operation: Option<FileOperation> = None;
+
+        // Top panel with menu bar and title
         egui::TopBottomPanel::top("editor_top_panel").show(egui_ctx, |ui| {
-            ui.horizontal(|ui| {
-                ui.heading("Crossworld Voxel Editor");
+            // Menu bar
+            egui::menu::bar(ui, |ui| {
+                // File menu
+                if let Some(op) = ui::show_file_menu(ui, &self.file_state) {
+                    file_operation = Some(op);
+                }
+
                 ui.separator();
+
+                // Title with filename
+                ui.heading(format!(
+                    "Crossworld Voxel Editor - {}",
+                    self.file_state.display_name()
+                ));
+
+                ui.separator();
+
+                // Mode indicator
                 ui.label(format!(
                     "Mode: {}",
                     if self.cursor.focus_mode == FocusMode::Near {
@@ -337,6 +535,11 @@ impl App for EditorApp {
 
         // Model palette panel on the left side
         ui::show_model_palette_panel(egui_ctx, &mut self.model_palette);
+
+        // Handle file operations after UI rendering
+        if let Some(operation) = file_operation {
+            self.handle_file_operation(ctx.gl, operation);
+        }
     }
 }
 
