@@ -65,6 +65,8 @@ pub struct AppConfig {
     pub gl_minor: u8,
     /// Optional debug mode configuration
     pub debug_mode: Option<DebugMode>,
+    /// Optional note message to display as overlay (supports markdown)
+    pub note: Option<String>,
 }
 
 impl Default for AppConfig {
@@ -76,6 +78,7 @@ impl Default for AppConfig {
             gl_major: 4,
             gl_minor: 3,
             debug_mode: None,
+            note: None,
         }
     }
 }
@@ -106,6 +109,12 @@ impl AppConfig {
     /// Enable debug mode with the specified number of frames
     pub fn with_debug_mode(mut self, frames: u64) -> Self {
         self.debug_mode = Some(DebugMode::new(frames));
+        self
+    }
+
+    /// Set a note message to display as overlay (supports markdown)
+    pub fn with_note(mut self, note: impl Into<String>) -> Self {
+        self.note = Some(note.into());
         self
     }
 }
@@ -524,8 +533,16 @@ impl<A: App> ApplicationHandler for AppRuntime<A> {
                             gl.blend_func(glow::SRC_ALPHA, glow::ONE_MINUS_SRC_ALPHA);
                         }
 
+                        // Get note for rendering in the closure
+                        let note = self.config.note.clone();
+
                         egui.run(window, [size.width, size.height], |egui_ctx| {
                             self.app.ui(&ctx, egui_ctx);
+
+                            // Render note overlay if configured
+                            if let Some(ref note_text) = note {
+                                super::note_overlay::render_note_overlay(egui_ctx, note_text);
+                            }
                         });
 
                         // Restore GL state

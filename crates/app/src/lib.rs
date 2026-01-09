@@ -34,10 +34,14 @@ pub use controller::GilrsBackend;
 #[cfg(feature = "runtime")]
 mod egui_integration;
 #[cfg(feature = "runtime")]
+mod note_overlay;
+#[cfg(feature = "runtime")]
 mod runner;
 
 #[cfg(feature = "runtime")]
 pub use egui_integration::EguiIntegration;
+#[cfg(feature = "runtime")]
+pub use note_overlay::render_note_overlay;
 #[cfg(feature = "runtime")]
 pub use runner::{create_event_loop, run_app, AppConfig, AppRuntime, DebugMode};
 

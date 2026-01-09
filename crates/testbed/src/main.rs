@@ -17,6 +17,7 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     let mut debug_frames: Option<u64> = None;
     let mut config_path: Option<PathBuf> = None;
+    let mut note_message: Option<String> = None;
 
     let mut i = 1;
     while i < args.len() {
@@ -49,12 +50,23 @@ fn main() {
                     return;
                 }
             }
+            "--note" | "-n" => {
+                if i + 1 < args.len() {
+                    note_message = Some(args[i + 1].clone());
+                    println!("Note message: {}\n", args[i + 1]);
+                    i += 1;
+                } else {
+                    eprintln!("Error: --note requires a message");
+                    return;
+                }
+            }
             "--help" | "-h" => {
                 println!("Usage: testbed [OPTIONS]");
                 println!();
                 println!("Options:");
                 println!("  --debug N       Run only N frames with debug output");
                 println!("  --config PATH   Load scene configuration from Lua (.lua) file");
+                println!("  --note MESSAGE  Display a note overlay with markdown text");
                 println!("  --help          Show this help message");
                 return;
             }
@@ -87,6 +99,11 @@ fn main() {
     // Apply debug mode if requested
     if let Some(frames) = debug_frames {
         config = config.with_debug_mode(frames);
+    }
+
+    // Apply note overlay if requested
+    if let Some(note) = note_message {
+        config = config.with_note(note);
     }
 
     run_app(app, config);
