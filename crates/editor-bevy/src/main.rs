@@ -1,0 +1,100 @@
+use bevy::prelude::*;
+use bevy_egui::EguiPlugin;
+
+mod camera;
+mod config;
+mod voxel_scene;
+mod mesh_sync;
+mod raycast;
+mod cursor;
+mod editing;
+mod file_io;
+mod file_ops;
+mod ui;
+
+use camera::{CameraPlugin, OrbitCamera};
+use config::EditorConfig;
+use voxel_scene::VoxelScenePlugin;
+use mesh_sync::MeshSyncPlugin;
+use raycast::RaycastPlugin;
+use cursor::CursorPlugin;
+use editing::EditingPlugin;
+use file_io::FileIoPlugin;
+use file_ops::FileOpsPlugin;
+use ui::UiPlugin;
+
+fn main() {
+    App::new()
+        .add_plugins(DefaultPlugins.set(WindowPlugin {
+            primary_window: Some(Window {
+                title: "Crossworld Voxel Editor".to_string(),
+                resolution: (1280, 720).into(),
+                ..default()
+            }),
+            ..default()
+        }))
+        .add_plugins(EguiPlugin::default())
+        .init_resource::<EditorConfig>()
+        .add_plugins(CameraPlugin)
+        .add_plugins(VoxelScenePlugin)
+        .add_plugins(MeshSyncPlugin)
+        .add_plugins(RaycastPlugin)
+        .add_plugins(CursorPlugin)
+        .add_plugins(EditingPlugin)
+        .add_plugins(FileIoPlugin)
+        .add_plugins(FileOpsPlugin)
+        .add_plugins(UiPlugin)
+        .add_plugins(EditorPlugin)
+        .run();
+}
+
+struct EditorPlugin;
+
+impl Plugin for EditorPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(Startup, setup_scene);
+    }
+}
+
+fn setup_scene(
+    mut commands: Commands,
+) {
+    // Spawn orbit camera at (10, 10, 10) looking at origin
+    let orbit_camera = OrbitCamera::new(Vec3::ZERO, 15.0);
+    commands.spawn((
+        Camera3d::default(),
+        orbit_camera.calculate_transform(),
+        orbit_camera,
+    ));
+
+    // Add a directional light
+    commands.spawn((
+        DirectionalLight {
+            illuminance: 10000.0,
+            shadows_enabled: true,
+            ..default()
+        },
+        Transform::from_xyz(4.0, 8.0, 4.0).looking_at(Vec3::ZERO, Vec3::Y),
+    ));
+
+    // Add an ambient light for better visibility
+    commands.insert_resource(AmbientLight {
+        color: Color::WHITE,
+        brightness: 200.0,
+        affects_lightmapped_meshes: false,
+    });
+
+    // Add a ground plane as a visual reference
+    // commands.spawn((
+    //     Mesh3d(meshes.add(Plane3d::default().mesh().size(20.0, 20.0))),
+    //     MeshMaterial3d(materials.add(StandardMaterial {
+    //         base_color: Color::srgb(0.3, 0.5, 0.3),
+    //         ..default()
+    //     })),
+    //     Transform::from_xyz(0.0, -0.5, 0.0),
+    // ));
+
+    info!("Crossworld Voxel Editor initialized");
+    info!("Camera positioned at (10, 10, 10) looking at origin");
+    info!("VoxelScene will generate terrain on first frame");
+}
