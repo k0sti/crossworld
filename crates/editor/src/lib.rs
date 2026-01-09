@@ -277,7 +277,7 @@ impl EditorApp {
             .to_string();
 
         // Load into model palette
-        match self.model_palette.load_from_bytes(&name, &bytes) {
+        match self.model_palette.load_from_bytes(&bytes, &name) {
             Ok(id) => {
                 println!("[Editor] Imported VOX model '{}' (id: {})", name, id);
             }
