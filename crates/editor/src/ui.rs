@@ -166,10 +166,8 @@ pub fn show_file_menu(ui: &mut Ui, _file_state: &FileState) -> Option<FileOperat
         } else if ctx.input(|i| i.key_pressed(egui::Key::S)) {
             operation = Some(FileOperation::Save);
         }
-    } else if modifiers.ctrl && modifiers.shift {
-        if ctx.input(|i| i.key_pressed(egui::Key::S)) {
-            operation = Some(FileOperation::SaveAs);
-        }
+    } else if modifiers.ctrl && modifiers.shift && ctx.input(|i| i.key_pressed(egui::Key::S)) {
+        operation = Some(FileOperation::SaveAs);
     }
 
     operation

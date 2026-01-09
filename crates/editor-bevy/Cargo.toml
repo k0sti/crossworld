@@ -7,7 +7,7 @@ description = "Native voxel editor for Crossworld using Bevy"
 license = "MIT OR Apache-2.0"
 
 [[bin]]
-name = "editor"
+name = "editor-bevy"
 path = "src/main.rs"
 
 [dependencies]
