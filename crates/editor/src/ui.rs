@@ -740,6 +740,219 @@ pub fn show_model_palette_panel(ctx: &egui::Context, model_palette: &mut ModelPa
     model_selected
 }
 
+// ============================================================================
+// Cursor Info Panel
+// ============================================================================
+
+/// Show cursor information panel
+///
+/// Displays details about the current cursor state including:
+/// - Cursor position (CubeCoord)
+/// - Cursor size
+/// - Depth controls (increment/decrement buttons)
+/// - Alignment mode
+/// - Hit face
+///
+/// # Arguments
+/// * `ui` - The egui UI context
+/// * `cursor` - The current cursor state (mutable for depth controls)
+/// * `max_depth` - Maximum allowed depth for the cursor
+pub fn show_cursor_info(ui: &mut Ui, cursor: &mut CubeCursor, max_depth: u32) {
+    // Validity indicator
+    ui.horizontal(|ui| {
+        let (status, color) = if cursor.valid {
+            ("Active", Color32::from_rgb(100, 200, 100))
+        } else {
+            ("Inactive", Color32::from_gray(150))
+        };
+        ui.label("Status:");
+        ui.colored_label(color, status);
+    });
+
+    ui.separator();
+
+    // Mode indicator
+    ui.horizontal(|ui| {
+        let (mode_text, mode_color) = match cursor.focus_mode {
+            FocusMode::Near => ("Near (Remove)", Color32::from_rgb(255, 100, 100)),
+            FocusMode::Far => ("Far (Place)", Color32::from_rgb(100, 255, 100)),
+        };
+        ui.label("Mode:");
+        ui.colored_label(mode_color, mode_text);
+    });
+
+    ui.add_space(4.0);
+
+    // Depth controls with increment/decrement buttons
+    ui.group(|ui| {
+        ui.label("Depth:");
+        ui.horizontal(|ui| {
+            // Decrement button
+            if ui.button("-").clicked() {
+                cursor.decrease_depth();
+            }
+
+            // Current depth display
+            ui.monospace(format!("{}", cursor.coord.depth));
+
+            // Increment button
+            if ui.button("+").clicked() {
+                cursor.increase_depth(max_depth);
+            }
+
+            // Show voxel size at this depth
+            let voxel_count = 1u32 << cursor.coord.depth;
+            ui.label(format!("({}x{}x{})", voxel_count, voxel_count, voxel_count));
+        });
+    });
+
+    ui.add_space(4.0);
+
+    // Coordinate info (CubeCoord)
+    ui.group(|ui| {
+        ui.label("Position:");
+        ui.horizontal(|ui| {
+            ui.monospace(format!(
+                "({}, {}, {})",
+                cursor.coord.pos.x, cursor.coord.pos.y, cursor.coord.pos.z
+            ));
+        });
+    });
+
+    ui.add_space(4.0);
+
+    // Size info
+    ui.group(|ui| {
+        ui.label("Size:");
+        ui.horizontal(|ui| {
+            ui.monospace(format!(
+                "{}x{}x{}",
+                cursor.size.x, cursor.size.y, cursor.size.z
+            ));
+        });
+    });
+
+    ui.add_space(4.0);
+
+    // Alignment mode
+    ui.horizontal(|ui| {
+        ui.label("Align:");
+        ui.monospace(cursor.align.name());
+    });
+
+    // Hit face info
+    if let Some(face) = cursor.hit_face {
+        ui.add_space(4.0);
+        ui.horizontal(|ui| {
+            ui.label("Hit Face:");
+            let face_name = match face {
+                cube::Axis::PosX => "+X",
+                cube::Axis::NegX => "-X",
+                cube::Axis::PosY => "+Y",
+                cube::Axis::NegY => "-Y",
+                cube::Axis::PosZ => "+Z",
+                cube::Axis::NegZ => "-Z",
+            };
+            ui.monospace(face_name);
+        });
+
+        ui.horizontal(|ui| {
+            ui.label("Hit Pos:");
+            ui.monospace(format!(
+                "({:.2}, {:.2}, {:.2})",
+                cursor.hit_position.x, cursor.hit_position.y, cursor.hit_position.z
+            ));
+        });
+    }
+}
+
+// ============================================================================
+// Unified Sidebar Panel
+// ============================================================================
+
+/// Result from showing the unified sidebar
+pub struct SidebarResult {
+    /// Whether a color was selected
+    pub color_selected: bool,
+    /// Whether a material was selected
+    pub material_selected: bool,
+    /// Whether a model was selected
+    pub model_selected: bool,
+}
+
+/// Show the unified left sidebar with all palettes and cursor info
+///
+/// This creates a single left panel with collapsible sections for:
+/// - Cursor Info
+/// - Color Palette (R2G3B2)
+/// - Material Palette
+/// - Model Palette
+///
+/// # Arguments
+/// * `ctx` - The egui context
+/// * `cursor` - The cursor state (mutable for depth controls)
+/// * `max_depth` - Maximum allowed depth for the cursor
+/// * `color_palette` - The color palette state
+/// * `material_palette` - The material palette state
+/// * `model_palette` - The model palette state
+/// * `editor_state` - The editor state
+///
+/// # Returns
+/// SidebarResult with flags for what was selected
+pub fn show_unified_sidebar(
+    ctx: &egui::Context,
+    cursor: &mut CubeCursor,
+    max_depth: u32,
+    color_palette: &mut ColorPalette,
+    material_palette: &mut MaterialPalette,
+    model_palette: &mut ModelPalette,
+    editor_state: &mut EditorState,
+) -> SidebarResult {
+    let mut result = SidebarResult {
+        color_selected: false,
+        material_selected: false,
+        model_selected: false,
+    };
+
+    egui::SidePanel::left("unified_sidebar")
+        .resizable(true)
+        .min_width(280.0)
+        .default_width(300.0)
+        .show(ctx, |ui| {
+            egui::ScrollArea::vertical()
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    // Cursor Info section
+                    ui.collapsing("Cursor Info", |ui| {
+                        show_cursor_info(ui, cursor, max_depth);
+                    });
+
+                    ui.add_space(8.0);
+
+                    // Color Palette section
+                    ui.collapsing("Colors (R2G3B2)", |ui| {
+                        result.color_selected = show_color_palette(ui, color_palette, editor_state);
+                    });
+
+                    ui.add_space(8.0);
+
+                    // Material Palette section
+                    ui.collapsing("Materials", |ui| {
+                        result.material_selected = show_material_palette(ui, material_palette, editor_state);
+                    });
+
+                    ui.add_space(8.0);
+
+                    // Model Palette section
+                    ui.collapsing("Models", |ui| {
+                        result.model_selected = show_model_palette(ui, model_palette);
+                    });
+                });
+        });
+
+    result
+}
+
 /// Status bar information
 pub struct StatusBarInfo {
     /// Current FPS
@@ -765,7 +978,7 @@ impl StatusBarInfo {
             },
             cursor_valid: cursor.valid,
             cursor_position: if cursor.valid {
-                Some(cursor.position)
+                Some(cursor.position())
             } else {
                 None
             },
