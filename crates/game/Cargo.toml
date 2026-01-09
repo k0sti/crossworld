@@ -19,6 +19,9 @@ app = { path = "../app", features = ["runtime"] }
 renderer = { path = "../renderer" }
 cube = { path = "../cube" }
 
+# World generation
+crossworld-world = { path = "../world" }
+
 # Core graphics (needed for App trait implementation in lib)
 glow = "0.16"
 glam = "0.30"
