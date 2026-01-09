@@ -29,6 +29,9 @@ winit = "0.30"
 egui = "0.29"
 egui_glow = "0.29"
 
+# Native file dialogs
+rfd = "0.15"
+
 [target.'cfg(target_os = "linux")'.dependencies]
 winit = { version = "0.30", features = ["x11"] }
 
