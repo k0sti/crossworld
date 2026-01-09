@@ -1021,10 +1021,10 @@ pub fn show_status_bar(ctx: &egui::Context, info: &StatusBarInfo) {
                     ui.separator();
                 }
 
-                // Cursor mode
+                // Cursor mode (with keyboard hint)
                 let mode_text = match info.cursor_mode {
-                    FocusMode::Near => "Mode: Near (Remove)",
-                    FocusMode::Far => "Mode: Far (Place)",
+                    FocusMode::Near => "Mode: Near [SPACE]",
+                    FocusMode::Far => "Mode: Far [SPACE]",
                 };
                 let mode_color = match info.cursor_mode {
                     FocusMode::Near => Color32::from_rgb(255, 100, 100),

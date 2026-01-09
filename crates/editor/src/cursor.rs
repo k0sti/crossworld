@@ -31,7 +31,7 @@ impl FocusMode {
     pub fn wireframe_color(&self) -> [f32; 3] {
         match self {
             FocusMode::Near => [1.0, 0.3, 0.3], // Red for removal
-            FocusMode::Far => [0.3, 1.0, 0.3],  // Green for placement
+            FocusMode::Far => [1.0, 1.0, 0.0],  // Yellow for placement (more visible)
         }
     }
 }
@@ -81,7 +81,7 @@ impl Default for CursorCoord {
     fn default() -> Self {
         Self {
             pos: IVec3::ZERO,
-            depth: 0, // Default to 0 (whole cube)
+            depth: 4, // Default to depth 4 (16x16x16 voxels)
         }
     }
 }
@@ -331,6 +331,68 @@ impl CubeCursor {
         self.update_from_raycast_with_face(hit_position, face, voxel_coord, self.coord.depth);
     }
 
+    /// Update cursor position using the new coord selection logic
+    ///
+    /// This method uses the EditorHit's select_coord_at_depth to properly handle
+    /// far/near mode based on whether the hit face is at a boundary of the cursor depth.
+    ///
+    /// # Arguments
+    /// * `hit_position` - World position of the raycast hit
+    /// * `face` - The face that was hit
+    /// * `selected_coord` - The voxel coordinate selected by select_coord_at_depth
+    /// * `depth` - The depth level for the cursor
+    /// * `is_boundary` - Whether the hit was at a boundary face
+    pub fn update_from_selected_coord(
+        &mut self,
+        hit_position: Vec3,
+        face: Axis,
+        selected_coord: IVec3,
+        depth: u32,
+        is_boundary: bool,
+    ) {
+        self.valid = true;
+        self.hit_face = Some(face);
+        self.hit_position = hit_position;
+        self.coord.depth = depth;
+
+        // The selected_coord already accounts for far/near mode
+        // Apply alignment based on face
+        self.coord.pos = self.calculate_aligned_position(selected_coord, face);
+
+        // Store whether this was a boundary hit for potential UI display
+        let _ = is_boundary; // Currently unused but available for future use
+    }
+
+    /// Update cursor position while preserving the current depth
+    ///
+    /// Similar to update_from_selected_coord but does not change the cursor's depth.
+    /// The selected_coord should already be calculated at the cursor's current depth.
+    ///
+    /// # Arguments
+    /// * `hit_position` - World position of the raycast hit
+    /// * `face` - The face that was hit
+    /// * `selected_coord` - The voxel coordinate selected at cursor's current depth
+    /// * `is_boundary` - Whether the hit was at a boundary face
+    pub fn update_from_selected_coord_preserve_depth(
+        &mut self,
+        hit_position: Vec3,
+        face: Axis,
+        selected_coord: IVec3,
+        is_boundary: bool,
+    ) {
+        self.valid = true;
+        self.hit_face = Some(face);
+        self.hit_position = hit_position;
+        // Don't change self.coord.depth - preserve current cursor depth
+
+        // The selected_coord already accounts for far/near mode
+        // Apply alignment based on face
+        self.coord.pos = self.calculate_aligned_position(selected_coord, face);
+
+        // Store whether this was a boundary hit for potential UI display
+        let _ = is_boundary; // Currently unused but available for future use
+    }
+
     /// Mark cursor as invalid (no raycast hit)
     pub fn invalidate(&mut self) {
         self.valid = false;
@@ -418,7 +480,7 @@ mod tests {
     #[test]
     fn test_wireframe_colors() {
         assert_eq!(FocusMode::Near.wireframe_color(), [1.0, 0.3, 0.3]);
-        assert_eq!(FocusMode::Far.wireframe_color(), [0.3, 1.0, 0.3]);
+        assert_eq!(FocusMode::Far.wireframe_color(), [1.0, 1.0, 0.0]); // Yellow for visibility
     }
 
     #[test]
