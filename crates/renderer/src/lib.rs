@@ -27,6 +27,7 @@ pub mod renderers;
 pub mod bcf_raycast;
 pub mod scenes;
 pub mod shader_utils;
+pub mod thumbnail;
 
 // Backward-compatible re-exports (old flat structure)
 pub mod bcf_cpu_tracer {

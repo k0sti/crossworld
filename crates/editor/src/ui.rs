@@ -87,8 +87,6 @@ pub enum FileOperation {
     Save,
     /// Save to a new file
     SaveAs,
-    /// Import a VOX file into model palette
-    ImportVox,
 }
 
 /// Show the file menu in the top menu bar
@@ -142,14 +140,6 @@ pub fn show_file_menu(ui: &mut Ui, _file_state: &FileState) -> Option<FileOperat
             .clicked()
         {
             operation = Some(FileOperation::SaveAs);
-            ui.close();
-        }
-
-        ui.separator();
-
-        // Import VOX
-        if ui.button("Import VOX...").clicked() {
-            operation = Some(FileOperation::ImportVox);
             ui.close();
         }
     });
@@ -593,9 +583,6 @@ pub fn show_model_palette(ui: &mut Ui, model_palette: &mut ModelPalette) -> bool
         ui.vertical_centered(|ui| {
             ui.add_space(20.0);
             ui.label("No models loaded");
-            ui.add_space(8.0);
-            ui.label("Use File > Import VOX");
-            ui.label("to load models");
             ui.add_space(20.0);
         });
     } else {
@@ -1300,13 +1287,11 @@ mod tests {
         // Ensure all variants are distinct
         assert_ne!(FileOperation::New, FileOperation::Open);
         assert_ne!(FileOperation::Save, FileOperation::SaveAs);
-        assert_ne!(FileOperation::SaveAs, FileOperation::ImportVox);
 
         // Test equality
         assert_eq!(FileOperation::New, FileOperation::New);
         assert_eq!(FileOperation::Open, FileOperation::Open);
         assert_eq!(FileOperation::Save, FileOperation::Save);
         assert_eq!(FileOperation::SaveAs, FileOperation::SaveAs);
-        assert_eq!(FileOperation::ImportVox, FileOperation::ImportVox);
     }
 }
