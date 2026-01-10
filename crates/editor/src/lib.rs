@@ -119,11 +119,11 @@ struct EditPlane {
 impl EditPlane {
     /// Create a new edit plane from cursor position (which already accounts for Far/Near mode)
     fn from_cursor(
-        cursor_pos: IVec3,
+        _cursor_pos: IVec3,
         normal: Vec3,
         depth: u32,
-        cube_position: Vec3,
-        cube_scale: f32,
+        _cube_position: Vec3,
+        _cube_scale: f32,
         hit_pos: Vec3,
     ) -> Self {
         // Calculate right and up vectors for the plane
@@ -138,15 +138,9 @@ impl EditPlane {
             (Vec3::new(1.0, 0.0, 0.0), Vec3::new(0.0, 1.0, 0.0))
         };
 
-        // Convert cursor voxel position to world space (this is the voxel center)
-        let half_scale = cube_scale * 0.5;
-        let scale = (1 << depth) as f32 / 2.0;
-        let cube_pos = Vec3::new(
-            (cursor_pos.x as f32 + 0.5) / scale - 1.0,
-            (cursor_pos.y as f32 + 0.5) / scale - 1.0,
-            (cursor_pos.z as f32 + 0.5) / scale - 1.0,
-        );
-        let origin = cube_position + cube_pos * half_scale;
+        // Use the actual hit position as the plane origin
+        // This ensures the plane passes through the exact raycast hit point
+        let origin = hit_pos;
 
         Self {
             origin,
@@ -173,17 +167,42 @@ impl EditPlane {
         Some(ray_origin + ray_direction * t)
     }
 
-    /// Convert world position on plane to voxel coordinate at the plane's depth
-    fn world_to_voxel(&self, world_pos: Vec3, cube_position: Vec3, cube_scale: f32) -> IVec3 {
+    /// Convert world position to the nearest voxel corner at the plane's depth
+    /// Uses rounding to get the nearest corner, not floor
+    fn world_to_nearest_voxel_corner(
+        &self,
+        world_pos: Vec3,
+        cube_position: Vec3,
+        cube_scale: f32,
+    ) -> IVec3 {
         let half_scale = cube_scale * 0.5;
         let cube_pos = (world_pos - cube_position) / half_scale;
 
         let scale = (1 << self.depth) as f32 / 2.0;
         IVec3::new(
-            ((cube_pos.x + 1.0) * scale).floor() as i32,
-            ((cube_pos.y + 1.0) * scale).floor() as i32,
-            ((cube_pos.z + 1.0) * scale).floor() as i32,
+            ((cube_pos.x + 1.0) * scale).round() as i32,
+            ((cube_pos.y + 1.0) * scale).round() as i32,
+            ((cube_pos.z + 1.0) * scale).round() as i32,
         )
+    }
+
+    /// Convert voxel corner coordinate back to world position
+    fn voxel_corner_to_world(
+        &self,
+        voxel_pos: IVec3,
+        cube_position: Vec3,
+        cube_scale: f32,
+    ) -> Vec3 {
+        let half_scale = cube_scale * 0.5;
+        let scale = (1 << self.depth) as f32 / 2.0;
+
+        let cube_pos = Vec3::new(
+            voxel_pos.x as f32 / scale - 1.0,
+            voxel_pos.y as f32 / scale - 1.0,
+            voxel_pos.z as f32 / scale - 1.0,
+        );
+
+        cube_position + cube_pos * half_scale
     }
 }
 
@@ -211,6 +230,9 @@ pub struct EditorApp {
 
     // Edit plane state (for drag operations)
     edit_plane: Option<EditPlane>,
+
+    // Current drag target world position (exact ray-plane intersection, not snapped)
+    drag_target_world_pos: Option<Vec3>,
 
     // Current mouse position (for 2D gizmo)
     current_mouse_pos: Option<Vec2>,
@@ -288,6 +310,7 @@ impl EditorApp {
             prev_space_pressed: false,
             prev_left_mouse_pressed: false,
             edit_plane: None,
+            drag_target_world_pos: None,
             current_mouse_pos: None,
             color_palette: ColorPalette::new(),
             material_palette: MaterialPalette::new(),
@@ -973,8 +996,28 @@ impl App for EditorApp {
                 let ray = mouse_to_ray(mouse_pos, screen_size, &self.camera);
 
                 if let Some(world_pos) = plane.project_ray(ray.origin, ray.direction) {
-                    let voxel_coord = plane.world_to_voxel(world_pos, CUBE_POSITION, CUBE_SCALE);
+                    // Store the exact world position for gizmo rendering (not snapped to voxel grid)
+                    self.drag_target_world_pos = Some(world_pos);
+
+                    // Get the nearest voxel corner to the ray-plane intersection
+                    let nearest_corner =
+                        plane.world_to_nearest_voxel_corner(world_pos, CUBE_POSITION, CUBE_SCALE);
                     let cursor_depth = plane.depth;
+
+                    // Apply Far/Near mode offset: Far mode places voxels one step further
+                    let normal_ivec = IVec3::new(
+                        plane.normal.x.round() as i32,
+                        plane.normal.y.round() as i32,
+                        plane.normal.z.round() as i32,
+                    );
+
+                    let voxel_coord = if self.cursor.focus_mode == FocusMode::Far {
+                        // Far mode: offset two voxels in the normal direction from nearest corner
+                        nearest_corner
+                    } else {
+                        // Near mode: offset one voxel in the normal direction from nearest corner
+                        nearest_corner - normal_ivec
+                    };
 
                     // Update cursor to show where we're drawing
                     self.cursor.coord.pos = voxel_coord;
@@ -991,9 +1034,10 @@ impl App for EditorApp {
             }
         }
 
-        // On mouse release: clear edit plane
+        // On mouse release: clear edit plane and drag target
         if left_release {
             self.edit_plane = None;
+            self.drag_target_world_pos = None;
         }
 
         self.prev_left_mouse_pressed = left_mouse_pressed;
@@ -1055,19 +1099,21 @@ impl App for EditorApp {
             let voxel_size = CUBE_SCALE / (1 << plane.depth) as f32;
             let line_thickness = voxel_size * LINE_WIDTH_FACTOR;
 
-            // Snap grid origin to voxel grid at cursor depth
-            let half_scale = CUBE_SCALE * 0.5;
-            let cube_pos = (plane.hit_pos - CUBE_POSITION) / half_scale;
-            let scale = (1 << plane.depth) as f32 / 2.0;
+            // Use exact drag target world position (ray-plane intersection) for gizmo
+            // This is the unsnapped position that follows the mouse precisely
+            let target_world_pos = self.drag_target_world_pos.unwrap_or(plane.hit_pos);
 
-            // Round to nearest voxel grid intersection
-            let voxel_x = (cube_pos.x * scale).round();
-            let voxel_y = (cube_pos.y * scale).round();
-            let voxel_z = (cube_pos.z * scale).round();
+            // Snap grid origin to the global voxel grid at the current depth
+            // Get nearest voxel corner, convert back to world, then project onto plane
+            let nearest_corner =
+                plane.world_to_nearest_voxel_corner(target_world_pos, CUBE_POSITION, CUBE_SCALE);
+            let corner_world_pos =
+                plane.voxel_corner_to_world(nearest_corner, CUBE_POSITION, CUBE_SCALE);
 
-            // Convert back to world space
-            let snapped_cube_pos = Vec3::new(voxel_x / scale, voxel_y / scale, voxel_z / scale);
-            let grid_origin = CUBE_POSITION + snapped_cube_pos * half_scale;
+            // Project the corner onto the plane to ensure grid stays on the edit plane
+            let offset = corner_world_pos - plane.origin;
+            let distance_along_normal = offset.dot(plane.normal);
+            let grid_origin = corner_world_pos - plane.normal * distance_along_normal;
 
             unsafe {
                 // Draw grid lines parallel to right axis
@@ -1079,9 +1125,9 @@ impl App for EditorApp {
 
                     let line_center = (start + end) * 0.5;
 
-                    // Calculate distance-based opacity for fade at edges (zero at distance 4)
-                    let dist_from_hit = (line_center - plane.hit_pos).length();
-                    let max_dist = 4.0 * voxel_size;
+                    // Calculate distance-based opacity for gradient fade (fully transparent at distance 3)
+                    let dist_from_hit = (line_center - target_world_pos).length();
+                    let max_dist = 3.0 * voxel_size;
                     let alpha = (1.0 - (dist_from_hit / max_dist)).clamp(0.0, 1.0);
 
                     // Skip lines beyond fade distance
@@ -1093,16 +1139,10 @@ impl App for EditorApp {
                     let line_dir = (end - start).normalize();
                     let rotation = Quat::from_rotation_arc(Vec3::X, line_dir);
 
-                    // Fade by blending toward white (simulates transparency against light background)
-                    let base_color = [0.3, 0.6, 1.0];
-                    let white = [1.0, 1.0, 1.0];
-                    let color = [
-                        base_color[0] * alpha + white[0] * (1.0 - alpha),
-                        base_color[1] * alpha + white[1] * (1.0 - alpha),
-                        base_color[2] * alpha + white[2] * (1.0 - alpha),
-                    ];
+                    // Use actual alpha transparency (blue grid)
+                    let color = [0.3, 0.6, 1.0, alpha];
 
-                    self.mesh_renderer.render_cubebox_wireframe_colored(
+                    self.mesh_renderer.render_cubebox_wireframe_colored_alpha(
                         ctx.gl,
                         line_center,
                         rotation,
@@ -1123,9 +1163,9 @@ impl App for EditorApp {
 
                     let line_center = (start + end) * 0.5;
 
-                    // Calculate distance-based opacity for fade at edges (zero at distance 4)
-                    let dist_from_hit = (line_center - plane.hit_pos).length();
-                    let max_dist = 4.0 * voxel_size;
+                    // Calculate distance-based opacity for gradient fade (fully transparent at distance 3)
+                    let dist_from_hit = (line_center - target_world_pos).length();
+                    let max_dist = 3.0 * voxel_size;
                     let alpha = (1.0 - (dist_from_hit / max_dist)).clamp(0.0, 1.0);
 
                     // Skip lines beyond fade distance
@@ -1137,16 +1177,10 @@ impl App for EditorApp {
                     let line_dir = (end - start).normalize();
                     let rotation = Quat::from_rotation_arc(Vec3::X, line_dir);
 
-                    // Fade by blending toward white (simulates transparency against light background)
-                    let base_color = [0.3, 0.6, 1.0];
-                    let white = [1.0, 1.0, 1.0];
-                    let color = [
-                        base_color[0] * alpha + white[0] * (1.0 - alpha),
-                        base_color[1] * alpha + white[1] * (1.0 - alpha),
-                        base_color[2] * alpha + white[2] * (1.0 - alpha),
-                    ];
+                    // Use actual alpha transparency (blue grid)
+                    let color = [0.3, 0.6, 1.0, alpha];
 
-                    self.mesh_renderer.render_cubebox_wireframe_colored(
+                    self.mesh_renderer.render_cubebox_wireframe_colored_alpha(
                         ctx.gl,
                         line_center,
                         rotation,
@@ -1159,20 +1193,20 @@ impl App for EditorApp {
                     );
                 }
 
-                // Draw gizmo dot at raycast hit point
+                // Draw gizmo dot at paint start position (initial hit point)
                 self.mesh_renderer.render_cubebox_wireframe_colored(
                     ctx.gl,
                     plane.hit_pos,
                     Quat::IDENTITY,
                     Vec3::ONE,
                     voxel_size * 0.1,
-                    [1.0, 1.0, 0.0], // Yellow
+                    [1.0, 1.0, 0.0], // Yellow for start position
                     &self.camera,
                     width,
                     height,
                 );
 
-                // Draw short line from hit point toward camera
+                // Draw short line from start hit point toward camera
                 let line_length = voxel_size * 2.0;
                 let to_camera = (self.camera.position - plane.hit_pos).normalize();
                 let line_end = plane.hit_pos + to_camera * line_length;
@@ -1186,7 +1220,38 @@ impl App for EditorApp {
                     rotation,
                     Vec3::new(line_length, line_thickness * 2.0, line_thickness * 2.0),
                     1.0,
-                    [1.0, 1.0, 0.0], // Yellow
+                    [1.0, 1.0, 0.0], // Yellow for start position
+                    &self.camera,
+                    width,
+                    height,
+                );
+
+                // Draw gizmo dot at current paint target position (exact ray-plane intersection)
+                self.mesh_renderer.render_cubebox_wireframe_colored(
+                    ctx.gl,
+                    target_world_pos,
+                    Quat::IDENTITY,
+                    Vec3::ONE,
+                    voxel_size * 0.15, // Slightly larger to stand out
+                    [0.0, 1.0, 1.0],   // Cyan for target position
+                    &self.camera,
+                    width,
+                    height,
+                );
+
+                // Draw short line from target position toward camera
+                let to_camera_target = (self.camera.position - target_world_pos).normalize();
+                let line_end_target = target_world_pos + to_camera_target * line_length;
+                let line_center_target = (target_world_pos + line_end_target) * 0.5;
+                let rotation_target = Quat::from_rotation_arc(Vec3::X, to_camera_target);
+
+                self.mesh_renderer.render_cubebox_wireframe_colored(
+                    ctx.gl,
+                    line_center_target,
+                    rotation_target,
+                    Vec3::new(line_length, line_thickness * 2.5, line_thickness * 2.5),
+                    1.0,
+                    [0.0, 1.0, 1.0], // Cyan for target position
                     &self.camera,
                     width,
                     height,
