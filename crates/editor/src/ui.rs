@@ -188,7 +188,23 @@ pub fn show_color_palette(
 ) -> bool {
     let mut color_selected = false;
 
-    ui.label("Colors (R2G3B2)");
+    ui.horizontal(|ui| {
+        ui.label("Colors (R2G3B2)");
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            let erase_label = if editor_state.is_erase_mode() {
+                "✓ Erase"
+            } else {
+                "Erase"
+            };
+            if ui.button(erase_label).clicked() {
+                if editor_state.is_erase_mode() {
+                    editor_state.disable_erase_mode();
+                } else {
+                    editor_state.enable_erase_mode();
+                }
+            }
+        });
+    });
     ui.add_space(4.0);
 
     // Get colors organized by hue (8 rows × 16 columns)
@@ -213,6 +229,7 @@ pub fn show_color_palette(
                 if color_button(ui, color, is_selected).clicked() {
                     color_palette.select(palette_idx);
                     editor_state.set_material(palette_color.index);
+                    editor_state.disable_erase_mode();
                     color_selected = true;
                 }
             }
@@ -373,6 +390,7 @@ pub fn show_material_palette(
                         if material_list_item(ui, material, is_selected).clicked() {
                             material_palette.select_by_material(material.index);
                             editor_state.set_material(material.index);
+                            editor_state.disable_erase_mode();
                             material_selected = true;
                         }
                     }

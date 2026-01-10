@@ -401,10 +401,7 @@ impl GameConfig {
         let world_create_start = Instant::now();
         let mut world = World::new(base_cube, self.world.macro_depth);
         if debug {
-            println!(
-                "[Game] World::new took {:?}",
-                world_create_start.elapsed()
-            );
+            println!("[Game] World::new took {:?}", world_create_start.elapsed());
         }
 
         if debug {
@@ -423,10 +420,7 @@ impl GameConfig {
         let find_start = Instant::now();
         let scene_models = Self::find_scene_models(&assets_path)?;
         if debug {
-            println!(
-                "[Game] find_scene_models took {:?}",
-                find_start.elapsed()
-            );
+            println!("[Game] find_scene_models took {:?}", find_start.elapsed());
             println!(
                 "[Game] Found {} scene_* models in {}",
                 scene_models.len(),
@@ -447,7 +441,12 @@ impl GameConfig {
             )?;
 
             if debug {
-                println!("[Game] [{}/{}] Loading model: {}", i + 1, self.models.len(), model_path.display());
+                println!(
+                    "[Game] [{}/{}] Loading model: {}",
+                    i + 1,
+                    self.models.len(),
+                    model_path.display()
+                );
                 println!("[Game]   Position: {:?}", model_config.position);
                 println!("[Game]   Align: {:?}", model_config.align);
             }
@@ -477,7 +476,11 @@ impl GameConfig {
 
             if debug {
                 println!("[Game]   Merge time: {:?}", merge_duration);
-                println!("[Game]   World scale after merge: 2^{} = {} units", world.scale(), 1 << world.scale());
+                println!(
+                    "[Game]   World scale after merge: 2^{} = {} units",
+                    world.scale(),
+                    1 << world.scale()
+                );
             }
         }
 
@@ -491,7 +494,10 @@ impl GameConfig {
             println!("[Game] === Performance Summary ===");
             println!("[Game]   Total load time: {:?}", total_load_time);
             println!("[Game]   Total merge time: {:?}", total_merge_time);
-            println!("[Game]   Total apply_models_to_world: {:?}", total_start.elapsed());
+            println!(
+                "[Game]   Total apply_models_to_world: {:?}",
+                total_start.elapsed()
+            );
         }
 
         Ok(world)

@@ -101,7 +101,10 @@ impl VoxelGame {
             self.config.world.seed,
         );
         if debug {
-            println!("[Game] NativeWorldCube::new took {:?}", world_cube_start.elapsed());
+            println!(
+                "[Game] NativeWorldCube::new took {:?}",
+                world_cube_start.elapsed()
+            );
             println!("[Game] World cube created, applying 2D map...");
         }
 
@@ -124,7 +127,10 @@ impl VoxelGame {
         match self.config.apply_models_to_world(base_cube, debug) {
             Ok(world) => {
                 if debug {
-                    println!("[Game] apply_models_to_world total: {:?}", models_start.elapsed());
+                    println!(
+                        "[Game] apply_models_to_world total: {:?}",
+                        models_start.elapsed()
+                    );
                     let csm = cube::serialize_csm(world.root());
                     let csm_preview = if csm.len() > 500 {
                         format!("{}... (truncated, {} total chars)", &csm[..500], csm.len())
@@ -150,7 +156,10 @@ impl VoxelGame {
         }
 
         if debug {
-            println!("[Game] === init_world Total: {:?} ===", total_start.elapsed());
+            println!(
+                "[Game] === init_world Total: {:?} ===",
+                total_start.elapsed()
+            );
         }
     }
 

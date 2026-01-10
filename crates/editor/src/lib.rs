@@ -390,7 +390,8 @@ impl EditorApp {
         }
 
         // Create new cube with voxel set
-        let material = self.editor_state.material();
+        // Use effective_material() which returns 0 if erase mode is active
+        let material = self.editor_state.effective_material();
         let new_cube = Rc::new(cube.set_voxel(pos.x, pos.y, pos.z, depth, material));
         self.cube = Some(Rc::clone(&new_cube));
 
@@ -1264,7 +1265,12 @@ impl App for EditorApp {
             // Get cursor position and size in world space
             let cursor_center = self.cursor.world_center(CUBE_POSITION, CUBE_SCALE);
             let cursor_size = self.cursor.world_size(CUBE_SCALE);
-            let cursor_color = self.cursor.wireframe_color();
+            // Use magenta color when erase mode is active, otherwise use normal cursor color
+            let cursor_color = if self.editor_state.is_erase_mode() {
+                [1.0, 0.0, 1.0] // Magenta for erase mode
+            } else {
+                self.cursor.wireframe_color()
+            };
 
             // Debug output for cursor rendering
             if self.test_config.is_some() {
