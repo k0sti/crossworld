@@ -36,6 +36,10 @@ serde-wasm-bindgen = { version = "0.6", optional = true }
 # Logging
 tracing = "0.1"
 
+# App framework (for Object trait) - native only, not for WASM
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+app = { path = "../app", default-features = false }
+
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 getrandom = { version = "0.3", features = ["wasm_js"] }
 tracing-wasm = "0.2"

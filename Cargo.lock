@@ -2863,6 +2863,7 @@ checksum = "d0a5c400df2834b80a4c3327b3aad3a4c4cd4de0629063962b03235697506a28"
 name = "crossworld-physics"
 version = "0.0.1"
 dependencies = [
+ "app",
  "criterion",
  "cube",
  "getrandom 0.3.4",
@@ -6862,6 +6863,7 @@ checksum = "19b30a45b0cd0bcca8037f3d0dc3421eaf95327a17cad11964fb8179b4fc4832"
 name = "renderer"
 version = "0.1.0"
 dependencies = [
+ "app",
  "bytemuck",
  "crossworld-physics",
  "cube",

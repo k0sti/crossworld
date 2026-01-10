@@ -1,4 +1,7 @@
 //! Object trait for types with position and rotation in 3D space
+//!
+//! This module defines the Object trait for WASM builds.
+//! For native builds, the trait is re-exported from the app crate.
 
 use glam::{Quat, Vec3};
 
@@ -9,7 +12,7 @@ use glam::{Quat, Vec3};
 /// can be accessed without external context.
 ///
 /// Implemented by:
-/// - `Camera` in renderer crate
+/// - `Camera` in app/renderer crate
 /// - `Entity` and `Avatar` in world crate
 ///
 /// Note: Physics objects like `CubeObject` and `CharacterController` require
