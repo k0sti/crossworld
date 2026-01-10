@@ -59,10 +59,61 @@ For each command in the response, execute the corresponding action:
 | `APPROVE` | `mcp__vibe_kanban__update_task(task_id, status: "done")` |
 | `CONTINUE` | `mcp__vibe_kanban__update_task(task_id, status: "inprogress")`, incorporate feedback |
 | `SPAWN` | `mcp__vibe_kanban__create_task(project_id, title: "<spawn argument>")` for each SPAWN |
-| `DISCARD` | `mcp__vibe_kanban__update_task(task_id, status: "cancelled")`, `git checkout main`, delete branch |
-| `REBASE` | `git fetch origin main && git rebase origin/main` |
-| `MERGE` | `git checkout main && git merge <branch> --no-ff && git push origin main` |
+| `DISCARD` | `mcp__vibe_kanban__update_task(task_id, status: "cancelled")`, delete worktree (see below) |
+| `REBASE` | Rebase onto main (see Worktree Git Operations below) |
+| `MERGE` | Merge to main (see Worktree Git Operations below) |
 | `COMMENT` | Log comment, optionally add to task description |
+
+### Worktree Git Operations
+
+**IMPORTANT**: This project uses git worktrees. Each task branch lives in a separate worktree directory. The `main` branch is checked out in the primary worktree (typically at `/home/k0/work/crossworld`). You CANNOT run `git checkout main` in a feature worktree because git prevents a branch from being checked out in multiple worktrees simultaneously.
+
+**Finding the main worktree:**
+```bash
+# List all worktrees to find the main one
+git worktree list
+# Look for the entry with [main] - that's your main worktree path
+```
+
+**REBASE operation:**
+```bash
+# From within the feature worktree, rebase onto origin/main
+git fetch origin main
+git rebase origin/main
+# Resolve any conflicts, then continue
+# git rebase --continue (if conflicts)
+```
+
+**MERGE operation:**
+```bash
+# 1. Find the main worktree path
+MAIN_WORKTREE=$(git worktree list | grep '\[main\]' | awk '{print $1}')
+CURRENT_BRANCH=$(git branch --show-current)
+
+# 2. Change to main worktree and merge
+cd "$MAIN_WORKTREE"
+git fetch origin main
+git merge origin/main --ff-only  # Ensure main is up to date first
+git merge "$CURRENT_BRANCH" --no-ff -m "Merge branch '$CURRENT_BRANCH'"
+git push origin main
+
+# 3. Return to feature worktree (optional - usually done after task completion)
+```
+
+**DISCARD operation:**
+```bash
+# 1. Get current worktree path and branch
+WORKTREE_PATH=$(pwd)
+BRANCH=$(git branch --show-current)
+MAIN_WORKTREE=$(git worktree list | grep '\[main\]' | awk '{print $1}')
+
+# 2. Move to main worktree
+cd "$MAIN_WORKTREE"
+
+# 3. Remove the worktree and delete the branch
+git worktree remove "$WORKTREE_PATH" --force
+git branch -D "$BRANCH"
+```
 
 ### Example Response Handling
 
@@ -76,8 +127,8 @@ SPAWN: Update README with new feature
 ```
 
 Agent must execute:
-1. `git fetch origin main && git rebase origin/main`
-2. `git checkout main && git merge <branch> --no-ff && git push origin main`
+1. Rebase: `git fetch origin main && git rebase origin/main`
+2. Merge (from main worktree): `cd <main_worktree> && git merge <branch> --no-ff && git push origin main`
 3. `mcp__vibe_kanban__update_task(task_id, status: "done")`
 4. `mcp__vibe_kanban__create_task(project_id, title: "Add integration tests")`
 5. `mcp__vibe_kanban__create_task(project_id, title: "Update README with new feature")`
