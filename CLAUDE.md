@@ -18,9 +18,14 @@ When completing a vibe-kanban task, use the review workflow to get user approval
 
 3. **Launch Review**
    ```bash
-   cargo run -p `<crate>` -- --review doc/review/current.md
+   cargo run -p `<crate>` -- --review-file doc/review/current.md
    ```
    Where `<crate>` is crate that is worked on current task or `testbed` if no suitable crate target.
+
+   Alternatively, pass the review content directly as a string:
+   ```bash
+   cargo run -p `<crate>` -- --review "Review content here"
+   ```
 
 4. **Parse and Execute Response**
    The response contains one or more commands (one per line). You MUST execute ALL commands.
@@ -88,7 +93,7 @@ mcp__vibe_kanban__update_task(task_id="abc123", status="inreview")
 # 3. Create review document at doc/review/current.md
 
 # 4. Launch review
-$ cargo run -p testbed -- --review doc/review/current.md
+$ cargo run -p testbed -- --review-file doc/review/current.md
 
 # 5. User reviews and responds with commands
 

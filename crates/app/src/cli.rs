@@ -45,9 +45,13 @@ pub struct CommonArgs {
     #[arg(long, short = 'n', value_name = "MESSAGE")]
     pub note: Option<String>,
 
-    /// Display a review panel with the given markdown document
-    #[arg(long, short = 'r', value_name = "PATH")]
-    pub review: Option<PathBuf>,
+    /// Display a review panel with the given markdown message
+    #[arg(long, short = 'r', value_name = "MESSAGE")]
+    pub review: Option<String>,
+
+    /// Display a review panel with markdown content loaded from a file
+    #[arg(long, value_name = "PATH")]
+    pub review_file: Option<PathBuf>,
 
     /// Load scene configuration from a Lua file
     #[arg(long, short = 'c', value_name = "PATH")]
@@ -71,8 +75,12 @@ impl CommonArgs {
             config = config.with_note(note.clone());
         }
 
-        if let Some(ref path) = self.review {
-            config = config.with_review(path.clone())?;
+        if let Some(ref message) = self.review {
+            config = config.with_review_text(message.clone());
+        }
+
+        if let Some(ref path) = self.review_file {
+            config = config.with_review_file(path.clone())?;
         }
 
         Ok(config)
@@ -111,6 +119,7 @@ mod tests {
         assert!(args.common.debug.is_none());
         assert!(args.common.note.is_none());
         assert!(args.common.review.is_none());
+        assert!(args.common.review_file.is_none());
         assert!(args.common.config.is_none());
     }
 
@@ -134,14 +143,20 @@ mod tests {
 
     #[test]
     fn test_review_arg() {
-        let args = TestArgs::parse_from(["test", "--review", "doc/review.md"]);
-        assert_eq!(args.common.review, Some(PathBuf::from("doc/review.md")));
+        let args = TestArgs::parse_from(["test", "--review", "This is a review message"]);
+        assert_eq!(args.common.review.as_deref(), Some("This is a review message"));
     }
 
     #[test]
     fn test_review_short_arg() {
-        let args = TestArgs::parse_from(["test", "-r", "doc/review.md"]);
-        assert_eq!(args.common.review, Some(PathBuf::from("doc/review.md")));
+        let args = TestArgs::parse_from(["test", "-r", "Short review"]);
+        assert_eq!(args.common.review.as_deref(), Some("Short review"));
+    }
+
+    #[test]
+    fn test_review_file_arg() {
+        let args = TestArgs::parse_from(["test", "--review-file", "doc/review.md"]);
+        assert_eq!(args.common.review_file, Some(PathBuf::from("doc/review.md")));
     }
 
     #[test]
@@ -165,13 +180,16 @@ mod tests {
             "--note",
             "Testing",
             "--review",
+            "Review message",
+            "--review-file",
             "review.md",
             "--config",
             "config.lua",
         ]);
         assert_eq!(args.common.debug, Some(50));
         assert_eq!(args.common.note.as_deref(), Some("Testing"));
-        assert_eq!(args.common.review, Some(PathBuf::from("review.md")));
+        assert_eq!(args.common.review.as_deref(), Some("Review message"));
+        assert_eq!(args.common.review_file, Some(PathBuf::from("review.md")));
         assert_eq!(args.common.config, Some(PathBuf::from("config.lua")));
     }
 }
