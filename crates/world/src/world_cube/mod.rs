@@ -7,7 +7,7 @@ use noise::{Fbm, Perlin};
 /// World container that can expand to accommodate models
 pub struct World {
     cube: Cube<u8>,
-    scale: u32,  // World scale: actual world size = 2^(macro_depth + scale)
+    scale: u32, // World scale: actual world size = 2^(macro_depth + scale)
 }
 
 impl World {
@@ -77,43 +77,30 @@ impl World {
     /// Merge a model into the world at specified position
     /// Position is in world coordinates
     /// Automatically expands world if model doesn't fit
-    pub fn merge_model(&mut self, model: &CubeBox<u8>, world_pos: IVec3, depth: u32) {
+    pub fn merge_model(&mut self, model: &CubeBox<u8>, world_pos: IVec3, _depth: u32) {
         let model_size = IVec3::new(model.size.x, model.size.y, model.size.z);
         self.ensure_fits(model_size, world_pos);
 
-        // Convert world position to octree coordinates at the target depth
+        // Convert world position to octree coordinates
         let world_size = 1 << self.scale;
         let half_size = world_size / 2;
 
-        // Place each voxel from the model
-        // This is a simplified implementation - a more efficient version would
-        // merge the entire octree structure
-        for y in 0..model.size.y {
-            for z in 0..model.size.z {
-                for x in 0..model.size.x {
-                    let model_coord = CubeCoord::new(
-                        IVec3::new(x, y, z),
-                        model.depth,
-                    );
+        // The target depth is the current world scale (after any expansions)
+        // At this depth, the world has 2^self.scale positions per axis
+        let target_depth = self.scale;
 
-                    let material_cube = model.cube.get(model_coord);
-                    if let Some(&material) = material_cube.value()
-                        && material > 0 {  // Skip empty voxels
-                            // World position for this voxel
-                            let voxel_world_pos = world_pos + IVec3::new(x, y, z);
+        // Use update_depth_tree to efficiently merge the entire model octree
+        // The model.depth is the scale: the model occupies 2^model.depth positions at target_depth
+        let octree_offset = IVec3::new(
+            world_pos.x + half_size,
+            world_pos.y + half_size,
+            world_pos.z + half_size,
+        );
 
-                            // Convert to octree coordinates
-                            let octree_x = voxel_world_pos.x + half_size;
-                            let octree_y = voxel_world_pos.y + half_size;
-                            let octree_z = voxel_world_pos.z + half_size;
-
-                            // Update the world cube
-                            let coord = CubeCoord::new(IVec3::new(octree_x, octree_y, octree_z), depth);
-                            self.cube = self.cube.update(coord, Cube::Solid(material)).simplified();
-                        }
-                }
-            }
-        }
+        self.cube = self
+            .cube
+            .update_depth_tree(target_depth, octree_offset, model.depth, &model.cube)
+            .simplified();
     }
 }
 
