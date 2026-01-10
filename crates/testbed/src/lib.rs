@@ -24,7 +24,9 @@ use crossworld_physics::{
 use cube::{io::csm::parse_csm, Cube};
 use glam::{Quat, Vec3};
 use glow::{Context, HasContext, COLOR_BUFFER_BIT, DEPTH_BUFFER_BIT, SCISSOR_TEST};
-use renderer::{Camera, MeshRenderer, OrbitController, OrbitControllerConfig};
+use renderer::{
+    Camera, CrtConfig, CrtPostProcess, MeshRenderer, OrbitController, OrbitControllerConfig,
+};
 use std::path::Path;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -157,6 +159,9 @@ pub struct PhysicsTestbed {
     camera: Camera,
     orbit_controller: OrbitController,
 
+    // CRT post-processing
+    crt_post_process: CrtPostProcess,
+
     // Physics scenes (4 quadrants)
     scenes: [Option<PhysicsScene>; 4],
 
@@ -201,10 +206,14 @@ impl PhysicsTestbed {
             max_distance: 50.0,
         };
 
+        // Create CRT post-processor with subtle settings
+        let crt_post_process = CrtPostProcess::with_config(CrtConfig::subtle());
+
         Self {
             mesh_renderer: MeshRenderer::new(),
             camera: Camera::look_at(camera_position, camera_target, Vec3::Y),
             orbit_controller: OrbitController::new(camera_target, orbit_config),
+            crt_post_process,
             scenes: [None, None, None, None],
             ground_cubes: [None, None, None, None],
             falling_cube: None,
@@ -349,10 +358,14 @@ impl PhysicsTestbed {
             max_distance: 50.0,
         };
 
+        // Create CRT post-processor with subtle settings
+        let crt_post_process = CrtPostProcess::with_config(CrtConfig::subtle());
+
         Ok(Self {
             mesh_renderer: MeshRenderer::new(),
             camera: Camera::look_at(camera_position, camera_target, Vec3::Y),
             orbit_controller: OrbitController::new(camera_target, orbit_config),
+            crt_post_process,
             scenes: [None, None, None, None],
             ground_cubes: [None, None, None, None],
             falling_cube: None,
@@ -738,6 +751,11 @@ impl App for PhysicsTestbed {
             eprintln!("[Testbed] Failed to initialize mesh renderer: {}", e);
         }
 
+        // Initialize CRT post-processor
+        if let Err(e) = unsafe { self.crt_post_process.init_gl(ctx.gl) } {
+            eprintln!("[Testbed] Failed to initialize CRT post-processor: {}", e);
+        }
+
         // Get ground cube (from CSM or solid material)
         let ground_cube = self.get_ground_cube();
 
@@ -768,6 +786,7 @@ impl App for PhysicsTestbed {
     fn shutdown(&mut self, ctx: &FrameContext) {
         println!("[Testbed] Cleaning up");
         unsafe { self.mesh_renderer.destroy_gl(ctx.gl) };
+        unsafe { self.crt_post_process.destroy_gl(ctx.gl) };
     }
 
     fn update(&mut self, ctx: &FrameContext, input: &InputState) {
@@ -787,18 +806,23 @@ impl App for PhysicsTestbed {
     }
 
     fn render(&mut self, ctx: &FrameContext) {
-        let width = ctx.size.0 as i32;
-        let height = ctx.size.1 as i32;
+        let width = ctx.size.0;
+        let height = ctx.size.1;
+
+        // Begin CRT post-processing (redirects rendering to framebuffer)
+        unsafe {
+            self.crt_post_process.begin(ctx.gl, width, height);
+        }
 
         // Reserve space for top bar only (status is now overlay in each view)
         let top_bar_height = ui::TOP_BAR_HEIGHT as i32;
-        let render_height = height - top_bar_height;
-        let half_width = width / 2;
+        let render_height = height as i32 - top_bar_height;
+        let half_width = width as i32 / 2;
         let half_height = render_height / 2;
 
         // Clear the entire window first
         unsafe {
-            ctx.gl.viewport(0, 0, width, height);
+            ctx.gl.viewport(0, 0, width as i32, height as i32);
             ctx.gl.clear_color(0.1, 0.1, 0.1, 1.0);
             ctx.gl.clear(COLOR_BUFFER_BIT | DEPTH_BUFFER_BIT);
         }
@@ -836,7 +860,7 @@ impl App for PhysicsTestbed {
 
         // Draw divider lines between quadrants
         unsafe {
-            ctx.gl.viewport(0, 0, width, height);
+            ctx.gl.viewport(0, 0, width as i32, height as i32);
 
             // Vertical divider
             ctx.gl.scissor(half_width - 1, 0, 2, render_height);
@@ -845,10 +869,16 @@ impl App for PhysicsTestbed {
             ctx.gl.clear(COLOR_BUFFER_BIT);
 
             // Horizontal divider
-            ctx.gl.scissor(0, half_height - 1, width, 2);
+            ctx.gl.scissor(0, half_height - 1, width as i32, 2);
             ctx.gl.clear(COLOR_BUFFER_BIT);
 
             ctx.gl.disable(SCISSOR_TEST);
+        }
+
+        // End CRT post-processing (applies effects and draws to screen)
+        unsafe {
+            self.crt_post_process
+                .end(ctx.gl, width, height, ctx.elapsed);
         }
     }
 
@@ -866,6 +896,11 @@ impl App for PhysicsTestbed {
                 if ui.button("Reset").clicked() {
                     self.reset_requested = true;
                 }
+
+                ui.separator();
+
+                // CRT toggle
+                ui.checkbox(&mut self.crt_post_process.enabled, "CRT");
 
                 ui.separator();
                 ui.label(format!("Frame: {}", frame_count));
