@@ -1,145 +1,157 @@
-# Task Review: Optimize Cube update_depth
+# Task Review: Add drag paint target gizmo
 
-**Task ID:** 301d79ad-5f09-4c0c-8a2a-8621ef538e7d
-**Branch:** vk/2b16-optimize-cube-up
+**Task ID:** 909b
+**Branch:** vk/909b-add-drag-paint-t
 **Date:** 2026-01-10
 
 ## Summary
 
-Optimized the Cube `update_depth` function by:
-1. Renaming the slow iterative version to `update_depth_slow`
-2. Updating all production code to use the efficient `update_depth_tree` implementation
-3. Adding a comprehensive performance benchmark test
-4. Updating WASM bindings to use the optimized version
-5. Added debug instrumentation for performance analysis
+Added a drag paint target gizmo to the voxel editor with improved coordinate handling. The implementation includes:
+
+1. **Dual gizmo system**: Yellow gizmo for paint start position, cyan gizmo for current target position
+2. **Alpha transparency grid**: 2D grid with gradient fade (opaque at cursor, transparent at distance 3)
+3. **Grid alignment**: Grid aligns with global voxel boundaries while staying on the edit plane
+4. **Refactored coordinate system**: Cleaner conversion between world space and voxel space
+5. **Far/Near mode support**: Cursor correctly offsets based on focus mode during drag painting
 
 ## Changes Made
 
 ### Files Modified
-
-```
- crates/cube/src/core/cube.rs      | 143 ++++++++++++++++++++++++++++++++++++--
- crates/cube/src/wasm/cube_wasm.rs |   3 +-
- crates/game/src/lib.rs            |  15 ++++
- crates/game/src/config.rs         |  35 ++++++++++
- 4 files changed, 188 insertions(+), 8 deletions(-)
-```
+- `crates/renderer/src/renderers/mesh_renderer.rs` - Added alpha transparency support for wireframes
+- `crates/editor/src/lib.rs` - Added drag target gizmo, grid rendering, and coordinate refactoring
 
 ### Key Changes
 
-#### 1. Renamed `update_depth` to `update_depth_slow` (cube.rs:391)
+#### Renderer Changes (mesh_renderer.rs)
+1. **Updated fragment shader** to support RGBA colors (changed `uColorOverride` from `vec3` to `vec4`)
+2. **Added `render_cubebox_wireframe_colored_alpha()`** function with OpenGL blending support
+3. **Updated existing functions** to use the new RGBA shader uniforms
 
-```rust
-/// **Note:** This is the slow O(2^(3*scale)) iterative version. Prefer `update_depth_tree` for better performance.
-pub fn update_depth_slow(&self, depth: u32, offset: IVec3, scale: u32, cube: Cube<T>) -> Self {
-```
+#### Editor Changes (lib.rs)
 
-#### 2. Updated WASM bindings to use `update_depth_tree` (cube_wasm.rs:152)
+**Coordinate System Refactoring:**
+1. **Replaced `world_to_voxel()` with `world_to_nearest_voxel_corner()`**
+   - Changed from `floor()` to `round()` for consistent corner snapping
+   - Eliminates offset bugs from boundary conditions
 
-```rust
-let new_cube = self
-    .inner
-    .update_depth_tree(depth, offset, scale, &cube.inner);  // Changed from update_depth
-```
+2. **Added `voxel_corner_to_world()`**
+   - Bidirectional conversion for cleaner code
+   - Used for grid origin calculation
 
-#### 3. Added Performance Benchmark Test (cube.rs:1353-1478)
+**Key Improvements:**
+1. **Fixed plane origin calculation** - Now uses exact raycast hit position instead of voxel center with 0.5 offset
+2. **Added `drag_target_world_pos` field** - Stores exact ray-plane intersection for precise gizmo positioning
+3. **Grid origin snapping** - Snaps to global voxel grid at current depth, then projects onto plane
+4. **Far/Near mode during drag** - Applies proper offset based on focus mode (lines 1014-1020):
+   - Far mode: `nearest_corner + normal_ivec * 2` (place voxels two steps away)
+   - Near mode: `nearest_corner + normal_ivec` (place voxels one step away)
+5. **Target gizmo rendering** - Cyan gizmo at exact mouse ray-plane intersection (unsnapped)
+6. **Grid transparency** - Gradient alpha from 1.0 at cursor to 0.0 at distance 3 voxels
 
-New `test_update_depth_performance` test that compares both implementations.
+## Refactoring Benefits
 
-#### 4. Added Debug Instrumentation (lib.rs, config.rs)
+The coordinate system refactoring addresses the structural issues:
 
-Debug mode (`GAME_DEBUG=1`) now shows detailed timing for:
-- World initialization
-- Map application
-- Per-model load and merge times
+**Before:**
+- `world_to_voxel()` used `floor()` → inconsistent at boundaries
+- Multiple coordinate conversions scattered throughout code
+- Offset logic mixed with coordinate calculations
 
-## Performance Analysis
+**After:**
+- `world_to_nearest_voxel_corner()` uses `round()` → consistent snapping
+- `voxel_corner_to_world()` provides bidirectional conversion
+- Clean separation: coordinate conversion → offset application → rendering
 
-Running with `GAME_DEBUG=1` revealed the actual performance profile:
-
-```
-[Game] NativeWorldCube::new took 2.563398ms
-[Game] apply_map_to_world took 2.364097ms
-[Game] [1/10] Loading model: scene_aliens.vox
-[Game]   Model size: IVec3(126, 64, 126)
-[Game]   Model depth: 7
-[Game]   Load time: 47.161266ms
-[Game]   Merge time: 5.742092833s  ← BOTTLENECK
-```
-
-### Root Cause Analysis
-
-The `update_depth_tree` function with `model.depth = 7` requires:
-- 2^7 = 128 positions per axis at target depth
-- O(8^scale) = 8^7 = 2,097,152 recursive calls
-- Each call to `update()` traverses from root
-
-For a 126x64x126 voxel model:
-- **Load time**: ~47ms (reading .vox file + parsing)
-- **Merge time**: ~5.7 seconds (inserting into world octree)
-
-### Why This Is the Correct Behavior
-
-The `update_depth_tree` function IS more efficient than `update_depth_slow`:
-- `update_depth_tree`: O(8^scale) - follows octree structure
-- `update_depth_slow`: O(2^(3*scale)) - iterates all positions
-
-For scale=7:
-- `update_depth_tree`: 8^7 = 2,097,152 operations
-- `update_depth_slow`: 2^21 = 2,097,152 operations (same!)
-
-At scale=7, both have the same complexity because the model has maximum detail. The advantage of `update_depth_tree` appears with:
-- Sparse models (many Solid regions can be skipped)
-- Smaller scales (asymptotically better)
-- Reference-based API (no cloning overhead)
-
-### Future Optimization Opportunities
-
-The merge performance could be improved by:
-1. **Batch updates**: Modify octree in-place instead of cloning at each step
-2. **Level-of-detail**: Use lower-resolution models for initial placement
-3. **Async loading**: Load/merge models in background thread
-4. **Octree surgery**: Direct subtree replacement instead of per-voxel updates
+This makes the code easier to understand and maintain.
 
 ## Testing
 
 ### Tests Run
-
 ```bash
-$ cargo test -p cube test_update_depth -- --nocapture
-running 3 tests
-test core::cube::tests::test_update_depth_vs_update_depth_tree ... ok
-test core::cube::tests::test_update_depth_tree_nested ... ok
-test core::cube::tests::test_update_depth_performance ... ok
+just check
+```
+All checks passed:
+- ✅ Cargo check --workspace
+- ✅ Cargo clippy --workspace
+- ✅ Cargo fmt --check
+- ✅ WASM build (release mode)
+- ✅ TypeScript build
 
-test result: ok. 3 passed; 0 failed; 0 ignored
+### Manual Testing Required
+- Test Far mode offset during drag painting (should place voxels two steps away from nearest corner)
+- Test Near mode during drag painting (should place voxels one step away from nearest corner)
+- Verify grid aligns with voxel boundaries on all faces
+- Verify grid transparency gradient works correctly
+- Verify grid stays on the edit plane
+- Test on different cube faces (X, Y, Z axes)
+
+## Implementation Details
+
+### Offset Calculation (lib.rs:1014-1020)
+The offset is applied after calculating the nearest voxel corner from the ray-plane intersection:
+
+```rust
+// Calculate normal as integer vector
+let normal_ivec = IVec3::new(
+    plane.normal.x.round() as i32,
+    plane.normal.y.round() as i32,
+    plane.normal.z.round() as i32,
+);
+
+let voxel_coord = if self.cursor.focus_mode == FocusMode::Far {
+    // Far mode: offset two voxels in the normal direction from nearest corner
+    nearest_corner + normal_ivec * 2
+} else {
+    // Near mode: offset one voxel in the normal direction from nearest corner
+    nearest_corner + normal_ivec
+};
 ```
 
-```bash
-$ cargo check --workspace
-    Finished `dev` profile [unoptimized + debuginfo] target(s)
+### Coordinate Conversion
+```rust
+// World to voxel corner (using round for consistent snapping)
+fn world_to_nearest_voxel_corner(&self, world_pos: Vec3, ...) -> IVec3 {
+    let scale = (1 << self.depth) as f32 / 2.0;
+    IVec3::new(
+        ((cube_pos.x + 1.0) * scale).round() as i32,  // round, not floor!
+        ((cube_pos.y + 1.0) * scale).round() as i32,
+        ((cube_pos.z + 1.0) * scale).round() as i32,
+    )
+}
+
+// Voxel corner to world (bidirectional)
+fn voxel_corner_to_world(&self, voxel_pos: IVec3, ...) -> Vec3 {
+    let cube_pos = Vec3::new(
+        voxel_pos.x as f32 / scale - 1.0,
+        voxel_pos.y as f32 / scale - 1.0,
+        voxel_pos.z as f32 / scale - 1.0,
+    );
+    cube_position + cube_pos * half_scale
+}
 ```
 
-### Debug Mode Testing
+### Grid Alignment Algorithm
+```rust
+// 1. Snap target position to nearest voxel corner
+let nearest_corner = plane.world_to_nearest_voxel_corner(target_world_pos, CUBE_POSITION, CUBE_SCALE);
 
-```bash
-$ GAME_DEBUG=1 cargo run -p game
-# Shows detailed timing for all initialization steps
+// 2. Convert back to world space
+let corner_world_pos = plane.voxel_corner_to_world(nearest_corner, CUBE_POSITION, CUBE_SCALE);
+
+// 3. Project onto plane to maintain plane alignment
+let offset = corner_world_pos - plane.origin;
+let distance_along_normal = offset.dot(plane.normal);
+let grid_origin = corner_world_pos - plane.normal * distance_along_normal;
 ```
 
-## Usage Summary
+### Alpha Transparency
+- OpenGL blending enabled when alpha < 1.0: `glBlendFunc(SRC_ALPHA, ONE_MINUS_SRC_ALPHA)`
+- Grid uses gradient alpha: `alpha = (1.0 - (distance / max_dist)).clamp(0.0, 1.0)`
+- Max distance set to 3 voxels as requested
 
-| Location | Function Used |
-|----------|---------------|
-| WASM bindings (`updateDepth`) | `update_depth_tree` |
-| `CubeBox::place_in()` | `update_depth_tree` |
-| `WorldCube::merge_model()` | `update_depth_tree` |
-| `proto-gl structures` | `update_depth_tree` |
-| Tests | Both (for comparison) |
+## Known Issues / Testing Notes
 
-## Open Questions
-
-The slow loading is an inherent complexity issue with large models (scale=7 = 128^3 voxels), not a bug. Further optimization would require architectural changes to the octree merge algorithm.
+The voxel placement offset was recently updated to use `nearest_corner + normal_ivec * 2` for Far mode and `nearest_corner + normal_ivec` for Near mode. This adds the additional +1 offset that was requested.
 
 ---
 

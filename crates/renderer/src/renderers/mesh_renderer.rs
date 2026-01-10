@@ -728,6 +728,40 @@ impl MeshRenderer {
         viewport_width: i32,
         viewport_height: i32,
     ) {
+        // Delegate to RGBA version with alpha = 1.0
+        unsafe {
+            self.render_cubebox_wireframe_colored_alpha(
+                gl,
+                position,
+                rotation,
+                normalized_size,
+                scale,
+                [color[0], color[1], color[2], 1.0],
+                camera,
+                viewport_width,
+                viewport_height,
+            )
+        }
+    }
+
+    /// Render a colored wireframe box with alpha transparency support
+    ///
+    /// # Safety
+    ///
+    /// Must be called with an active GL context on the current thread.
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn render_cubebox_wireframe_colored_alpha(
+        &self,
+        gl: &Context,
+        position: glam::Vec3,
+        rotation: glam::Quat,
+        normalized_size: glam::Vec3,
+        scale: f32,
+        color: [f32; 4],
+        camera: &Camera,
+        viewport_width: i32,
+        viewport_height: i32,
+    ) {
         unsafe {
             let Some(program) = self.program else { return };
             let Some(ref wireframe_mesh) = self.wireframe_box else {
@@ -739,6 +773,12 @@ impl MeshRenderer {
             gl.depth_mask(false); // Don't write to depth buffer
             gl.disable(CULL_FACE);
             gl.line_width(1.0); // Thin wireframe lines
+
+            // Enable blending for alpha transparency
+            if color[3] < 1.0 {
+                gl.enable(BLEND);
+                gl.blend_func(SRC_ALPHA, ONE_MINUS_SRC_ALPHA);
+            }
 
             // Calculate matrices
             let aspect = viewport_width as f32 / viewport_height as f32;
@@ -776,9 +816,15 @@ impl MeshRenderer {
             let diffuse_strength_loc = gl.get_uniform_location(program, "uDiffuseStrength");
             gl.uniform_1_f32(diffuse_strength_loc.as_ref(), 0.0);
 
-            // Set wireframe color via vertex color override uniform
+            // Set wireframe color via vertex color override uniform (now RGBA)
             let color_override_loc = gl.get_uniform_location(program, "uColorOverride");
-            gl.uniform_3_f32(color_override_loc.as_ref(), color[0], color[1], color[2]);
+            gl.uniform_4_f32(
+                color_override_loc.as_ref(),
+                color[0],
+                color[1],
+                color[2],
+                color[3],
+            );
 
             let use_color_override_loc = gl.get_uniform_location(program, "uUseColorOverride");
             gl.uniform_1_i32(use_color_override_loc.as_ref(), 1);
@@ -791,6 +837,9 @@ impl MeshRenderer {
             // Restore GL state
             gl.uniform_1_i32(use_color_override_loc.as_ref(), 0);
             gl.depth_mask(true); // Restore depth writing
+            if color[3] < 1.0 {
+                gl.disable(BLEND);
+            }
         }
     }
 
@@ -858,9 +907,15 @@ impl MeshRenderer {
             let diffuse_strength_loc = gl.get_uniform_location(program, "uDiffuseStrength");
             gl.uniform_1_f32(diffuse_strength_loc.as_ref(), 0.0);
 
-            // Set wireframe color via vertex color override uniform
+            // Set wireframe color via vertex color override uniform (RGBA with alpha = 1.0)
             let color_override_loc = gl.get_uniform_location(program, "uColorOverride");
-            gl.uniform_3_f32(color_override_loc.as_ref(), color[0], color[1], color[2]);
+            gl.uniform_4_f32(
+                color_override_loc.as_ref(),
+                color[0],
+                color[1],
+                color[2],
+                1.0,
+            );
 
             let use_color_override_loc = gl.get_uniform_location(program, "uUseColorOverride");
             gl.uniform_1_i32(use_color_override_loc.as_ref(), 1);
@@ -1276,14 +1331,15 @@ in vec3 vColor;
 uniform vec3 uLightDir;
 uniform float uAmbient;
 uniform float uDiffuseStrength;
-uniform vec3 uColorOverride;
+uniform vec4 uColorOverride;
 uniform int uUseColorOverride;
 
 out vec4 FragColor;
 
 void main() {
     // Use color override if set (for colored wireframes)
-    vec3 baseColor = uUseColorOverride == 1 ? uColorOverride : vColor;
+    vec3 baseColor = uUseColorOverride == 1 ? uColorOverride.rgb : vColor;
+    float alpha = uUseColorOverride == 1 ? uColorOverride.a : 1.0;
 
     vec3 normal = normalize(vNormal);
     float diffuse = max(dot(normal, uLightDir), 0.0);
@@ -1292,7 +1348,7 @@ void main() {
     // Gamma correction to match CPU tracer output
     vec3 gammaCorrected = pow(lighting, vec3(1.0 / 2.2));
 
-    FragColor = vec4(gammaCorrected, 1.0);
+    FragColor = vec4(gammaCorrected, alpha);
 }
 "#;
 
