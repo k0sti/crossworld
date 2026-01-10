@@ -14,7 +14,7 @@ use app::{App, FrameContext, InputState};
 use cube::Cube;
 use glam::{IVec3, Quat, Vec2, Vec3};
 use glow::HasContext;
-use renderer::{Camera, MeshRenderer, OrbitController, OrbitControllerConfig};
+use renderer::{Camera, MeshRenderer, OrbitController, OrbitControllerConfig, SkyboxRenderer};
 use std::path::PathBuf;
 use std::rc::Rc;
 use winit::keyboard::KeyCode;
@@ -191,6 +191,7 @@ impl EditPlane {
 pub struct EditorApp {
     // Rendering
     mesh_renderer: MeshRenderer,
+    skybox_renderer: SkyboxRenderer,
     camera: Camera,
     orbit_controller: OrbitController,
 
@@ -275,6 +276,7 @@ impl EditorApp {
 
         Self {
             mesh_renderer: MeshRenderer::new(),
+            skybox_renderer: SkyboxRenderer::new(),
             camera: Camera::look_at(camera_position, camera_target, Vec3::Y),
             orbit_controller: OrbitController::new(camera_target, orbit_config),
             cube: None,
@@ -730,6 +732,12 @@ impl App for EditorApp {
             return;
         }
 
+        // Initialize skybox renderer
+        if let Err(e) = unsafe { self.skybox_renderer.init_gl(ctx.gl) } {
+            eprintln!("[Editor] Failed to initialize skybox renderer: {}", e);
+            return;
+        }
+
         // Load all VOX models from assets directory
         self.load_models_from_assets();
 
@@ -763,7 +771,10 @@ impl App for EditorApp {
 
     fn shutdown(&mut self, ctx: &FrameContext) {
         println!("[Editor] Shutting down");
-        unsafe { self.mesh_renderer.destroy_gl(ctx.gl) };
+        unsafe {
+            self.skybox_renderer.destroy_gl(ctx.gl);
+            self.mesh_renderer.destroy_gl(ctx.gl);
+        }
     }
 
     fn update(&mut self, ctx: &FrameContext, input: &InputState) {
@@ -998,6 +1009,12 @@ impl App for EditorApp {
             ctx.gl.clear_color(0.1, 0.1, 0.15, 1.0);
             ctx.gl
                 .clear(glow::COLOR_BUFFER_BIT | glow::DEPTH_BUFFER_BIT);
+        }
+
+        // Render skybox first (depth test disabled)
+        unsafe {
+            self.skybox_renderer
+                .render(ctx.gl, &self.camera, width, height);
         }
 
         // Render the cube mesh at the center
