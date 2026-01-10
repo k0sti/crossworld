@@ -75,6 +75,7 @@ local function generate_models(config)
             index = i - 1,  -- Use sequential index for model selection
             align = config.align or vec3(0.5, 0, 0.5),
             position = vec3(x, config.y or 0, z),
+            scale = config.scale or -3,  -- Depth scale offset (negative = smaller)
         })
     end
 
@@ -90,6 +91,7 @@ local model_config = {
     y = 0,                      -- Y position (ground level)
     align = vec3(0.5, 0, 0.5),  -- Bottom-center alignment
     seed = world_config.seed,   -- Use world seed for reproducibility
+    scale = -3,                 -- Depth scale: -3 = 8x smaller (2^3)
 }
 
 -- Generate models
