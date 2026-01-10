@@ -89,7 +89,7 @@ impl World {
         // At this depth, the world has 2^self.scale positions per axis
         let target_depth = self.scale;
 
-        // Use update_depth_tree to efficiently merge the entire model octree
+        // Use Cube::merge for efficient sparse model merging
         // The model.depth is the scale: the model occupies 2^model.depth positions at target_depth
         let octree_offset = IVec3::new(
             world_pos.x + half_size,
@@ -99,7 +99,7 @@ impl World {
 
         self.cube = self
             .cube
-            .update_depth_tree(target_depth, octree_offset, model.depth, &model.cube)
+            .merge(octree_offset, target_depth, model.depth, &model.cube)
             .simplified();
     }
 }
