@@ -76,17 +76,9 @@ pub fn generate_thumbnail(cube: Rc<Cube<u8>>, size: u32) -> ImageBuffer<Rgb<u8>,
         distance * angle.sin(),
     );
     let target = Vec3::ZERO;
-    let forward = (target - position).normalize();
-    let rotation = glam::Quat::from_rotation_arc(glam::Vec3::NEG_Z, forward);
 
-    let camera = Camera {
-        position,
-        rotation,
-        vfov: 45.0_f32.to_radians(),
-        yaw: -angle,
-        pitch: -15.0_f32.to_radians(),
-        target_position: Some(target),
-    };
+    let mut camera = Camera::look_at(position, target, Vec3::Y);
+    camera.vfov = 45.0_f32.to_radians();
 
     // Render thumbnail
     tracer.render_with_camera(size, size, &camera);

@@ -32,8 +32,8 @@ pub use controller::{
 
 // Re-export camera types at crate root for convenience
 pub use camera::{
-    Camera, CameraMode, FirstPersonController, FirstPersonControllerConfig, Object,
-    OrbitController, OrbitControllerConfig, DEFAULT_VFOV,
+    Camera, FirstPersonController, FirstPersonControllerConfig, OrbitController,
+    OrbitControllerConfig, DEFAULT_VFOV,
 };
 
 #[cfg(feature = "gilrs")]
