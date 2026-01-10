@@ -1,8 +1,121 @@
 mod builder;
 
 use crate::GeometryData;
-use cube::{ColorMapper, Cube, CubeCoord, DefaultMeshBuilder, glam::IVec3, serialize_csm};
+use cube::{ColorMapper, Cube, CubeBox, CubeCoord, DefaultMeshBuilder, glam::IVec3, serialize_csm};
 use noise::{Fbm, Perlin};
+
+/// World container that can expand to accommodate models
+pub struct World {
+    cube: Cube<u8>,
+    scale: u32,  // World scale: actual world size = 2^(macro_depth + scale)
+}
+
+impl World {
+    /// Create new World from a cube at macro_depth
+    pub fn new(cube: Cube<u8>, macro_depth: u32) -> Self {
+        Self {
+            cube,
+            scale: macro_depth,
+        }
+    }
+
+    /// Get the current world scale
+    pub fn scale(&self) -> u32 {
+        self.scale
+    }
+
+    /// Get reference to the root cube
+    pub fn root(&self) -> &Cube<u8> {
+        &self.cube
+    }
+
+    /// Set a new root cube
+    pub fn set_root(&mut self, cube: Cube<u8>) {
+        self.cube = cube.simplified();
+    }
+
+    /// Expand world by one level with sky/ground borders
+    /// Doubles the world size by wrapping in border materials
+    fn expand_once(&mut self) {
+        const HARD_GROUND: u8 = 16;
+        const WATER: u8 = 17;
+        const AIR: u8 = 0;
+
+        let border_materials = [HARD_GROUND, WATER, AIR, AIR];
+        self.cube = Cube::expand(&self.cube, border_materials, 1);
+        self.scale += 1;
+    }
+
+    /// Ensure the world can fit a model at given position
+    /// Expands world if necessary
+    /// Returns the adjusted position in world coordinates
+    pub fn ensure_fits(&mut self, model_size: IVec3, world_pos: IVec3) -> IVec3 {
+        let world_size = 1 << self.scale;
+        let half_size = world_size / 2;
+
+        // Calculate required bounds
+        let min = world_pos;
+        let max = world_pos + model_size;
+
+        // Check if model fits within current world bounds [-half_size, half_size)
+        let needs_expansion = min.x < -half_size
+            || min.y < -half_size
+            || min.z < -half_size
+            || max.x > half_size
+            || max.y > half_size
+            || max.z > half_size;
+
+        if needs_expansion {
+            self.expand_once();
+            // Recursively check again with expanded world
+            self.ensure_fits(model_size, world_pos)
+        } else {
+            world_pos
+        }
+    }
+
+    /// Merge a model into the world at specified position
+    /// Position is in world coordinates
+    /// Automatically expands world if model doesn't fit
+    pub fn merge_model(&mut self, model: &CubeBox<u8>, world_pos: IVec3, depth: u32) {
+        let model_size = IVec3::new(model.size.x, model.size.y, model.size.z);
+        self.ensure_fits(model_size, world_pos);
+
+        // Convert world position to octree coordinates at the target depth
+        let world_size = 1 << self.scale;
+        let half_size = world_size / 2;
+
+        // Place each voxel from the model
+        // This is a simplified implementation - a more efficient version would
+        // merge the entire octree structure
+        for y in 0..model.size.y {
+            for z in 0..model.size.z {
+                for x in 0..model.size.x {
+                    let model_coord = CubeCoord::new(
+                        IVec3::new(x, y, z),
+                        model.depth,
+                    );
+
+                    let material_cube = model.cube.get(model_coord);
+                    if let Some(&material) = material_cube.value()
+                        && material > 0 {  // Skip empty voxels
+                            // World position for this voxel
+                            let voxel_world_pos = world_pos + IVec3::new(x, y, z);
+
+                            // Convert to octree coordinates
+                            let octree_x = voxel_world_pos.x + half_size;
+                            let octree_y = voxel_world_pos.y + half_size;
+                            let octree_z = voxel_world_pos.z + half_size;
+
+                            // Update the world cube
+                            let coord = CubeCoord::new(IVec3::new(octree_x, octree_y, octree_z), depth);
+                            self.cube = self.cube.update(coord, Cube::Solid(material)).simplified();
+                        }
+                }
+            }
+        }
+    }
+}
 
 pub struct WorldCube {
     cube: Cube<u8>,
