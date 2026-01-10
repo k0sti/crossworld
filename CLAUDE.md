@@ -46,7 +46,7 @@ When completing a vibe-kanban task, use the review workflow to get user approval
 
 1. **At least one command required** - Empty response is invalid
 2. **Mutually exclusive statuses** - Cannot combine `APPROVE` + `DISCARD` or `APPROVE` + `CONTINUE`
-3. **Order matters** - Commands executed in order (e.g., `REBASE` before `MERGE`)
+3. **Order matters** - Commands executed in order. **CRITICAL**: `REBASE` and `MERGE` must come before `APPROVE` (merge first, then mark done)
 4. **Multiple `SPAWN` allowed** - Can create multiple follow-up tasks
 5. **`COMMENT` is additive** - Can combine with any other command
 
@@ -68,17 +68,19 @@ For each command in the response, execute the corresponding action:
 
 Response from reviewer:
 ```
+REBASE
+MERGE
 APPROVE
 SPAWN: Add integration tests
 SPAWN: Update README with new feature
-MERGE
 ```
 
 Agent must execute:
-1. `mcp__vibe_kanban__update_task(task_id, status: "done")`
-2. `mcp__vibe_kanban__create_task(project_id, title: "Add integration tests")`
-3. `mcp__vibe_kanban__create_task(project_id, title: "Update README with new feature")`
-4. `git checkout main && git merge <branch> --no-ff && git push origin main`
+1. `git fetch origin main && git rebase origin/main`
+2. `git checkout main && git merge <branch> --no-ff && git push origin main`
+3. `mcp__vibe_kanban__update_task(task_id, status: "done")`
+4. `mcp__vibe_kanban__create_task(project_id, title: "Add integration tests")`
+5. `mcp__vibe_kanban__create_task(project_id, title: "Update README with new feature")`
 
 ### Example Complete Workflow
 
