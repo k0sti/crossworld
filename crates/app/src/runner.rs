@@ -648,10 +648,10 @@ impl<A: App> ApplicationHandler for AppRuntime<A> {
                                 return;
                             }
                             super::review_overlay::ReviewAction::Complete => {
-                                // Complete = APPROVE + REBASE + MERGE
-                                println!("APPROVE");
+                                // Complete = REBASE + MERGE + APPROVE (merge first, then mark done)
                                 println!("REBASE");
                                 println!("MERGE");
+                                println!("APPROVE");
                                 self.app.shutdown(&ctx);
                                 event_loop.exit();
                                 return;
