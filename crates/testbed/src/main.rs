@@ -37,7 +37,10 @@ fn main() {
     if let Some(ref note) = args.common.note {
         println!("Note message: {}\n", note);
     }
-    if let Some(ref path) = args.common.review {
+    if let Some(ref message) = args.common.review {
+        println!("Review message: {}\n", message);
+    }
+    if let Some(ref path) = args.common.review_file {
         println!("Review document: {}\n", path.display());
     }
 
