@@ -15,6 +15,9 @@ pub struct EditorState {
     pub continuous_paint: bool,
     /// Whether erase mode is enabled (places material 0)
     pub erase_mode: bool,
+    /// World scale - rendered cube is scaled by 2^world_scale
+    /// When expanded, original model stays at same position but extra space is added
+    pub world_scale: u32,
 }
 
 impl Default for EditorState {
@@ -23,6 +26,7 @@ impl Default for EditorState {
             selected_material: DEFAULT_MATERIAL,
             continuous_paint: false,
             erase_mode: false,
+            world_scale: 0,
         }
     }
 }
@@ -91,6 +95,31 @@ impl EditorState {
             self.selected_material
         }
     }
+
+    /// Get the current world scale
+    pub fn world_scale(&self) -> u32 {
+        self.world_scale
+    }
+
+    /// Set the world scale
+    pub fn set_world_scale(&mut self, scale: u32) {
+        self.world_scale = scale;
+    }
+
+    /// Increment world scale by 1
+    pub fn increment_world_scale(&mut self) {
+        self.world_scale += 1;
+    }
+
+    /// Decrement world scale by 1 (min 0)
+    pub fn decrement_world_scale(&mut self) {
+        self.world_scale = self.world_scale.saturating_sub(1);
+    }
+
+    /// Get the cube scale factor (2^world_scale)
+    pub fn cube_scale_factor(&self) -> f32 {
+        (1 << self.world_scale) as f32
+    }
 }
 
 #[cfg(test)]
@@ -103,6 +132,7 @@ mod tests {
         assert_eq!(state.selected_material, DEFAULT_MATERIAL);
         assert!(!state.continuous_paint);
         assert!(!state.erase_mode);
+        assert_eq!(state.world_scale, 0);
     }
 
     #[test]
@@ -111,6 +141,7 @@ mod tests {
         assert_eq!(state.selected_material, DEFAULT_MATERIAL);
         assert!(!state.continuous_paint);
         assert!(!state.erase_mode);
+        assert_eq!(state.world_scale, 0);
     }
 
     #[test]
@@ -179,5 +210,37 @@ mod tests {
 
         state.disable_erase_mode();
         assert_eq!(state.effective_material(), 42);
+    }
+
+    #[test]
+    fn test_world_scale() {
+        let mut state = EditorState::new();
+        assert_eq!(state.world_scale(), 0);
+        assert_eq!(state.cube_scale_factor(), 1.0);
+
+        state.increment_world_scale();
+        assert_eq!(state.world_scale(), 1);
+        assert_eq!(state.cube_scale_factor(), 2.0);
+
+        state.increment_world_scale();
+        assert_eq!(state.world_scale(), 2);
+        assert_eq!(state.cube_scale_factor(), 4.0);
+
+        state.decrement_world_scale();
+        assert_eq!(state.world_scale(), 1);
+        assert_eq!(state.cube_scale_factor(), 2.0);
+
+        state.set_world_scale(3);
+        assert_eq!(state.world_scale(), 3);
+        assert_eq!(state.cube_scale_factor(), 8.0);
+    }
+
+    #[test]
+    fn test_world_scale_decrement_at_zero() {
+        let mut state = EditorState::new();
+        assert_eq!(state.world_scale(), 0);
+
+        state.decrement_world_scale();
+        assert_eq!(state.world_scale(), 0); // Should stay at 0
     }
 }

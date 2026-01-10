@@ -92,8 +92,8 @@ use crate::ui::{FileOperation, FileState};
 /// Constants for the edited cube
 /// Position is the CENTER of the cube (renderer uses center-aligned coordinates)
 const CUBE_POSITION: Vec3 = Vec3::ZERO;
-/// World scale - edge size of 1 unit
-const CUBE_SCALE: f32 = 1.0;
+/// Base world scale - edge size of 1 unit (before world_scale factor)
+const BASE_CUBE_SCALE: f32 = 1.0;
 /// Depth for edited cube (4 = 16x16x16 voxels)
 const EDIT_DEPTH: u32 = 4;
 /// Line width/strength for all wireframes and gizmo lines (relative to voxel size)
@@ -368,40 +368,110 @@ impl EditorApp {
         &self.gizmo_options
     }
 
+    /// Get the effective cube scale (base scale * 2^world_scale)
+    fn effective_cube_scale(&self) -> f32 {
+        BASE_CUBE_SCALE * self.editor_state.cube_scale_factor()
+    }
+
+    /// Get the effective edit depth (EDIT_DEPTH + 2 * world_scale)
+    /// Each world_scale increment corresponds to 2 octree levels from expansion
+    #[allow(dead_code)]
+    fn effective_edit_depth(&self) -> u32 {
+        EDIT_DEPTH + 2 * self.editor_state.world_scale()
+    }
+
     /// Place a voxel at the given position and re-upload the mesh
+    ///
+    /// If the position is outside the current cube bounds, the cube will be
+    /// expanded using Cube::expand_once with material 0 (empty) borders, and the
+    /// world_scale will be incremented. The expansion adds 2 octree levels, so
+    /// coordinates shift by 2^depth to place original content in center.
     ///
     /// # Arguments
     /// * `gl` - OpenGL context
-    /// * `pos` - Position in [0, 2^depth) range
+    /// * `pos` - Position in [0, 2^effective_depth) range
     /// * `depth` - Depth level for placement
     fn place_voxel(&mut self, gl: &glow::Context, pos: IVec3, depth: u32) {
         let Some(ref cube) = self.cube else { return };
 
-        // Check bounds
-        let max_coord = 1 << depth;
-        if pos.x < 0
-            || pos.x >= max_coord
-            || pos.y < 0
-            || pos.y >= max_coord
-            || pos.z < 0
-            || pos.z >= max_coord
+        // Calculate effective depth based on world_scale
+        // Each expansion adds 2 octree levels
+        let effective_depth = depth + 2 * self.editor_state.world_scale();
+
+        // Check bounds at effective depth
+        let max_coord = 1i32 << effective_depth;
+        let in_bounds = pos.x >= 0
+            && pos.x < max_coord
+            && pos.y >= 0
+            && pos.y < max_coord
+            && pos.z >= 0
+            && pos.z < max_coord;
+
+        let (new_cube, new_pos, new_effective_depth) = if in_bounds {
+            // Normal case: position is within bounds
+            ((**cube).clone(), pos, effective_depth)
+        } else {
+            // Position is outside bounds - expand the cube
+            // expand_once creates a 4x4x4 grid (2 octree levels) with original in center 2x2x2
+            let expanded = Cube::expand_once(cube, [0, 0, 0, 0]);
+
+            // After expansion, coordinates shift by 2^effective_depth to center the original
+            // New coordinate space is [0, 2^(effective_depth+2))
+            // Original [0, 2^effective_depth) maps to [2^effective_depth, 2^(effective_depth+1))
+            let offset = 1i32 << effective_depth;
+            let new_pos = pos + IVec3::splat(offset);
+            let new_effective_depth = effective_depth + 2;
+
+            // Increment world scale
+            self.editor_state.increment_world_scale();
+
+            println!(
+                "[Editor] Expanded cube, new world_scale: {}, new_pos: {:?}",
+                self.editor_state.world_scale(),
+                new_pos
+            );
+
+            (expanded, new_pos, new_effective_depth)
+        };
+
+        // Check bounds again after expansion
+        let max_coord = 1i32 << new_effective_depth;
+        if new_pos.x < 0
+            || new_pos.x >= max_coord
+            || new_pos.y < 0
+            || new_pos.y >= max_coord
+            || new_pos.z < 0
+            || new_pos.z >= max_coord
         {
+            // Still out of bounds after one expansion - would need multiple expansions
+            eprintln!(
+                "[Editor] Position {:?} still out of bounds after expansion (max: {})",
+                new_pos, max_coord
+            );
             return;
         }
 
-        // Create new cube with voxel set
-        // Use effective_material() which returns 0 if erase mode is active
+        // Create new cube with voxel set at the effective depth
         let material = self.editor_state.effective_material();
-        let new_cube = Rc::new(cube.set_voxel(pos.x, pos.y, pos.z, depth, material));
+        let new_cube = Rc::new(new_cube.set_voxel(
+            new_pos.x,
+            new_pos.y,
+            new_pos.z,
+            new_effective_depth,
+            material,
+        ));
         self.cube = Some(Rc::clone(&new_cube));
 
         // Mark file as dirty
         self.file_state.mark_dirty();
 
-        // Re-upload mesh
+        // Re-upload mesh at the effective depth
         unsafe {
             self.mesh_renderer.clear_meshes(gl);
-            match self.mesh_renderer.upload_mesh(gl, &new_cube, EDIT_DEPTH) {
+            match self
+                .mesh_renderer
+                .upload_mesh(gl, &new_cube, new_effective_depth)
+            {
                 Ok(idx) => {
                     self.cube_mesh_index = Some(idx);
                 }
@@ -413,16 +483,20 @@ impl EditorApp {
     /// Remove a voxel at the given position and re-upload the mesh
     ///
     /// Removal is done by setting the voxel value to 0 (empty).
+    /// Uses effective_edit_depth to account for world_scale.
     ///
     /// # Arguments
     /// * `gl` - OpenGL context
-    /// * `pos` - Position in [0, 2^depth) range
-    /// * `depth` - Depth level for removal
+    /// * `pos` - Position in [0, 2^effective_depth) range
+    /// * `depth` - Base depth level for removal (will use effective depth)
     fn remove_voxel(&mut self, gl: &glow::Context, pos: IVec3, depth: u32) {
         let Some(ref cube) = self.cube else { return };
 
-        // Check bounds
-        let max_coord = 1 << depth;
+        // Calculate effective depth based on world_scale
+        let effective_depth = depth + 2 * self.editor_state.world_scale();
+
+        // Check bounds at effective depth
+        let max_coord = 1i32 << effective_depth;
         if pos.x < 0
             || pos.x >= max_coord
             || pos.y < 0
@@ -434,16 +508,19 @@ impl EditorApp {
         }
 
         // Create new cube with voxel removed (set to 0)
-        let new_cube = Rc::new(cube.set_voxel(pos.x, pos.y, pos.z, depth, 0));
+        let new_cube = Rc::new(cube.set_voxel(pos.x, pos.y, pos.z, effective_depth, 0));
         self.cube = Some(Rc::clone(&new_cube));
 
         // Mark file as dirty
         self.file_state.mark_dirty();
 
-        // Re-upload mesh
+        // Re-upload mesh at effective depth
         unsafe {
             self.mesh_renderer.clear_meshes(gl);
-            match self.mesh_renderer.upload_mesh(gl, &new_cube, EDIT_DEPTH) {
+            match self
+                .mesh_renderer
+                .upload_mesh(gl, &new_cube, effective_depth)
+            {
                 Ok(idx) => {
                     self.cube_mesh_index = Some(idx);
                 }
@@ -464,6 +541,9 @@ impl EditorApp {
 
         // Clear file state
         self.file_state.clear();
+
+        // Reset world scale to 0
+        self.editor_state.set_world_scale(0);
 
         // Re-upload mesh
         unsafe {
@@ -501,6 +581,9 @@ impl EditorApp {
         // Update editor state
         self.cube = Some(Rc::clone(&cube));
         self.file_state.set_file(path.clone());
+
+        // Reset world scale to 0 when loading a new file
+        self.editor_state.set_world_scale(0);
 
         // Update config with last model path
         self.config.set_last_model_path(Some(path.clone()));
@@ -910,14 +993,18 @@ impl App for EditorApp {
                 &self.camera,
                 cube,
                 CUBE_POSITION,
-                CUBE_SCALE,
+                self.effective_cube_scale(),
                 Some(EDIT_DEPTH),
             ) {
                 // Use the new coord selection logic that handles far/near based on boundary detection
                 // Select at cursor's depth, not EDIT_DEPTH
                 let far_mode = self.cursor.focus_mode == FocusMode::Far;
-                let (selected_coord, is_boundary) =
-                    hit.select_coord_at_depth(cursor_depth, far_mode, CUBE_POSITION, CUBE_SCALE);
+                let (selected_coord, is_boundary) = hit.select_coord_at_depth(
+                    cursor_depth,
+                    far_mode,
+                    CUBE_POSITION,
+                    self.effective_cube_scale(),
+                );
 
                 // Debug logging for selected CubeCoord
                 if self.test_config.is_some() {
@@ -930,7 +1017,11 @@ impl App for EditorApp {
                         hit.voxel_coord.x, hit.voxel_coord.y, hit.voxel_coord.z
                     );
                     // Also log the voxel_at_depth result before far/near adjustment
-                    let base_voxel = hit.voxel_at_depth(cursor_depth, CUBE_POSITION, CUBE_SCALE);
+                    let base_voxel = hit.voxel_at_depth(
+                        cursor_depth,
+                        CUBE_POSITION,
+                        self.effective_cube_scale(),
+                    );
                     println!(
                         "[DEBUG Frame {}] voxel_at_depth({})=({}, {}, {}), Selected=({}, {}, {}), mode={}, face_type={}",
                         ctx.frame, cursor_depth, base_voxel.x, base_voxel.y, base_voxel.z,
@@ -977,7 +1068,7 @@ impl App for EditorApp {
                     normal,
                     cursor_depth,
                     CUBE_POSITION,
-                    CUBE_SCALE,
+                    self.effective_cube_scale(),
                     hit.world_pos,
                 ));
 
@@ -1001,8 +1092,11 @@ impl App for EditorApp {
                     self.drag_target_world_pos = Some(world_pos);
 
                     // Get the nearest voxel corner to the ray-plane intersection
-                    let nearest_corner =
-                        plane.world_to_nearest_voxel_corner(world_pos, CUBE_POSITION, CUBE_SCALE);
+                    let nearest_corner = plane.world_to_nearest_voxel_corner(
+                        world_pos,
+                        CUBE_POSITION,
+                        self.effective_cube_scale(),
+                    );
                     let cursor_depth = plane.depth;
 
                     // Apply Far/Near mode offset: Far mode places voxels one step further
@@ -1070,7 +1164,7 @@ impl App for EditorApp {
                     mesh_index,
                     CUBE_POSITION,
                     Quat::IDENTITY,
-                    CUBE_SCALE,
+                    self.effective_cube_scale(),
                     &self.camera,
                     width,
                     height,
@@ -1086,8 +1180,20 @@ impl App for EditorApp {
                 CUBE_POSITION,
                 Quat::IDENTITY,
                 Vec3::ONE,
-                CUBE_SCALE,
+                self.effective_cube_scale(),
                 [1.0, 1.0, 1.0], // White
+                &self.camera,
+                width,
+                height,
+            );
+        }
+
+        // Render axis gizmo at world center with length 1
+        unsafe {
+            self.mesh_renderer.render_3d_axis_arrows(
+                ctx.gl,
+                CUBE_POSITION, // World center
+                1.0,           // Length 1
                 &self.camera,
                 width,
                 height,
@@ -1097,7 +1203,7 @@ impl App for EditorApp {
         // Render edit plane 2D grid when active (during drag)
         if let Some(ref plane) = self.edit_plane {
             let grid_size = 5; // Draw 5x5 voxel grid
-            let voxel_size = CUBE_SCALE / (1 << plane.depth) as f32;
+            let voxel_size = self.effective_cube_scale() / (1 << plane.depth) as f32;
             let line_thickness = voxel_size * LINE_WIDTH_FACTOR;
 
             // Use exact drag target world position (ray-plane intersection) for gizmo
@@ -1106,10 +1212,16 @@ impl App for EditorApp {
 
             // Snap grid origin to the global voxel grid at the current depth
             // Get nearest voxel corner, convert back to world, then project onto plane
-            let nearest_corner =
-                plane.world_to_nearest_voxel_corner(target_world_pos, CUBE_POSITION, CUBE_SCALE);
-            let corner_world_pos =
-                plane.voxel_corner_to_world(nearest_corner, CUBE_POSITION, CUBE_SCALE);
+            let nearest_corner = plane.world_to_nearest_voxel_corner(
+                target_world_pos,
+                CUBE_POSITION,
+                self.effective_cube_scale(),
+            );
+            let corner_world_pos = plane.voxel_corner_to_world(
+                nearest_corner,
+                CUBE_POSITION,
+                self.effective_cube_scale(),
+            );
 
             // Project the corner onto the plane to ensure grid stays on the edit plane
             let offset = corner_world_pos - plane.origin;
@@ -1263,8 +1375,10 @@ impl App for EditorApp {
         // Render cursor wireframe when valid
         if self.cursor.valid {
             // Get cursor position and size in world space
-            let cursor_center = self.cursor.world_center(CUBE_POSITION, CUBE_SCALE);
-            let cursor_size = self.cursor.world_size(CUBE_SCALE);
+            let cursor_center = self
+                .cursor
+                .world_center(CUBE_POSITION, self.effective_cube_scale());
+            let cursor_size = self.cursor.world_size(self.effective_cube_scale());
             // Use magenta color when erase mode is active, otherwise use normal cursor color
             let cursor_color = if self.editor_state.is_erase_mode() {
                 [1.0, 0.0, 1.0] // Magenta for erase mode
@@ -1398,6 +1512,22 @@ impl App for EditorApp {
                     } else {
                         "Far (Place)"
                     }
+                ));
+
+                ui.separator();
+
+                // World scale control
+                ui.label("Scale:");
+                if ui.button("-").clicked() && self.editor_state.world_scale() > 0 {
+                    self.editor_state.decrement_world_scale();
+                }
+                ui.label(format!("{}", self.editor_state.world_scale()));
+                if ui.button("+").clicked() {
+                    self.editor_state.increment_world_scale();
+                }
+                ui.label(format!(
+                    "({}x)",
+                    self.editor_state.cube_scale_factor() as i32
                 ));
             });
         });
