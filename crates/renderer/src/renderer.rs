@@ -6,8 +6,8 @@ use glam::Vec3;
 pub use crate::camera::Camera;
 pub use crate::lighting::{AMBIENT, BACKGROUND_COLOR, DIFFUSE_STRENGTH, LIGHT_DIR};
 
-// Re-export Object trait from camera module (canonical source is app crate)
-pub use crate::camera::Object;
+// Re-export Object trait from physics crate
+pub use crossworld_physics::Object;
 
 /// Common renderer trait for cube raytracers
 ///

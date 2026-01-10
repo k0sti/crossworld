@@ -842,17 +842,11 @@ impl ProtoGlApp {
                 position: self.orbit_camera.position(),
                 rotation: self.orbit_camera.rotation(),
                 vfov: 60.0_f32.to_radians(),
-                pitch: self.orbit_camera.pitch(),
-                yaw: self.orbit_camera.yaw(),
-                target_position: Some(self.orbit_camera.focus),
             },
             CameraMode::FirstPerson => CameraConfig {
                 position: self.fps_camera.position(),
                 rotation: self.fps_camera.rotation(),
                 vfov: 60.0_f32.to_radians(),
-                pitch: self.fps_camera.pitch(),
-                yaw: self.fps_camera.yaw(),
-                target_position: None,
             },
         };
 

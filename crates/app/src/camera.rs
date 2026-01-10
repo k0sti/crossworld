@@ -5,54 +5,11 @@
 //!
 //! # Components
 //!
-//! - [`Camera`]: Core camera struct with position, rotation (quaternion), and fov
-//! - [`CameraMode`]: Enum for switching between orbit and first-person modes
+//! - [`Camera`]: Core camera struct with position and rotation (quaternion only)
 //! - [`OrbitController`]: Controller for orbit camera behavior
 //! - [`FirstPersonController`]: Controller for first-person camera behavior
-//! - [`Object`]: Trait for types with position and rotation in 3D space
 
 use glam::{Quat, Vec3};
-
-// ============================================================================
-// Object Trait
-// ============================================================================
-
-/// Base trait for any object with position and rotation in 3D space.
-///
-/// This trait provides a common interface for objects that have a transform
-/// (position and rotation). It's designed for objects where the transform
-/// can be accessed without external context.
-///
-/// Implemented by:
-/// - [`Camera`] in this module
-/// - Other game objects that have transforms
-pub trait Object {
-    /// Get the current position
-    fn position(&self) -> Vec3;
-
-    /// Get the current rotation as a quaternion
-    fn rotation(&self) -> Quat;
-
-    /// Set the position
-    fn set_position(&mut self, position: Vec3);
-
-    /// Set the rotation
-    fn set_rotation(&mut self, rotation: Quat);
-}
-
-// ============================================================================
-// Camera Mode
-// ============================================================================
-
-/// Camera control mode
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum CameraMode {
-    /// Orbit around a target point
-    #[default]
-    Orbit,
-    /// First-person free look
-    FirstPerson,
-}
 
 // ============================================================================
 // Camera
@@ -61,13 +18,13 @@ pub enum CameraMode {
 /// Default vertical field of view: 60 degrees
 pub const DEFAULT_VFOV: f32 = 60.0 * std::f32::consts::PI / 180.0;
 
-/// Maximum pitch angle to prevent gimbal lock (89 degrees)
-const MAX_PITCH: f32 = 89.0 * std::f32::consts::PI / 180.0;
+/// Maximum pitch angle to prevent gimbal lock (~86 degrees)
+const MAX_PITCH: f32 = 1.5;
 
 /// Camera for 3D rendering
 ///
-/// A generic camera with position, rotation (quaternion), and field of view.
-/// Supports both orbit and first-person camera modes through helper methods.
+/// A minimal camera with position and rotation (quaternion).
+/// Pitch and yaw are derived from the quaternion on-demand.
 ///
 /// # Coordinate System
 ///
@@ -93,45 +50,26 @@ const MAX_PITCH: f32 = 89.0 * std::f32::consts::PI / 180.0;
 /// let forward = camera.forward();
 /// let right = camera.right();
 /// let up = camera.up();
+///
+/// // Get derived angles
+/// let pitch = camera.pitch();
+/// let yaw = camera.yaw();
 /// ```
 #[derive(Debug, Clone, Copy)]
 pub struct Camera {
     /// Camera position in world space
     pub position: Vec3,
-    /// Camera rotation (orientation) as quaternion
+    /// Camera rotation (orientation) as quaternion - source of truth
     pub rotation: Quat,
     /// Vertical field of view in radians
     pub vfov: f32,
-    /// Pitch angle in radians (rotation around X axis)
-    /// Cached for convenience in first-person controls
-    pub pitch: f32,
-    /// Yaw angle in radians (rotation around Y axis)
-    /// Cached for convenience in first-person controls
-    pub yaw: f32,
-    /// Optional target position for look-at cameras (orbit mode)
-    pub target_position: Option<Vec3>,
 }
 
 impl Default for Camera {
     fn default() -> Self {
         let position = Vec3::new(3.0, 2.0, 3.0);
         let target = Vec3::ZERO;
-        let forward = (target - position).normalize();
-
-        // Calculate pitch and yaw from forward vector
-        let yaw = forward.z.atan2(forward.x);
-        let pitch = forward.y.asin();
-
-        let rotation = Quat::from_rotation_arc(Vec3::NEG_Z, forward);
-
-        Self {
-            position,
-            rotation,
-            vfov: DEFAULT_VFOV,
-            pitch,
-            yaw,
-            target_position: Some(target),
-        }
+        Self::look_at(position, target, Vec3::Y)
     }
 }
 
@@ -142,15 +80,11 @@ impl Camera {
             position,
             rotation: Quat::IDENTITY,
             vfov: DEFAULT_VFOV,
-            pitch: 0.0,
-            yaw: 0.0,
-            target_position: None,
         }
     }
 
     /// Create camera with position looking at target
     pub fn look_at(position: Vec3, target: Vec3, up: Vec3) -> Self {
-        // Build camera basis the same way as the raytracer does
         let forward = (target - position).normalize();
         let right = forward.cross(up).normalize();
         let cam_up = right.cross(forward);
@@ -160,36 +94,22 @@ impl Camera {
         let rotation_matrix = glam::Mat3::from_cols(right, cam_up, -forward);
         let rotation = Quat::from_mat3(&rotation_matrix);
 
-        // Calculate pitch and yaw from forward vector
-        let yaw = forward.z.atan2(forward.x);
-        let pitch = forward.y.asin();
-
         Self {
             position,
             rotation,
             vfov: DEFAULT_VFOV,
-            pitch,
-            yaw,
-            target_position: Some(target),
         }
     }
 
     /// Set the camera to look at a specific target position
     pub fn set_look_at(&mut self, target: Vec3) {
-        // Build camera basis the same way as the raytracer does
-        let up = Vec3::Y; // Use world up
+        let up = Vec3::Y;
         let forward = (target - self.position).normalize();
         let right = forward.cross(up).normalize();
         let cam_up = right.cross(forward);
 
-        // Build rotation matrix from basis vectors and convert to quaternion
         let rotation_matrix = glam::Mat3::from_cols(right, cam_up, -forward);
         self.rotation = Quat::from_mat3(&rotation_matrix);
-
-        // Update pitch and yaw
-        self.yaw = forward.z.atan2(forward.x);
-        self.pitch = forward.y.asin();
-        self.target_position = Some(target);
     }
 
     /// Create camera from pitch and yaw angles
@@ -200,17 +120,7 @@ impl Camera {
             position,
             rotation,
             vfov: DEFAULT_VFOV,
-            pitch,
-            yaw,
-            target_position: None,
         }
-    }
-
-    /// Update camera rotation from pitch and yaw
-    pub fn update_from_pitch_yaw(&mut self) {
-        self.rotation = Quat::from_euler(glam::EulerRot::YXZ, self.yaw, self.pitch, 0.0);
-        // Clear target when manually rotating
-        self.target_position = None;
     }
 
     /// Get the forward direction vector
@@ -240,83 +150,87 @@ impl Camera {
         Vec3::new(rgt.x, 0.0, rgt.z).normalize_or_zero()
     }
 
+    /// Extract pitch angle from rotation (derived, not stored)
+    pub fn pitch(&self) -> f32 {
+        self.forward().y.asin()
+    }
+
+    /// Extract yaw angle from rotation (derived, not stored)
+    pub fn yaw(&self) -> f32 {
+        let fwd = self.forward();
+        fwd.x.atan2(fwd.z)
+    }
+
     /// Get the target point the camera is looking at (1 unit forward)
     pub fn target(&self) -> Vec3 {
         self.position + self.forward()
     }
 
-    /// Rotate camera by yaw (around Y axis) and pitch (around local X axis)
-    /// This rotates the camera in place (first-person style)
+    /// Rotate camera in place (first-person style)
+    ///
+    /// Applies yaw around world Y-axis, then pitch around camera's local X-axis.
+    /// Pitch is clamped to prevent flipping.
     pub fn rotate(&mut self, yaw_delta: f32, pitch_delta: f32) {
-        // Update pitch and yaw
-        self.yaw += yaw_delta;
-        self.pitch += pitch_delta;
+        // Rotate around world Y axis (yaw)
+        let yaw_rotation = Quat::from_axis_angle(Vec3::Y, yaw_delta);
 
-        // Clamp pitch to prevent gimbal lock
-        self.pitch = self.pitch.clamp(-MAX_PITCH, MAX_PITCH);
+        // Rotate around camera's local X axis (pitch)
+        let pitch_rotation = Quat::from_axis_angle(self.right(), pitch_delta);
 
-        // Update rotation from pitch and yaw
-        self.update_from_pitch_yaw();
+        // Apply rotations
+        self.rotation = yaw_rotation * self.rotation;
+        self.rotation = pitch_rotation * self.rotation;
+        self.rotation = self.rotation.normalize();
+
+        // Clamp pitch to prevent flipping
+        self.clamp_pitch();
     }
 
     /// Orbit camera around a target point
-    /// yaw_delta: rotation around world Y-axis (horizontal mouse movement)
-    /// pitch_delta: rotation around camera's local right axis (vertical mouse movement)
+    ///
+    /// Applies yaw around world Y-axis, pitch around camera's local right axis.
+    /// Maintains distance from target.
     pub fn orbit(&mut self, target: Vec3, yaw_delta: f32, pitch_delta: f32) {
         // Calculate vector from target to camera
         let mut offset = self.position - target;
         let distance = offset.length();
 
-        // Step 1: Apply pitch rotation around camera's CURRENT local right axis (vertical angle)
-        // This must happen FIRST, using the original camera orientation
-        if pitch_delta.abs() > 0.0001 {
-            // Get the current right vector (perpendicular to both up and forward)
-            let forward = -offset.normalize();
-            let right = forward.cross(Vec3::Y).normalize();
-
-            // Only apply pitch if right vector is valid (not looking straight up/down)
-            if right.length_squared() > 0.0001 {
-                let pitch_rotation = Quat::from_axis_angle(right, pitch_delta);
-                offset = pitch_rotation * offset;
-
-                // Clamp to prevent flipping over the poles
-                let new_y = offset.y;
-                let xz_length = (offset.x * offset.x + offset.z * offset.z).sqrt();
-                let angle_from_horizontal = new_y.atan2(xz_length);
-
-                // Clamp angle to [-85°, 85°] to prevent gimbal lock
-                const MAX_ANGLE: f32 = 85.0 * std::f32::consts::PI / 180.0;
-                if angle_from_horizontal.abs() > MAX_ANGLE {
-                    let clamped_angle = angle_from_horizontal.clamp(-MAX_ANGLE, MAX_ANGLE);
-                    let new_y = distance * clamped_angle.sin();
-                    let new_xz = distance * clamped_angle.cos();
-                    let xz_ratio = new_xz / xz_length;
-                    offset = Vec3::new(offset.x * xz_ratio, new_y, offset.z * xz_ratio);
-                }
-            }
-        }
-
-        // Step 2: Apply yaw rotation around world Y-axis (horizontal orbit)
-        // This happens AFTER pitch, so horizontal orbit is always around world Y
+        // Apply yaw rotation around world Y-axis
         if yaw_delta.abs() > 0.0001 {
             let yaw_rotation = Quat::from_axis_angle(Vec3::Y, yaw_delta);
             offset = yaw_rotation * offset;
         }
 
-        // Ensure we maintain the same distance
-        offset = offset.normalize() * distance;
+        // Apply pitch rotation around camera's local right axis
+        if pitch_delta.abs() > 0.0001 {
+            let forward = -offset.normalize();
+            let right = forward.cross(Vec3::Y).normalize();
 
-        // Update position
+            if right.length_squared() > 0.0001 {
+                let pitch_rotation = Quat::from_axis_angle(right, pitch_delta);
+                offset = pitch_rotation * offset;
+
+                // Clamp to prevent flipping over the poles
+                let xz_length = (offset.x * offset.x + offset.z * offset.z).sqrt();
+                let angle = offset.y.atan2(xz_length);
+
+                if angle.abs() > MAX_PITCH {
+                    let clamped = angle.clamp(-MAX_PITCH, MAX_PITCH);
+                    let new_y = distance * clamped.sin();
+                    let new_xz = distance * clamped.cos();
+                    let ratio = new_xz / xz_length;
+                    offset = Vec3::new(offset.x * ratio, new_y, offset.z * ratio);
+                }
+            }
+        }
+
+        // Maintain distance and update position
+        offset = offset.normalize() * distance;
         self.position = target + offset;
 
         // Update rotation to look at target
         let forward = (target - self.position).normalize();
         self.rotation = Quat::from_rotation_arc(Vec3::NEG_Z, forward);
-
-        // Update pitch and yaw from the new rotation
-        self.yaw = forward.z.atan2(forward.x);
-        self.pitch = forward.y.asin();
-        self.target_position = Some(target);
     }
 
     /// Move camera relative to its current orientation
@@ -327,38 +241,21 @@ impl Camera {
     }
 
     /// Zoom by moving camera forward/backward along view direction
-    /// Note: For orbit cameras, consider zooming toward/away from target instead
     pub fn zoom(&mut self, delta: f32) {
         self.position += self.forward() * delta;
     }
 
-    /// Create a camera looking at a target object
-    ///
-    /// # Arguments
-    /// * `target` - The object to look at (implements Object trait)
-    /// * `offset` - Offset from target position to place camera
-    /// * `up` - Up vector for camera orientation
-    pub fn looking_at(target: &dyn Object, offset: Vec3, up: Vec3) -> Self {
-        let camera_position = target.position() + offset;
-        Self::look_at(camera_position, target.position(), up)
-    }
-}
+    /// Clamp pitch to prevent camera flipping
+    fn clamp_pitch(&mut self) {
+        let fwd = self.forward();
+        if fwd.y.abs() > MAX_PITCH.sin() {
+            let yaw = fwd.x.atan2(fwd.z);
+            let pitch = fwd.y.asin().clamp(-MAX_PITCH, MAX_PITCH);
 
-impl Object for Camera {
-    fn position(&self) -> Vec3 {
-        self.position
-    }
-
-    fn rotation(&self) -> Quat {
-        self.rotation
-    }
-
-    fn set_position(&mut self, position: Vec3) {
-        self.position = position;
-    }
-
-    fn set_rotation(&mut self, rotation: Quat) {
-        self.rotation = rotation;
+            let yaw_quat = Quat::from_rotation_y(yaw);
+            let pitch_quat = Quat::from_rotation_x(pitch);
+            self.rotation = yaw_quat * pitch_quat;
+        }
     }
 }
 
@@ -549,24 +446,12 @@ impl FirstPersonController {
         let yaw_delta = -delta_x * self.config.mouse_sensitivity;
         let pitch_delta = -delta_y * self.config.mouse_sensitivity;
 
-        camera.yaw += yaw_delta;
-        camera.pitch += pitch_delta;
-
-        // Clamp pitch to prevent gimbal lock
-        camera.pitch = camera.pitch.clamp(-MAX_PITCH, MAX_PITCH);
-
-        camera.update_from_pitch_yaw();
+        camera.rotate(yaw_delta, pitch_delta);
     }
 
     /// Apply camera rotation directly (for gamepad input, etc.)
     pub fn apply_rotation(&self, camera: &mut Camera, delta_x: f32, delta_y: f32) {
-        camera.yaw += delta_x;
-        camera.pitch += delta_y;
-
-        // Clamp pitch to prevent gimbal lock
-        camera.pitch = camera.pitch.clamp(-MAX_PITCH, MAX_PITCH);
-
-        camera.update_from_pitch_yaw();
+        camera.rotate(delta_x, delta_y);
     }
 
     /// Calculate movement velocity from input state

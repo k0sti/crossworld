@@ -5,6 +5,6 @@
 
 // Re-export all camera types from app crate
 pub use app::camera::{
-    Camera, CameraMode, DEFAULT_VFOV, FirstPersonController, FirstPersonControllerConfig, Object,
-    OrbitController, OrbitControllerConfig,
+    Camera, DEFAULT_VFOV, FirstPersonController, FirstPersonControllerConfig, OrbitController,
+    OrbitControllerConfig,
 };
