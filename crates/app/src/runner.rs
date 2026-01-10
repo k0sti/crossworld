@@ -671,6 +671,9 @@ impl<A: App> ApplicationHandler for AppRuntime<A> {
                         }
                     }
 
+                    // Call post-render for final post-processing (e.g., CRT effect on entire frame)
+                    self.app.post_render(&ctx);
+
                     gl_surface.swap_buffers(gl_context).unwrap();
 
                     self.frame_count += 1;
