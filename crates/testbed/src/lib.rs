@@ -878,7 +878,14 @@ impl App for PhysicsTestbed {
             ctx.gl.disable(SCISSOR_TEST);
         }
 
-        // End CRT post-processing (applies effects and draws to screen)
+        // Note: CRT post-processing end() is called in post_render() to include UI
+    }
+
+    fn post_render(&mut self, ctx: &FrameContext) {
+        let width = ctx.size.0;
+        let height = ctx.size.1;
+
+        // End CRT post-processing (applies effects to entire frame including UI)
         unsafe {
             self.crt_post_process
                 .end(ctx.gl, width, height, ctx.elapsed);
