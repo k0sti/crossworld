@@ -24,7 +24,7 @@ pub enum ReviewAction {
     Rebase,
     /// MERGE - Merge branch to main
     Merge,
-    /// Complete workflow: APPROVE + REBASE + MERGE
+    /// Complete workflow: REBASE + MERGE + APPROVE
     Complete,
     /// Exit without sending any command (ESC pressed)
     Cancel,
