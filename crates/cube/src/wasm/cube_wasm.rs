@@ -126,6 +126,7 @@ impl WasmCube {
     /// Update this cube with another cube at specified depth and offset, scaled
     ///
     /// This is useful for placing scaled models within a larger cube.
+    /// Uses the efficient recursive tree-based algorithm.
     ///
     /// # Arguments
     /// * `depth` - Depth level at which to place the cube
@@ -148,7 +149,7 @@ impl WasmCube {
         let offset = IVec3::new(offset_x, offset_y, offset_z);
         let new_cube = self
             .inner
-            .update_depth(depth, offset, scale, (*cube.inner).clone());
+            .update_depth_tree(depth, offset, scale, &cube.inner);
         WasmCube {
             inner: Rc::new(new_cube),
         }
