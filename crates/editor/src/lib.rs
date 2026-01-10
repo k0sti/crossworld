@@ -14,7 +14,7 @@ use app::{App, Camera, FrameContext, InputState, OrbitController, OrbitControlle
 use cube::Cube;
 use glam::{IVec3, Quat, Vec2, Vec3};
 use glow::HasContext;
-use renderer::{MeshRenderer, SkyboxRenderer};
+use renderer::{MeshRenderer, SkyboxRenderer, WireframeDepthMode};
 use std::path::PathBuf;
 use std::rc::Rc;
 use winit::keyboard::KeyCode;
@@ -98,6 +98,8 @@ const BASE_CUBE_SCALE: f32 = 1.0;
 const EDIT_DEPTH: u32 = 4;
 /// Line width/strength for all wireframes and gizmo lines (relative to voxel size)
 const LINE_WIDTH_FACTOR: f32 = 0.01;
+/// Half line width for lines drawn behind/inside model (thinner, obscured lines)
+const LINE_WIDTH_FACTOR_HALF: f32 = LINE_WIDTH_FACTOR * 0.5;
 
 /// Edit plane for drag operations
 #[derive(Debug, Clone)]
@@ -1174,14 +1176,30 @@ impl App for EditorApp {
 
         // Render white wireframe around the ground cube
         // CUBE_POSITION is already the center (renderer uses center-aligned coordinates)
+        // Uses two-pass rendering: behind (less red, dimmer) and in front (normal)
         unsafe {
-            self.mesh_renderer.render_cubebox_wireframe_colored(
+            // Behind pass: less red (more cyan), half alpha
+            self.mesh_renderer.render_cubebox_wireframe_depth(
                 ctx.gl,
                 CUBE_POSITION,
                 Quat::IDENTITY,
                 Vec3::ONE,
                 self.effective_cube_scale(),
-                [1.0, 1.0, 1.0], // White
+                [0.6, 0.9, 1.0, 0.4], // Cyan-white, less red, reduced alpha
+                WireframeDepthMode::Behind,
+                &self.camera,
+                width,
+                height,
+            );
+            // In front pass: full white, full alpha
+            self.mesh_renderer.render_cubebox_wireframe_depth(
+                ctx.gl,
+                CUBE_POSITION,
+                Quat::IDENTITY,
+                Vec3::ONE,
+                self.effective_cube_scale(),
+                [1.0, 1.0, 1.0, 1.0], // White, full alpha
+                WireframeDepthMode::InFront,
                 &self.camera,
                 width,
                 height,
@@ -1201,10 +1219,12 @@ impl App for EditorApp {
         }
 
         // Render edit plane 2D grid when active (during drag)
+        // Uses two-pass rendering: thinner lines behind geometry, thicker lines in front
         if let Some(ref plane) = self.edit_plane {
             let grid_size = 5; // Draw 5x5 voxel grid
             let voxel_size = self.effective_cube_scale() / (1 << plane.depth) as f32;
             let line_thickness = voxel_size * LINE_WIDTH_FACTOR;
+            let line_thickness_half = voxel_size * LINE_WIDTH_FACTOR_HALF;
 
             // Use exact drag target world position (ray-plane intersection) for gizmo
             // This is the unsnapped position that follows the mouse precisely
@@ -1228,125 +1248,203 @@ impl App for EditorApp {
             let distance_along_normal = offset.dot(plane.normal);
             let grid_origin = corner_world_pos - plane.normal * distance_along_normal;
 
+            // Helper closure to draw a single unit-length grid segment with two-pass depth
+            let draw_grid_segment = |renderer: &MeshRenderer,
+                                     gl: &glow::Context,
+                                     start: Vec3,
+                                     end: Vec3,
+                                     alpha: f32,
+                                     camera: &Camera| {
+                let line_center = (start + end) * 0.5;
+                let line_length = (end - start).length();
+                let line_dir = (end - start).normalize();
+                let rotation = Quat::from_rotation_arc(Vec3::X, line_dir);
+                // Behind color: less red, more blue-cyan
+                let behind_color = [0.15, 0.5, 1.0, alpha * 0.7];
+                // In front color: normal blue
+                let front_color = [0.3, 0.6, 1.0, alpha];
+
+                unsafe {
+                    // First pass: behind geometry (thinner, half width, less red color)
+                    renderer.render_cubebox_wireframe_depth(
+                        gl,
+                        line_center,
+                        rotation,
+                        Vec3::new(line_length, line_thickness_half, line_thickness_half),
+                        1.0,
+                        behind_color,
+                        WireframeDepthMode::Behind,
+                        camera,
+                        width,
+                        height,
+                    );
+
+                    // Second pass: in front of geometry (full width, normal color)
+                    renderer.render_cubebox_wireframe_depth(
+                        gl,
+                        line_center,
+                        rotation,
+                        Vec3::new(line_length, line_thickness, line_thickness),
+                        1.0,
+                        front_color,
+                        WireframeDepthMode::InFront,
+                        camera,
+                        width,
+                        height,
+                    );
+                }
+            };
+
+            // Draw grid lines in unit-length segments parallel to right axis
+            for i in -grid_size..=grid_size {
+                let row_offset = plane.up * (i as f32 * voxel_size);
+                for j in -grid_size..grid_size {
+                    let seg_start =
+                        grid_origin + plane.right * (j as f32 * voxel_size) + row_offset;
+                    let seg_end =
+                        grid_origin + plane.right * ((j + 1) as f32 * voxel_size) + row_offset;
+                    let seg_center = (seg_start + seg_end) * 0.5;
+
+                    // Calculate distance-based opacity for gradient fade (fully transparent at distance 3)
+                    let dist_from_hit = (seg_center - target_world_pos).length();
+                    let max_dist = 3.0 * voxel_size;
+                    let alpha = (1.0 - (dist_from_hit / max_dist)).clamp(0.0, 1.0);
+
+                    // Skip segments beyond fade distance
+                    if alpha < 0.01 {
+                        continue;
+                    }
+
+                    draw_grid_segment(
+                        &self.mesh_renderer,
+                        ctx.gl,
+                        seg_start,
+                        seg_end,
+                        alpha,
+                        &self.camera,
+                    );
+                }
+            }
+
+            // Draw grid lines in unit-length segments parallel to up axis
+            for j in -grid_size..=grid_size {
+                let col_offset = plane.right * (j as f32 * voxel_size);
+                for i in -grid_size..grid_size {
+                    let seg_start = grid_origin + plane.up * (i as f32 * voxel_size) + col_offset;
+                    let seg_end =
+                        grid_origin + plane.up * ((i + 1) as f32 * voxel_size) + col_offset;
+                    let seg_center = (seg_start + seg_end) * 0.5;
+
+                    // Calculate distance-based opacity for gradient fade (fully transparent at distance 3)
+                    let dist_from_hit = (seg_center - target_world_pos).length();
+                    let max_dist = 3.0 * voxel_size;
+                    let alpha = (1.0 - (dist_from_hit / max_dist)).clamp(0.0, 1.0);
+
+                    // Skip segments beyond fade distance
+                    if alpha < 0.01 {
+                        continue;
+                    }
+
+                    draw_grid_segment(
+                        &self.mesh_renderer,
+                        ctx.gl,
+                        seg_start,
+                        seg_end,
+                        alpha,
+                        &self.camera,
+                    );
+                }
+            }
+
             unsafe {
-                // Draw grid lines parallel to right axis
-                for i in -grid_size..=grid_size {
-                    let offset = plane.up * (i as f32 * voxel_size);
-                    let start =
-                        grid_origin - plane.right * (grid_size as f32 * voxel_size) + offset;
-                    let end = grid_origin + plane.right * (grid_size as f32 * voxel_size) + offset;
-
-                    let line_center = (start + end) * 0.5;
-
-                    // Calculate distance-based opacity for gradient fade (fully transparent at distance 3)
-                    let dist_from_hit = (line_center - target_world_pos).length();
-                    let max_dist = 3.0 * voxel_size;
-                    let alpha = (1.0 - (dist_from_hit / max_dist)).clamp(0.0, 1.0);
-
-                    // Skip lines beyond fade distance
-                    if alpha < 0.01 {
-                        continue;
-                    }
-
-                    let line_length = (end - start).length();
-                    let line_dir = (end - start).normalize();
-                    let rotation = Quat::from_rotation_arc(Vec3::X, line_dir);
-
-                    // Use actual alpha transparency (blue grid)
-                    let color = [0.3, 0.6, 1.0, alpha];
-
-                    self.mesh_renderer.render_cubebox_wireframe_colored_alpha(
-                        ctx.gl,
-                        line_center,
-                        rotation,
-                        Vec3::new(line_length, line_thickness, line_thickness),
-                        1.0,
-                        color,
-                        &self.camera,
-                        width,
-                        height,
-                    );
-                }
-
-                // Draw grid lines parallel to up axis
-                for j in -grid_size..=grid_size {
-                    let offset = plane.right * (j as f32 * voxel_size);
-                    let start = grid_origin - plane.up * (grid_size as f32 * voxel_size) + offset;
-                    let end = grid_origin + plane.up * (grid_size as f32 * voxel_size) + offset;
-
-                    let line_center = (start + end) * 0.5;
-
-                    // Calculate distance-based opacity for gradient fade (fully transparent at distance 3)
-                    let dist_from_hit = (line_center - target_world_pos).length();
-                    let max_dist = 3.0 * voxel_size;
-                    let alpha = (1.0 - (dist_from_hit / max_dist)).clamp(0.0, 1.0);
-
-                    // Skip lines beyond fade distance
-                    if alpha < 0.01 {
-                        continue;
-                    }
-
-                    let line_length = (end - start).length();
-                    let line_dir = (end - start).normalize();
-                    let rotation = Quat::from_rotation_arc(Vec3::X, line_dir);
-
-                    // Use actual alpha transparency (blue grid)
-                    let color = [0.3, 0.6, 1.0, alpha];
-
-                    self.mesh_renderer.render_cubebox_wireframe_colored_alpha(
-                        ctx.gl,
-                        line_center,
-                        rotation,
-                        Vec3::new(line_length, line_thickness, line_thickness),
-                        1.0,
-                        color,
-                        &self.camera,
-                        width,
-                        height,
-                    );
-                }
-
                 // Draw gizmo dot at paint start position (initial hit point)
-                self.mesh_renderer.render_cubebox_wireframe_colored(
+                // Two-pass: behind (half size, less red) then in front (full size)
+                self.mesh_renderer.render_cubebox_wireframe_depth(
                     ctx.gl,
                     plane.hit_pos,
                     Quat::IDENTITY,
                     Vec3::ONE,
-                    voxel_size * 0.1,
-                    [1.0, 1.0, 0.0], // Yellow for start position
+                    voxel_size * 0.05,    // Half size for behind
+                    [0.5, 1.0, 0.0, 0.7], // Less red yellow (more green), dimmer
+                    WireframeDepthMode::Behind,
+                    &self.camera,
+                    width,
+                    height,
+                );
+                self.mesh_renderer.render_cubebox_wireframe_depth(
+                    ctx.gl,
+                    plane.hit_pos,
+                    Quat::IDENTITY,
+                    Vec3::ONE,
+                    voxel_size * 0.1,     // Full size for in front
+                    [1.0, 1.0, 0.0, 1.0], // Yellow for start position
+                    WireframeDepthMode::InFront,
                     &self.camera,
                     width,
                     height,
                 );
 
                 // Draw short line from start hit point toward camera
-                let line_length = voxel_size * 2.0;
+                let gizmo_line_length = voxel_size * 2.0;
                 let to_camera = (self.camera.position - plane.hit_pos).normalize();
-                let line_end = plane.hit_pos + to_camera * line_length;
+                let line_end = plane.hit_pos + to_camera * gizmo_line_length;
                 let line_center = (plane.hit_pos + line_end) * 0.5;
                 let line_dir = to_camera;
                 let rotation = Quat::from_rotation_arc(Vec3::X, line_dir);
 
-                self.mesh_renderer.render_cubebox_wireframe_colored(
+                // Behind pass (thinner, less red)
+                self.mesh_renderer.render_cubebox_wireframe_depth(
                     ctx.gl,
                     line_center,
                     rotation,
-                    Vec3::new(line_length, line_thickness * 2.0, line_thickness * 2.0),
+                    Vec3::new(gizmo_line_length, line_thickness_half, line_thickness_half),
                     1.0,
-                    [1.0, 1.0, 0.0], // Yellow for start position
+                    [0.5, 1.0, 0.0, 0.7], // Less red yellow, dimmer
+                    WireframeDepthMode::Behind,
+                    &self.camera,
+                    width,
+                    height,
+                );
+                // In front pass (thicker)
+                self.mesh_renderer.render_cubebox_wireframe_depth(
+                    ctx.gl,
+                    line_center,
+                    rotation,
+                    Vec3::new(
+                        gizmo_line_length,
+                        line_thickness * 2.0,
+                        line_thickness * 2.0,
+                    ),
+                    1.0,
+                    [1.0, 1.0, 0.0, 1.0], // Yellow for start position
+                    WireframeDepthMode::InFront,
                     &self.camera,
                     width,
                     height,
                 );
 
                 // Draw gizmo dot at current paint target position (exact ray-plane intersection)
-                self.mesh_renderer.render_cubebox_wireframe_colored(
+                // Two-pass: behind (half size, dimmer) then in front (full size)
+                self.mesh_renderer.render_cubebox_wireframe_depth(
                     ctx.gl,
                     target_world_pos,
                     Quat::IDENTITY,
                     Vec3::ONE,
-                    voxel_size * 0.15, // Slightly larger to stand out
-                    [0.0, 1.0, 1.0],   // Cyan for target position
+                    voxel_size * 0.075,   // Half size for behind
+                    [0.0, 0.7, 0.9, 0.7], // Dimmer cyan for behind
+                    WireframeDepthMode::Behind,
+                    &self.camera,
+                    width,
+                    height,
+                );
+                self.mesh_renderer.render_cubebox_wireframe_depth(
+                    ctx.gl,
+                    target_world_pos,
+                    Quat::IDENTITY,
+                    Vec3::ONE,
+                    voxel_size * 0.15,    // Full size for in front
+                    [0.0, 1.0, 1.0, 1.0], // Cyan for target position
+                    WireframeDepthMode::InFront,
                     &self.camera,
                     width,
                     height,
@@ -1354,17 +1452,40 @@ impl App for EditorApp {
 
                 // Draw short line from target position toward camera
                 let to_camera_target = (self.camera.position - target_world_pos).normalize();
-                let line_end_target = target_world_pos + to_camera_target * line_length;
+                let line_end_target = target_world_pos + to_camera_target * gizmo_line_length;
                 let line_center_target = (target_world_pos + line_end_target) * 0.5;
                 let rotation_target = Quat::from_rotation_arc(Vec3::X, to_camera_target);
 
-                self.mesh_renderer.render_cubebox_wireframe_colored(
+                // Behind pass (thinner, dimmer)
+                self.mesh_renderer.render_cubebox_wireframe_depth(
                     ctx.gl,
                     line_center_target,
                     rotation_target,
-                    Vec3::new(line_length, line_thickness * 2.5, line_thickness * 2.5),
+                    Vec3::new(
+                        gizmo_line_length,
+                        line_thickness_half * 1.25,
+                        line_thickness_half * 1.25,
+                    ),
                     1.0,
-                    [0.0, 1.0, 1.0], // Cyan for target position
+                    [0.0, 0.7, 0.9, 0.7], // Dimmer cyan for behind
+                    WireframeDepthMode::Behind,
+                    &self.camera,
+                    width,
+                    height,
+                );
+                // In front pass (thicker)
+                self.mesh_renderer.render_cubebox_wireframe_depth(
+                    ctx.gl,
+                    line_center_target,
+                    rotation_target,
+                    Vec3::new(
+                        gizmo_line_length,
+                        line_thickness * 2.5,
+                        line_thickness * 2.5,
+                    ),
+                    1.0,
+                    [0.0, 1.0, 1.0, 1.0], // Cyan for target position
+                    WireframeDepthMode::InFront,
                     &self.camera,
                     width,
                     height,
