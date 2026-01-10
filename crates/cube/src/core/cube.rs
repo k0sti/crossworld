@@ -379,14 +379,16 @@ impl<T: Clone> Cube<T> {
         }
     }
 
-    /// Update this cube with cube at depth and offset, scaled with given scale depth
+    /// Update this cube with cube at depth and offset, scaled with given scale depth (slow iterative version)
     ///
     /// Places the source cube at the target depth and offset, where the source cube
     /// occupies 2^scale voxels in each dimension at the target depth.
     ///
-    /// Example: update_depth(2, (0, 2, 0), 1, cube) places cube at depth 2
+    /// **Note:** This is the slow O(2^(3*scale)) iterative version. Prefer `update_depth_tree` for better performance.
+    ///
+    /// Example: update_depth_slow(2, (0, 2, 0), 1, cube) places cube at depth 2
     /// covering positions x=[0,1], y=[2,3], z=[0,1]
-    pub fn update_depth(&self, depth: u32, offset: IVec3, scale: u32, cube: Cube<T>) -> Self {
+    pub fn update_depth_slow(&self, depth: u32, offset: IVec3, scale: u32, cube: Cube<T>) -> Self {
         if scale == 0 {
             self.update(CubeCoord::new(offset, depth), cube)
         } else {
@@ -1277,7 +1279,7 @@ mod tests {
         let scale = 1;
 
         // Update using both methods
-        let result1 = target.update_depth(depth, offset, scale, source.clone());
+        let result1 = target.update_depth_slow(depth, offset, scale, source.clone());
         let result2 = target.update_depth_tree(depth, offset, scale, &source);
 
         // Verify all positions match
@@ -1290,7 +1292,7 @@ mod tests {
                     let id2 = <Cube<u8>>::id(&result2.get(CubeCoord::new(pos, depth)));
                     assert_eq!(
                         id1, id2,
-                        "Mismatch at position {:?}: update_depth={}, update_depth_tree={}",
+                        "Mismatch at position {:?}: update_depth_slow={}, update_depth_tree={}",
                         pos, id1, id2
                     );
                 }
@@ -1327,7 +1329,7 @@ mod tests {
         let scale = 2;
 
         // Test both methods produce same result
-        let result_loop = target.update_depth(depth, offset, scale, source.clone());
+        let result_loop = target.update_depth_slow(depth, offset, scale, source.clone());
         let result_tree = target.update_depth_tree(depth, offset, scale, &source);
 
         // Verify all positions match between methods
@@ -1340,12 +1342,139 @@ mod tests {
                     let id_tree = <Cube<u8>>::id(&result_tree.get(CubeCoord::new(pos, depth)));
                     assert_eq!(
                         id_loop, id_tree,
-                        "Mismatch at position {:?}: update_depth={}, update_depth_tree={}",
+                        "Mismatch at position {:?}: update_depth_slow={}, update_depth_tree={}",
                         pos, id_loop, id_tree
                     );
                 }
             }
         }
+    }
+
+    #[test]
+    fn test_update_depth_performance() {
+        use std::time::Instant;
+
+        // Test with scale=4 (16x16x16 = 4096 iterations for slow version)
+        // The tree version processes 8 octants recursively (4 levels = 8^4 = 4096 operations
+        // but with better cache locality and fewer intermediate allocations)
+        let scale = 4;
+        let depth = 6;
+
+        // Create a uniform source cube (best case for tree version - can skip subtrees)
+        let source_uniform = Cube::Solid(42u8);
+
+        // Create a complex nested source (more realistic case)
+        let create_nested_cube = |base: u8| -> Cube<u8> {
+            Cube::cubes([
+                Rc::new(Cube::Solid(base)),
+                Rc::new(Cube::Solid(base.wrapping_add(1))),
+                Rc::new(Cube::Solid(base.wrapping_add(2))),
+                Rc::new(Cube::Solid(base.wrapping_add(3))),
+                Rc::new(Cube::Solid(base.wrapping_add(4))),
+                Rc::new(Cube::Solid(base.wrapping_add(5))),
+                Rc::new(Cube::Solid(base.wrapping_add(6))),
+                Rc::new(Cube::Solid(base.wrapping_add(7))),
+            ])
+        };
+
+        let source_complex: Cube<u8> = Cube::cubes([
+            Rc::new(Cube::cubes([
+                Rc::new(create_nested_cube(0)),
+                Rc::new(create_nested_cube(10)),
+                Rc::new(create_nested_cube(20)),
+                Rc::new(create_nested_cube(30)),
+                Rc::new(create_nested_cube(40)),
+                Rc::new(create_nested_cube(50)),
+                Rc::new(create_nested_cube(60)),
+                Rc::new(create_nested_cube(70)),
+            ])),
+            Rc::new(Cube::cubes([
+                Rc::new(create_nested_cube(80)),
+                Rc::new(create_nested_cube(90)),
+                Rc::new(create_nested_cube(100)),
+                Rc::new(create_nested_cube(110)),
+                Rc::new(create_nested_cube(120)),
+                Rc::new(create_nested_cube(130)),
+                Rc::new(create_nested_cube(140)),
+                Rc::new(create_nested_cube(150)),
+            ])),
+            Rc::new(Cube::Solid(200)),
+            Rc::new(Cube::Solid(201)),
+            Rc::new(Cube::Solid(202)),
+            Rc::new(Cube::Solid(203)),
+            Rc::new(Cube::Solid(204)),
+            Rc::new(Cube::Solid(205)),
+        ]);
+
+        let target = Cube::Solid(0u8);
+        let offset = IVec3::new(0, 0, 0);
+
+        const ITERATIONS: u32 = 5;
+
+        // Test 1: Uniform source (tree version should be much faster)
+        println!("\n=== Test 1: Uniform source (scale={}) ===", scale);
+        let start_slow = Instant::now();
+        for _ in 0..ITERATIONS {
+            let _ = target.update_depth_slow(depth, offset, scale, source_uniform.clone());
+        }
+        let slow_uniform = start_slow.elapsed();
+
+        let start_tree = Instant::now();
+        for _ in 0..ITERATIONS {
+            let _ = target.update_depth_tree(depth, offset, scale, &source_uniform);
+        }
+        let tree_uniform = start_tree.elapsed();
+
+        println!("  update_depth_slow: {:?}", slow_uniform);
+        println!("  update_depth_tree: {:?}", tree_uniform);
+        let speedup_uniform = slow_uniform.as_nanos() as f64 / tree_uniform.as_nanos() as f64;
+        println!("  Speedup: {:.2}x", speedup_uniform);
+
+        // Test 2: Complex nested source
+        println!("\n=== Test 2: Complex nested source (scale={}) ===", scale);
+        let start_slow = Instant::now();
+        for _ in 0..ITERATIONS {
+            let _ = target.update_depth_slow(depth, offset, scale, source_complex.clone());
+        }
+        let slow_complex = start_slow.elapsed();
+
+        let start_tree = Instant::now();
+        for _ in 0..ITERATIONS {
+            let _ = target.update_depth_tree(depth, offset, scale, &source_complex);
+        }
+        let tree_complex = start_tree.elapsed();
+
+        println!("  update_depth_slow: {:?}", slow_complex);
+        println!("  update_depth_tree: {:?}", tree_complex);
+        let speedup_complex = slow_complex.as_nanos() as f64 / tree_complex.as_nanos() as f64;
+        println!("  Speedup: {:.2}x", speedup_complex);
+
+        // Verify correctness (results must match)
+        let result_slow = target.update_depth_slow(depth, offset, scale, source_complex.clone());
+        let result_tree = target.update_depth_tree(depth, offset, scale, &source_complex);
+
+        let size = 1 << scale;
+        for z in 0..size {
+            for y in 0..size {
+                for x in 0..size {
+                    let pos = offset + IVec3::new(x, y, z);
+                    let id_slow = <Cube<u8>>::id(&result_slow.get(CubeCoord::new(pos, depth)));
+                    let id_tree = <Cube<u8>>::id(&result_tree.get(CubeCoord::new(pos, depth)));
+                    assert_eq!(
+                        id_slow, id_tree,
+                        "Mismatch at position {:?}: update_depth_slow={}, update_depth_tree={}",
+                        pos, id_slow, id_tree
+                    );
+                }
+            }
+        }
+
+        // For uniform sources, tree version should be significantly faster
+        // For complex sources, performance may be similar but tree version avoids cloning
+        assert!(
+            speedup_uniform >= 0.5,
+            "Tree version should not be more than 2x slower for uniform sources"
+        );
     }
 
     #[test]
