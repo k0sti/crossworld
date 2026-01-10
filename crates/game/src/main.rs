@@ -14,7 +14,7 @@
 
 use app::{
     create_controller_backend, App, ControllerBackend, CursorMode, FrameContext, InputState,
-    CREATE_APP_SYMBOL,
+    ReviewConfig, CREATE_APP_SYMBOL,
 };
 use glam::Vec2;
 use glow::{Context, HasContext};
@@ -45,18 +45,6 @@ use winit::platform::x11::EventLoopBuilderExtX11;
 struct DebugConfig {
     /// Number of frames to run before exiting
     frames: u64,
-}
-
-/// Review panel configuration
-#[derive(Debug, Clone)]
-struct ReviewConfig {
-    /// Path to the review document (None if created from text)
-    #[allow(dead_code)]
-    path: Option<PathBuf>,
-    /// Content of the review document
-    content: String,
-    /// User comment input buffer
-    comment: String,
 }
 
 /// Command line configuration
@@ -95,8 +83,8 @@ fn parse_args() -> CliConfig {
                 if i + 1 < args.len() {
                     let content = args[i + 1].clone();
                     config.review = Some(ReviewConfig {
-                        path: None,
-                        content,
+                        file_path: None,
+                        content: content.into(),
                         comment: String::new(),
                     });
                     println!("[Game] Review message: {}", &args[i + 1]);
@@ -112,8 +100,8 @@ fn parse_args() -> CliConfig {
                     match std::fs::read_to_string(&path) {
                         Ok(content) => {
                             config.review = Some(ReviewConfig {
-                                path: Some(path.clone()),
-                                content,
+                                file_path: Some(path.clone()),
+                                content: content.into(),
                                 comment: String::new(),
                             });
                             println!("[Game] Review document: {}", path.display());
@@ -720,9 +708,8 @@ impl ApplicationHandler for GameRuntime {
                         }
                     }
 
-                    // Render egui UI
-                    let mut should_exit = false;
-                    let mut exit_comment: Option<String> = None;
+                    // Render egui UI and handle review overlay
+                    let mut review_action = app::ReviewAction::None;
 
                     if let Some(egui) = &mut self.egui {
                         unsafe {
@@ -731,68 +718,21 @@ impl ApplicationHandler for GameRuntime {
                             gl.blend_func(glow::SRC_ALPHA, glow::ONE_MINUS_SRC_ALPHA);
                         }
 
-                        let review_config = &mut self.cli_config.review;
+                        let mut review_config = self.cli_config.review.clone();
 
                         egui.run(window, [size.width, size.height], |egui_ctx| {
                             app.ui(&ctx, egui_ctx);
 
                             // Render review overlay if configured
                             if let Some(ref mut review) = review_config {
-                                use egui::{
-                                    Align2, Area, Color32, Frame, Margin, RichText, ScrollArea,
-                                    TextEdit,
-                                };
-
-                                Area::new(egui::Id::new("review_panel"))
-                                    .anchor(Align2::RIGHT_TOP, [-10.0, 10.0])
-                                    .show(egui_ctx, |ui| {
-                                        Frame::popup(ui.style())
-                                            .fill(Color32::from_rgba_unmultiplied(20, 20, 30, 240))
-                                            .inner_margin(Margin::same(16))
-                                            .show(ui, |ui| {
-                                                ui.set_max_width(400.0);
-                                                ui.set_max_height(500.0);
-
-                                                ui.heading(
-                                                    RichText::new("Review").color(Color32::WHITE),
-                                                );
-                                                ui.separator();
-
-                                                ScrollArea::vertical().max_height(300.0).show(
-                                                    ui,
-                                                    |ui| {
-                                                        ui.label(
-                                                            RichText::new(&*review.content)
-                                                                .color(Color32::LIGHT_GRAY),
-                                                        );
-                                                    },
-                                                );
-
-                                                ui.separator();
-                                                ui.label(
-                                                    RichText::new("Response:")
-                                                        .color(Color32::WHITE),
-                                                );
-                                                ui.add(
-                                                    TextEdit::multiline(&mut review.comment)
-                                                        .desired_width(380.0)
-                                                        .desired_rows(4)
-                                                        .hint_text("Enter your response..."),
-                                                );
-
-                                                ui.horizontal(|ui| {
-                                                    if ui.button("Submit").clicked() {
-                                                        should_exit = true;
-                                                        exit_comment = Some(review.comment.clone());
-                                                    }
-                                                    if ui.button("Cancel").clicked() {
-                                                        should_exit = true;
-                                                    }
-                                                });
-                                            });
-                                    });
+                                review_action = app::render_review_overlay(egui_ctx, review);
                             }
                         });
+
+                        // Save review config back
+                        if review_config.is_some() {
+                            self.cli_config.review = review_config;
+                        }
 
                         unsafe {
                             gl.enable(glow::DEPTH_TEST);
@@ -819,16 +759,78 @@ impl ApplicationHandler for GameRuntime {
                         return;
                     }
 
-                    // Check review panel exit
-                    if should_exit {
-                        if let Some(comment) = exit_comment {
-                            println!("{}", comment);
+                    // Handle review action - output commands to stdout
+                    match review_action {
+                        app::ReviewAction::None => {
+                            // Keep running
                         }
-                        unsafe {
-                            self.unload_app();
+                        app::ReviewAction::Approve => {
+                            println!("APPROVE");
+                            unsafe {
+                                self.unload_app();
+                            }
+                            event_loop.exit();
+                            return;
                         }
-                        event_loop.exit();
-                        return;
+                        app::ReviewAction::ContinueWithFeedback(msg) => {
+                            println!("CONTINUE: {}", msg);
+                            unsafe {
+                                self.unload_app();
+                            }
+                            event_loop.exit();
+                            return;
+                        }
+                        app::ReviewAction::Spawn(title) => {
+                            println!("SPAWN: {}", title);
+                            unsafe {
+                                self.unload_app();
+                            }
+                            event_loop.exit();
+                            return;
+                        }
+                        app::ReviewAction::Discard => {
+                            println!("DISCARD");
+                            unsafe {
+                                self.unload_app();
+                            }
+                            event_loop.exit();
+                            return;
+                        }
+                        app::ReviewAction::Rebase => {
+                            println!("REBASE");
+                            unsafe {
+                                self.unload_app();
+                            }
+                            event_loop.exit();
+                            return;
+                        }
+                        app::ReviewAction::Merge => {
+                            println!("MERGE");
+                            unsafe {
+                                self.unload_app();
+                            }
+                            event_loop.exit();
+                            return;
+                        }
+                        app::ReviewAction::Complete => {
+                            // Complete = REBASE + MERGE + APPROVE (merge first, then mark done)
+                            println!("REBASE");
+                            println!("MERGE");
+                            println!("APPROVE");
+                            unsafe {
+                                self.unload_app();
+                            }
+                            event_loop.exit();
+                            return;
+                        }
+                        app::ReviewAction::Cancel => {
+                            // Exit without printing any command
+                            unsafe {
+                                self.unload_app();
+                            }
+                            event_loop.exit();
+                            return;
+                        }
                     }
 
                     // Debug frame logging
