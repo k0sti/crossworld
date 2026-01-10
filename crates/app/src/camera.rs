@@ -55,8 +55,10 @@ pub mod egui_ext {
         let to_target = controller.target - camera.position;
         let distance = to_target.length();
         let zoom_amount = scroll_delta * controller.config.zoom_sensitivity * 0.01;
-        let new_distance = (distance - zoom_amount)
-            .clamp(controller.config.min_distance, controller.config.max_distance);
+        let new_distance = (distance - zoom_amount).clamp(
+            controller.config.min_distance,
+            controller.config.max_distance,
+        );
         let zoom_factor = new_distance / distance;
         camera.position = controller.target - to_target * zoom_factor;
     }
