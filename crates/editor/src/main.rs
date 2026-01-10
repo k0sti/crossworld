@@ -14,8 +14,11 @@
 //! # Debug mode: run N frames then exit
 //! editor --debug 100
 //!
-//! # Display a review panel
-//! editor --review doc/review/current.md
+//! # Display a review panel with inline message
+//! editor --review "Review message here"
+//!
+//! # Display a review panel from file
+//! editor --review-file doc/review/current.md
 //! ```
 
 use app::{cli::CommonArgs, run_app, AppConfig};
@@ -48,7 +51,10 @@ fn main() {
     if let Some(ref note) = args.common.note {
         println!("Note message: {}\n", note);
     }
-    if let Some(ref path) = args.common.review {
+    if let Some(ref message) = args.common.review {
+        println!("Review message: {}\n", message);
+    }
+    if let Some(ref path) = args.common.review_file {
         println!("Review document: {}\n", path.display());
     }
 

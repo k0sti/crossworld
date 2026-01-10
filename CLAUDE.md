@@ -4,6 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Vibe-Kanban Review Workflow
 
+**IMPORTANT**: When working on vibe-kanban tasks in this Rust crate, ALWAYS use the review workflow to get user approval. Never ask for feedback in chat - always launch the review application.
+
 When completing a vibe-kanban task, use the review workflow to get user approval before marking work as done.
 
 ### Review Process
@@ -13,16 +15,19 @@ When completing a vibe-kanban task, use the review workflow to get user approval
    - Run checks: `just check`
    - Update task status: `mcp__vibe_kanban__update_task(task_id, status: "inreview")`
 
-2. **Generate Review Document**
-   Create `doc/review/current.md` using the template at `doc/templates/review.md`
-
-3. **Launch Review**
+2. **Launch Review**
+   Pass a concise summary message directly as an argument:
    ```bash
-   cargo run -p `<crate>` -- --review doc/review/current.md
+   cargo run -p `<crate>` -- --review "Brief summary of changes (1-3 sentences)"
    ```
-   Where `<crate>` is crate that is worked on current task or `testbed` if no suitable crate target.
+   Where `<crate>` is the crate that is worked on for the current task or `testbed` if no suitable crate target.
 
-4. **Parse and Execute Response**
+   For more detailed reviews, you can use a markdown file:
+   ```bash
+   cargo run -p `<crate>` -- --review-file doc/review/current.md
+   ```
+
+3. **Parse and Execute Response**
    The response contains one or more commands (one per line). You MUST execute ALL commands.
 
 ### Response Commands
@@ -85,14 +90,12 @@ $ just check
 # 2. Update task status to inreview
 mcp__vibe_kanban__update_task(task_id="abc123", status="inreview")
 
-# 3. Create review document at doc/review/current.md
+# 3. Launch review with brief summary
+$ cargo run -p testbed -- --review "Added string-based review option. Renamed --review to --review-file and added new --review for inline messages."
 
-# 4. Launch review
-$ cargo run -p testbed -- --review doc/review/current.md
+# 4. User reviews and responds with commands
 
-# 5. User reviews and responds with commands
-
-# 6. Agent parses response and executes all commands
+# 5. Agent parses response and executes all commands
 ```
 
 ---

@@ -3,9 +3,10 @@
 //! This binary watches the game library for changes and hot-reloads it.
 //!
 //! Usage:
-//!   cargo run -p game                          # Normal hot-reload mode
-//!   cargo run -p game -- --debug N             # Run N frames with debug output
-//!   cargo run -p game -- --review PATH         # Run with review panel
+//!   cargo run -p game                              # Normal hot-reload mode
+//!   cargo run -p game -- --debug N                 # Run N frames with debug output
+//!   cargo run -p game -- --review "Message"        # Run with review panel (inline message)
+//!   cargo run -p game -- --review-file PATH        # Run with review panel (from file)
 //!
 //! In debug mode, additional logging is output for world/cube state verification.
 
@@ -49,9 +50,9 @@ struct DebugConfig {
 /// Review panel configuration
 #[derive(Debug, Clone)]
 struct ReviewConfig {
-    /// Path to the review document (kept for reference)
+    /// Path to the review document (None if created from text)
     #[allow(dead_code)]
-    path: PathBuf,
+    path: Option<PathBuf>,
     /// Content of the review document
     content: String,
     /// User comment input buffer
@@ -92,11 +93,26 @@ fn parse_args() -> CliConfig {
             }
             "--review" | "-r" => {
                 if i + 1 < args.len() {
+                    let content = args[i + 1].clone();
+                    config.review = Some(ReviewConfig {
+                        path: None,
+                        content,
+                        comment: String::new(),
+                    });
+                    println!("[Game] Review message: {}", &args[i + 1]);
+                    i += 1;
+                } else {
+                    eprintln!("Error: --review requires a message");
+                    std::process::exit(1);
+                }
+            }
+            "--review-file" => {
+                if i + 1 < args.len() {
                     let path = PathBuf::from(&args[i + 1]);
                     match std::fs::read_to_string(&path) {
                         Ok(content) => {
                             config.review = Some(ReviewConfig {
-                                path: path.clone(),
+                                path: Some(path.clone()),
                                 content,
                                 comment: String::new(),
                             });
@@ -109,7 +125,7 @@ fn parse_args() -> CliConfig {
                     }
                     i += 1;
                 } else {
-                    eprintln!("Error: --review requires a file path");
+                    eprintln!("Error: --review-file requires a file path");
                     std::process::exit(1);
                 }
             }
@@ -117,9 +133,12 @@ fn parse_args() -> CliConfig {
                 println!("Usage: game [OPTIONS]");
                 println!();
                 println!("Options:");
-                println!("  --debug N       Run only N frames with debug output");
-                println!("  --review PATH   Display a review panel with markdown document");
-                println!("  --help          Show this help message");
+                println!("  --debug N           Run only N frames with debug output");
+                println!("  --review MESSAGE    Display a review panel with markdown message");
+                println!(
+                    "  --review-file PATH  Display a review panel with markdown document from file"
+                );
+                println!("  --help              Show this help message");
                 std::process::exit(0);
             }
             _ => {
