@@ -18,6 +18,7 @@ use winit::event::WindowEvent;
 use winit::keyboard::KeyCode;
 use winit::window::Window;
 
+pub mod cli;
 pub mod controller;
 
 // Lua configuration module
