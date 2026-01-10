@@ -78,7 +78,9 @@ impl VoxelGame {
 
     /// Initialize the voxel world from config
     fn init_world(&mut self) {
+        use std::time::Instant;
         let debug = is_debug_mode();
+        let total_start = Instant::now();
 
         if debug {
             println!("[Game] Initializing world in DEBUG mode");
@@ -91,31 +93,38 @@ impl VoxelGame {
             );
         }
 
+        let world_cube_start = Instant::now();
         let mut world_cube = crossworld_world::NativeWorldCube::new(
             self.config.world.macro_depth,
             self.config.world.micro_depth,
             self.config.world.border_depth,
             self.config.world.seed,
         );
-
         if debug {
+            println!("[Game] NativeWorldCube::new took {:?}", world_cube_start.elapsed());
             println!("[Game] World cube created, applying 2D map...");
         }
 
         // Apply 2D map to world
+        let map_start = Instant::now();
         if let Some(spawn) = self.config.apply_map_to_world(&mut world_cube, debug) {
             self.spawn_position = spawn;
             self.camera.position = spawn + Vec3::new(0.0, 1.6, 0.0); // Eye height
             println!("[Game] Spawn position set to: {:?}", self.spawn_position);
+        }
+        if debug {
+            println!("[Game] apply_map_to_world took {:?}", map_start.elapsed());
         }
 
         // Get the root cube for model merging
         let base_cube = world_cube.root().clone();
 
         // Apply world models and create expandable World
+        let models_start = Instant::now();
         match self.config.apply_models_to_world(base_cube, debug) {
             Ok(world) => {
                 if debug {
+                    println!("[Game] apply_models_to_world total: {:?}", models_start.elapsed());
                     let csm = cube::serialize_csm(world.root());
                     let csm_preview = if csm.len() > 500 {
                         format!("{}... (truncated, {} total chars)", &csm[..500], csm.len())
@@ -138,6 +147,10 @@ impl VoxelGame {
                     self.config.world.macro_depth,
                 ));
             }
+        }
+
+        if debug {
+            println!("[Game] === init_world Total: {:?} ===", total_start.elapsed());
         }
     }
 
