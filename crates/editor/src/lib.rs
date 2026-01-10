@@ -11,7 +11,7 @@ pub mod raycast;
 pub mod ui;
 
 use app::{App, Camera, FrameContext, InputState, OrbitController, OrbitControllerConfig};
-use cube::Cube;
+use cube::CubeGrid;
 use glam::{IVec3, Quat, Vec2, Vec3};
 use glow::HasContext;
 use renderer::{MeshRenderer, SkyboxRenderer, WireframeDepthMode};
@@ -257,8 +257,8 @@ pub struct EditorApp {
     camera: Camera,
     orbit_controller: OrbitController,
 
-    // Cube data
-    cube: Option<Rc<Cube<u8>>>,
+    // Cube data - using CubeGrid for automatic expansion
+    cube_grid: Option<CubeGrid>,
     cube_mesh_index: Option<usize>,
 
     // Editor state
@@ -344,7 +344,7 @@ impl EditorApp {
             skybox_renderer: SkyboxRenderer::new(),
             camera: Camera::look_at(camera_position, camera_target, Vec3::Y),
             orbit_controller: OrbitController::new(camera_target, orbit_config),
-            cube: None,
+            cube_grid: None,
             cube_mesh_index: None,
             editor_state: EditorState::new(),
             last_hit: None,
@@ -411,99 +411,69 @@ impl EditorApp {
         &self.gizmo_options
     }
 
-    /// Get the effective cube scale (base scale * 2^world_scale)
+    /// Get the effective cube scale (base scale * 2^scale from CubeGrid)
     fn effective_cube_scale(&self) -> f32 {
-        BASE_CUBE_SCALE * self.editor_state.cube_scale_factor()
+        match &self.cube_grid {
+            Some(grid) => BASE_CUBE_SCALE * grid.scale_factor(),
+            None => BASE_CUBE_SCALE,
+        }
     }
 
-    /// Get the effective edit depth (EDIT_DEPTH + 2 * world_scale)
-    /// Each world_scale increment corresponds to 2 octree levels from expansion
+    /// Get the effective edit depth (EDIT_DEPTH + 2 * scale from CubeGrid)
+    /// Each scale increment corresponds to 2 octree levels from expansion
     #[allow(dead_code)]
     fn effective_edit_depth(&self) -> u32 {
-        EDIT_DEPTH + 2 * self.editor_state.world_scale()
+        match &self.cube_grid {
+            Some(grid) => grid.effective_depth(EDIT_DEPTH),
+            None => EDIT_DEPTH,
+        }
+    }
+
+    /// Get the current world scale from CubeGrid (for UI display)
+    fn world_scale(&self) -> u32 {
+        match &self.cube_grid {
+            Some(grid) => grid.scale(),
+            None => 0,
+        }
     }
 
     /// Place a voxel at the given position and re-upload the mesh
     ///
-    /// If the position is outside the current cube bounds, the cube will be
-    /// expanded using Cube::expand_once with material 0 (empty) borders, and the
-    /// world_scale will be incremented. The expansion adds 2 octree levels, so
-    /// coordinates shift by 2^depth to place original content in center.
+    /// If the position is outside the current cube bounds, the CubeGrid will
+    /// automatically expand to accommodate the new voxel.
     ///
     /// # Arguments
     /// * `gl` - OpenGL context
-    /// * `pos` - Position in [0, 2^effective_depth) range
-    /// * `depth` - Depth level for placement
-    fn place_voxel(&mut self, gl: &glow::Context, pos: IVec3, depth: u32) {
-        let Some(ref cube) = self.cube else { return };
-
-        // Calculate effective depth based on world_scale
-        // Each expansion adds 2 octree levels
-        let effective_depth = depth + 2 * self.editor_state.world_scale();
-
-        // Check bounds at effective depth
-        let max_coord = 1i32 << effective_depth;
-        let in_bounds = pos.x >= 0
-            && pos.x < max_coord
-            && pos.y >= 0
-            && pos.y < max_coord
-            && pos.z >= 0
-            && pos.z < max_coord;
-
-        let (new_cube, new_pos, new_effective_depth) = if in_bounds {
-            // Normal case: position is within bounds
-            ((**cube).clone(), pos, effective_depth)
-        } else {
-            // Position is outside bounds - expand the cube
-            // expand_once creates a 4x4x4 grid (2 octree levels) with original in center 2x2x2
-            let expanded = Cube::expand_once(cube, [0, 0, 0, 0]);
-
-            // After expansion, coordinates shift by 2^effective_depth to center the original
-            // New coordinate space is [0, 2^(effective_depth+2))
-            // Original [0, 2^effective_depth) maps to [2^effective_depth, 2^(effective_depth+1))
-            let offset = 1i32 << effective_depth;
-            let new_pos = pos + IVec3::splat(offset);
-            let new_effective_depth = effective_depth + 2;
-
-            // Increment world scale
-            self.editor_state.increment_world_scale();
-
-            println!(
-                "[Editor] Expanded cube, new world_scale: {}, new_pos: {:?}",
-                self.editor_state.world_scale(),
-                new_pos
-            );
-
-            (expanded, new_pos, new_effective_depth)
+    /// * `pos` - Position in corner-based coordinates
+    /// * `depth` - Base depth level for placement (e.g., EDIT_DEPTH)
+    fn place_voxel(&mut self, gl: &glow::Context, pos: IVec3, cursor_depth: u32) {
+        let Some(grid) = self.cube_grid.take() else {
+            return;
         };
 
-        // Check bounds again after expansion
-        let max_coord = 1i32 << new_effective_depth;
-        if new_pos.x < 0
-            || new_pos.x >= max_coord
-            || new_pos.y < 0
-            || new_pos.y >= max_coord
-            || new_pos.z < 0
-            || new_pos.z >= max_coord
-        {
-            // Still out of bounds after one expansion - would need multiple expansions
-            eprintln!(
-                "[Editor] Position {:?} still out of bounds after expansion (max: {})",
-                new_pos, max_coord
-            );
-            return;
+        let old_scale = grid.scale();
+        let material = self.editor_state.effective_material();
+
+        // The cursor coordinates are at cursor_depth resolution.
+        // We need to scale them to effective_depth resolution.
+        // effective_depth = EDIT_DEPTH + 2*scale
+        // Scale factor = 2^(effective_depth - cursor_depth)
+        let effective_depth = grid.effective_depth(EDIT_DEPTH);
+        let depth_diff = effective_depth.saturating_sub(cursor_depth);
+        let scale_factor = 1i32 << depth_diff;
+        let scaled_pos = pos * scale_factor;
+
+        // CubeGrid handles expansion internally
+        let new_grid = grid.set_cube(scaled_pos, EDIT_DEPTH, material);
+
+        if new_grid.scale() > old_scale {
+            println!("[Editor] Expanded cube, new scale: {}", new_grid.scale());
         }
 
-        // Create new cube with voxel set at the effective depth
-        let material = self.editor_state.effective_material();
-        let new_cube = Rc::new(new_cube.set_voxel(
-            new_pos.x,
-            new_pos.y,
-            new_pos.z,
-            new_effective_depth,
-            material,
-        ));
-        self.cube = Some(Rc::clone(&new_cube));
+        let effective_depth = new_grid.effective_depth(EDIT_DEPTH);
+        let root = new_grid.root_rc();
+
+        self.cube_grid = Some(new_grid);
 
         // Mark file as dirty
         self.file_state.mark_dirty();
@@ -511,10 +481,7 @@ impl EditorApp {
         // Re-upload mesh at the effective depth
         unsafe {
             self.mesh_renderer.clear_meshes(gl);
-            match self
-                .mesh_renderer
-                .upload_mesh(gl, &new_cube, new_effective_depth)
-            {
+            match self.mesh_renderer.upload_mesh(gl, &root, effective_depth) {
                 Ok(idx) => {
                     self.cube_mesh_index = Some(idx);
                 }
@@ -526,33 +493,37 @@ impl EditorApp {
     /// Remove a voxel at the given position and re-upload the mesh
     ///
     /// Removal is done by setting the voxel value to 0 (empty).
-    /// Uses effective_edit_depth to account for world_scale.
     ///
     /// # Arguments
     /// * `gl` - OpenGL context
-    /// * `pos` - Position in [0, 2^effective_depth) range
-    /// * `depth` - Base depth level for removal (will use effective depth)
-    fn remove_voxel(&mut self, gl: &glow::Context, pos: IVec3, depth: u32) {
-        let Some(ref cube) = self.cube else { return };
+    /// * `pos` - Position in corner-based coordinates
+    /// * `cursor_depth` - Cursor depth level for removal
+    fn remove_voxel(&mut self, gl: &glow::Context, pos: IVec3, cursor_depth: u32) {
+        let Some(grid) = self.cube_grid.take() else {
+            return;
+        };
 
-        // Calculate effective depth based on world_scale
-        let effective_depth = depth + 2 * self.editor_state.world_scale();
+        // The cursor coordinates are at cursor_depth resolution.
+        // We need to scale them to effective_depth resolution.
+        // effective_depth = EDIT_DEPTH + 2*scale
+        // Scale factor = 2^(effective_depth - cursor_depth)
+        let effective_depth = grid.effective_depth(EDIT_DEPTH);
+        let depth_diff = effective_depth.saturating_sub(cursor_depth);
+        let scale_factor = 1i32 << depth_diff;
+        let scaled_pos = pos * scale_factor;
 
-        // Check bounds at effective depth
-        let max_coord = 1i32 << effective_depth;
-        if pos.x < 0
-            || pos.x >= max_coord
-            || pos.y < 0
-            || pos.y >= max_coord
-            || pos.z < 0
-            || pos.z >= max_coord
-        {
+        // Check bounds - don't expand for removal
+        if !grid.in_bounds(scaled_pos, EDIT_DEPTH) {
+            self.cube_grid = Some(grid);
             return;
         }
 
-        // Create new cube with voxel removed (set to 0)
-        let new_cube = Rc::new(cube.set_voxel(pos.x, pos.y, pos.z, effective_depth, 0));
-        self.cube = Some(Rc::clone(&new_cube));
+        // Set voxel to 0 (empty)
+        let new_grid = grid.set_cube(scaled_pos, EDIT_DEPTH, 0);
+        let effective_depth = new_grid.effective_depth(EDIT_DEPTH);
+        let root = new_grid.root_rc();
+
+        self.cube_grid = Some(new_grid);
 
         // Mark file as dirty
         self.file_state.mark_dirty();
@@ -560,10 +531,7 @@ impl EditorApp {
         // Re-upload mesh at effective depth
         unsafe {
             self.mesh_renderer.clear_meshes(gl);
-            match self
-                .mesh_renderer
-                .upload_mesh(gl, &new_cube, effective_depth)
-            {
+            match self.mesh_renderer.upload_mesh(gl, &root, effective_depth) {
                 Ok(idx) => {
                     self.cube_mesh_index = Some(idx);
                 }
@@ -578,20 +546,18 @@ impl EditorApp {
 
     /// Create a new empty cube and reset file state
     fn new_cube(&mut self, gl: &glow::Context) {
-        // Create fresh solid cube (same as init)
-        let cube = Rc::new(Cube::Solid(156u8));
-        self.cube = Some(Rc::clone(&cube));
+        // Create fresh CubeGrid with a solid cube
+        let grid = CubeGrid::solid(156);
+        let root = grid.root_rc();
+        self.cube_grid = Some(grid);
 
         // Clear file state
         self.file_state.clear();
 
-        // Reset world scale to 0
-        self.editor_state.set_world_scale(0);
-
         // Re-upload mesh
         unsafe {
             self.mesh_renderer.clear_meshes(gl);
-            match self.mesh_renderer.upload_mesh(gl, &cube, EDIT_DEPTH) {
+            match self.mesh_renderer.upload_mesh(gl, &root, EDIT_DEPTH) {
                 Ok(idx) => {
                     self.cube_mesh_index = Some(idx);
                     println!("[Editor] New cube created");
@@ -614,19 +580,18 @@ impl EditorApp {
 
         // Parse CSM
         let cube = match cube::parse_csm(&content) {
-            Ok(c) => Rc::new(c),
+            Ok(c) => c,
             Err(e) => {
                 eprintln!("[Editor] Failed to parse CSM file {:?}: {}", path, e);
                 return;
             }
         };
 
-        // Update editor state
-        self.cube = Some(Rc::clone(&cube));
+        // Create CubeGrid from loaded cube at scale 0
+        let grid = CubeGrid::from_cube(cube);
+        let root = grid.root_rc();
+        self.cube_grid = Some(grid);
         self.file_state.set_file(path.clone());
-
-        // Reset world scale to 0 when loading a new file
-        self.editor_state.set_world_scale(0);
 
         // Update config with last model path
         self.config.set_last_model_path(Some(path.clone()));
@@ -634,7 +599,7 @@ impl EditorApp {
         // Re-upload mesh
         unsafe {
             self.mesh_renderer.clear_meshes(gl);
-            match self.mesh_renderer.upload_mesh(gl, &cube, EDIT_DEPTH) {
+            match self.mesh_renderer.upload_mesh(gl, &root, EDIT_DEPTH) {
                 Ok(idx) => {
                     self.cube_mesh_index = Some(idx);
                     println!("[Editor] Loaded CSM file: {:?}", path);
@@ -646,13 +611,13 @@ impl EditorApp {
 
     /// Save the current cube to a CSM file
     fn save_csm(&mut self, path: PathBuf) {
-        let Some(ref cube) = self.cube else {
+        let Some(ref grid) = self.cube_grid else {
             eprintln!("[Editor] No cube to save");
             return;
         };
 
         // Serialize to CSM format
-        let content = cube::serialize_csm(cube);
+        let content = cube::serialize_csm(grid.root());
 
         // Write to file
         match std::fs::write(&path, content) {
@@ -905,12 +870,13 @@ impl App for EditorApp {
             }
         }
 
-        // Create initial cube - solid with a colorful material (material index 156 = green-ish)
-        let cube = Rc::new(Cube::Solid(156u8));
-        self.cube = Some(Rc::clone(&cube));
+        // Create initial CubeGrid - solid with a colorful material (material index 156 = green-ish)
+        let grid = CubeGrid::solid(156);
+        let root = grid.root_rc();
+        self.cube_grid = Some(grid);
 
         // Upload cube mesh at EDIT_DEPTH for voxel editing
-        match unsafe { self.mesh_renderer.upload_mesh(ctx.gl, &cube, EDIT_DEPTH) } {
+        match unsafe { self.mesh_renderer.upload_mesh(ctx.gl, &root, EDIT_DEPTH) } {
             Ok(idx) => {
                 self.cube_mesh_index = Some(idx);
                 println!("[Editor] Cube mesh uploaded (index: {})", idx);
@@ -1024,20 +990,23 @@ impl App for EditorApp {
         self.current_mouse_pos = effective_input.mouse_pos;
 
         // Update cursor from mouse raycast (only if mouse position is available)
-        if let (Some(ref cube), Some(mouse_pos)) = (&self.cube, effective_input.mouse_pos) {
+        if let (Some(ref grid), Some(mouse_pos)) = (&self.cube_grid, effective_input.mouse_pos) {
             let screen_size = Vec2::new(ctx.size.0 as f32, ctx.size.1 as f32);
 
             // Use the cursor's current depth for raycast selection
             let cursor_depth = self.cursor.coord.depth;
 
+            // Use effective edit depth for raycast traversal (accounts for grid expansion)
+            let effective_depth = grid.effective_depth(EDIT_DEPTH);
+
             if let Some(hit) = raycast_from_mouse(
                 mouse_pos,
                 screen_size,
                 &self.camera,
-                cube,
+                grid.root(),
                 CUBE_POSITION,
                 self.effective_cube_scale(),
-                Some(EDIT_DEPTH),
+                Some(effective_depth),
             ) {
                 // Use the new coord selection logic that handles far/near based on boundary detection
                 // Select at cursor's depth, not EDIT_DEPTH
@@ -1665,18 +1634,11 @@ impl App for EditorApp {
 
                 ui.separator();
 
-                // World scale control
-                ui.label("Scale:");
-                if ui.button("-").clicked() && self.editor_state.world_scale() > 0 {
-                    self.editor_state.decrement_world_scale();
-                }
-                ui.label(format!("{}", self.editor_state.world_scale()));
-                if ui.button("+").clicked() {
-                    self.editor_state.increment_world_scale();
-                }
+                // World scale display (read-only, managed by CubeGrid)
                 ui.label(format!(
-                    "({}x)",
-                    self.editor_state.cube_scale_factor() as i32
+                    "Scale: {} ({}x)",
+                    self.world_scale(),
+                    (1u32 << self.world_scale())
                 ));
             });
         });
@@ -1687,10 +1649,12 @@ impl App for EditorApp {
         ui::show_status_bar(egui_ctx, &status_info);
 
         // Unified sidebar on the left with all palettes and cursor info
+        // Use effective depth as max cursor depth (allows deeper editing after expansion)
+        let max_cursor_depth = self.effective_edit_depth();
         let _sidebar_result = ui::show_unified_sidebar(
             egui_ctx,
             &mut self.cursor,
-            EDIT_DEPTH,
+            max_cursor_depth,
             &mut self.color_palette,
             &mut self.material_palette,
             &mut self.model_palette,
