@@ -206,6 +206,47 @@ impl EditPlane {
 
         cube_position + cube_pos * half_scale
     }
+
+    /// Convert world position on the edit plane to a voxel coordinate
+    ///
+    /// This correctly handles the plane boundary by biasing into the correct
+    /// voxel based on Far/Near mode and the plane normal.
+    ///
+    /// # Arguments
+    /// * `world_pos` - World position on the edit plane
+    /// * `cube_position` - World position of the cube's center
+    /// * `cube_scale` - Scale factor of the cube in world space
+    /// * `far_mode` - If true, select the voxel on the positive normal side
+    fn world_to_voxel_coord(
+        &self,
+        world_pos: Vec3,
+        cube_position: Vec3,
+        cube_scale: f32,
+        far_mode: bool,
+    ) -> IVec3 {
+        let half_scale = cube_scale * 0.5;
+        let cube_pos = (world_pos - cube_position) / half_scale;
+
+        // Convert to voxel space [0, 2^depth]
+        let voxel_scale = (1 << self.depth) as f32;
+        let voxel_pos = (cube_pos + Vec3::ONE) * 0.5 * voxel_scale;
+
+        // The edit plane sits exactly at a voxel face boundary.
+        // We need to bias the position slightly based on Far/Near mode:
+        // - Far mode: bias in the positive normal direction (place on far side)
+        // - Near mode: bias in the negative normal direction (place on near side)
+        //
+        // The bias amount is small (0.001) - just enough to resolve the boundary ambiguity.
+        let bias = if far_mode { 0.001 } else { -0.001 };
+        let biased_pos = voxel_pos + self.normal * bias * voxel_scale;
+
+        // Floor to get the voxel coordinate
+        IVec3::new(
+            biased_pos.x.floor() as i32,
+            biased_pos.y.floor() as i32,
+            biased_pos.z.floor() as i32,
+        )
+    }
 }
 
 /// Main editor application struct
@@ -1093,28 +1134,15 @@ impl App for EditorApp {
                     // Store the exact world position for gizmo rendering (not snapped to voxel grid)
                     self.drag_target_world_pos = Some(world_pos);
 
-                    // Get the nearest voxel corner to the ray-plane intersection
-                    let nearest_corner = plane.world_to_nearest_voxel_corner(
+                    // Compute the voxel coordinate using proper boundary handling
+                    let far_mode = self.cursor.focus_mode == FocusMode::Far;
+                    let voxel_coord = plane.world_to_voxel_coord(
                         world_pos,
                         CUBE_POSITION,
                         self.effective_cube_scale(),
+                        far_mode,
                     );
                     let cursor_depth = plane.depth;
-
-                    // Apply Far/Near mode offset: Far mode places voxels one step further
-                    let normal_ivec = IVec3::new(
-                        plane.normal.x.round() as i32,
-                        plane.normal.y.round() as i32,
-                        plane.normal.z.round() as i32,
-                    );
-
-                    let voxel_coord = if self.cursor.focus_mode == FocusMode::Far {
-                        // Far mode: offset two voxels in the normal direction from nearest corner
-                        nearest_corner
-                    } else {
-                        // Near mode: offset one voxel in the normal direction from nearest corner
-                        nearest_corner - normal_ivec
-                    };
 
                     // Update cursor to show where we're drawing
                     self.cursor.coord.pos = voxel_coord;
