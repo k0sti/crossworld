@@ -178,6 +178,7 @@ pub struct PhysicsTestbed {
 
     // UI state
     reset_requested: bool,
+    crt_settings_open: bool,
 
     // Timing
     frame_count: u64,
@@ -220,6 +221,7 @@ impl PhysicsTestbed {
             ground_settings: GroundSettings::default(),
             object_settings: vec![ObjectSettings::default()],
             reset_requested: false,
+            crt_settings_open: false,
             frame_count: 0,
             physics_dt: 1.0 / 60.0,
             last_physics_update: Instant::now(),
@@ -372,6 +374,7 @@ impl PhysicsTestbed {
             ground_settings,
             object_settings,
             reset_requested: false,
+            crt_settings_open: false,
             frame_count: 0,
             physics_dt: 1.0 / 60.0,
             last_physics_update: Instant::now(),
@@ -902,10 +905,82 @@ impl App for PhysicsTestbed {
                 // CRT toggle
                 ui.checkbox(&mut self.crt_post_process.enabled, "CRT");
 
+                // CRT Tune button (only show if CRT is enabled)
+                if self.crt_post_process.enabled && ui.button("Tune").clicked() {
+                    self.crt_settings_open = !self.crt_settings_open;
+                }
+
                 ui.separator();
                 ui.label(format!("Frame: {}", frame_count));
             });
         });
+
+        // CRT Settings window
+        if self.crt_settings_open {
+            egui::Window::new("CRT Settings")
+                .open(&mut self.crt_settings_open)
+                .resizable(true)
+                .default_width(300.0)
+                .show(egui_ctx, |ui| {
+                    let config = &mut self.crt_post_process.config;
+
+                    ui.heading("Scanlines");
+                    ui.add(
+                        egui::Slider::new(&mut config.scanline_intensity, 0.0..=0.5)
+                            .text("Intensity"),
+                    );
+                    ui.add(
+                        egui::Slider::new(&mut config.scanline_count, 100.0..=800.0).text("Count"),
+                    );
+                    ui.add(
+                        egui::Slider::new(&mut config.adaptive_intensity, 0.0..=1.0)
+                            .text("Adaptive"),
+                    );
+
+                    ui.separator();
+                    ui.heading("Screen Effects");
+                    ui.add(egui::Slider::new(&mut config.curvature, 0.0..=0.5).text("Curvature"));
+                    ui.add(
+                        egui::Slider::new(&mut config.vignette_strength, 0.0..=1.0)
+                            .text("Vignette"),
+                    );
+
+                    ui.separator();
+                    ui.heading("Bloom");
+                    ui.add(
+                        egui::Slider::new(&mut config.bloom_intensity, 0.0..=0.5).text("Intensity"),
+                    );
+                    ui.add(
+                        egui::Slider::new(&mut config.bloom_threshold, 0.0..=1.0).text("Threshold"),
+                    );
+
+                    ui.separator();
+                    ui.heading("Color");
+                    ui.add(egui::Slider::new(&mut config.brightness, 0.5..=1.5).text("Brightness"));
+                    ui.add(egui::Slider::new(&mut config.contrast, 0.5..=1.5).text("Contrast"));
+                    ui.add(egui::Slider::new(&mut config.saturation, 0.5..=1.5).text("Saturation"));
+                    ui.add(egui::Slider::new(&mut config.rgb_shift, 0.0..=2.0).text("RGB Shift"));
+
+                    ui.separator();
+                    ui.heading("Animation");
+                    ui.add(
+                        egui::Slider::new(&mut config.flicker_strength, 0.0..=0.05).text("Flicker"),
+                    );
+
+                    ui.separator();
+                    ui.horizontal(|ui| {
+                        if ui.button("Subtle").clicked() {
+                            *config = CrtConfig::subtle();
+                        }
+                        if ui.button("Default").clicked() {
+                            *config = CrtConfig::default();
+                        }
+                        if ui.button("Retro").clicked() {
+                            *config = CrtConfig::retro();
+                        }
+                    });
+                });
+        }
 
         // Central panel for scene overlays (titles and status)
         egui::CentralPanel::default()
