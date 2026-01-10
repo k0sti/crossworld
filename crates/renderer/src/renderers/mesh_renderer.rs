@@ -957,7 +957,9 @@ impl MeshRenderer {
         viewport_height: i32,
     ) {
         unsafe {
-            let Some(program) = self.program_2d else { return };
+            let Some(program) = self.program_2d else {
+                return;
+            };
 
             gl.use_program(Some(program));
             gl.disable(DEPTH_TEST);
@@ -1029,7 +1031,9 @@ impl MeshRenderer {
         viewport_height: i32,
     ) {
         unsafe {
-            let Some(program) = self.program_2d else { return };
+            let Some(program) = self.program_2d else {
+                return;
+            };
 
             gl.use_program(Some(program));
             gl.disable(DEPTH_TEST);
@@ -1099,7 +1103,9 @@ impl MeshRenderer {
     ) {
         unsafe {
             let Some(program) = self.program else { return };
-            let Some(ref axis_mesh) = self.axis_arrows else { return };
+            let Some(ref axis_mesh) = self.axis_arrows else {
+                return;
+            };
 
             gl.use_program(Some(program));
             gl.disable(DEPTH_TEST); // Always on top

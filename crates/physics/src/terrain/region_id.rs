@@ -51,22 +51,16 @@ impl RegionId {
     }
 
     /// Create from world AABB (returns all regions that intersect)
-    pub fn from_world_aabb(
-        world_aabb: &Aabb,
-        world_size: f32,
-        depth: u32,
-    ) -> Vec<RegionId> {
+    pub fn from_world_aabb(world_aabb: &Aabb, world_size: f32, depth: u32) -> Vec<RegionId> {
         let half_world = world_size / 2.0;
 
         // Convert world AABB to local [0,1] space
-        let local_min =
-            (Vec3::new(world_aabb.mins.x, world_aabb.mins.y, world_aabb.mins.z)
-                + Vec3::splat(half_world))
-                / world_size;
-        let local_max =
-            (Vec3::new(world_aabb.maxs.x, world_aabb.maxs.y, world_aabb.maxs.z)
-                + Vec3::splat(half_world))
-                / world_size;
+        let local_min = (Vec3::new(world_aabb.mins.x, world_aabb.mins.y, world_aabb.mins.z)
+            + Vec3::splat(half_world))
+            / world_size;
+        let local_max = (Vec3::new(world_aabb.maxs.x, world_aabb.maxs.y, world_aabb.maxs.z)
+            + Vec3::splat(half_world))
+            / world_size;
 
         // Convert to region coordinates at given depth
         let scale = (1 << depth) as f32;

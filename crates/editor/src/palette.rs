@@ -406,8 +406,8 @@ impl PaletteModel {
             return Ok(());
         }
 
-        let bytes = std::fs::read(&self.file_path)
-            .map_err(|e| format!("Failed to read file: {}", e))?;
+        let bytes =
+            std::fs::read(&self.file_path).map_err(|e| format!("Failed to read file: {}", e))?;
 
         let cubebox = load_vox_to_cubebox_compact(&bytes)?;
         self.size = Some(cubebox.size);
@@ -427,8 +427,8 @@ impl PaletteModel {
         // Simulate loading delay for testing
         std::thread::sleep(std::time::Duration::from_millis(10));
 
-        let bytes = std::fs::read(&self.file_path)
-            .map_err(|e| format!("Failed to read file: {}", e))?;
+        let bytes =
+            std::fs::read(&self.file_path).map_err(|e| format!("Failed to read file: {}", e))?;
 
         let cubebox = load_vox_to_cubebox_compact(&bytes)?;
         self.size = Some(cubebox.size);
@@ -447,8 +447,8 @@ impl PaletteModel {
             return Ok(());
         }
 
-        let bytes = std::fs::read(&self.file_path)
-            .map_err(|e| format!("Failed to read file: {}", e))?;
+        let bytes =
+            std::fs::read(&self.file_path).map_err(|e| format!("Failed to read file: {}", e))?;
 
         let cubebox = load_vox_to_cubebox_compact(&bytes)?;
         self.size = Some(cubebox.size);
@@ -530,12 +530,13 @@ impl ModelPalette {
     ///
     /// # Returns
     /// The ID of the newly added model, or an error string
-    pub fn add_model(&mut self, file_path: std::path::PathBuf, name: impl Into<String>) -> Result<usize, String> {
+    pub fn add_model(
+        &mut self,
+        file_path: std::path::PathBuf,
+        name: impl Into<String>,
+    ) -> Result<usize, String> {
         if self.models.len() >= Self::MAX_MODELS {
-            return Err(format!(
-                "Cannot add more than {} models",
-                Self::MAX_MODELS
-            ));
+            return Err(format!("Cannot add more than {} models", Self::MAX_MODELS));
         }
 
         let id = self.next_id;
@@ -614,7 +615,9 @@ impl ModelPalette {
     /// Find a model by name (case-insensitive)
     pub fn find_by_name(&self, name: &str) -> Option<&PaletteModel> {
         let name_lower = name.to_lowercase();
-        self.models.iter().find(|m| m.name.to_lowercase() == name_lower)
+        self.models
+            .iter()
+            .find(|m| m.name.to_lowercase() == name_lower)
     }
 
     /// Remove a model by palette index

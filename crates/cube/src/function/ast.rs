@@ -348,16 +348,10 @@ pub enum Expr {
     },
 
     /// Unary operation
-    UnaryOp {
-        op: UnaryOpKind,
-        expr: Box<Expr>,
-    },
+    UnaryOp { op: UnaryOpKind, expr: Box<Expr> },
 
     /// Built-in function call
-    Call {
-        func: BuiltinFunc,
-        args: Vec<Expr>,
-    },
+    Call { func: BuiltinFunc, args: Vec<Expr> },
 
     /// Conditional: if cond then a else b
     If {
@@ -460,9 +454,7 @@ impl Expr {
                 then_expr,
                 else_expr,
             } => {
-                cond.contains_var(var)
-                    || then_expr.contains_var(var)
-                    || else_expr.contains_var(var)
+                cond.contains_var(var) || then_expr.contains_var(var) || else_expr.contains_var(var)
             }
             Expr::Let { value, body, .. } => value.contains_var(var) || body.contains_var(var),
             Expr::Match {
@@ -490,7 +482,9 @@ impl Expr {
                 left.contains_func(func) || right.contains_func(func)
             }
             Expr::UnaryOp { expr, .. } => expr.contains_func(func),
-            Expr::Call { func: f, args } => *f == func || args.iter().any(|a| a.contains_func(func)),
+            Expr::Call { func: f, args } => {
+                *f == func || args.iter().any(|a| a.contains_func(func))
+            }
             Expr::If {
                 cond,
                 then_expr,
@@ -556,14 +550,19 @@ impl Expr {
                     + then_expr.estimate_complexity()
                     + else_expr.estimate_complexity()
             }
-            Expr::Let { value, body, .. } => value.estimate_complexity() + body.estimate_complexity(),
+            Expr::Let { value, body, .. } => {
+                value.estimate_complexity() + body.estimate_complexity()
+            }
             Expr::Match {
                 expr,
                 cases,
                 default,
             } => {
                 expr.estimate_complexity()
-                    + cases.iter().map(|(_, e)| e.estimate_complexity()).sum::<u32>()
+                    + cases
+                        .iter()
+                        .map(|(_, e)| e.estimate_complexity())
+                        .sum::<u32>()
                     + default.estimate_complexity()
             }
         }
@@ -685,7 +684,11 @@ mod tests {
 
         let with_noise = Expr::call(
             BuiltinFunc::Noise,
-            vec![Expr::var(VarId::X), Expr::var(VarId::Y), Expr::var(VarId::Z)],
+            vec![
+                Expr::var(VarId::X),
+                Expr::var(VarId::Y),
+                Expr::var(VarId::Z),
+            ],
         );
         assert!(with_noise.uses_noise());
     }

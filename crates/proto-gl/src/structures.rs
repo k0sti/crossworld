@@ -5,7 +5,7 @@
 //! rotated in 90° steps. The world uses origin-centered coordinates.
 
 use crate::config::StructuresConfig;
-use cube::{load_vox_to_cubebox, Axis, Cube, CubeBox};
+use cube::{Axis, Cube, CubeBox, load_vox_to_cubebox};
 use glam::IVec3;
 use rand::prelude::*;
 use serde::Deserialize;
@@ -60,10 +60,7 @@ pub fn load_structure_models(config: &StructuresConfig) -> Vec<StructureModel> {
     let csv_path = Path::new(&config.models_csv);
 
     if !csv_path.exists() {
-        eprintln!(
-            "Warning: Models CSV not found: {}",
-            config.models_csv
-        );
+        eprintln!("Warning: Models CSV not found: {}", config.models_csv);
         return models;
     }
 
@@ -143,11 +140,7 @@ pub fn load_structure_models(config: &StructuresConfig) -> Vec<StructureModel> {
         .iter()
         .map(|m| (m.name.clone(), m.depth(), m.scale_exp))
         .collect();
-    println!(
-        "Loaded {} structure models: {:?}",
-        models.len(),
-        depths
-    );
+    println!("Loaded {} structure models: {:?}", models.len(), depths);
     models
 }
 

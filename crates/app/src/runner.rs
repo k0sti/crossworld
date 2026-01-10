@@ -25,8 +25,7 @@ use winit::window::{CursorGrabMode, Window, WindowId};
 use winit::platform::x11::EventLoopBuilderExtX11;
 
 use crate::{
-    create_controller_backend, App, ControllerBackend, CursorMode, FrameContext,
-    InputState,
+    create_controller_backend, App, ControllerBackend, CursorMode, FrameContext, InputState,
 };
 
 use super::EguiIntegration;
@@ -634,7 +633,9 @@ impl<A: App> ApplicationHandler for AppRuntime<A> {
                             );
 
                             // Create output directory if it doesn't exist
-                            if let Some(parent) = std::path::Path::new(debug_mode.output_path).parent() {
+                            if let Some(parent) =
+                                std::path::Path::new(debug_mode.output_path).parent()
+                            {
                                 let _ = std::fs::create_dir_all(parent);
                             }
 

@@ -31,7 +31,7 @@ use bevy::{
     prelude::*,
     render::{
         render_resource::{Extent3d, TextureDimension, TextureFormat},
-        view::screenshot::{save_to_disk, Screenshot},
+        view::screenshot::{Screenshot, save_to_disk},
     },
     window::{CursorGrabMode, CursorOptions},
 };
@@ -108,7 +108,13 @@ impl BevyObject {
         material: Handle<StandardMaterial>,
         transform: Transform,
         collider: Collider,
-    ) -> (Mesh3d, MeshMaterial3d<StandardMaterial>, Transform, RigidBody, Collider) {
+    ) -> (
+        Mesh3d,
+        MeshMaterial3d<StandardMaterial>,
+        Transform,
+        RigidBody,
+        Collider,
+    ) {
         (
             Mesh3d(mesh),
             MeshMaterial3d(material),
@@ -278,21 +284,53 @@ fn setup(
     // Tetrahedron: edge length ~1.73 (vertices at distance 1.0 from center)
     // ConicalFrustum: radius_top = 0.25, radius_bottom = 0.5, height = 0.5
     let shape_data: Vec<(Handle<Mesh>, Collider, &str)> = vec![
-        (meshes.add(Cuboid::default()), Collider::cuboid(0.5, 0.5, 0.5), "Cuboid"),
+        (
+            meshes.add(Cuboid::default()),
+            Collider::cuboid(0.5, 0.5, 0.5),
+            "Cuboid",
+        ),
         (
             meshes.add(Tetrahedron::default()),
             create_tetrahedron_collider(),
             "Tetrahedron",
         ),
         // Capsule3d: radius=0.25, half_length=0.5 → capsule_y(half_segment, radius)
-        (meshes.add(Capsule3d::default()), Collider::capsule_y(0.5, 0.25), "Capsule3d"),
-        (meshes.add(Torus::default()), create_torus_collider(0.75, 0.25, 16), "Torus"),
-        (meshes.add(Cylinder::default()), Collider::cylinder(0.5, 0.5), "Cylinder"),
+        (
+            meshes.add(Capsule3d::default()),
+            Collider::capsule_y(0.5, 0.25),
+            "Capsule3d",
+        ),
+        (
+            meshes.add(Torus::default()),
+            create_torus_collider(0.75, 0.25, 16),
+            "Torus",
+        ),
+        (
+            meshes.add(Cylinder::default()),
+            Collider::cylinder(0.5, 0.5),
+            "Cylinder",
+        ),
         // Cone: height=1.0 means half_height=0.5
-        (meshes.add(Cone::default()), Collider::cone(0.5, 0.5), "Cone"),
-        (meshes.add(ConicalFrustum::default()), create_frustum_collider(0.5, 0.25, 0.25, 12), "ConicalFrustum"),
-        (meshes.add(Sphere::default().mesh().ico(5).unwrap()), Collider::ball(0.5), "Icosphere"),
-        (meshes.add(Sphere::default().mesh().uv(32, 18)), Collider::ball(0.5), "UVSphere"),
+        (
+            meshes.add(Cone::default()),
+            Collider::cone(0.5, 0.5),
+            "Cone",
+        ),
+        (
+            meshes.add(ConicalFrustum::default()),
+            create_frustum_collider(0.5, 0.25, 0.25, 12),
+            "ConicalFrustum",
+        ),
+        (
+            meshes.add(Sphere::default().mesh().ico(5).unwrap()),
+            Collider::ball(0.5),
+            "Icosphere",
+        ),
+        (
+            meshes.add(Sphere::default().mesh().uv(32, 18)),
+            Collider::ball(0.5),
+            "UVSphere",
+        ),
     ];
 
     // 2D shape defaults for extrusions:
@@ -304,15 +342,39 @@ fn setup(
     // RegularPolygon: circumradius = 0.5, 6 sides
     // Triangle2d: default equilateral with circumradius ~0.58
     let extrusion_data: Vec<(Handle<Mesh>, Collider, &str)> = vec![
-        (meshes.add(Extrusion::new(Rectangle::default(), 1.)), Collider::cuboid(0.5, 0.5, 0.5), "RectExtrusion"),
+        (
+            meshes.add(Extrusion::new(Rectangle::default(), 1.)),
+            Collider::cuboid(0.5, 0.5, 0.5),
+            "RectExtrusion",
+        ),
         // Capsule2d extruded: radius=0.25, half_length=0.5, depth=0.5
-        (meshes.add(Extrusion::new(Capsule2d::default(), 1.)), Collider::capsule_z(0.5, 0.25), "CapsuleExtrusion"),
+        (
+            meshes.add(Extrusion::new(Capsule2d::default(), 1.)),
+            Collider::capsule_z(0.5, 0.25),
+            "CapsuleExtrusion",
+        ),
         // Annulus: approximate with cylinder at outer radius
-        (meshes.add(Extrusion::new(Annulus::default(), 1.)), Collider::cylinder(0.5, 0.5), "AnnulusExtrusion"),
-        (meshes.add(Extrusion::new(Circle::default(), 1.)), Collider::cylinder(0.5, 0.5), "CircleExtrusion"),
+        (
+            meshes.add(Extrusion::new(Annulus::default(), 1.)),
+            Collider::cylinder(0.5, 0.5),
+            "AnnulusExtrusion",
+        ),
+        (
+            meshes.add(Extrusion::new(Circle::default(), 1.)),
+            Collider::cylinder(0.5, 0.5),
+            "CircleExtrusion",
+        ),
         // Ellipse: half_size = (0.5, 0.25)
-        (meshes.add(Extrusion::new(Ellipse::default(), 1.)), create_ellipse_extrusion_collider(0.5, 0.25, 0.5, 12), "EllipseExtrusion"),
-        (meshes.add(Extrusion::new(RegularPolygon::default(), 1.)), create_polygon_extrusion_collider(0.5, 6, 0.5), "PolygonExtrusion"),
+        (
+            meshes.add(Extrusion::new(Ellipse::default(), 1.)),
+            create_ellipse_extrusion_collider(0.5, 0.25, 0.5, 12),
+            "EllipseExtrusion",
+        ),
+        (
+            meshes.add(Extrusion::new(RegularPolygon::default(), 1.)),
+            create_polygon_extrusion_collider(0.5, 6, 0.5),
+            "PolygonExtrusion",
+        ),
         (
             meshes.add(Extrusion::new(Triangle2d::default(), 1.)),
             create_triangle_extrusion_collider(0.5),
@@ -329,7 +391,12 @@ fn setup(
         )
         .with_rotation(Quat::from_rotation_x(-PI / 4.));
 
-        commands.spawn(BevyObject::new(mesh, debug_material.clone(), transform, collider));
+        commands.spawn(BevyObject::new(
+            mesh,
+            debug_material.clone(),
+            transform,
+            collider,
+        ));
 
         if debug_mode.enabled {
             info!("Spawned {} at {:?}", name, transform.translation);
@@ -345,7 +412,12 @@ fn setup(
         )
         .with_rotation(Quat::from_rotation_x(-PI / 4.));
 
-        commands.spawn(BevyObject::new(mesh, debug_material.clone(), transform, collider));
+        commands.spawn(BevyObject::new(
+            mesh,
+            debug_material.clone(),
+            transform,
+            collider,
+        ));
 
         if debug_mode.enabled {
             info!("Spawned {} at {:?}", name, transform.translation);
@@ -447,18 +519,36 @@ fn create_torus_collider(major_radius: f32, minor_radius: f32, segments: usize) 
     Collider::convex_hull(&points).unwrap_or_else(|| Collider::ball(major_radius))
 }
 
-fn create_frustum_collider(radius_bottom: f32, radius_top: f32, half_height: f32, segments: usize) -> Collider {
+fn create_frustum_collider(
+    radius_bottom: f32,
+    radius_top: f32,
+    half_height: f32,
+    segments: usize,
+) -> Collider {
     let mut points = Vec::with_capacity(segments * 2);
     for i in 0..segments {
         let angle = (i as f32 / segments as f32) * 2.0 * PI;
         let (sin_a, cos_a) = angle.sin_cos();
-        points.push(Vec3::new(cos_a * radius_bottom, -half_height, sin_a * radius_bottom));
-        points.push(Vec3::new(cos_a * radius_top, half_height, sin_a * radius_top));
+        points.push(Vec3::new(
+            cos_a * radius_bottom,
+            -half_height,
+            sin_a * radius_bottom,
+        ));
+        points.push(Vec3::new(
+            cos_a * radius_top,
+            half_height,
+            sin_a * radius_top,
+        ));
     }
     Collider::convex_hull(&points).unwrap_or_else(|| Collider::cylinder(half_height, radius_bottom))
 }
 
-fn create_ellipse_extrusion_collider(half_width: f32, half_height: f32, half_depth: f32, segments: usize) -> Collider {
+fn create_ellipse_extrusion_collider(
+    half_width: f32,
+    half_height: f32,
+    half_depth: f32,
+    segments: usize,
+) -> Collider {
     let mut points = Vec::with_capacity(segments * 2);
     for i in 0..segments {
         let angle = (i as f32 / segments as f32) * 2.0 * PI;
@@ -468,7 +558,8 @@ fn create_ellipse_extrusion_collider(half_width: f32, half_height: f32, half_dep
         points.push(Vec3::new(x, y, -half_depth));
         points.push(Vec3::new(x, y, half_depth));
     }
-    Collider::convex_hull(&points).unwrap_or_else(|| Collider::cuboid(half_width, half_height, half_depth))
+    Collider::convex_hull(&points)
+        .unwrap_or_else(|| Collider::cuboid(half_width, half_height, half_depth))
 }
 
 fn create_polygon_extrusion_collider(radius: f32, sides: usize, half_depth: f32) -> Collider {
@@ -524,7 +615,10 @@ fn uv_debug_texture() -> Image {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn toggle_wireframe(mut wireframe_config: ResMut<WireframeConfig>, keyboard: Res<ButtonInput<KeyCode>>) {
+fn toggle_wireframe(
+    mut wireframe_config: ResMut<WireframeConfig>,
+    keyboard: Res<ButtonInput<KeyCode>>,
+) {
     if keyboard.just_pressed(KeyCode::Space) {
         wireframe_config.global = !wireframe_config.global;
     }
@@ -542,12 +636,24 @@ fn first_person_movement(
         let right = transform.right();
         let right_flat = Vec3::new(right.x, 0.0, right.z).normalize_or_zero();
 
-        if keyboard.pressed(KeyCode::KeyW) { velocity += forward_flat; }
-        if keyboard.pressed(KeyCode::KeyS) { velocity -= forward_flat; }
-        if keyboard.pressed(KeyCode::KeyD) { velocity += right_flat; }
-        if keyboard.pressed(KeyCode::KeyA) { velocity -= right_flat; }
-        if keyboard.pressed(KeyCode::KeyF) { velocity += Vec3::Y; }
-        if keyboard.pressed(KeyCode::KeyV) { velocity -= Vec3::Y; }
+        if keyboard.pressed(KeyCode::KeyW) {
+            velocity += forward_flat;
+        }
+        if keyboard.pressed(KeyCode::KeyS) {
+            velocity -= forward_flat;
+        }
+        if keyboard.pressed(KeyCode::KeyD) {
+            velocity += right_flat;
+        }
+        if keyboard.pressed(KeyCode::KeyA) {
+            velocity -= right_flat;
+        }
+        if keyboard.pressed(KeyCode::KeyF) {
+            velocity += Vec3::Y;
+        }
+        if keyboard.pressed(KeyCode::KeyV) {
+            velocity -= Vec3::Y;
+        }
 
         if velocity.length_squared() > 0.0 {
             velocity = velocity.normalize() * controller.move_speed * time.delta_secs();
@@ -617,7 +723,10 @@ fn draw_mesh_intersections(pointers: Query<&PointerInteraction>, mut gizmos: Giz
     }
 }
 
-fn update_hit_info_text(hit_info: Res<RaycastHitInfo>, mut query: Query<&mut Text, With<HitInfoText>>) {
+fn update_hit_info_text(
+    hit_info: Res<RaycastHitInfo>,
+    mut query: Query<&mut Text, With<HitInfoText>>,
+) {
     for mut text in &mut query {
         if let (Some(pos), Some(normal)) = (hit_info.position, hit_info.normal) {
             **text = format!(
@@ -636,20 +745,24 @@ fn update_camera_debug_text(
     mouse_motion: Res<AccumulatedMouseMotion>,
     mut text_query: Query<&mut Text, With<CameraDebugText>>,
 ) {
-    let Ok((transform, cam)) = camera_query.single() else { return };
-    let Ok(mut text) = text_query.single_mut() else { return };
+    let Ok((transform, cam)) = camera_query.single() else {
+        return;
+    };
+    let Ok(mut text) = text_query.single_mut() else {
+        return;
+    };
 
     let pos = transform.translation;
     let fwd = transform.forward();
-    let rmb = if mouse_button.pressed(MouseButton::Right) { "RMB" } else { "---" };
+    let rmb = if mouse_button.pressed(MouseButton::Right) {
+        "RMB"
+    } else {
+        "---"
+    };
     let delta = mouse_motion.delta;
 
     **text = format!(
         "Pos: ({:.1}, {:.1}, {:.1}) | Pitch: {:.2} Yaw: {:.2} | Fwd: ({:.2}, {:.2}, {:.2}) | {} | Delta: ({:.1}, {:.1})",
-        pos.x, pos.y, pos.z,
-        cam.pitch, cam.yaw,
-        fwd.x, fwd.y, fwd.z,
-        rmb,
-        delta.x, delta.y
+        pos.x, pos.y, pos.z, cam.pitch, cam.yaw, fwd.x, fwd.y, fwd.z, rmb, delta.x, delta.y
     );
 }

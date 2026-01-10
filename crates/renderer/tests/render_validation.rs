@@ -1,8 +1,8 @@
 //! Validation tests to ensure renderers actually produce visible output
 
 use renderer::cpu_tracer::CpuTracer;
-use renderer::{Camera, Renderer};
 use renderer::scenes::create_octa_cube;
+use renderer::{Camera, Renderer};
 
 #[test]
 fn test_cpu_renderer_produces_visible_output() {

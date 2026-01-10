@@ -37,7 +37,10 @@ pub fn render_review_overlay(egui_ctx: &EguiContext, review: &mut ReviewConfig) 
         .frame(
             Frame::default()
                 .fill(Color32::from_rgba_unmultiplied(20, 20, 30, 220))
-                .stroke(Stroke::new(1.0, Color32::from_rgba_unmultiplied(100, 100, 120, 180)))
+                .stroke(Stroke::new(
+                    1.0,
+                    Color32::from_rgba_unmultiplied(100, 100, 120, 180),
+                ))
                 .corner_radius(CornerRadius::same(8))
                 .inner_margin(Margin::same(16)),
         )
@@ -67,8 +70,7 @@ pub fn render_review_overlay(egui_ctx: &EguiContext, review: &mut ReviewConfig) 
 
             // Comment input area at the bottom
             ui.label(
-                egui::RichText::new("Review Comment:")
-                    .color(Color32::from_rgb(200, 200, 220)),
+                egui::RichText::new("Review Comment:").color(Color32::from_rgb(200, 200, 220)),
             );
 
             let text_edit_response = egui::TextEdit::multiline(&mut review.comment)
@@ -215,7 +217,7 @@ fn render_inline_markdown(ui: &mut egui::Ui, text: &str) {
                 // Check for bold (**) vs italic (*)
                 if chars.peek() == Some(&'*') {
                     chars.next(); // consume second *
-                    // Flush current text
+                                  // Flush current text
                     if !current_text.is_empty() {
                         job.append(&current_text, 0.0, default_format.clone());
                         current_text.clear();

@@ -32,10 +32,7 @@ type Result<T> = std::result::Result<T, CsmError>;
 
 // Whitespace and comments
 fn comment(input: &str) -> IResult<&str, ()> {
-    value(
-        (),
-        (char('#'), take_while(|c| c != '\n'), opt(char('\n'))),
-    ).parse(input)
+    value((), (char('#'), take_while(|c| c != '\n'), opt(char('\n')))).parse(input)
 }
 
 fn ws_or_comment(input: &str) -> IResult<&str, ()> {
@@ -169,7 +166,8 @@ fn parse_cube_inner<'a>(
             |i| cube_array(i, prev_epoch),
             |i| cube_reference(i, prev_epoch),
         )),
-    ).parse(input)
+    )
+    .parse(input)
 }
 
 // Statement parsing (>path cube)

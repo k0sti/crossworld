@@ -232,10 +232,7 @@ impl VoxelTerrainCollider {
     /// Get triangle by part ID
     ///
     /// Returns None if the region is not cached or triangle index is invalid.
-    pub fn get_triangle(
-        &self,
-        part_id: TerrainPartId,
-    ) -> Option<rapier3d::parry::shape::Triangle> {
+    pub fn get_triangle(&self, part_id: TerrainPartId) -> Option<rapier3d::parry::shape::Triangle> {
         let region = part_id.region();
         let tri_idx = part_id.triangle_idx();
 

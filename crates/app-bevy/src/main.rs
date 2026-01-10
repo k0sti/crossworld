@@ -53,9 +53,9 @@ fn setup(
 
     // Spawn main branches attached to trunk
     let branch_configs = [
-        (Vec3::new(0.0, 1.2, 0.0), PI / 6.0, 0.0),          // Front branch
-        (Vec3::new(0.0, 1.2, 0.0), PI / 6.0, PI / 2.0),     // Right branch
-        (Vec3::new(0.0, 1.2, 0.0), PI / 6.0, PI),           // Back branch
+        (Vec3::new(0.0, 1.2, 0.0), PI / 6.0, 0.0), // Front branch
+        (Vec3::new(0.0, 1.2, 0.0), PI / 6.0, PI / 2.0), // Right branch
+        (Vec3::new(0.0, 1.2, 0.0), PI / 6.0, PI),  // Back branch
         (Vec3::new(0.0, 1.2, 0.0), PI / 6.0, 3.0 * PI / 2.0), // Left branch
     ];
 
@@ -65,9 +65,7 @@ fn setup(
                 Mesh3d(branch_mesh.clone()),
                 MeshMaterial3d(branch_material.clone()),
                 Transform::from_translation(offset)
-                    .with_rotation(
-                        Quat::from_rotation_y(rotation) * Quat::from_rotation_x(tilt),
-                    ),
+                    .with_rotation(Quat::from_rotation_y(rotation) * Quat::from_rotation_x(tilt)),
             ))
             .id();
 
@@ -85,8 +83,7 @@ fn setup(
                 .spawn((
                     Mesh3d(leaf_mesh.clone()),
                     MeshMaterial3d(leaf_material.clone()),
-                    Transform::from_translation(leaf_pos)
-                        .with_scale(Vec3::splat(0.5)),
+                    Transform::from_translation(leaf_pos).with_scale(Vec3::splat(0.5)),
                 ))
                 .id();
 

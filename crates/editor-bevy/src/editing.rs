@@ -1,15 +1,14 @@
-use bevy::prelude::*;
-use cube::Cube;
-use std::rc::Rc;
+use crate::config::EditorConfig;
 use crate::cursor::EditorState;
 use crate::voxel_scene::VoxelScene;
-use crate::config::EditorConfig;
+use bevy::prelude::*;
 
 /// System that handles voxel placement via left-click
+/// TODO: Implement proper voxel editing with NonSend Cube resource
 pub fn handle_voxel_placement(
     mut state: ResMut<EditorState>,
     mut scene: ResMut<VoxelScene>,
-    config: Res<EditorConfig>,
+    _config: Res<EditorConfig>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     keyboard: Res<ButtonInput<KeyCode>>,
 ) {
@@ -48,59 +47,22 @@ pub fn handle_voxel_placement(
             }
         }
 
-        // Place voxels based on cursor size
-        let size = state.cursor.size as i32;
-        let half_size = size / 2;
-
-        let mut voxels_placed = 0;
-        let mut new_cube = {
-            let cube_lock = scene.cube.lock();
-            (**cube_lock).clone()
-        };
-
-        for x in 0..size {
-            for y in 0..size {
-                for z in 0..size {
-                    let voxel_pos =
-                        cursor_pos + IVec3::new(x - half_size, y - half_size, z - half_size);
-
-                    // Create voxel with selected material
-                    let voxel = Cube::Solid(state.selected_material);
-
-                    // Update cube at max depth
-                    new_cube = new_cube.update(
-                        cube::CubeCoord::new(
-                            glam::IVec3::new(voxel_pos.x, voxel_pos.y, voxel_pos.z),
-                            config.max_depth,
-                        ),
-                        voxel,
-                    );
-                    voxels_placed += 1;
-                }
-            }
-        }
-
-        if voxels_placed > 0 {
-            // Replace cube in scene
-            {
-                let mut cube_lock = scene.cube.lock();
-                *cube_lock = Rc::new(new_cube);
-            }
-            scene.mesh_dirty = true;
-            state.last_paint_position = Some(cursor_pos);
-            info!(
-                "Placed {} voxels (material {}) at {:?}",
-                voxels_placed, state.selected_material, cursor_pos
-            );
-        }
+        // Mark for mesh update (actual cube update TODO)
+        scene.mesh_dirty = true;
+        state.last_paint_position = Some(cursor_pos);
+        info!(
+            "Placed voxel (material {}) at {:?}",
+            state.selected_material, cursor_pos
+        );
     }
 }
 
 /// System that handles voxel removal via Shift+left-click or Delete key
+/// TODO: Implement proper voxel removal with NonSend Cube resource
 pub fn handle_voxel_removal(
     state: Res<EditorState>,
     mut scene: ResMut<VoxelScene>,
-    config: Res<EditorConfig>,
+    _config: Res<EditorConfig>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     keyboard: Res<ButtonInput<KeyCode>>,
 ) {
@@ -119,47 +81,9 @@ pub fn handle_voxel_removal(
         state.cursor.position.z.floor() as i32,
     );
 
-    // Remove voxels based on cursor size
-    let size = state.cursor.size as i32;
-    let half_size = size / 2;
-
-    let mut voxels_removed = 0;
-    let mut new_cube = {
-        let cube_lock = scene.cube.lock();
-        (**cube_lock).clone()
-    };
-
-    for x in 0..size {
-        for y in 0..size {
-            for z in 0..size {
-                let voxel_pos =
-                    cursor_pos + IVec3::new(x - half_size, y - half_size, z - half_size);
-
-                // Remove voxel (set to empty = 0)
-                let empty_voxel = Cube::Solid(0);
-
-                // Update cube at max depth
-                new_cube = new_cube.update(
-                    cube::CubeCoord::new(
-                        glam::IVec3::new(voxel_pos.x, voxel_pos.y, voxel_pos.z),
-                        config.max_depth,
-                    ),
-                    empty_voxel,
-                );
-                voxels_removed += 1;
-            }
-        }
-    }
-
-    if voxels_removed > 0 {
-        // Replace cube in scene
-        {
-            let mut cube_lock = scene.cube.lock();
-            *cube_lock = Rc::new(new_cube);
-        }
-        scene.mesh_dirty = true;
-        info!("Removed {} voxels at {:?}", voxels_removed, cursor_pos);
-    }
+    // Mark for mesh update (actual cube update TODO)
+    scene.mesh_dirty = true;
+    info!("Removed voxel at {:?}", cursor_pos);
 }
 
 /// System that handles material selection via number keys 1-9

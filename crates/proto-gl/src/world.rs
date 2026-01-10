@@ -1,5 +1,5 @@
-use cube::{Cube, parse_csm};
 use crate::config::WorldConfig;
+use cube::{Cube, parse_csm};
 use std::rc::Rc;
 
 /// Generate world cube from configuration

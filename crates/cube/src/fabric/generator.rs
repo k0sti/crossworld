@@ -142,13 +142,7 @@ impl FabricGenerator {
             }
             Cube::Cubes(children) => {
                 // At max depth but not leaf - return first child's value as approximation
-                self.get_quaternion_recursive(
-                    &children[0],
-                    target_pos,
-                    node_center,
-                    node_size,
-                    0,
-                )
+                self.get_quaternion_recursive(&children[0], target_pos, node_center, node_size, 0)
             }
             // For other cube types, get value if available
             _ => cube.value().copied().unwrap_or(Quat::IDENTITY),
@@ -206,10 +200,10 @@ mod tests {
     fn test_generate_cube_spherical_surface() {
         // Use a larger surface radius so more of the cube is inside
         let config = FabricConfig {
-            root_magnitude: 0.3,      // Inside at center (well below 1.0)
-            boundary_magnitude: 3.0,  // Outside at edges (well above 1.0)
-            surface_radius: 1.5,      // Surface at 1.5 units from origin (outer corners at ~1.73)
-            additive_states: vec![],  // No noise for predictability
+            root_magnitude: 0.3,     // Inside at center (well below 1.0)
+            boundary_magnitude: 3.0, // Outside at edges (well above 1.0)
+            surface_radius: 1.5,     // Surface at 1.5 units from origin (outer corners at ~1.73)
+            additive_states: vec![], // No noise for predictability
             max_depth: 3,
         };
         let generator = FabricGenerator::new(config);

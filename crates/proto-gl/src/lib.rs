@@ -149,7 +149,8 @@ pub fn run_physics_debug(iterations: u32) -> Result<(), Box<dyn Error>> {
             );
 
             let correction = resolve_terrain_collision(&terrain_collider, &rapier_aabb, &body_aabb);
-            obj.physics.apply_collision_response(&mut physics_world, correction);
+            obj.physics
+                .apply_collision_response(&mut physics_world, correction);
         }
 
         // Log at intervals
@@ -279,9 +280,21 @@ fn compute_aabb_triangle_correction(
     }
 
     let aabb_corner = Vec3::new(
-        if normal.x > 0.0 { aabb.min.x } else { aabb.max.x },
-        if normal.y > 0.0 { aabb.min.y } else { aabb.max.y },
-        if normal.z > 0.0 { aabb.min.z } else { aabb.max.z },
+        if normal.x > 0.0 {
+            aabb.min.x
+        } else {
+            aabb.max.x
+        },
+        if normal.y > 0.0 {
+            aabb.min.y
+        } else {
+            aabb.max.y
+        },
+        if normal.z > 0.0 {
+            aabb.min.z
+        } else {
+            aabb.max.z
+        },
     );
 
     let d = normal.dot(a);

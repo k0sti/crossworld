@@ -8,8 +8,8 @@
 
 use crate::renderer::*;
 use crate::shader_utils::create_compute_program;
-use cube::io::bcf::serialize_bcf;
 use cube::Cube;
+use cube::io::bcf::serialize_bcf;
 use glow::*;
 use std::rc::Rc;
 
@@ -108,7 +108,8 @@ impl ComputeTracer {
             let uniform_camera_pos = gl.get_uniform_location(compute_program, "uCameraPos");
             let uniform_camera_rot = gl.get_uniform_location(compute_program, "uCameraRot");
             let uniform_use_camera = gl.get_uniform_location(compute_program, "uUseCamera");
-            let uniform_octree_data_size = gl.get_uniform_location(compute_program, "uOctreeDataSize");
+            let uniform_octree_data_size =
+                gl.get_uniform_location(compute_program, "uOctreeDataSize");
             let uniform_near = gl.get_uniform_location(compute_program, "uNear");
             let uniform_far = gl.get_uniform_location(compute_program, "uFar");
 
@@ -163,7 +164,10 @@ impl ComputeTracer {
             gl.bind_buffer(SHADER_STORAGE_BUFFER, Some(octree_ssbo));
             gl.buffer_data_u8_slice(SHADER_STORAGE_BUFFER, &padded_bcf, STATIC_DRAW);
             gl.bind_buffer(SHADER_STORAGE_BUFFER, None);
-            println!("[GPU Tracer] ✓ BCF octree data uploaded to SSBO ({} bytes)", padded_bcf.len());
+            println!(
+                "[GPU Tracer] ✓ BCF octree data uploaded to SSBO ({} bytes)",
+                padded_bcf.len()
+            );
 
             // Create material palette SSBO (binding = 1)
             let material_palette_ssbo = Self::create_material_palette_ssbo(gl)?;
@@ -258,16 +262,36 @@ impl ComputeTracer {
             gl.use_program(Some(gl_state.compute_program));
 
             // Bind output texture as image (unit 0)
-            gl.bind_image_texture(0, Some(gl_state.output_texture), 0, false, 0, WRITE_ONLY, RGBA8);
+            gl.bind_image_texture(
+                0,
+                Some(gl_state.output_texture),
+                0,
+                false,
+                0,
+                WRITE_ONLY,
+                RGBA8,
+            );
 
             // Bind depth texture as image (unit 1)
-            gl.bind_image_texture(1, Some(gl_state.depth_texture), 0, false, 0, WRITE_ONLY, R32F);
+            gl.bind_image_texture(
+                1,
+                Some(gl_state.depth_texture),
+                0,
+                false,
+                0,
+                WRITE_ONLY,
+                R32F,
+            );
 
             // Bind octree data SSBO (binding = 0)
             gl.bind_buffer_base(SHADER_STORAGE_BUFFER, 0, Some(gl_state.octree_ssbo));
 
             // Bind material palette SSBO (binding = 1)
-            gl.bind_buffer_base(SHADER_STORAGE_BUFFER, 1, Some(gl_state.material_palette_ssbo));
+            gl.bind_buffer_base(
+                SHADER_STORAGE_BUFFER,
+                1,
+                Some(gl_state.material_palette_ssbo),
+            );
 
             // Set uniforms
             if let Some(loc) = &gl_state.uniform_resolution {
@@ -327,16 +351,36 @@ impl ComputeTracer {
             gl.use_program(Some(gl_state.compute_program));
 
             // Bind output texture as image (unit 0)
-            gl.bind_image_texture(0, Some(gl_state.output_texture), 0, false, 0, WRITE_ONLY, RGBA8);
+            gl.bind_image_texture(
+                0,
+                Some(gl_state.output_texture),
+                0,
+                false,
+                0,
+                WRITE_ONLY,
+                RGBA8,
+            );
 
             // Bind depth texture as image (unit 1)
-            gl.bind_image_texture(1, Some(gl_state.depth_texture), 0, false, 0, WRITE_ONLY, R32F);
+            gl.bind_image_texture(
+                1,
+                Some(gl_state.depth_texture),
+                0,
+                false,
+                0,
+                WRITE_ONLY,
+                R32F,
+            );
 
             // Bind octree data SSBO (binding = 0)
             gl.bind_buffer_base(SHADER_STORAGE_BUFFER, 0, Some(gl_state.octree_ssbo));
 
             // Bind material palette SSBO (binding = 1)
-            gl.bind_buffer_base(SHADER_STORAGE_BUFFER, 1, Some(gl_state.material_palette_ssbo));
+            gl.bind_buffer_base(
+                SHADER_STORAGE_BUFFER,
+                1,
+                Some(gl_state.material_palette_ssbo),
+            );
 
             // Set uniforms
             if let Some(loc) = &gl_state.uniform_resolution {
