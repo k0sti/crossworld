@@ -52,7 +52,8 @@ pub use lighting::{AMBIENT, BACKGROUND_COLOR, DIFFUSE_STRENGTH, LIGHT_DIR};
 pub use orbit_controller::{OrbitController, OrbitControllerConfig};
 pub use renderer::{Object, Renderer};
 pub use renderers::{
-    BcfTracer, ComputeTracer, CpuTracer, GlTracer, MeshRenderer, SkyboxRenderer, WireframeDepthMode,
+    BcfTracer, ComputeTracer, CpuTracer, CrtConfig, CrtPostProcess, GlTracer, MeshRenderer,
+    SkyboxRenderer, WireframeDepthMode,
 };
 pub use scenes::create_octa_cube;
 
