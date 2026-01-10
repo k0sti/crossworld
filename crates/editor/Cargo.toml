@@ -18,6 +18,9 @@ path = "src/lib.rs"
 # Core app framework with runtime support
 app = { path = "../app", features = ["runtime"] }
 
+# CLI argument processing
+clap = { version = "4", features = ["derive"] }
+
 # Rendering and voxel core
 renderer = { path = "../renderer" }
 cube = { path = "../cube" }
