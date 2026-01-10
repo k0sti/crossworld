@@ -16,7 +16,7 @@ mod tests;
 
 // Re-export for native use (non-WASM)
 #[cfg(not(target_arch = "wasm32"))]
-pub use world_cube::{WorldCube as NativeWorldCube, World};
+pub use world_cube::{World, WorldCube as NativeWorldCube};
 
 // GeometryData is used by both WASM and native, but defined differently
 // For native, just re-export the WASM version's fields

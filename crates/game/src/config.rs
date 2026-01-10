@@ -413,7 +413,11 @@ impl GameConfig {
         let scene_models = Self::find_scene_models(&assets_path)?;
 
         if debug {
-            println!("[Game] Found {} scene_* models in {}", scene_models.len(), assets_path.display());
+            println!(
+                "[Game] Found {} scene_* models in {}",
+                scene_models.len(),
+                assets_path.display()
+            );
         }
 
         // Load and merge each configured model
@@ -435,11 +439,8 @@ impl GameConfig {
             let model = Self::load_vox_model(&model_path)?;
 
             // Calculate aligned position
-            let aligned_pos = Self::calculate_aligned_position(
-                &model,
-                model_config.position,
-                model_config.align,
-            );
+            let aligned_pos =
+                Self::calculate_aligned_position(&model, model_config.position, model_config.align);
 
             if debug {
                 println!("[Game]   Model size: {:?}", model.size);
@@ -452,7 +453,11 @@ impl GameConfig {
 
         if debug {
             println!("[Game] All models merged successfully");
-            println!("[Game] Final world scale: 2^{} = {} units", world.scale(), 1 << world.scale());
+            println!(
+                "[Game] Final world scale: 2^{} = {} units",
+                world.scale(),
+                1 << world.scale()
+            );
         }
 
         Ok(world)
@@ -519,11 +524,7 @@ impl GameConfig {
 
     /// Calculate aligned position for a model
     /// align: (0,0,0) = bottom-left corner, (0.5,0,0.5) = bottom center, (1,1,1) = top-right corner
-    fn calculate_aligned_position(
-        model: &CubeBox<u8>,
-        world_pos: Vec3,
-        align: Vec3,
-    ) -> IVec3 {
+    fn calculate_aligned_position(model: &CubeBox<u8>, world_pos: Vec3, align: Vec3) -> IVec3 {
         let offset_x = -(model.size.x as f32 * align.x);
         let offset_y = -(model.size.y as f32 * align.y);
         let offset_z = -(model.size.z as f32 * align.z);
