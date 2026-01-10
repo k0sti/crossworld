@@ -4,6 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Vibe-Kanban Review Workflow
 
+**IMPORTANT**: When working on vibe-kanban tasks in this Rust crate, ALWAYS use the review workflow to get user approval. Never ask for feedback in chat - always launch the review application.
+
 When completing a vibe-kanban task, use the review workflow to get user approval before marking work as done.
 
 ### Review Process
