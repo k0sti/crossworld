@@ -393,9 +393,19 @@ impl GameConfig {
         debug: bool,
     ) -> Result<crossworld_world::World, String> {
         use crossworld_world::World;
+        use std::time::Instant;
+
+        let total_start = Instant::now();
 
         // Start with the base world from macro_depth
+        let world_create_start = Instant::now();
         let mut world = World::new(base_cube, self.world.macro_depth);
+        if debug {
+            println!(
+                "[Game] World::new took {:?}",
+                world_create_start.elapsed()
+            );
+        }
 
         if debug {
             println!("[Game] Loading {} world models", self.models.len());
@@ -410,9 +420,13 @@ impl GameConfig {
         assets_path.push("vox");
 
         // Get list of available scene models
+        let find_start = Instant::now();
         let scene_models = Self::find_scene_models(&assets_path)?;
-
         if debug {
+            println!(
+                "[Game] find_scene_models took {:?}",
+                find_start.elapsed()
+            );
             println!(
                 "[Game] Found {} scene_* models in {}",
                 scene_models.len(),
@@ -420,8 +434,11 @@ impl GameConfig {
             );
         }
 
+        let mut total_load_time = std::time::Duration::ZERO;
+        let mut total_merge_time = std::time::Duration::ZERO;
+
         // Load and merge each configured model
-        for model_config in &self.models {
+        for (i, model_config) in self.models.iter().enumerate() {
             let model_path = Self::resolve_model_pattern(
                 &assets_path,
                 &model_config.pattern,
@@ -430,13 +447,16 @@ impl GameConfig {
             )?;
 
             if debug {
-                println!("[Game] Loading model: {}", model_path.display());
+                println!("[Game] [{}/{}] Loading model: {}", i + 1, self.models.len(), model_path.display());
                 println!("[Game]   Position: {:?}", model_config.position);
                 println!("[Game]   Align: {:?}", model_config.align);
             }
 
             // Load the vox model
+            let load_start = Instant::now();
             let model = Self::load_vox_model(&model_path)?;
+            let load_duration = load_start.elapsed();
+            total_load_time += load_duration;
 
             // Calculate aligned position
             let aligned_pos =
@@ -444,11 +464,21 @@ impl GameConfig {
 
             if debug {
                 println!("[Game]   Model size: {:?}", model.size);
+                println!("[Game]   Model depth: {}", model.depth);
                 println!("[Game]   Aligned position: {:?}", aligned_pos);
+                println!("[Game]   Load time: {:?}", load_duration);
             }
 
             // Merge into world at macro_depth
+            let merge_start = Instant::now();
             world.merge_model(&model, aligned_pos, self.world.macro_depth);
+            let merge_duration = merge_start.elapsed();
+            total_merge_time += merge_duration;
+
+            if debug {
+                println!("[Game]   Merge time: {:?}", merge_duration);
+                println!("[Game]   World scale after merge: 2^{} = {} units", world.scale(), 1 << world.scale());
+            }
         }
 
         if debug {
@@ -458,6 +488,10 @@ impl GameConfig {
                 world.scale(),
                 1 << world.scale()
             );
+            println!("[Game] === Performance Summary ===");
+            println!("[Game]   Total load time: {:?}", total_load_time);
+            println!("[Game]   Total merge time: {:?}", total_merge_time);
+            println!("[Game]   Total apply_models_to_world: {:?}", total_start.elapsed());
         }
 
         Ok(world)
