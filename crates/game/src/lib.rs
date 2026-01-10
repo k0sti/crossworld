@@ -5,11 +5,15 @@ use app::{
     InputState,
 };
 use config::GameConfig;
+use cube::CubeGrid;
 use glam::{Quat, Vec3};
 use glow::*;
 use renderer::{MeshRenderer, SkyboxRenderer};
 use std::path::PathBuf;
 use winit::keyboard::KeyCode;
+
+/// Base world scale - edge size of 1 unit (before world_scale factor)
+const BASE_WORLD_SCALE: f32 = 1.0;
 
 /// Check if debug mode is enabled via environment variable
 fn is_debug_mode() -> bool {
@@ -22,7 +26,8 @@ pub struct VoxelGame {
     mesh_renderer: MeshRenderer,
     skybox_renderer: SkyboxRenderer,
     world_mesh_index: Option<usize>,
-    world: Option<crossworld_world::World>,
+    /// The world cube grid - provides automatic expansion and scaling
+    cube_grid: Option<CubeGrid>,
     config: GameConfig,
     spawn_position: Vec3,
     camera: Camera,
@@ -35,7 +40,7 @@ impl Default for VoxelGame {
             mesh_renderer: MeshRenderer::new(),
             skybox_renderer: SkyboxRenderer::new(),
             world_mesh_index: None,
-            world: None,
+            cube_grid: None,
             config: GameConfig::default(),
             spawn_position: Vec3::new(0.0, 2.0, 5.0),
             camera: Camera::from_pitch_yaw(Vec3::new(0.0, 2.0, 5.0), 0.0, 0.0),
@@ -47,6 +52,22 @@ impl Default for VoxelGame {
 impl VoxelGame {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Get the effective world scale (base scale * 2^scale from CubeGrid)
+    fn effective_world_scale(&self) -> f32 {
+        match &self.cube_grid {
+            Some(grid) => BASE_WORLD_SCALE * grid.scale_factor(),
+            None => BASE_WORLD_SCALE,
+        }
+    }
+
+    /// Get the current world scale level from CubeGrid (for UI display)
+    fn world_scale(&self) -> u32 {
+        match &self.cube_grid {
+            Some(grid) => grid.scale(),
+            None => 0,
+        }
     }
 
     /// Load world configuration from Lua file
@@ -141,17 +162,24 @@ impl VoxelGame {
                     println!("{}", csm_preview);
                 }
 
-                self.world = Some(world);
-                println!("[Game] World initialized successfully with models");
+                // Create CubeGrid from the world's root cube with the world's scale
+                let grid = CubeGrid::from_cube_with_scale(world.root().clone(), world.scale());
+                println!(
+                    "[Game] World initialized with CubeGrid (scale: {} = {}x)",
+                    grid.scale(),
+                    1 << grid.scale()
+                );
+                self.cube_grid = Some(grid);
             }
             Err(e) => {
                 eprintln!("[Game] Failed to apply models: {}", e);
                 eprintln!("[Game] Using world without models");
                 // Fall back to base world without models
-                self.world = Some(crossworld_world::World::new(
+                let grid = CubeGrid::from_cube_with_scale(
                     world_cube.root().clone(),
                     self.config.world.macro_depth,
-                ));
+                );
+                self.cube_grid = Some(grid);
             }
         }
 
@@ -165,16 +193,14 @@ impl VoxelGame {
 
     /// Update world mesh from current world state
     fn update_world_mesh(&mut self, gl: &Context) {
-        if let Some(world) = &self.world {
-            use std::rc::Rc;
-
-            // Get the cube root and wrap in Rc for upload_mesh
-            let cube_rc = Rc::new(world.root().clone());
+        if let Some(grid) = &self.cube_grid {
+            // Get the cube root for mesh upload
+            let cube_rc = grid.root_rc();
 
             unsafe {
                 // Use world scale for rendering depth
                 // This ensures models are rendered at correct size
-                let depth = world.scale();
+                let depth = grid.scale();
                 match self.mesh_renderer.upload_mesh(gl, &cube_rc, depth) {
                     Ok(mesh_index) => {
                         self.world_mesh_index = Some(mesh_index);
@@ -229,7 +255,7 @@ impl App for VoxelGame {
         }
 
         self.world_mesh_index = None;
-        self.world = None;
+        self.cube_grid = None;
 
         println!("[Game] Cleanup complete");
     }
@@ -328,11 +354,13 @@ impl App for VoxelGame {
                 .render(ctx.gl, &self.camera, ctx.size.0 as i32, ctx.size.1 as i32);
 
             if let Some(mesh_index) = self.world_mesh_index {
-                self.mesh_renderer.render_mesh(
+                // Render with effective world scale from CubeGrid
+                self.mesh_renderer.render_mesh_with_scale(
                     ctx.gl,
                     mesh_index,
                     Vec3::ZERO,
                     Quat::IDENTITY,
+                    self.effective_world_scale(),
                     &self.camera,
                     ctx.size.0 as i32,
                     ctx.size.1 as i32,
@@ -379,6 +407,11 @@ impl App for VoxelGame {
                 ui.label(format!("Macro depth: {}", self.config.world.macro_depth));
                 ui.label(format!("Micro depth: {}", self.config.world.micro_depth));
                 ui.label(format!("Seed: {}", self.config.world.seed));
+                ui.label(format!(
+                    "Scale: {} ({}x)",
+                    self.world_scale(),
+                    1u32 << self.world_scale()
+                ));
 
                 ui.separator();
                 ui.heading("Controls");

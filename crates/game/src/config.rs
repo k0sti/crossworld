@@ -5,6 +5,10 @@ use mlua::prelude::*;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+/// Default depth scale offset for loaded vox models.
+/// Negative value makes models smaller: -3 means 2^3 = 8x smaller.
+const DEFAULT_MODEL_DEPTH_SCALE: i32 = -3;
+
 /// World configuration from Lua
 #[derive(Debug, Clone)]
 pub struct WorldConfig {
@@ -47,6 +51,9 @@ pub struct WorldModelConfig {
     pub index: usize,
     pub align: Vec3,
     pub position: Vec3,
+    /// Depth scale offset: negative = smaller, positive = larger
+    /// Default is -3 (8x smaller)
+    pub scale: i32,
 }
 
 /// Combined game configuration
@@ -221,11 +228,17 @@ impl GameConfig {
                 let pos_y: f32 = position.get(2).unwrap_or(0.0);
                 let pos_z: f32 = position.get(3).unwrap_or(0.0);
 
+                // Extract scale (optional, defaults to DEFAULT_MODEL_DEPTH_SCALE)
+                let scale: i32 = model_table
+                    .get("scale")
+                    .unwrap_or(DEFAULT_MODEL_DEPTH_SCALE);
+
                 models.push(WorldModelConfig {
                     pattern,
                     index,
                     align: Vec3::new(align_x, align_y, align_z),
                     position: Vec3::new(pos_x, pos_y, pos_z),
+                    scale,
                 });
             }
         }
@@ -449,11 +462,12 @@ impl GameConfig {
                 );
                 println!("[Game]   Position: {:?}", model_config.position);
                 println!("[Game]   Align: {:?}", model_config.align);
+                println!("[Game]   Scale: {}", model_config.scale);
             }
 
-            // Load the vox model
+            // Load the vox model with configured scale
             let load_start = Instant::now();
-            let model = Self::load_vox_model(&model_path)?;
+            let model = Self::load_vox_model(&model_path, model_config.scale)?;
             let load_duration = load_start.elapsed();
             total_load_time += load_duration;
 
@@ -463,7 +477,7 @@ impl GameConfig {
 
             if debug {
                 println!("[Game]   Model size: {:?}", model.size);
-                println!("[Game]   Model depth: {}", model.depth);
+                println!("[Game]   Model depth: {} (after scale)", model.depth);
                 println!("[Game]   Aligned position: {:?}", aligned_pos);
                 println!("[Game]   Load time: {:?}", load_duration);
             }
@@ -554,12 +568,27 @@ impl GameConfig {
         }
     }
 
-    /// Load a vox model from file
-    fn load_vox_model(path: &Path) -> Result<CubeBox<u8>, String> {
+    /// Load a vox model from file with depth scaling applied.
+    ///
+    /// The model depth is adjusted by the scale parameter to control
+    /// the rendered size relative to the world.
+    ///
+    /// # Arguments
+    /// * `path` - Path to the .vox file
+    /// * `scale` - Depth scale offset (negative = smaller, positive = larger)
+    fn load_vox_model(path: &Path, scale: i32) -> Result<CubeBox<u8>, String> {
         let bytes = std::fs::read(path)
             .map_err(|e| format!("Failed to read model file {}: {}", path.display(), e))?;
 
-        load_vox_to_cubebox(&bytes)
+        let mut model = load_vox_to_cubebox(&bytes)?;
+
+        // Apply depth scale offset (negative = smaller models)
+        // The depth determines how many world units the model occupies: 2^depth
+        // Reducing depth by 3 makes the model 8x smaller (2^3 = 8)
+        let scaled_depth = (model.depth as i32 + scale).max(0) as u32;
+        model.depth = scaled_depth;
+
+        Ok(model)
     }
 
     /// Calculate aligned position for a model
