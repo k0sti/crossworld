@@ -113,10 +113,42 @@ The agent **MUST** execute all commands in the response. For each command:
 | `APPROVE` | `mcp__vibe_kanban__update_task(task_id, status: "done")` |
 | `CONTINUE` | `mcp__vibe_kanban__update_task(task_id, status: "inprogress")`, incorporate feedback |
 | `SPAWN` | `mcp__vibe_kanban__create_task(project_id, title: <arg>)` for each SPAWN |
-| `DISCARD` | `mcp__vibe_kanban__update_task(task_id, status: "cancelled")`, `git checkout main`, delete branch |
-| `REBASE` | `git fetch origin main && git rebase origin/main` |
-| `MERGE` | Create PR or `git checkout main && git merge <branch>` |
+| `DISCARD` | `mcp__vibe_kanban__update_task(task_id, status: "cancelled")`, delete worktree (see Worktree Operations) |
+| `REBASE` | Rebase onto main (see Worktree Operations below) |
+| `MERGE` | Merge to main from main worktree (see Worktree Operations below) |
 | `COMMENT` | Log comment, optionally add to task description |
+
+### Worktree Git Operations
+
+**IMPORTANT**: This project uses git worktrees. Each task branch lives in a separate worktree directory. The `main` branch is checked out in the primary worktree. You CANNOT run `git checkout main` in a feature worktree because git prevents a branch from being checked out in multiple worktrees simultaneously.
+
+**REBASE:**
+```bash
+# From the feature worktree
+git fetch origin main
+git rebase origin/main
+```
+
+**MERGE:**
+```bash
+# Must be done from the main worktree, not the feature worktree
+MAIN_WORKTREE=$(git worktree list | grep '\[main\]' | awk '{print $1}')
+CURRENT_BRANCH=$(git branch --show-current)
+cd "$MAIN_WORKTREE"
+git fetch origin main && git merge origin/main --ff-only
+git merge "$CURRENT_BRANCH" --no-ff -m "Merge branch '$CURRENT_BRANCH'"
+git push origin main
+```
+
+**DISCARD:**
+```bash
+WORKTREE_PATH=$(pwd)
+BRANCH=$(git branch --show-current)
+MAIN_WORKTREE=$(git worktree list | grep '\[main\]' | awk '{print $1}')
+cd "$MAIN_WORKTREE"
+git worktree remove "$WORKTREE_PATH" --force
+git branch -D "$BRANCH"
+```
 
 ---
 
@@ -176,10 +208,12 @@ For each command in the response, execute the corresponding action:
 APPROVE → mcp__vibe_kanban__update_task(task_id, status: "done")
 CONTINUE → mcp__vibe_kanban__update_task(task_id, status: "inprogress")
 SPAWN → mcp__vibe_kanban__create_task(project_id, title: "<spawn argument>")
-DISCARD → mcp__vibe_kanban__update_task(task_id, status: "cancelled")
-REBASE → git fetch origin main && git rebase origin/main
-MERGE → git checkout main && git merge <branch> --no-ff
+DISCARD → mcp__vibe_kanban__update_task(task_id, status: "cancelled"), delete worktree
+REBASE → git fetch origin main && git rebase origin/main (from feature worktree)
+MERGE → cd <main_worktree> && git merge <branch> --no-ff (must run from main worktree)
 ```
+
+**Note**: See "Worktree Git Operations" section above for detailed worktree-aware commands.
 
 ### Example Response Handling
 
@@ -324,8 +358,20 @@ def parse_review_response(response: str) -> list[dict]:
 ### 4. Command Execution Logic
 
 ```python
-async def execute_review_commands(commands: list[dict], task_id: str, project_id: str, branch: str):
-    """Execute all review commands in order."""
+async def execute_review_commands(commands: list[dict], task_id: str, project_id: str, branch: str, worktree_path: str):
+    """Execute all review commands in order.
+
+    IMPORTANT: This project uses git worktrees. The main branch is checked out
+    in a separate worktree. You cannot `git checkout main` from a feature worktree.
+    """
+
+    # Find the main worktree path
+    result = await run_bash('git worktree list')
+    main_worktree = None
+    for line in result.split('\n'):
+        if '[main]' in line:
+            main_worktree = line.split()[0]
+            break
 
     for cmd in commands:
         match cmd['command']:
@@ -345,17 +391,21 @@ async def execute_review_commands(commands: list[dict], task_id: str, project_id
 
             case 'DISCARD':
                 await mcp_vibe_kanban_update_task(task_id, status='cancelled')
-                await run_bash('git checkout main')
-                await run_bash(f'git branch -D {branch}')
+                # Must delete worktree from main worktree, not from within it
+                await run_bash(f'cd {main_worktree} && git worktree remove {worktree_path} --force')
+                await run_bash(f'cd {main_worktree} && git branch -D {branch}')
 
             case 'REBASE':
+                # Rebase can be done from within the feature worktree
                 await run_bash('git fetch origin main')
                 await run_bash('git rebase origin/main')
 
             case 'MERGE':
-                await run_bash('git checkout main')
-                await run_bash(f'git merge {branch} --no-ff')
-                await run_bash('git push origin main')
+                # MUST be done from main worktree - cannot checkout main in feature worktree
+                await run_bash(f'cd {main_worktree} && git fetch origin main')
+                await run_bash(f'cd {main_worktree} && git merge origin/main --ff-only')
+                await run_bash(f'cd {main_worktree} && git merge {branch} --no-ff -m "Merge branch \'{branch}\'"')
+                await run_bash(f'cd {main_worktree} && git push origin main')
 
             case 'COMMENT':
                 # Log or store comment
@@ -493,9 +543,11 @@ mcp__vibe_kanban__create_task(
 # 4. COMMENT - Log the comment
 print("Reviewer comment: Great implementation! Clean code.")
 
-# 5. MERGE - Merge to main
-$ git checkout main
-$ git merge vk/abc123-physics-component --no-ff
+# 5. MERGE - Merge to main (from main worktree, not feature worktree!)
+$ MAIN_WORKTREE=$(git worktree list | grep '\[main\]' | awk '{print $1}')
+$ cd "$MAIN_WORKTREE"
+$ git fetch origin main && git merge origin/main --ff-only
+$ git merge vk/abc123-physics-component --no-ff -m "Merge branch 'vk/abc123-physics-component'"
 $ git push origin main
 ```
 
