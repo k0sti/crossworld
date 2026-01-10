@@ -242,6 +242,14 @@ pub trait App {
         // Default: no UI
     }
 
+    /// Post-render callback (optional)
+    ///
+    /// Called after all rendering is complete (including UI).
+    /// Use this for post-processing effects that should apply to the entire frame.
+    fn post_render(&mut self, _ctx: &FrameContext) {
+        // Default: no post-render
+    }
+
     /// Request cursor mode (optional)
     ///
     /// Called each frame to check cursor behavior.

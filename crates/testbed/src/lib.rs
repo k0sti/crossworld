@@ -24,7 +24,9 @@ use crossworld_physics::{
 use cube::{io::csm::parse_csm, Cube};
 use glam::{Quat, Vec3};
 use glow::{Context, HasContext, COLOR_BUFFER_BIT, DEPTH_BUFFER_BIT, SCISSOR_TEST};
-use renderer::{Camera, MeshRenderer, OrbitController, OrbitControllerConfig};
+use renderer::{
+    Camera, CrtConfig, CrtPostProcess, MeshRenderer, OrbitController, OrbitControllerConfig,
+};
 use std::path::Path;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -157,6 +159,9 @@ pub struct PhysicsTestbed {
     camera: Camera,
     orbit_controller: OrbitController,
 
+    // CRT post-processing
+    crt_post_process: CrtPostProcess,
+
     // Physics scenes (4 quadrants)
     scenes: [Option<PhysicsScene>; 4],
 
@@ -173,6 +178,7 @@ pub struct PhysicsTestbed {
 
     // UI state
     reset_requested: bool,
+    crt_settings_open: bool,
 
     // Timing
     frame_count: u64,
@@ -201,16 +207,21 @@ impl PhysicsTestbed {
             max_distance: 50.0,
         };
 
+        // Create CRT post-processor with subtle settings
+        let crt_post_process = CrtPostProcess::with_config(CrtConfig::subtle());
+
         Self {
             mesh_renderer: MeshRenderer::new(),
             camera: Camera::look_at(camera_position, camera_target, Vec3::Y),
             orbit_controller: OrbitController::new(camera_target, orbit_config),
+            crt_post_process,
             scenes: [None, None, None, None],
             ground_cubes: [None, None, None, None],
             falling_cube: None,
             ground_settings: GroundSettings::default(),
             object_settings: vec![ObjectSettings::default()],
             reset_requested: false,
+            crt_settings_open: false,
             frame_count: 0,
             physics_dt: 1.0 / 60.0,
             last_physics_update: Instant::now(),
@@ -349,16 +360,21 @@ impl PhysicsTestbed {
             max_distance: 50.0,
         };
 
+        // Create CRT post-processor with subtle settings
+        let crt_post_process = CrtPostProcess::with_config(CrtConfig::subtle());
+
         Ok(Self {
             mesh_renderer: MeshRenderer::new(),
             camera: Camera::look_at(camera_position, camera_target, Vec3::Y),
             orbit_controller: OrbitController::new(camera_target, orbit_config),
+            crt_post_process,
             scenes: [None, None, None, None],
             ground_cubes: [None, None, None, None],
             falling_cube: None,
             ground_settings,
             object_settings,
             reset_requested: false,
+            crt_settings_open: false,
             frame_count: 0,
             physics_dt: 1.0 / 60.0,
             last_physics_update: Instant::now(),
@@ -738,6 +754,11 @@ impl App for PhysicsTestbed {
             eprintln!("[Testbed] Failed to initialize mesh renderer: {}", e);
         }
 
+        // Initialize CRT post-processor
+        if let Err(e) = unsafe { self.crt_post_process.init_gl(ctx.gl) } {
+            eprintln!("[Testbed] Failed to initialize CRT post-processor: {}", e);
+        }
+
         // Get ground cube (from CSM or solid material)
         let ground_cube = self.get_ground_cube();
 
@@ -768,6 +789,7 @@ impl App for PhysicsTestbed {
     fn shutdown(&mut self, ctx: &FrameContext) {
         println!("[Testbed] Cleaning up");
         unsafe { self.mesh_renderer.destroy_gl(ctx.gl) };
+        unsafe { self.crt_post_process.destroy_gl(ctx.gl) };
     }
 
     fn update(&mut self, ctx: &FrameContext, input: &InputState) {
@@ -787,18 +809,23 @@ impl App for PhysicsTestbed {
     }
 
     fn render(&mut self, ctx: &FrameContext) {
-        let width = ctx.size.0 as i32;
-        let height = ctx.size.1 as i32;
+        let width = ctx.size.0;
+        let height = ctx.size.1;
+
+        // Begin CRT post-processing (redirects rendering to framebuffer)
+        unsafe {
+            self.crt_post_process.begin(ctx.gl, width, height);
+        }
 
         // Reserve space for top bar only (status is now overlay in each view)
         let top_bar_height = ui::TOP_BAR_HEIGHT as i32;
-        let render_height = height - top_bar_height;
-        let half_width = width / 2;
+        let render_height = height as i32 - top_bar_height;
+        let half_width = width as i32 / 2;
         let half_height = render_height / 2;
 
         // Clear the entire window first
         unsafe {
-            ctx.gl.viewport(0, 0, width, height);
+            ctx.gl.viewport(0, 0, width as i32, height as i32);
             ctx.gl.clear_color(0.1, 0.1, 0.1, 1.0);
             ctx.gl.clear(COLOR_BUFFER_BIT | DEPTH_BUFFER_BIT);
         }
@@ -836,7 +863,7 @@ impl App for PhysicsTestbed {
 
         // Draw divider lines between quadrants
         unsafe {
-            ctx.gl.viewport(0, 0, width, height);
+            ctx.gl.viewport(0, 0, width as i32, height as i32);
 
             // Vertical divider
             ctx.gl.scissor(half_width - 1, 0, 2, render_height);
@@ -845,10 +872,23 @@ impl App for PhysicsTestbed {
             ctx.gl.clear(COLOR_BUFFER_BIT);
 
             // Horizontal divider
-            ctx.gl.scissor(0, half_height - 1, width, 2);
+            ctx.gl.scissor(0, half_height - 1, width as i32, 2);
             ctx.gl.clear(COLOR_BUFFER_BIT);
 
             ctx.gl.disable(SCISSOR_TEST);
+        }
+
+        // Note: CRT post-processing end() is called in post_render() to include UI
+    }
+
+    fn post_render(&mut self, ctx: &FrameContext) {
+        let width = ctx.size.0;
+        let height = ctx.size.1;
+
+        // End CRT post-processing (applies effects to entire frame including UI)
+        unsafe {
+            self.crt_post_process
+                .end(ctx.gl, width, height, ctx.elapsed);
         }
     }
 
@@ -868,9 +908,86 @@ impl App for PhysicsTestbed {
                 }
 
                 ui.separator();
+
+                // CRT toggle
+                ui.checkbox(&mut self.crt_post_process.enabled, "CRT");
+
+                // CRT Tune button (only show if CRT is enabled)
+                if self.crt_post_process.enabled && ui.button("Tune").clicked() {
+                    self.crt_settings_open = !self.crt_settings_open;
+                }
+
+                ui.separator();
                 ui.label(format!("Frame: {}", frame_count));
             });
         });
+
+        // CRT Settings window
+        if self.crt_settings_open {
+            egui::Window::new("CRT Settings")
+                .open(&mut self.crt_settings_open)
+                .resizable(true)
+                .default_width(300.0)
+                .show(egui_ctx, |ui| {
+                    let config = &mut self.crt_post_process.config;
+
+                    ui.heading("Scanlines");
+                    ui.add(
+                        egui::Slider::new(&mut config.scanline_intensity, 0.0..=0.5)
+                            .text("Intensity"),
+                    );
+                    ui.add(
+                        egui::Slider::new(&mut config.scanline_count, 100.0..=800.0).text("Count"),
+                    );
+                    ui.add(
+                        egui::Slider::new(&mut config.adaptive_intensity, 0.0..=1.0)
+                            .text("Adaptive"),
+                    );
+
+                    ui.separator();
+                    ui.heading("Screen Effects");
+                    ui.add(egui::Slider::new(&mut config.curvature, 0.0..=0.5).text("Curvature"));
+                    ui.add(
+                        egui::Slider::new(&mut config.vignette_strength, 0.0..=1.0)
+                            .text("Vignette"),
+                    );
+
+                    ui.separator();
+                    ui.heading("Bloom");
+                    ui.add(
+                        egui::Slider::new(&mut config.bloom_intensity, 0.0..=0.5).text("Intensity"),
+                    );
+                    ui.add(
+                        egui::Slider::new(&mut config.bloom_threshold, 0.0..=1.0).text("Threshold"),
+                    );
+
+                    ui.separator();
+                    ui.heading("Color");
+                    ui.add(egui::Slider::new(&mut config.brightness, 0.5..=1.5).text("Brightness"));
+                    ui.add(egui::Slider::new(&mut config.contrast, 0.5..=1.5).text("Contrast"));
+                    ui.add(egui::Slider::new(&mut config.saturation, 0.5..=1.5).text("Saturation"));
+                    ui.add(egui::Slider::new(&mut config.rgb_shift, 0.0..=2.0).text("RGB Shift"));
+
+                    ui.separator();
+                    ui.heading("Animation");
+                    ui.add(
+                        egui::Slider::new(&mut config.flicker_strength, 0.0..=0.05).text("Flicker"),
+                    );
+
+                    ui.separator();
+                    ui.horizontal(|ui| {
+                        if ui.button("Subtle").clicked() {
+                            *config = CrtConfig::subtle();
+                        }
+                        if ui.button("Default").clicked() {
+                            *config = CrtConfig::default();
+                        }
+                        if ui.button("Retro").clicked() {
+                            *config = CrtConfig::retro();
+                        }
+                    });
+                });
+        }
 
         // Central panel for scene overlays (titles and status)
         egui::CentralPanel::default()
