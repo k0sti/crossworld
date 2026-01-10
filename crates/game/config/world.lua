@@ -44,3 +44,4 @@ materials = {
     grass = 32,     -- Green grass
     stone = 64,     -- Gray stone
 }
+

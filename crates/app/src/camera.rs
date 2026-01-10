@@ -229,9 +229,34 @@ impl Camera {
         offset = offset.normalize() * distance;
         self.position = target + offset;
 
-        // Update rotation to look at target
+        // Update rotation to look at target with no roll (up = world Y)
         let forward = (target - self.position).normalize();
-        self.rotation = Quat::from_rotation_arc(Vec3::NEG_Z, forward);
+        let right = forward.cross(Vec3::Y).normalize();
+        let up = right.cross(forward);
+
+        // Build rotation matrix and convert to quaternion
+        let rotation_matrix = glam::Mat3::from_cols(right, up, -forward);
+        self.rotation = Quat::from_mat3(&rotation_matrix);
+
+        // Debug: check for roll
+        #[cfg(debug_assertions)]
+        {
+            let roll = self.roll();
+            if roll.abs() > 0.01 {
+                eprintln!(
+                    "[Camera::orbit] WARNING: unexpected roll={:.3} rad ({:.1} deg)",
+                    roll,
+                    roll.to_degrees()
+                );
+            }
+        }
+    }
+
+    /// Extract roll angle from rotation (should be ~0 for orbit camera)
+    pub fn roll(&self) -> f32 {
+        let right = self.right();
+        // Roll is the angle of the right vector away from the horizontal plane
+        right.y.asin()
     }
 
     /// Move camera relative to its current orientation
