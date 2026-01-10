@@ -26,9 +26,12 @@ pub mod controller;
 // Lua configuration module
 pub mod lua_config;
 
-pub use controller::{
-    create_controller_backend, ControllerBackend, ControllerInfo, ControllerInput, GamepadState,
+// Re-export input types from core
+pub use core::input::{
+    ControllerInfo, ControllerInput, CursorMode, GamepadState, MouseButtonType, MouseButtons,
 };
+
+pub use controller::{create_controller_backend, ControllerBackend};
 
 // Re-export camera types at crate root for convenience
 pub use camera::{
@@ -61,14 +64,6 @@ pub use runner::{create_event_loop, run_app, AppConfig, AppRuntime, DebugMode, R
 // Re-export egui when runtime feature is enabled
 #[cfg(feature = "runtime")]
 pub use egui;
-
-/// Mouse button state flags
-#[derive(Debug, Clone, Copy, Default)]
-pub struct MouseButtons {
-    pub left: bool,
-    pub right: bool,
-    pub middle: bool,
-}
 
 /// Frame context passed to update/render methods
 ///
@@ -168,26 +163,6 @@ impl InputState {
         self.mouse_buttons = MouseButtons::default();
         self.gamepad = None;
     }
-}
-
-/// Mouse button type for injection
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MouseButtonType {
-    Left,
-    Right,
-    Middle,
-}
-
-/// Cursor mode for the application
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum CursorMode {
-    /// Visible, free movement (default)
-    #[default]
-    Normal,
-    /// Hidden but not grabbed
-    Hidden,
-    /// Hidden and confined/locked (for FPS camera)
-    Grabbed,
 }
 
 /// Application trait for hot-reloadable game code

@@ -31,12 +31,14 @@ default:
 
 # Build WASM module in development mode
 build-wasm-dev:
+    cd crates/core && wasm-pack build --dev --target web --out-dir ../../packages/wasm-core --out-name core
     cd crates/world && wasm-pack build --dev --target web --out-dir ../../packages/wasm-world --out-name crossworld-world
     cd crates/cube && wasm-pack build --dev --target web --out-dir ../../packages/wasm-cube -- --features wasm
     cd crates/physics && wasm-pack build --dev --target web --out-dir ../../packages/wasm-physics --out-name crossworld_physics -- --features wasm
 
 # Build WASM module in release mode
 build-wasm:
+    cd crates/core && wasm-pack build --target web --out-dir ../../packages/wasm-core --out-name core
     cd crates/world && wasm-pack build --target web --out-dir ../../packages/wasm-world --out-name crossworld-world
     cd crates/cube && wasm-pack build --target web --out-dir ../../packages/wasm-cube -- --features wasm
     cd crates/physics && wasm-pack build --target web --out-dir ../../packages/wasm-physics --out-name crossworld_physics -- --features wasm
@@ -51,7 +53,7 @@ build: build-wasm
 
 # Clean build artifacts
 clean:
-    rm -rf packages/wasm-world packages/wasm-cube
+    rm -rf packages/wasm-core packages/wasm-world packages/wasm-cube packages/wasm-physics
     cd packages/app && rm -rf dist node_modules/.vite
 
 # Install dependencies

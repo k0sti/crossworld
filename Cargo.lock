@@ -277,6 +277,7 @@ name = "app"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "core",
  "egui",
  "egui-winit",
  "egui_glow",
@@ -2619,6 +2620,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "633458d4ef8c78b72454de2d54fd6ab2e60f9e02be22f3c6104cdc8a4e0fceb9"
 dependencies = [
  "unicode-segmentation",
+]
+
+[[package]]
+name = "core"
+version = "0.1.0"
+dependencies = [
+ "gilrs",
+ "glam 0.30.10",
+ "glow",
+ "serde",
+ "wasm-bindgen",
+ "winit",
 ]
 
 [[package]]
@@ -6865,6 +6878,7 @@ version = "0.1.0"
 dependencies = [
  "app",
  "bytemuck",
+ "core",
  "crossworld-physics",
  "cube",
  "egui",
