@@ -1,6 +1,7 @@
 // Core octree data structures
 
 pub mod cube;
+pub mod cube_grid;
 pub mod cubebox;
 pub mod raycast;
 
@@ -8,5 +9,6 @@ pub mod raycast;
 pub use cube::{
     octant_char_to_index, octant_index_to_char, Cube, IVec3Ext, Voxel, OCTANT_POSITIONS,
 };
+pub use cube_grid::CubeGrid;
 pub use cubebox::CubeBox;
 pub use raycast::{raycast, raycast_with_options, Hit, RaycastDebugState, RaycastOptions};
