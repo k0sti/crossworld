@@ -13,6 +13,8 @@ pub struct EditorState {
     pub selected_material: u8,
     /// Whether continuous painting is enabled (paint while dragging)
     pub continuous_paint: bool,
+    /// Whether erase mode is enabled (places material 0)
+    pub erase_mode: bool,
 }
 
 impl Default for EditorState {
@@ -20,6 +22,7 @@ impl Default for EditorState {
         Self {
             selected_material: DEFAULT_MATERIAL,
             continuous_paint: false,
+            erase_mode: false,
         }
     }
 }
@@ -59,6 +62,35 @@ impl EditorState {
     pub fn material(&self) -> u8 {
         self.selected_material
     }
+
+    /// Enable erase mode
+    pub fn enable_erase_mode(&mut self) {
+        self.erase_mode = true;
+    }
+
+    /// Disable erase mode
+    pub fn disable_erase_mode(&mut self) {
+        self.erase_mode = false;
+    }
+
+    /// Toggle erase mode
+    pub fn toggle_erase_mode(&mut self) {
+        self.erase_mode = !self.erase_mode;
+    }
+
+    /// Check if erase mode is enabled
+    pub fn is_erase_mode(&self) -> bool {
+        self.erase_mode
+    }
+
+    /// Get the effective material to place (returns 0 if erase mode is active)
+    pub fn effective_material(&self) -> u8 {
+        if self.erase_mode {
+            0
+        } else {
+            self.selected_material
+        }
+    }
 }
 
 #[cfg(test)]
@@ -70,6 +102,7 @@ mod tests {
         let state = EditorState::default();
         assert_eq!(state.selected_material, DEFAULT_MATERIAL);
         assert!(!state.continuous_paint);
+        assert!(!state.erase_mode);
     }
 
     #[test]
@@ -77,6 +110,7 @@ mod tests {
         let state = EditorState::new();
         assert_eq!(state.selected_material, DEFAULT_MATERIAL);
         assert!(!state.continuous_paint);
+        assert!(!state.erase_mode);
     }
 
     #[test]
@@ -107,5 +141,43 @@ mod tests {
 
         state.disable_continuous_paint();
         assert!(!state.is_continuous_paint());
+    }
+
+    #[test]
+    fn test_erase_mode() {
+        let mut state = EditorState::new();
+        assert!(!state.is_erase_mode());
+
+        state.enable_erase_mode();
+        assert!(state.is_erase_mode());
+
+        state.disable_erase_mode();
+        assert!(!state.is_erase_mode());
+    }
+
+    #[test]
+    fn test_toggle_erase_mode() {
+        let mut state = EditorState::new();
+        assert!(!state.is_erase_mode());
+
+        state.toggle_erase_mode();
+        assert!(state.is_erase_mode());
+
+        state.toggle_erase_mode();
+        assert!(!state.is_erase_mode());
+    }
+
+    #[test]
+    fn test_effective_material() {
+        let mut state = EditorState::new();
+        state.set_material(42);
+
+        assert_eq!(state.effective_material(), 42);
+
+        state.enable_erase_mode();
+        assert_eq!(state.effective_material(), 0);
+
+        state.disable_erase_mode();
+        assert_eq!(state.effective_material(), 42);
     }
 }
