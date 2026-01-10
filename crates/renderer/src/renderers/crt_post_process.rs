@@ -347,14 +347,19 @@ impl CrtPostProcess {
     /// Call this before rendering your scene. All subsequent draw calls
     /// will be captured to the internal framebuffer until `end()` is called.
     ///
+    /// When CRT is disabled, this ensures rendering goes to the default framebuffer.
+    ///
     /// # Safety
     /// Must be called with an active GL context.
     pub unsafe fn begin(&mut self, gl: &Context, width: u32, height: u32) {
-        if !self.enabled || self.gl_resources.is_none() {
-            return;
-        }
-
         unsafe {
+            if !self.enabled || self.gl_resources.is_none() {
+                // When disabled, ensure we're rendering to the default framebuffer
+                gl.bind_framebuffer(FRAMEBUFFER, None);
+                gl.viewport(0, 0, width as i32, height as i32);
+                return;
+            }
+
             self.ensure_framebuffer_size(gl, width, height);
 
             if let Some(res) = &self.gl_resources {
