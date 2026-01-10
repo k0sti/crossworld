@@ -156,7 +156,11 @@ impl VoxelGame {
                 match self.mesh_renderer.upload_mesh(gl, &cube_rc, depth) {
                     Ok(mesh_index) => {
                         self.world_mesh_index = Some(mesh_index);
-                        println!("[Game] World mesh uploaded successfully (scale: 2^{} = {} units)", depth, 1 << depth);
+                        println!(
+                            "[Game] World mesh uploaded successfully (scale: 2^{} = {} units)",
+                            depth,
+                            1 << depth
+                        );
                     }
                     Err(e) => {
                         eprintln!("[Game] Failed to upload world mesh: {}", e);

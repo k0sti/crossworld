@@ -144,7 +144,10 @@ mod tests {
     #[test]
     fn test_review_arg() {
         let args = TestArgs::parse_from(["test", "--review", "This is a review message"]);
-        assert_eq!(args.common.review.as_deref(), Some("This is a review message"));
+        assert_eq!(
+            args.common.review.as_deref(),
+            Some("This is a review message")
+        );
     }
 
     #[test]
@@ -156,7 +159,10 @@ mod tests {
     #[test]
     fn test_review_file_arg() {
         let args = TestArgs::parse_from(["test", "--review-file", "doc/review.md"]);
-        assert_eq!(args.common.review_file, Some(PathBuf::from("doc/review.md")));
+        assert_eq!(
+            args.common.review_file,
+            Some(PathBuf::from("doc/review.md"))
+        );
     }
 
     #[test]
