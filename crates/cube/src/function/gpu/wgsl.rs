@@ -407,7 +407,7 @@ fn turbulence(p: vec3<f32>, octaves: u32, seed: u32) -> f32 {
 
     return value / max_value;
 }"#
-            .to_string()
+        .to_string()
     }
 }
 
@@ -434,7 +434,11 @@ mod tests {
     fn test_noise_call() {
         let expr = Expr::call(
             BuiltinFunc::Noise,
-            vec![Expr::var(VarId::X), Expr::var(VarId::Y), Expr::var(VarId::Z)],
+            vec![
+                Expr::var(VarId::X),
+                Expr::var(VarId::Y),
+                Expr::var(VarId::Z),
+            ],
         );
         let code = WgslCodegen::expr_to_wgsl(&expr, 1).unwrap();
         assert!(code.contains("noise3"));
@@ -469,7 +473,11 @@ mod tests {
     fn test_noise_shader() {
         let expr = Expr::call(
             BuiltinFunc::Noise,
-            vec![Expr::var(VarId::X), Expr::var(VarId::Y), Expr::var(VarId::Z)],
+            vec![
+                Expr::var(VarId::X),
+                Expr::var(VarId::Y),
+                Expr::var(VarId::Z),
+            ],
         );
         let shader = WgslCodegen::generate(&expr).unwrap();
 

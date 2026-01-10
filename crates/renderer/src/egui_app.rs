@@ -36,8 +36,8 @@ struct RenderResponse {
 
 /// Convert a fabric Cube<Quat> to Cube<u8> using surface detection (standalone function for thread use)
 fn fabric_to_material_cube(fabric_cube: &cube::Cube<glam::Quat>, depth: u32) -> cube::Cube<u8> {
-    use cube::fabric::quaternion_to_color;
     use cube::Cube;
+    use cube::fabric::quaternion_to_color;
 
     match fabric_cube {
         Cube::Solid(quat) => {
@@ -225,7 +225,11 @@ impl CubeRendererApp {
         unsafe { Self::new_with_sync(gl, false, None) }
     }
 
-    pub unsafe fn new_with_sync(gl: &Arc<Context>, sync_mode: bool, model_name: Option<&str>) -> Result<Self, String> {
+    pub unsafe fn new_with_sync(
+        gl: &Arc<Context>,
+        sync_mode: bool,
+        model_name: Option<&str>,
+    ) -> Result<Self, String> {
         // Create default scene (Octa Cube - Depth 1 for debugging, or user-specified model)
         let default_model_id = model_name.unwrap_or("octa");
         let fabric_config = get_fabric_config().clone();
@@ -280,8 +284,7 @@ impl CubeRendererApp {
 
         // Initialize camera
         let camera_target = glam::Vec3::ZERO;
-        let camera =
-            Camera::look_at(glam::Vec3::new(3.0, 2.0, 3.0), camera_target, glam::Vec3::Y);
+        let camera = Camera::look_at(glam::Vec3::new(3.0, 2.0, 3.0), camera_target, glam::Vec3::Y);
 
         // Create CPU renderer thread
         let cpu_sync_request = Arc::new(Mutex::new(None));
@@ -306,7 +309,10 @@ impl CubeRendererApp {
                 Rc::new(Cube::Solid(thread_single_material))
             } else {
                 create_cube_from_id(&thread_model_id).unwrap_or_else(|e| {
-                    eprintln!("Failed to load model '{}': {}, falling back to octa", thread_model_id, e);
+                    eprintln!(
+                        "Failed to load model '{}': {}, falling back to octa",
+                        thread_model_id, e
+                    );
                     create_cube_from_id("octa").unwrap()
                 })
             };
@@ -331,7 +337,8 @@ impl CubeRendererApp {
                         || request.fabric_max_depth != current_fabric_depth;
                     let single_changed = request.single_voxel_material != current_single_material;
 
-                    if model_changed || (request.model_id == "fabric" && fabric_changed)
+                    if model_changed
+                        || (request.model_id == "fabric" && fabric_changed)
                         || (request.model_id == "single" && single_changed)
                     {
                         current_model_id = request.model_id.clone();
@@ -359,7 +366,10 @@ impl CubeRendererApp {
                             Rc::new(Cube::Solid(material))
                         } else {
                             create_cube_from_id(&request.model_id).unwrap_or_else(|e| {
-                                eprintln!("Failed to load model '{}': {}, falling back to octa", request.model_id, e);
+                                eprintln!(
+                                    "Failed to load model '{}': {}, falling back to octa",
+                                    request.model_id, e
+                                );
                                 create_cube_from_id("octa").unwrap()
                             })
                         };
@@ -555,14 +565,8 @@ impl CubeRendererApp {
 
                 Ok(filename)
             }
-            (None, _) => Err(format!(
-                "Left frame ({:?}) not available",
-                self.diff_left
-            )),
-            (_, None) => Err(format!(
-                "Right frame ({:?}) not available",
-                self.diff_right
-            )),
+            (None, _) => Err(format!("Left frame ({:?}) not available", self.diff_left)),
+            (_, None) => Err(format!("Right frame ({:?}) not available", self.diff_right)),
         }
     }
 
@@ -599,47 +603,46 @@ impl CubeRendererApp {
                 }
 
                 // Helper to create framebuffer + texture + depth buffer
-                let create_fb_tex_depth =
-                    |gl: &Context| -> (Framebuffer, Texture, Renderbuffer) {
-                        let texture = gl.create_texture().unwrap();
-                        gl.bind_texture(TEXTURE_2D, Some(texture));
-                        gl.tex_image_2d(
-                            TEXTURE_2D,
-                            0,
-                            RGBA as i32,
-                            width,
-                            height,
-                            0,
-                            RGBA,
-                            UNSIGNED_BYTE,
-                            glow::PixelUnpackData::Slice(None),
-                        );
-                        gl.tex_parameter_i32(TEXTURE_2D, TEXTURE_MIN_FILTER, LINEAR as i32);
-                        gl.tex_parameter_i32(TEXTURE_2D, TEXTURE_MAG_FILTER, LINEAR as i32);
+                let create_fb_tex_depth = |gl: &Context| -> (Framebuffer, Texture, Renderbuffer) {
+                    let texture = gl.create_texture().unwrap();
+                    gl.bind_texture(TEXTURE_2D, Some(texture));
+                    gl.tex_image_2d(
+                        TEXTURE_2D,
+                        0,
+                        RGBA as i32,
+                        width,
+                        height,
+                        0,
+                        RGBA,
+                        UNSIGNED_BYTE,
+                        glow::PixelUnpackData::Slice(None),
+                    );
+                    gl.tex_parameter_i32(TEXTURE_2D, TEXTURE_MIN_FILTER, LINEAR as i32);
+                    gl.tex_parameter_i32(TEXTURE_2D, TEXTURE_MAG_FILTER, LINEAR as i32);
 
-                        // Create depth renderbuffer
-                        let depth_rb = gl.create_renderbuffer().unwrap();
-                        gl.bind_renderbuffer(RENDERBUFFER, Some(depth_rb));
-                        gl.renderbuffer_storage(RENDERBUFFER, DEPTH_COMPONENT16, width, height);
+                    // Create depth renderbuffer
+                    let depth_rb = gl.create_renderbuffer().unwrap();
+                    gl.bind_renderbuffer(RENDERBUFFER, Some(depth_rb));
+                    gl.renderbuffer_storage(RENDERBUFFER, DEPTH_COMPONENT16, width, height);
 
-                        let framebuffer = gl.create_framebuffer().unwrap();
-                        gl.bind_framebuffer(FRAMEBUFFER, Some(framebuffer));
-                        gl.framebuffer_texture_2d(
-                            FRAMEBUFFER,
-                            COLOR_ATTACHMENT0,
-                            TEXTURE_2D,
-                            Some(texture),
-                            0,
-                        );
-                        gl.framebuffer_renderbuffer(
-                            FRAMEBUFFER,
-                            DEPTH_ATTACHMENT,
-                            RENDERBUFFER,
-                            Some(depth_rb),
-                        );
+                    let framebuffer = gl.create_framebuffer().unwrap();
+                    gl.bind_framebuffer(FRAMEBUFFER, Some(framebuffer));
+                    gl.framebuffer_texture_2d(
+                        FRAMEBUFFER,
+                        COLOR_ATTACHMENT0,
+                        TEXTURE_2D,
+                        Some(texture),
+                        0,
+                    );
+                    gl.framebuffer_renderbuffer(
+                        FRAMEBUFFER,
+                        DEPTH_ATTACHMENT,
+                        RENDERBUFFER,
+                        Some(depth_rb),
+                    );
 
-                        (framebuffer, texture, depth_rb)
-                    };
+                    (framebuffer, texture, depth_rb)
+                };
 
                 // Create all framebuffers with depth buffers
                 let (gl_framebuffer, gl_texture, gl_depth_rb) = create_fb_tex_depth(gl);
@@ -831,11 +834,8 @@ impl CubeRendererApp {
                     self.camera
                 } else {
                     // Match CPU tracer camera orbit: position orbits at time * 0.3
-                    let camera_pos = glam::Vec3::new(
-                        3.0 * (time * 0.3).cos(),
-                        2.0,
-                        3.0 * (time * 0.3).sin(),
-                    );
+                    let camera_pos =
+                        glam::Vec3::new(3.0 * (time * 0.3).cos(), 2.0, 3.0 * (time * 0.3).sin());
                     let target = glam::Vec3::ZERO;
                     Camera::look_at(camera_pos, target, glam::Vec3::Y)
                 };
@@ -1186,11 +1186,23 @@ impl CubeRendererApp {
                     let csm_header = egui::CollapsingHeader::new("CSM Models")
                         .default_open(self.model_panel_expanded.csm_expanded)
                         .show(ui, |ui| {
-                            let csm_models = ["octa", "extended", "depth3", "quad", "layer", "sdf", "generated", "test_expansion"];
+                            let csm_models = [
+                                "octa",
+                                "extended",
+                                "depth3",
+                                "quad",
+                                "layer",
+                                "sdf",
+                                "generated",
+                                "test_expansion",
+                            ];
                             for model_id in csm_models {
                                 if let Some(model) = get_model(model_id)
                                     && ui
-                                        .selectable_label(self.current_model_id == model_id, &model.name)
+                                        .selectable_label(
+                                            self.current_model_id == model_id,
+                                            &model.name,
+                                        )
                                         .clicked()
                                 {
                                     self.current_model_id = model_id.to_string();
@@ -1208,7 +1220,10 @@ impl CubeRendererApp {
                             for model_id in vox_models {
                                 if let Some(model) = get_model(model_id)
                                     && ui
-                                        .selectable_label(self.current_model_id == model_id, &model.name)
+                                        .selectable_label(
+                                            self.current_model_id == model_id,
+                                            &model.name,
+                                        )
                                         .clicked()
                                 {
                                     self.current_model_id = model_id.to_string();
@@ -1223,7 +1238,10 @@ impl CubeRendererApp {
                         .default_open(self.model_panel_expanded.fabric_expanded)
                         .show(ui, |ui| {
                             if ui
-                                .selectable_label(self.current_model_id == "fabric", "Procedural Sphere")
+                                .selectable_label(
+                                    self.current_model_id == "fabric",
+                                    "Procedural Sphere",
+                                )
                                 .clicked()
                             {
                                 self.current_model_id = "fabric".to_string();
@@ -1248,8 +1266,11 @@ impl CubeRendererApp {
                                 // Root magnitude
                                 if ui
                                     .add(
-                                        egui::Slider::new(&mut self.fabric_config.root_magnitude, 0.1..=0.9)
-                                            .text("Root Mag"),
+                                        egui::Slider::new(
+                                            &mut self.fabric_config.root_magnitude,
+                                            0.1..=0.9,
+                                        )
+                                        .text("Root Mag"),
                                     )
                                     .changed()
                                 {
@@ -1259,8 +1280,11 @@ impl CubeRendererApp {
                                 // Boundary magnitude
                                 if ui
                                     .add(
-                                        egui::Slider::new(&mut self.fabric_config.boundary_magnitude, 1.1..=5.0)
-                                            .text("Boundary"),
+                                        egui::Slider::new(
+                                            &mut self.fabric_config.boundary_magnitude,
+                                            1.1..=5.0,
+                                        )
+                                        .text("Boundary"),
                                     )
                                     .changed()
                                 {
@@ -1270,8 +1294,11 @@ impl CubeRendererApp {
                                 // Surface radius
                                 if ui
                                     .add(
-                                        egui::Slider::new(&mut self.fabric_config.surface_radius, 0.3..=1.5)
-                                            .text("Surface R"),
+                                        egui::Slider::new(
+                                            &mut self.fabric_config.surface_radius,
+                                            0.3..=1.5,
+                                        )
+                                        .text("Surface R"),
                                     )
                                     .changed()
                                 {
@@ -1654,7 +1681,6 @@ impl CubeRendererApp {
             }
         }
     }
-
 
     fn handle_camera_input(&mut self, response: &egui::Response) {
         if response.dragged() {

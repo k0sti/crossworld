@@ -144,12 +144,14 @@ pub fn perlin3(x: f64, y: f64, z: f64, seed: u32) -> f64 {
         as i32
         + zi) as usize
         & 255] as i32;
-    let ba = perm_table[(perm_table[(perm_table[(xi + 1) as usize & 255] as i32 + yi) as usize
-        & 255] as i32
+    let ba = perm_table[(perm_table
+        [(perm_table[(xi + 1) as usize & 255] as i32 + yi) as usize & 255]
+        as i32
         + zi) as usize
         & 255] as i32;
-    let bb = perm_table[(perm_table[(perm_table[(xi + 1) as usize & 255] as i32 + yi + 1) as usize
-        & 255] as i32
+    let bb = perm_table[(perm_table
+        [(perm_table[(xi + 1) as usize & 255] as i32 + yi + 1) as usize & 255]
+        as i32
         + zi) as usize
         & 255] as i32;
 
@@ -208,8 +210,7 @@ pub fn turbulence(x: f64, y: f64, z: f64, octaves: u32, seed: u32) -> f64 {
 
     for i in 0..octaves.min(8) {
         let octave_seed = seed.wrapping_add(i);
-        value +=
-            amplitude * noise3(x * frequency, y * frequency, z * frequency, octave_seed).abs();
+        value += amplitude * noise3(x * frequency, y * frequency, z * frequency, octave_seed).abs();
         max_value += amplitude;
         amplitude *= 0.5;
         frequency *= 2.0;
@@ -231,8 +232,7 @@ pub fn ridged(x: f64, y: f64, z: f64, octaves: u32, seed: u32) -> f64 {
 
     for i in 0..octaves.min(8) {
         let octave_seed = seed.wrapping_add(i);
-        let signal =
-            1.0 - noise3(x * frequency, y * frequency, z * frequency, octave_seed).abs();
+        let signal = 1.0 - noise3(x * frequency, y * frequency, z * frequency, octave_seed).abs();
         let signal = signal * signal * weight;
         weight = (signal * 2.0).clamp(0.0, 1.0);
         value += signal * amplitude;

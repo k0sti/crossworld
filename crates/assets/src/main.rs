@@ -52,7 +52,6 @@ struct CsvModelEntry {
     notes: String,
 }
 
-
 #[derive(Debug, Serialize, Deserialize)]
 struct AvatarsIndex {
     vox: Vec<[String; 2]>,
@@ -148,7 +147,10 @@ fn cmd_index() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     if !existing_entries.is_empty() {
-        println!("Loaded {} existing entries from models.csv", existing_entries.len());
+        println!(
+            "Loaded {} existing entries from models.csv",
+            existing_entries.len()
+        );
     }
 
     let mut models = Vec::new();
@@ -187,10 +189,22 @@ fn cmd_index() -> Result<(), Box<dyn std::error::Error>> {
         })
         .collect();
 
-    let vox_count = merged_models.iter().filter(|m| m.file_type == "vox").count();
-    let glb_count = merged_models.iter().filter(|m| m.file_type == "glb").count();
-    let structure_count = merged_models.iter().filter(|m| m.model_type == "structure").count();
-    let object_count = merged_models.iter().filter(|m| m.model_type == "object").count();
+    let vox_count = merged_models
+        .iter()
+        .filter(|m| m.file_type == "vox")
+        .count();
+    let glb_count = merged_models
+        .iter()
+        .filter(|m| m.file_type == "glb")
+        .count();
+    let structure_count = merged_models
+        .iter()
+        .filter(|m| m.model_type == "structure")
+        .count();
+    let object_count = merged_models
+        .iter()
+        .filter(|m| m.model_type == "object")
+        .count();
 
     println!("Found {} models", merged_models.len());
     println!("  - VOX: {}", vox_count);

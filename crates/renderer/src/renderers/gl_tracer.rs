@@ -327,13 +327,13 @@ impl GlTracerGl {
 
             gl.tex_image_2d(
                 TEXTURE_2D,
-                0,                  // mip level
-                R8UI as i32,        // internal format
-                tex_width,          // width
-                tex_height,         // height
-                0,                  // border
-                RED_INTEGER,        // format
-                UNSIGNED_BYTE,      // type
+                0,                                                // mip level
+                R8UI as i32,                                      // internal format
+                tex_width,                                        // width
+                tex_height,                                       // height
+                0,                                                // border
+                RED_INTEGER,                                      // format
+                UNSIGNED_BYTE,                                    // type
                 glow::PixelUnpackData::Slice(Some(&padded_data)), // data
             );
 
@@ -753,8 +753,7 @@ impl Renderer for GlTracer {
         // Flip Y-axis (GL origin is bottom-left, image origin is top-left)
         let mut flipped = vec![0u8; rgb_pixels.len()];
         for y in 0..height {
-            let src_row =
-                &rgb_pixels[(y * width * 3) as usize..((y + 1) * width * 3) as usize];
+            let src_row = &rgb_pixels[(y * width * 3) as usize..((y + 1) * width * 3) as usize];
             let dst_y = height - 1 - y;
             let dst_row =
                 &mut flipped[(dst_y * width * 3) as usize..((dst_y + 1) * width * 3) as usize];
@@ -762,13 +761,7 @@ impl Renderer for GlTracer {
         }
 
         // Save to file
-        image::save_buffer(
-            path,
-            &flipped,
-            width,
-            height,
-            image::ColorType::Rgb8,
-        )
-        .map_err(|e| e.to_string())
+        image::save_buffer(path, &flipped, width, height, image::ColorType::Rgb8)
+            .map_err(|e| e.to_string())
     }
 }

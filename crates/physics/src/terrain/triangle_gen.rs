@@ -30,7 +30,9 @@ pub fn face_to_triangles(face: &FaceInfo, world_size: f32) -> [Triangle; 2] {
 
     // Use Face::vertices from cube crate for consistent winding order
     // The cube crate defines vertices in CCW order when viewed from outside
-    let local_verts = face.face.vertices(voxel_pos.x, voxel_pos.y, voxel_pos.z, size);
+    let local_verts = face
+        .face
+        .vertices(voxel_pos.x, voxel_pos.y, voxel_pos.z, size);
     let corners: [Vec3; 4] = [
         Vec3::from(local_verts[0]),
         Vec3::from(local_verts[1]),
@@ -41,8 +43,16 @@ pub fn face_to_triangles(face: &FaceInfo, world_size: f32) -> [Triangle; 2] {
     // Split quad into 2 triangles (0,1,2) and (0,2,3)
     let to_point = |v: Vec3| Point::new(v.x, v.y, v.z);
     [
-        Triangle::new(to_point(corners[0]), to_point(corners[1]), to_point(corners[2])),
-        Triangle::new(to_point(corners[0]), to_point(corners[2]), to_point(corners[3])),
+        Triangle::new(
+            to_point(corners[0]),
+            to_point(corners[1]),
+            to_point(corners[2]),
+        ),
+        Triangle::new(
+            to_point(corners[0]),
+            to_point(corners[2]),
+            to_point(corners[3]),
+        ),
     ]
 }
 

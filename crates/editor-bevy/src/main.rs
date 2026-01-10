@@ -3,25 +3,25 @@ use bevy_egui::EguiPlugin;
 
 mod camera;
 mod config;
-mod voxel_scene;
-mod mesh_sync;
-mod raycast;
 mod cursor;
 mod editing;
 mod file_io;
 mod file_ops;
+mod mesh_sync;
+mod raycast;
 mod ui;
+mod voxel_scene;
 
 use camera::{CameraPlugin, OrbitCamera};
 use config::EditorConfig;
-use voxel_scene::VoxelScenePlugin;
-use mesh_sync::MeshSyncPlugin;
-use raycast::RaycastPlugin;
 use cursor::CursorPlugin;
 use editing::EditingPlugin;
 use file_io::FileIoPlugin;
 use file_ops::FileOpsPlugin;
+use mesh_sync::MeshSyncPlugin;
+use raycast::RaycastPlugin;
 use ui::UiPlugin;
+use voxel_scene::VoxelScenePlugin;
 
 fn main() {
     App::new()
@@ -56,9 +56,7 @@ impl Plugin for EditorPlugin {
     }
 }
 
-fn setup_scene(
-    mut commands: Commands,
-) {
+fn setup_scene(mut commands: Commands) {
     // Spawn orbit camera at (10, 10, 10) looking at origin
     let orbit_camera = OrbitCamera::new(Vec3::ZERO, 15.0);
     commands.spawn((

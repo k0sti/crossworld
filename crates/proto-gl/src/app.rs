@@ -20,10 +20,7 @@ use winit::window::{CursorGrabMode, Window, WindowId};
 
 use crossworld_physics::{
     PhysicsWorld,
-    rapier3d::{
-        self,
-        parry::bounding_volume::Aabb as RapierAabb,
-    },
+    rapier3d::{self, parry::bounding_volume::Aabb as RapierAabb},
     terrain::{ActiveRegionTracker, VoxelTerrainCollider},
 };
 use cube::Cube;
@@ -407,7 +404,10 @@ impl ApplicationHandler for ProtoGlApp {
         for obj in &objects {
             // Get CubeBox from physics object (contains cube and depth)
             let Some(cubebox) = obj.physics.cube() else {
-                eprintln!("  Warning: No CubeBox for {}, using fallback", obj.model_name);
+                eprintln!(
+                    "  Warning: No CubeBox for {}, using fallback",
+                    obj.model_name
+                );
                 object_mesh_indices.push(0);
                 continue;
             };
@@ -766,11 +766,12 @@ impl ProtoGlApp {
                                 .friction(0.5)
                                 .restitution(0.0)
                                 .build();
-                            self.terrain_collider_handle = Some(physics_world.update_terrain_collider(
-                                body_handle,
-                                old_collider_handle,
-                                new_collider,
-                            ));
+                            self.terrain_collider_handle =
+                                Some(physics_world.update_terrain_collider(
+                                    body_handle,
+                                    old_collider_handle,
+                                    new_collider,
+                                ));
                         }
                     }
                 }

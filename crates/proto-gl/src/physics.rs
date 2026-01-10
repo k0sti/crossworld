@@ -1,11 +1,11 @@
-use glam::Vec3;
-use rand::Rng;
-use std::rc::Rc;
+use crate::config::SpawningConfig;
+use crate::models::{SpawnedObject, VoxModel};
 use crossworld_physics::rapier3d::prelude::*;
 use crossworld_physics::{CubeObject, PhysicsWorld};
 use cube::CubeBox;
-use crate::config::SpawningConfig;
-use crate::models::{SpawnedObject, VoxModel};
+use glam::Vec3;
+use rand::Rng;
+use std::rc::Rc;
 
 /// Camera object with physics body for first-person movement
 pub struct CameraObject {
@@ -21,12 +21,7 @@ impl CameraObject {
     /// * `position` - Initial position
     /// * `height` - Camera capsule height
     /// * `radius` - Camera capsule radius
-    pub fn new(
-        physics_world: &mut PhysicsWorld,
-        position: Vec3,
-        height: f32,
-        radius: f32,
-    ) -> Self {
+    pub fn new(physics_world: &mut PhysicsWorld, position: Vec3, height: f32, radius: f32) -> Self {
         // Use kinematic body for direct control with collision detection
         let rb = RigidBodyBuilder::kinematic_position_based()
             .translation(vector![position.x, position.y, position.z])

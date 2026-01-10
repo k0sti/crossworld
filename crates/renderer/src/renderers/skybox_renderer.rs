@@ -3,8 +3,8 @@
 //! Renders a skybox with configurable gradient colors for sky (top) and ground (bottom).
 //! Uses logarithmic interpolation to compress colors near the horizon.
 
-use glow::*;
 use glam::Mat4;
+use glow::*;
 
 use crate::camera::Camera;
 use crate::shader_utils::create_program;
@@ -39,8 +39,8 @@ impl SkyboxRenderer {
             ],
             // Default gray ground gradient (light gray to dark gray)
             ground_colors: vec![
-                [0.7, 0.7, 0.7],    // Light gray at horizon
-                [0.3, 0.3, 0.3],    // Dark gray at nadir
+                [0.7, 0.7, 0.7], // Light gray at horizon
+                [0.3, 0.3, 0.3], // Dark gray at nadir
             ],
         }
     }
@@ -91,11 +91,7 @@ impl SkyboxRenderer {
                 .create_buffer()
                 .map_err(|e| format!("Failed to create VBO: {}", e))?;
             gl.bind_buffer(ARRAY_BUFFER, Some(vbo));
-            gl.buffer_data_u8_slice(
-                ARRAY_BUFFER,
-                bytemuck::cast_slice(&vertices),
-                STATIC_DRAW,
-            );
+            gl.buffer_data_u8_slice(ARRAY_BUFFER, bytemuck::cast_slice(&vertices), STATIC_DRAW);
 
             // Position attribute (location 0)
             gl.enable_vertex_attrib_array(0);
@@ -115,13 +111,7 @@ impl SkyboxRenderer {
     /// # Safety
     ///
     /// Must be called with an active GL context on the current thread.
-    pub unsafe fn render(
-        &self,
-        gl: &Context,
-        camera: &Camera,
-        width: i32,
-        height: i32,
-    ) {
+    pub unsafe fn render(&self, gl: &Context, camera: &Camera, width: i32, height: i32) {
         unsafe {
             let program = match self.program {
                 Some(p) => p,
@@ -150,17 +140,28 @@ impl SkyboxRenderer {
 
             // Upload uniforms
             let inv_proj_view_loc = gl.get_uniform_location(program, "u_invProjView");
-            gl.uniform_matrix_4_f32_slice(inv_proj_view_loc.as_ref(), false, &inv_proj_view.to_cols_array());
+            gl.uniform_matrix_4_f32_slice(
+                inv_proj_view_loc.as_ref(),
+                false,
+                &inv_proj_view.to_cols_array(),
+            );
 
             let camera_pos_loc = gl.get_uniform_location(program, "u_cameraPos");
-            gl.uniform_3_f32(camera_pos_loc.as_ref(), camera.position.x, camera.position.y, camera.position.z);
+            gl.uniform_3_f32(
+                camera_pos_loc.as_ref(),
+                camera.position.x,
+                camera.position.y,
+                camera.position.z,
+            );
 
             // Upload sky gradient colors
             let sky_count_loc = gl.get_uniform_location(program, "u_skyColorCount");
             gl.uniform_1_i32(sky_count_loc.as_ref(), self.sky_colors.len() as i32);
 
             for (i, color) in self.sky_colors.iter().enumerate() {
-                if i >= 8 { break; } // Shader supports max 8 colors
+                if i >= 8 {
+                    break;
+                } // Shader supports max 8 colors
                 let uniform_name = format!("u_skyColors[{}]", i);
                 let color_loc = gl.get_uniform_location(program, &uniform_name);
                 gl.uniform_3_f32(color_loc.as_ref(), color[0], color[1], color[2]);
@@ -171,7 +172,9 @@ impl SkyboxRenderer {
             gl.uniform_1_i32(ground_count_loc.as_ref(), self.ground_colors.len() as i32);
 
             for (i, color) in self.ground_colors.iter().enumerate() {
-                if i >= 8 { break; } // Shader supports max 8 colors
+                if i >= 8 {
+                    break;
+                } // Shader supports max 8 colors
                 let uniform_name = format!("u_groundColors[{}]", i);
                 let color_loc = gl.get_uniform_location(program, &uniform_name);
                 gl.uniform_3_f32(color_loc.as_ref(), color[0], color[1], color[2]);

@@ -97,7 +97,8 @@ fn identifier(input: &str) -> IResult<&str, &str> {
     recognize(pair(
         take_while1(|c: char| c.is_alphabetic() || c == '_'),
         take_while(|c: char| c.is_alphanumeric() || c == '_'),
-    )).parse(input)
+    ))
+    .parse(input)
 }
 
 /// Parse a number literal
@@ -139,7 +140,8 @@ fn function_call(input: &str) -> IResult<&str, Expr> {
         pair(char('('), ws),
         separated_list0((ws, char(','), ws), expr),
         pair(ws, cut(char(')'))),
-    ).parse(input)?;
+    )
+    .parse(input)?;
 
     // Look up the function
     if let Some(func) = BuiltinFunc::from_name(name) {
@@ -163,11 +165,7 @@ fn function_call(input: &str) -> IResult<&str, Expr> {
 
 /// Parse a parenthesized expression: (expr)
 fn paren_expr(input: &str) -> IResult<&str, Expr> {
-    delimited(
-        pair(char('('), ws),
-        expr,
-        pair(ws, cut(char(')'))),
-    ).parse(input)
+    delimited(pair(char('('), ws), expr, pair(ws, cut(char(')')))).parse(input)
 }
 
 /// Parse an if-then-else expression
@@ -214,7 +212,8 @@ fn match_pattern(input: &str) -> IResult<&str, MatchPattern> {
         ),
         // Number pattern
         map(double, MatchPattern::Number),
-    )).parse(input)
+    ))
+    .parse(input)
 }
 
 /// Parse a match case: pattern => expr
@@ -237,10 +236,7 @@ fn match_expr(input: &str) -> IResult<&str, Expr> {
     let (input, _) = ws(input)?;
 
     // Parse cases
-    let (input, cases) = many0(terminated(
-        match_case,
-        (ws, char(','), ws),
-    )).parse(input)?;
+    let (input, cases) = many0(terminated(match_case, (ws, char(','), ws))).parse(input)?;
 
     // Parse default case: _ => expr
     let (input, _) = ws(input)?;
@@ -277,7 +273,8 @@ fn primary(input: &str) -> IResult<&str, Expr> {
             number_literal,
             variable_or_constant,
         )),
-    ).parse(input)
+    )
+    .parse(input)
 }
 
 /// Parse a unary expression: -expr, not expr
@@ -290,13 +287,13 @@ fn unary(input: &str) -> IResult<&str, Expr> {
                 Expr::unary(UnaryOpKind::Neg, e)
             }),
             // Logical not: not expr
-            map(
-                preceded((tag_no_case("not"), ws), unary),
-                |e| Expr::unary(UnaryOpKind::Not, e),
-            ),
+            map(preceded((tag_no_case("not"), ws), unary), |e| {
+                Expr::unary(UnaryOpKind::Not, e)
+            }),
             primary,
         )),
-    ).parse(input)
+    )
+    .parse(input)
 }
 
 /// Parse power operator (right-associative)
@@ -325,7 +322,8 @@ fn term(input: &str) -> IResult<&str, Expr> {
         )),
         ws,
         power,
-    )).parse(input)?;
+    ))
+    .parse(input)?;
 
     let result = rest
         .into_iter()
@@ -345,7 +343,8 @@ fn additive(input: &str) -> IResult<&str, Expr> {
         )),
         ws,
         term,
-    )).parse(input)?;
+    ))
+    .parse(input)?;
 
     let result = rest
         .into_iter()
@@ -369,7 +368,8 @@ fn comparison(input: &str) -> IResult<&str, Expr> {
         )),
         ws,
         additive,
-    )).parse(input)?;
+    ))
+    .parse(input)?;
 
     let result = rest
         .into_iter()
@@ -386,7 +386,8 @@ fn logical_and(input: &str) -> IResult<&str, Expr> {
         value(BinOpKind::And, tag_no_case("and")),
         ws,
         comparison,
-    )).parse(input)?;
+    ))
+    .parse(input)?;
 
     let result = rest
         .into_iter()
@@ -398,12 +399,8 @@ fn logical_and(input: &str) -> IResult<&str, Expr> {
 /// Parse logical or
 fn logical_or(input: &str) -> IResult<&str, Expr> {
     let (input, first) = logical_and(input)?;
-    let (input, rest) = many0((
-        ws,
-        value(BinOpKind::Or, tag_no_case("or")),
-        ws,
-        logical_and,
-    )).parse(input)?;
+    let (input, rest) =
+        many0((ws, value(BinOpKind::Or, tag_no_case("or")), ws, logical_and)).parse(input)?;
 
     let result = rest
         .into_iter()
@@ -436,7 +433,10 @@ pub fn parse_expr(input: &str) -> Result<Expr, ParseError> {
         let position = input.len() - remaining.len();
         return Err(ParseError::SyntaxError {
             position,
-            message: format!("Unexpected input: {}", &remaining[..remaining.len().min(20)]),
+            message: format!(
+                "Unexpected input: {}",
+                &remaining[..remaining.len().min(20)]
+            ),
         });
     }
 
@@ -579,7 +579,11 @@ mod tests {
             result,
             Expr::call(
                 BuiltinFunc::Noise,
-                vec![Expr::Var(VarId::X), Expr::Var(VarId::Y), Expr::Var(VarId::Z)]
+                vec![
+                    Expr::Var(VarId::X),
+                    Expr::Var(VarId::Y),
+                    Expr::Var(VarId::Z)
+                ]
             )
         );
 
