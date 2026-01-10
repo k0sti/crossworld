@@ -1,10 +1,13 @@
 mod config;
 
-use app::{App, CursorMode, FrameContext, InputState};
+use app::{
+    App, Camera, CursorMode, FirstPersonController, FirstPersonControllerConfig, FrameContext,
+    InputState,
+};
 use config::GameConfig;
 use glam::{Quat, Vec3};
 use glow::*;
-use renderer::{Camera, MeshRenderer, SkyboxRenderer};
+use renderer::{MeshRenderer, SkyboxRenderer};
 use std::path::PathBuf;
 use winit::keyboard::KeyCode;
 
@@ -15,100 +18,6 @@ fn is_debug_mode() -> bool {
         .unwrap_or(false)
 }
 
-/// Camera control state
-pub struct CameraController {
-    pub move_speed: f32,
-    pub sensitivity: f32,
-    pub mouse_captured: bool,
-}
-
-impl Default for CameraController {
-    fn default() -> Self {
-        Self {
-            move_speed: 5.0,
-            sensitivity: 0.003,
-            mouse_captured: false,
-        }
-    }
-}
-
-impl CameraController {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn handle_mouse_move(&mut self, camera: &mut Camera, delta_x: f32, delta_y: f32) {
-        if !self.mouse_captured {
-            return;
-        }
-
-        let yaw_delta = -delta_x * self.sensitivity;
-        let pitch_delta = -delta_y * self.sensitivity;
-
-        camera.yaw += yaw_delta;
-        camera.pitch += pitch_delta;
-
-        const MAX_PITCH: f32 = 89.0 * std::f32::consts::PI / 180.0;
-        camera.pitch = camera.pitch.clamp(-MAX_PITCH, MAX_PITCH);
-
-        camera.update_from_pitch_yaw();
-    }
-
-    pub fn apply_camera_rotation(&mut self, camera: &mut Camera, delta_x: f32, delta_y: f32) {
-        camera.yaw += delta_x;
-        camera.pitch += delta_y;
-
-        const MAX_PITCH: f32 = 89.0 * std::f32::consts::PI / 180.0;
-        camera.pitch = camera.pitch.clamp(-MAX_PITCH, MAX_PITCH);
-
-        camera.update_from_pitch_yaw();
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub fn calculate_velocity(
-        &self,
-        camera: &Camera,
-        forward: bool,
-        backward: bool,
-        left: bool,
-        right: bool,
-        up: bool,
-        down: bool,
-    ) -> Vec3 {
-        let mut velocity = Vec3::ZERO;
-
-        let fwd = camera.forward();
-        let fwd_xz = Vec3::new(fwd.x, 0.0, fwd.z).normalize_or_zero();
-        let rgt = camera.right();
-        let rgt_xz = Vec3::new(rgt.x, 0.0, rgt.z).normalize_or_zero();
-
-        if forward {
-            velocity += fwd_xz;
-        }
-        if backward {
-            velocity -= fwd_xz;
-        }
-        if left {
-            velocity -= rgt_xz;
-        }
-        if right {
-            velocity += rgt_xz;
-        }
-        if up {
-            velocity.y += 1.0;
-        }
-        if down {
-            velocity.y -= 1.0;
-        }
-
-        if velocity.length_squared() > 0.0 {
-            velocity = velocity.normalize() * self.move_speed;
-        }
-
-        velocity
-    }
-}
-
 pub struct VoxelGame {
     mesh_renderer: MeshRenderer,
     skybox_renderer: SkyboxRenderer,
@@ -117,7 +26,7 @@ pub struct VoxelGame {
     config: GameConfig,
     spawn_position: Vec3,
     camera: Camera,
-    camera_controller: CameraController,
+    fps_controller: FirstPersonController,
 }
 
 impl Default for VoxelGame {
@@ -130,7 +39,7 @@ impl Default for VoxelGame {
             config: GameConfig::default(),
             spawn_position: Vec3::new(0.0, 2.0, 5.0),
             camera: Camera::from_pitch_yaw(Vec3::new(0.0, 2.0, 5.0), 0.0, 0.0),
-            camera_controller: CameraController::new(),
+            fps_controller: FirstPersonController::new(FirstPersonControllerConfig::default()),
         }
     }
 }
@@ -288,7 +197,7 @@ impl App for VoxelGame {
 
         if let WindowEvent::MouseInput { state, button, .. } = event {
             if *button == MouseButton::Right && *state == ElementState::Pressed {
-                self.camera_controller.mouse_captured = !self.camera_controller.mouse_captured;
+                self.fps_controller.toggle_mouse_capture();
                 return true;
             }
         }
@@ -302,14 +211,14 @@ impl App for VoxelGame {
                 let sensitivity = 3.0 * ctx.delta_time;
                 let delta_x = -gamepad.right_stick.x * sensitivity;
                 let delta_y = gamepad.right_stick.y * sensitivity;
-                self.camera_controller
-                    .apply_camera_rotation(&mut self.camera, delta_x, delta_y);
+                self.fps_controller
+                    .apply_rotation(&mut self.camera, delta_x, delta_y);
             }
         }
 
         // Handle raw mouse movement for FPS camera
         if input.raw_mouse_delta.x.abs() > 0.001 || input.raw_mouse_delta.y.abs() > 0.001 {
-            self.camera_controller.handle_mouse_move(
+            self.fps_controller.handle_mouse_move(
                 &mut self.camera,
                 input.raw_mouse_delta.x,
                 input.raw_mouse_delta.y,
@@ -336,7 +245,7 @@ impl App for VoxelGame {
             .unwrap_or((0.0, 0.0, 0.0));
 
         // Combine keyboard and controller input
-        let mut total_velocity = self.camera_controller.calculate_velocity(
+        let mut total_velocity = self.fps_controller.calculate_velocity(
             &self.camera,
             forward,
             backward,
@@ -358,9 +267,9 @@ impl App for VoxelGame {
 
             let controller_move_dir = rgt_xz * controller_x + fwd_xz * controller_z;
             let controller_vel = Vec3::new(
-                controller_move_dir.x * self.camera_controller.move_speed,
-                controller_y_vertical * self.camera_controller.move_speed,
-                controller_move_dir.z * self.camera_controller.move_speed,
+                controller_move_dir.x * self.fps_controller.config.move_speed,
+                controller_y_vertical * self.fps_controller.config.move_speed,
+                controller_move_dir.z * self.fps_controller.config.move_speed,
             );
             total_velocity += controller_vel;
         }
@@ -392,7 +301,7 @@ impl App for VoxelGame {
 
     fn ui(&mut self, ctx: &FrameContext, egui_ctx: &egui::Context) {
         let camera_pos = self.camera.position;
-        let mouse_captured = self.camera_controller.mouse_captured;
+        let mouse_captured = self.fps_controller.mouse_captured;
 
         egui::Window::new("Voxel Game")
             .fixed_pos([10.0, 10.0])
@@ -439,7 +348,7 @@ impl App for VoxelGame {
     }
 
     fn cursor_mode(&self) -> CursorMode {
-        if self.camera_controller.mouse_captured {
+        if self.fps_controller.mouse_captured {
             CursorMode::Grabbed
         } else {
             CursorMode::Normal

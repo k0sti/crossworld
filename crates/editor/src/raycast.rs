@@ -4,9 +4,9 @@
 //! for determining where the cursor should be placed and what voxels
 //! are being targeted.
 
+use app::Camera;
 use cube::{raycast_with_options, Axis, Cube, CubeCoord, Hit, RaycastOptions};
 use glam::{IVec3, Vec2, Vec3};
-use renderer::Camera;
 
 /// Result of a raycast operation in the editor
 #[derive(Debug, Clone)]

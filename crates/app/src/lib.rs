@@ -6,6 +6,7 @@
 //! - [`FrameContext`]: Per-frame context with GL, window, timing info
 //! - [`InputState`]: Unified input state snapshot
 //! - [`ControllerBackend`] trait: Gamepad input handling
+//! - [`camera`]: Generic 3D camera system with orbit and first-person modes
 //!
 //! With the `runtime` feature enabled, additional utilities are available:
 //! - [`AppRuntime`]: Window creation and event loop management
@@ -18,6 +19,7 @@ use winit::event::WindowEvent;
 use winit::keyboard::KeyCode;
 use winit::window::Window;
 
+pub mod camera;
 pub mod cli;
 pub mod controller;
 
@@ -26,6 +28,12 @@ pub mod lua_config;
 
 pub use controller::{
     create_controller_backend, ControllerBackend, ControllerInfo, ControllerInput, GamepadState,
+};
+
+// Re-export camera types at crate root for convenience
+pub use camera::{
+    Camera, CameraMode, FirstPersonController, FirstPersonControllerConfig, Object,
+    OrbitController, OrbitControllerConfig, DEFAULT_VFOV,
 };
 
 #[cfg(feature = "gilrs")]

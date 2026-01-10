@@ -10,11 +10,11 @@ pub mod palette;
 pub mod raycast;
 pub mod ui;
 
-use app::{App, FrameContext, InputState};
+use app::{App, Camera, FrameContext, InputState, OrbitController, OrbitControllerConfig};
 use cube::Cube;
 use glam::{IVec3, Quat, Vec2, Vec3};
 use glow::HasContext;
-use renderer::{Camera, MeshRenderer, OrbitController, OrbitControllerConfig, SkyboxRenderer};
+use renderer::{MeshRenderer, SkyboxRenderer};
 use std::path::PathBuf;
 use std::rc::Rc;
 use winit::keyboard::KeyCode;
