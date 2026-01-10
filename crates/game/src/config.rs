@@ -1,8 +1,9 @@
 use app::lua_config::{extract_u32, mlua, LuaConfig};
-use glam::Vec3;
+use cube::{io::vox::load_vox_to_cubebox, CubeBox};
+use glam::{IVec3, Vec3};
 use mlua::prelude::*;
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// World configuration from Lua
 #[derive(Debug, Clone)]
@@ -39,11 +40,21 @@ pub struct MapConfig {
     pub materials: HashMap<String, u8>,
 }
 
+/// World model configuration
+#[derive(Debug, Clone)]
+pub struct WorldModelConfig {
+    pub pattern: String,
+    pub index: usize,
+    pub align: Vec3,
+    pub position: Vec3,
+}
+
 /// Combined game configuration
 #[derive(Debug, Clone, Default)]
 pub struct GameConfig {
     pub world: WorldConfig,
     pub map: MapConfig,
+    pub models: Vec<WorldModelConfig>,
 }
 
 impl GameConfig {
@@ -58,10 +69,12 @@ impl GameConfig {
 
         let world_config = Self::extract_world_config(lua_config.lua())?;
         let map_config = Self::extract_map_config(lua_config.lua())?;
+        let model_configs = Self::extract_model_configs(lua_config.lua())?;
 
         Ok(Self {
             world: world_config,
             map: map_config,
+            models: model_configs,
         })
     }
 
@@ -166,6 +179,58 @@ impl GameConfig {
             layout,
             materials,
         })
+    }
+
+    /// Extract world model configurations from Lua globals
+    fn extract_model_configs(lua: &Lua) -> Result<Vec<WorldModelConfig>, String> {
+        let globals = lua.globals();
+
+        // Get world_models table (optional)
+        let models_table: Option<mlua::Table> = globals.get("world_models").ok();
+
+        let mut models = Vec::new();
+
+        if let Some(table) = models_table {
+            for pair in table.pairs::<mlua::Value, mlua::Table>() {
+                let (_, model_table): (mlua::Value, mlua::Table) =
+                    pair.map_err(|e: mlua::Error| format!("Failed to parse world_models: {}", e))?;
+
+                let pattern: String = model_table
+                    .get("pattern")
+                    .map_err(|e| format!("Missing pattern in world_models: {}", e))?;
+
+                let index = extract_u32(
+                    &model_table
+                        .get("index")
+                        .map_err(|e| format!("Missing index in world_models: {}", e))?,
+                )
+                .map_err(|e| format!("Invalid index: {}", e))? as usize;
+
+                // Extract Vec3 values using LuaConfig's vec3 support
+                let align: mlua::Table = model_table
+                    .get("align")
+                    .map_err(|e| format!("Missing align in world_models: {}", e))?;
+                let align_x: f32 = align.get(1).unwrap_or(0.5);
+                let align_y: f32 = align.get(2).unwrap_or(0.0);
+                let align_z: f32 = align.get(3).unwrap_or(0.5);
+
+                let position: mlua::Table = model_table
+                    .get("position")
+                    .map_err(|e| format!("Missing position in world_models: {}", e))?;
+                let pos_x: f32 = position.get(1).unwrap_or(0.0);
+                let pos_y: f32 = position.get(2).unwrap_or(0.0);
+                let pos_z: f32 = position.get(3).unwrap_or(0.0);
+
+                models.push(WorldModelConfig {
+                    pattern,
+                    index,
+                    align: Vec3::new(align_x, align_y, align_z),
+                    position: Vec3::new(pos_x, pos_y, pos_z),
+                });
+            }
+        }
+
+        Ok(models)
     }
 
     /// Apply 2D map to world cube
@@ -318,5 +383,155 @@ impl GameConfig {
         }
 
         spawn_pos
+    }
+
+    /// Load and apply world models from configuration
+    /// Returns a World struct with all models merged
+    pub fn apply_models_to_world(
+        &self,
+        base_cube: cube::Cube<u8>,
+        debug: bool,
+    ) -> Result<crossworld_world::World, String> {
+        use crossworld_world::World;
+
+        // Start with the base world from macro_depth
+        let mut world = World::new(base_cube, self.world.macro_depth);
+
+        if debug {
+            println!("[Game] Loading {} world models", self.models.len());
+        }
+
+        // Resolve asset directory
+        let mut assets_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        assets_path.pop(); // Go from crates/game to crates
+        assets_path.pop(); // Go from crates to workspace root
+        assets_path.push("assets");
+        assets_path.push("models");
+        assets_path.push("vox");
+
+        // Get list of available scene models
+        let scene_models = Self::find_scene_models(&assets_path)?;
+
+        if debug {
+            println!("[Game] Found {} scene_* models in {}", scene_models.len(), assets_path.display());
+        }
+
+        // Load and merge each configured model
+        for model_config in &self.models {
+            let model_path = Self::resolve_model_pattern(
+                &assets_path,
+                &model_config.pattern,
+                &scene_models,
+                model_config.index,
+            )?;
+
+            if debug {
+                println!("[Game] Loading model: {}", model_path.display());
+                println!("[Game]   Position: {:?}", model_config.position);
+                println!("[Game]   Align: {:?}", model_config.align);
+            }
+
+            // Load the vox model
+            let model = Self::load_vox_model(&model_path)?;
+
+            // Calculate aligned position
+            let aligned_pos = Self::calculate_aligned_position(
+                &model,
+                model_config.position,
+                model_config.align,
+            );
+
+            if debug {
+                println!("[Game]   Model size: {:?}", model.size);
+                println!("[Game]   Aligned position: {:?}", aligned_pos);
+            }
+
+            // Merge into world at macro_depth
+            world.merge_model(&model, aligned_pos, self.world.macro_depth);
+        }
+
+        if debug {
+            println!("[Game] All models merged successfully");
+            println!("[Game] Final world scale: 2^{} = {} units", world.scale(), 1 << world.scale());
+        }
+
+        Ok(world)
+    }
+
+    /// Find all scene_*.vox models in the assets directory
+    fn find_scene_models(assets_path: &Path) -> Result<Vec<String>, String> {
+        let entries = std::fs::read_dir(assets_path)
+            .map_err(|e| format!("Failed to read assets directory: {}", e))?;
+
+        let mut models = Vec::new();
+        for entry in entries.flatten() {
+            if let Some(name) = entry.file_name().to_str() {
+                if name.starts_with("scene_") && name.ends_with(".vox") {
+                    models.push(name.to_string());
+                }
+            }
+        }
+
+        models.sort();
+        Ok(models)
+    }
+
+    /// Resolve a model pattern to an actual file path
+    fn resolve_model_pattern(
+        assets_path: &Path,
+        pattern: &str,
+        scene_models: &[String],
+        index: usize,
+    ) -> Result<PathBuf, String> {
+        if pattern.contains('*') {
+            // Wildcard pattern - use index to select from matching models
+            let prefix = pattern.trim_end_matches('*');
+            let matching: Vec<_> = scene_models
+                .iter()
+                .filter(|name| name.starts_with(prefix))
+                .collect();
+
+            if matching.is_empty() {
+                return Err(format!("No models match pattern: {}", pattern));
+            }
+
+            let selected_index = index % matching.len();
+            let selected_model = matching[selected_index];
+            Ok(assets_path.join(selected_model))
+        } else {
+            // Direct filename
+            let filename = if pattern.ends_with(".vox") {
+                pattern.to_string()
+            } else {
+                format!("{}.vox", pattern)
+            };
+            Ok(assets_path.join(filename))
+        }
+    }
+
+    /// Load a vox model from file
+    fn load_vox_model(path: &Path) -> Result<CubeBox<u8>, String> {
+        let bytes = std::fs::read(path)
+            .map_err(|e| format!("Failed to read model file {}: {}", path.display(), e))?;
+
+        load_vox_to_cubebox(&bytes)
+    }
+
+    /// Calculate aligned position for a model
+    /// align: (0,0,0) = bottom-left corner, (0.5,0,0.5) = bottom center, (1,1,1) = top-right corner
+    fn calculate_aligned_position(
+        model: &CubeBox<u8>,
+        world_pos: Vec3,
+        align: Vec3,
+    ) -> IVec3 {
+        let offset_x = -(model.size.x as f32 * align.x);
+        let offset_y = -(model.size.y as f32 * align.y);
+        let offset_z = -(model.size.z as f32 * align.z);
+
+        IVec3::new(
+            (world_pos.x + offset_x) as i32,
+            (world_pos.y + offset_y) as i32,
+            (world_pos.z + offset_z) as i32,
+        )
     }
 }

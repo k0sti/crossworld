@@ -22,7 +22,7 @@ pub struct VoxelGame {
     mesh_renderer: MeshRenderer,
     skybox_renderer: SkyboxRenderer,
     world_mesh_index: Option<usize>,
-    world: Option<crossworld_world::NativeWorldCube>,
+    world: Option<crossworld_world::World>,
     config: GameConfig,
     spawn_position: Vec3,
     camera: Camera,
@@ -91,7 +91,7 @@ impl VoxelGame {
             );
         }
 
-        let mut world = crossworld_world::NativeWorldCube::new(
+        let mut world_cube = crossworld_world::NativeWorldCube::new(
             self.config.world.macro_depth,
             self.config.world.micro_depth,
             self.config.world.border_depth,
@@ -103,26 +103,42 @@ impl VoxelGame {
         }
 
         // Apply 2D map to world
-        if let Some(spawn) = self.config.apply_map_to_world(&mut world, debug) {
+        if let Some(spawn) = self.config.apply_map_to_world(&mut world_cube, debug) {
             self.spawn_position = spawn;
             self.camera.position = spawn + Vec3::new(0.0, 1.6, 0.0); // Eye height
             println!("[Game] Spawn position set to: {:?}", self.spawn_position);
         }
 
-        // Debug: Log cube model structure
-        if debug {
-            let csm = cube::serialize_csm(world.root());
-            let csm_preview = if csm.len() > 500 {
-                format!("{}... (truncated, {} total chars)", &csm[..500], csm.len())
-            } else {
-                csm.clone()
-            };
-            println!("[Game] Resulting cube model (CSM):");
-            println!("{}", csm_preview);
-        }
+        // Get the root cube for model merging
+        let base_cube = world_cube.root().clone();
 
-        self.world = Some(world);
-        println!("[Game] World initialized successfully");
+        // Apply world models and create expandable World
+        match self.config.apply_models_to_world(base_cube, debug) {
+            Ok(world) => {
+                if debug {
+                    let csm = cube::serialize_csm(world.root());
+                    let csm_preview = if csm.len() > 500 {
+                        format!("{}... (truncated, {} total chars)", &csm[..500], csm.len())
+                    } else {
+                        csm.clone()
+                    };
+                    println!("[Game] Resulting world cube model (CSM):");
+                    println!("{}", csm_preview);
+                }
+
+                self.world = Some(world);
+                println!("[Game] World initialized successfully with models");
+            }
+            Err(e) => {
+                eprintln!("[Game] Failed to apply models: {}", e);
+                eprintln!("[Game] Using world without models");
+                // Fall back to base world without models
+                self.world = Some(crossworld_world::World::new(
+                    world_cube.root().clone(),
+                    self.config.world.macro_depth,
+                ));
+            }
+        }
     }
 
     /// Update world mesh from current world state
@@ -134,13 +150,13 @@ impl VoxelGame {
             let cube_rc = Rc::new(world.root().clone());
 
             unsafe {
-                let depth = self.config.world.macro_depth
-                    + self.config.world.micro_depth
-                    + self.config.world.border_depth;
+                // Use world scale for rendering depth
+                // This ensures models are rendered at correct size
+                let depth = world.scale();
                 match self.mesh_renderer.upload_mesh(gl, &cube_rc, depth) {
                     Ok(mesh_index) => {
                         self.world_mesh_index = Some(mesh_index);
-                        println!("[Game] World mesh uploaded successfully");
+                        println!("[Game] World mesh uploaded successfully (scale: 2^{} = {} units)", depth, 1 << depth);
                     }
                     Err(e) => {
                         eprintln!("[Game] Failed to upload world mesh: {}", e);
