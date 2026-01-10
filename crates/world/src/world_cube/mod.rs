@@ -7,7 +7,7 @@ use noise::{Fbm, Perlin};
 /// World container that can expand to accommodate models
 pub struct World {
     cube: Cube<u8>,
-    scale: u32,  // World scale: actual world size = 2^(macro_depth + scale)
+    scale: u32, // World scale: actual world size = 2^(macro_depth + scale)
 }
 
 impl World {
@@ -91,26 +91,25 @@ impl World {
         for y in 0..model.size.y {
             for z in 0..model.size.z {
                 for x in 0..model.size.x {
-                    let model_coord = CubeCoord::new(
-                        IVec3::new(x, y, z),
-                        model.depth,
-                    );
+                    let model_coord = CubeCoord::new(IVec3::new(x, y, z), model.depth);
 
                     let material_cube = model.cube.get(model_coord);
                     if let Some(&material) = material_cube.value()
-                        && material > 0 {  // Skip empty voxels
-                            // World position for this voxel
-                            let voxel_world_pos = world_pos + IVec3::new(x, y, z);
+                        && material > 0
+                    {
+                        // Skip empty voxels
+                        // World position for this voxel
+                        let voxel_world_pos = world_pos + IVec3::new(x, y, z);
 
-                            // Convert to octree coordinates
-                            let octree_x = voxel_world_pos.x + half_size;
-                            let octree_y = voxel_world_pos.y + half_size;
-                            let octree_z = voxel_world_pos.z + half_size;
+                        // Convert to octree coordinates
+                        let octree_x = voxel_world_pos.x + half_size;
+                        let octree_y = voxel_world_pos.y + half_size;
+                        let octree_z = voxel_world_pos.z + half_size;
 
-                            // Update the world cube
-                            let coord = CubeCoord::new(IVec3::new(octree_x, octree_y, octree_z), depth);
-                            self.cube = self.cube.update(coord, Cube::Solid(material)).simplified();
-                        }
+                        // Update the world cube
+                        let coord = CubeCoord::new(IVec3::new(octree_x, octree_y, octree_z), depth);
+                        self.cube = self.cube.update(coord, Cube::Solid(material)).simplified();
+                    }
                 }
             }
         }

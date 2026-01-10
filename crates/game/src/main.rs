@@ -135,7 +135,9 @@ fn parse_args() -> CliConfig {
                 println!("Options:");
                 println!("  --debug N           Run only N frames with debug output");
                 println!("  --review MESSAGE    Display a review panel with markdown message");
-                println!("  --review-file PATH  Display a review panel with markdown document from file");
+                println!(
+                    "  --review-file PATH  Display a review panel with markdown document from file"
+                );
                 println!("  --help              Show this help message");
                 std::process::exit(0);
             }
