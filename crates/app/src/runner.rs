@@ -52,9 +52,9 @@ impl DebugMode {
 /// Review panel configuration
 #[derive(Clone, Debug)]
 pub struct ReviewConfig {
-    /// Path to the review document file
-    pub file_path: std::path::PathBuf,
-    /// Document content (loaded from file, Arc for efficient cloning)
+    /// Path to the review document file (None if created from text)
+    pub file_path: Option<std::path::PathBuf>,
+    /// Document content (loaded from file or provided directly, Arc for efficient cloning)
     pub content: std::sync::Arc<str>,
     /// User comment input buffer
     pub comment: String,
@@ -62,13 +62,22 @@ pub struct ReviewConfig {
 
 impl ReviewConfig {
     /// Create a new review configuration by loading a file
-    pub fn new(file_path: std::path::PathBuf) -> std::io::Result<Self> {
+    pub fn from_file(file_path: std::path::PathBuf) -> std::io::Result<Self> {
         let content = std::fs::read_to_string(&file_path)?;
         Ok(Self {
-            file_path,
+            file_path: Some(file_path),
             content: content.into(),
             comment: String::new(),
         })
+    }
+
+    /// Create a new review configuration from a text string
+    pub fn from_text(content: impl Into<String>) -> Self {
+        Self {
+            file_path: None,
+            content: content.into().into(),
+            comment: String::new(),
+        }
     }
 }
 
@@ -143,9 +152,15 @@ impl AppConfig {
         self
     }
 
+    /// Set a review panel from a text message
+    pub fn with_review_text(mut self, content: impl Into<String>) -> Self {
+        self.review = Some(ReviewConfig::from_text(content));
+        self
+    }
+
     /// Set a review panel from a file path
-    pub fn with_review(mut self, file_path: std::path::PathBuf) -> std::io::Result<Self> {
-        self.review = Some(ReviewConfig::new(file_path)?);
+    pub fn with_review_file(mut self, file_path: std::path::PathBuf) -> std::io::Result<Self> {
+        self.review = Some(ReviewConfig::from_file(file_path)?);
         Ok(self)
     }
 }

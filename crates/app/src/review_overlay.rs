@@ -67,12 +67,13 @@ pub fn render_review_overlay(egui_ctx: &EguiContext, review: &mut ReviewConfig) 
                 .inner_margin(Margin::same(16)),
         )
         .show(egui_ctx, |ui| {
-            // Display file name
+            // Display file name or "Review" if no file
             let file_name = review
                 .file_path
-                .file_name()
+                .as_ref()
+                .and_then(|p| p.file_name())
                 .and_then(|n| n.to_str())
-                .unwrap_or("Unknown");
+                .unwrap_or("Review");
             ui.heading(file_name);
             ui.separator();
 
