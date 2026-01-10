@@ -48,8 +48,6 @@ pub fn render_review_overlay(egui_ctx: &EguiContext, review: &mut ReviewConfig) 
     let orange_hover = Color32::from_rgb(230, 173, 54);
     let red = Color32::from_rgb(218, 54, 51);
     let red_hover = Color32::from_rgb(238, 74, 71);
-    let gray = Color32::from_rgb(110, 118, 129);
-    let gray_hover = Color32::from_rgb(130, 138, 149);
 
     // Create a resizable window positioned on the right side
     egui::Window::new("Review")
@@ -101,37 +99,11 @@ pub fn render_review_overlay(egui_ctx: &EguiContext, review: &mut ReviewConfig) 
             );
             ui.add_space(4.0);
 
-            // Primary action row: Complete (APPROVE + REBASE + MERGE)
+            // Primary actions: Complete and Discard
             ui.horizontal(|ui| {
                 if colored_button(ui, "Complete", green, green_hover, "Ctrl+Shift+C").clicked() {
                     action = ReviewAction::Complete;
                 }
-                ui.label(
-                    egui::RichText::new("APPROVE + REBASE + MERGE")
-                        .small()
-                        .color(Color32::from_rgb(150, 150, 160)),
-                );
-            });
-
-            ui.add_space(4.0);
-
-            // Secondary actions row
-            ui.horizontal(|ui| {
-                if colored_button(ui, "Approve", blue, blue_hover, "Ctrl+A").clicked() {
-                    action = ReviewAction::Approve;
-                }
-                if colored_button(ui, "Rebase", gray, gray_hover, "Ctrl+R").clicked() {
-                    action = ReviewAction::Rebase;
-                }
-                if colored_button(ui, "Merge", gray, gray_hover, "Ctrl+M").clicked() {
-                    action = ReviewAction::Merge;
-                }
-            });
-
-            ui.add_space(4.0);
-
-            // Tertiary actions
-            ui.horizontal(|ui| {
                 if colored_button(ui, "Discard", red, red_hover, "Ctrl+D").clicked() {
                     action = ReviewAction::Discard;
                 }
@@ -164,9 +136,9 @@ pub fn render_review_overlay(egui_ctx: &EguiContext, review: &mut ReviewConfig) 
                     }
                 });
 
-                // Spawn button (requires comment)
+                // New Task button (requires comment)
                 ui.add_enabled_ui(has_comment, |ui| {
-                    if colored_button(ui, "Spawn Task", blue, blue_hover, "Ctrl+S").clicked() {
+                    if colored_button(ui, "New Task", blue, blue_hover, "Ctrl+S").clicked() {
                         action = ReviewAction::Spawn(review.comment.clone());
                     }
                 });
@@ -191,21 +163,6 @@ pub fn render_review_overlay(egui_ctx: &EguiContext, review: &mut ReviewConfig) 
             // Ctrl+Shift+C for Complete
             if input.key_pressed(egui::Key::C) && input.modifiers.ctrl && input.modifiers.shift {
                 action = ReviewAction::Complete;
-            }
-
-            // Ctrl+A for Approve
-            if input.key_pressed(egui::Key::A) && input.modifiers.ctrl && !input.modifiers.shift {
-                action = ReviewAction::Approve;
-            }
-
-            // Ctrl+R for Rebase
-            if input.key_pressed(egui::Key::R) && input.modifiers.ctrl && !input.modifiers.shift {
-                action = ReviewAction::Rebase;
-            }
-
-            // Ctrl+M for Merge
-            if input.key_pressed(egui::Key::M) && input.modifiers.ctrl && !input.modifiers.shift {
-                action = ReviewAction::Merge;
             }
 
             // Ctrl+D for Discard
