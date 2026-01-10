@@ -188,20 +188,15 @@ impl Camera {
 
     /// Orbit camera around a target point
     ///
-    /// Applies yaw around world Y-axis, pitch around camera's local right axis.
+    /// Applies pitch around camera's local right axis, then yaw around world Y-axis.
     /// Maintains distance from target.
     pub fn orbit(&mut self, target: Vec3, yaw_delta: f32, pitch_delta: f32) {
         // Calculate vector from target to camera
         let mut offset = self.position - target;
         let distance = offset.length();
 
-        // Apply yaw rotation around world Y-axis
-        if yaw_delta.abs() > 0.0001 {
-            let yaw_rotation = Quat::from_axis_angle(Vec3::Y, yaw_delta);
-            offset = yaw_rotation * offset;
-        }
-
-        // Apply pitch rotation around camera's local right axis
+        // Apply pitch rotation around camera's local right axis FIRST
+        // (must use original offset to get correct right vector)
         if pitch_delta.abs() > 0.0001 {
             let forward = -offset.normalize();
             let right = forward.cross(Vec3::Y).normalize();
@@ -222,6 +217,12 @@ impl Camera {
                     offset = Vec3::new(offset.x * ratio, new_y, offset.z * ratio);
                 }
             }
+        }
+
+        // Apply yaw rotation around world Y-axis SECOND
+        if yaw_delta.abs() > 0.0001 {
+            let yaw_rotation = Quat::from_axis_angle(Vec3::Y, yaw_delta);
+            offset = yaw_rotation * offset;
         }
 
         // Maintain distance and update position
