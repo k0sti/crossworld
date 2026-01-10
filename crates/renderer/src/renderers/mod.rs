@@ -34,5 +34,5 @@ pub use bcf_cpu_tracer::BcfTracer;
 pub use cpu_tracer::CpuTracer;
 pub use gl_tracer::GlTracer;
 pub use gpu_tracer::ComputeTracer;
-pub use mesh_renderer::MeshRenderer;
+pub use mesh_renderer::{MeshRenderer, WireframeDepthMode};
 pub use skybox_renderer::SkyboxRenderer;
