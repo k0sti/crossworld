@@ -38,6 +38,17 @@ impl Default for MeshRenderer {
     }
 }
 
+/// Depth test mode for two-pass wireframe rendering
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WireframeDepthMode {
+    /// Render behind geometry (depth test GREATER) - for occluded/inside parts
+    Behind,
+    /// Render in front of geometry (depth test LESS) - for visible parts
+    InFront,
+    /// Render always (no depth test) - original behavior
+    Always,
+}
+
 impl MeshRenderer {
     pub fn new() -> Self {
         Self {
@@ -837,6 +848,122 @@ impl MeshRenderer {
             // Restore GL state
             gl.uniform_1_i32(use_color_override_loc.as_ref(), 0);
             gl.depth_mask(true); // Restore depth writing
+            if color[3] < 1.0 {
+                gl.disable(BLEND);
+            }
+        }
+    }
+
+    /// Render a colored wireframe box with depth testing support
+    ///
+    /// This allows two-pass rendering where lines behind geometry are rendered
+    /// thinner than lines in front. Use `WireframeDepthMode::Behind` for the first
+    /// pass (thinner, occluded) and `WireframeDepthMode::InFront` for the second
+    /// pass (thicker, visible).
+    ///
+    /// # Safety
+    ///
+    /// Must be called with an active GL context on the current thread.
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn render_cubebox_wireframe_depth(
+        &self,
+        gl: &Context,
+        position: glam::Vec3,
+        rotation: glam::Quat,
+        normalized_size: glam::Vec3,
+        scale: f32,
+        color: [f32; 4],
+        depth_mode: WireframeDepthMode,
+        camera: &Camera,
+        viewport_width: i32,
+        viewport_height: i32,
+    ) {
+        unsafe {
+            let Some(program) = self.program else { return };
+            let Some(ref wireframe_mesh) = self.wireframe_box else {
+                return;
+            };
+
+            gl.use_program(Some(program));
+            gl.disable(CULL_FACE);
+            gl.line_width(1.0); // Thin wireframe lines
+
+            // Configure depth test based on mode
+            match depth_mode {
+                WireframeDepthMode::Behind => {
+                    gl.enable(DEPTH_TEST);
+                    gl.depth_func(GREATER); // Only render behind other geometry
+                    gl.depth_mask(false); // Don't write to depth buffer
+                }
+                WireframeDepthMode::InFront => {
+                    gl.enable(DEPTH_TEST);
+                    gl.depth_func(LEQUAL); // Render in front of (or at same depth as) other geometry
+                    gl.depth_mask(false); // Don't write to depth buffer
+                }
+                WireframeDepthMode::Always => {
+                    gl.disable(DEPTH_TEST);
+                    gl.depth_mask(false);
+                }
+            }
+
+            // Enable blending for alpha transparency
+            if color[3] < 1.0 {
+                gl.enable(BLEND);
+                gl.blend_func(SRC_ALPHA, ONE_MINUS_SRC_ALPHA);
+            }
+
+            // Calculate matrices
+            let aspect = viewport_width as f32 / viewport_height as f32;
+            let projection = glam::Mat4::perspective_rh(camera.vfov, aspect, 1.0, 50000.0);
+
+            let forward = camera.rotation * glam::Vec3::NEG_Z;
+            let up = camera.rotation * glam::Vec3::Y;
+            let target = camera.position + forward;
+            let view = glam::Mat4::look_at_rh(camera.position, target, up);
+
+            let model = glam::Mat4::from_translation(position)
+                * glam::Mat4::from_quat(rotation)
+                * glam::Mat4::from_scale(glam::Vec3::splat(scale))
+                * glam::Mat4::from_translation(normalized_size * -0.5)
+                * glam::Mat4::from_scale(normalized_size);
+
+            // Upload uniforms
+            let mvp = projection * view * model;
+            let mvp_loc = gl.get_uniform_location(program, "uMVP");
+            gl.uniform_matrix_4_f32_slice(mvp_loc.as_ref(), false, mvp.as_ref());
+
+            let model_loc = gl.get_uniform_location(program, "uModel");
+            gl.uniform_matrix_4_f32_slice(model_loc.as_ref(), false, model.as_ref());
+
+            // Full brightness for wireframe (no lighting)
+            let ambient_loc = gl.get_uniform_location(program, "uAmbient");
+            gl.uniform_1_f32(ambient_loc.as_ref(), 1.0);
+
+            let diffuse_strength_loc = gl.get_uniform_location(program, "uDiffuseStrength");
+            gl.uniform_1_f32(diffuse_strength_loc.as_ref(), 0.0);
+
+            // Set wireframe color via vertex color override uniform (RGBA)
+            let color_override_loc = gl.get_uniform_location(program, "uColorOverride");
+            gl.uniform_4_f32(
+                color_override_loc.as_ref(),
+                color[0],
+                color[1],
+                color[2],
+                color[3],
+            );
+
+            let use_color_override_loc = gl.get_uniform_location(program, "uUseColorOverride");
+            gl.uniform_1_i32(use_color_override_loc.as_ref(), 1);
+
+            // Draw wireframe box using LINES
+            gl.bind_vertex_array(Some(wireframe_mesh.vao));
+            gl.draw_elements(LINES, wireframe_mesh.index_count, UNSIGNED_INT, 0);
+            gl.bind_vertex_array(None);
+
+            // Restore GL state
+            gl.uniform_1_i32(use_color_override_loc.as_ref(), 0);
+            gl.depth_mask(true);
+            gl.depth_func(LESS); // Restore default depth function
             if color[3] < 1.0 {
                 gl.disable(BLEND);
             }
