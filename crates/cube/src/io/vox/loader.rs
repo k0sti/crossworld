@@ -316,4 +316,129 @@ mod tests {
         // Result: 10100010 = 82 + 128 = 210
         assert_eq!(map_color_to_material(128, 128, 128), 210);
     }
+
+    /// Performance benchmark for Cube::merge with VOX models
+    ///
+    /// This test loads actual VOX files and benchmarks merge operations.
+    /// Run with `cargo test --release test_merge_vox_performance -- --nocapture`
+    #[test]
+    #[ignore] // Ignored by default since it requires asset files
+    fn test_merge_vox_performance() {
+        use crate::CubeCoord;
+        use std::time::Instant;
+
+        // Path to test assets (relative to crate root when running tests)
+        let vox_files = [
+            "../../assets/models/vox/chr_chef.vox",
+            "../../assets/models/vox/alien_saucer1a.vox",
+            "../../assets/models/vox/alien_bot1.vox",
+        ];
+
+        println!("\n=== VOX Model Merge Performance Benchmark ===\n");
+
+        for vox_path in vox_files {
+            let bytes = match std::fs::read(vox_path) {
+                Ok(b) => b,
+                Err(e) => {
+                    println!("Skipping {}: {}", vox_path, e);
+                    continue;
+                }
+            };
+
+            let cubebox = match load_vox_to_cubebox(&bytes) {
+                Ok(cb) => cb,
+                Err(e) => {
+                    println!("Failed to load {}: {}", vox_path, e);
+                    continue;
+                }
+            };
+
+            let source = cubebox.cube.clone();
+            let source_depth = cubebox.depth;
+            let target_depth = source_depth + 2; // Larger target to have room for offset
+
+            // Count non-empty voxels in source
+            let mut voxel_count = 0;
+            let size = 1 << source_depth;
+            for z in 0..size {
+                for y in 0..size {
+                    for x in 0..size {
+                        let id = source
+                            .get(CubeCoord::new(IVec3::new(x, y, z), source_depth))
+                            .id();
+                        if id != 0 {
+                            voxel_count += 1;
+                        }
+                    }
+                }
+            }
+            let total_voxels = size * size * size;
+            let sparsity = 100.0 * (1.0 - (voxel_count as f64 / total_voxels as f64));
+
+            println!(
+                "Model: {} (depth={}, size={}³, voxels={}, sparsity={:.1}%)",
+                vox_path.split('/').last().unwrap_or(vox_path),
+                source_depth,
+                size,
+                voxel_count,
+                sparsity
+            );
+
+            let target = Cube::Solid(0);
+            let offset = IVec3::new(1, 1, 1);
+            let iterations = 50;
+
+            // Warm up
+            for _ in 0..5 {
+                let _ = target.merge(offset, target_depth, source_depth, &source);
+                let _ = target.update_depth_tree(target_depth, offset, source_depth, &source);
+            }
+
+            // Benchmark merge
+            let start = Instant::now();
+            for _ in 0..iterations {
+                let _ = target.merge(offset, target_depth, source_depth, &source);
+            }
+            let merge_time = start.elapsed();
+
+            // Benchmark update_depth_tree
+            let start = Instant::now();
+            for _ in 0..iterations {
+                let _ = target.update_depth_tree(target_depth, offset, source_depth, &source);
+            }
+            let update_time = start.elapsed();
+
+            let speedup = update_time.as_nanos() as f64 / merge_time.as_nanos() as f64;
+            println!(
+                "  merge:             {:?} ({} iterations)",
+                merge_time, iterations
+            );
+            println!(
+                "  update_depth_tree: {:?} ({} iterations)",
+                update_time, iterations
+            );
+            println!("  Speedup:           {:.2}x\n", speedup);
+
+            // Verify correctness - both should produce same voxel values
+            let result_merge = target.merge(offset, target_depth, source_depth, &source);
+            let result_update =
+                target.update_depth_tree(target_depth, offset, source_depth, &source);
+
+            let check_size = 1 << source_depth;
+            for z in 0..check_size {
+                for y in 0..check_size {
+                    for x in 0..check_size {
+                        let pos = offset + IVec3::new(x, y, z);
+                        let merge_id = result_merge.get(CubeCoord::new(pos, target_depth)).id();
+                        let update_id = result_update.get(CubeCoord::new(pos, target_depth)).id();
+                        assert_eq!(
+                            merge_id, update_id,
+                            "Mismatch at {:?} in {}: merge={}, update={}",
+                            pos, vox_path, merge_id, update_id
+                        );
+                    }
+                }
+            }
+        }
+    }
 }

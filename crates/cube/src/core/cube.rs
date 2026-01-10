@@ -533,6 +533,87 @@ impl Cube<u8> {
         }
     }
 
+    /// Merge source cube into self at the given offset and scale depth.
+    ///
+    /// This operation recursively merges the source cube into the target,
+    /// **skipping empty regions** (Solid(0)) in the source. This makes it
+    /// efficient for sparse source cubes.
+    ///
+    /// # Parameters
+    /// - `offset`: Position in target coordinate space where source cube starts
+    /// - `depth`: Target depth level for placement (determines coordinate range)
+    /// - `scale`: Scale depth of the source cube (source occupies 2^scale positions per axis)
+    /// - `source`: The cube to merge into self
+    ///
+    /// # Behavior
+    /// - At scale=0, merges source with target at the single position `offset`
+    /// - For scale>0, recursively processes source octants, skipping empty ones
+    /// - Non-empty source voxels overwrite target voxels (union with source priority)
+    ///
+    /// # Example
+    /// ```
+    /// use cube::Cube;
+    /// use glam::IVec3;
+    /// use std::rc::Rc;
+    ///
+    /// // Create a small source cube (2x2x2 at scale=1)
+    /// let source = Cube::cubes([
+    ///     Rc::new(Cube::Solid(1)), // octant 0: (0,0,0)
+    ///     Rc::new(Cube::Solid(0)), // octant 1: (1,0,0) - empty, will be skipped
+    ///     Rc::new(Cube::Solid(2)), // octant 2: (0,1,0)
+    ///     Rc::new(Cube::Solid(0)), // octant 3: (1,1,0) - empty
+    ///     Rc::new(Cube::Solid(0)), // octant 4: (0,0,1) - empty
+    ///     Rc::new(Cube::Solid(0)), // octant 5: (1,0,1) - empty
+    ///     Rc::new(Cube::Solid(0)), // octant 6: (0,1,1) - empty
+    ///     Rc::new(Cube::Solid(3)), // octant 7: (1,1,1)
+    /// ]);
+    ///
+    /// // Merge into empty target at offset (1,1,1) with depth=2, scale=1
+    /// // Places source 2x2x2 region at positions (1,1,1) to (2,2,2)
+    /// let target = Cube::Solid(0);
+    /// let result = target.merge(IVec3::new(1, 1, 1), 2, 1, &source);
+    /// ```
+    ///
+    /// # Performance
+    /// More efficient than `update_depth_tree` for sparse sources because
+    /// empty octants are skipped entirely rather than being processed.
+    pub fn merge(&self, offset: IVec3, depth: u32, scale: u32, source: &Cube<u8>) -> Self {
+        // Skip empty source regions entirely - key optimization
+        if matches!(source, Cube::Solid(0)) {
+            return self.clone();
+        }
+
+        if scale == 0 {
+            // Base case: merge single position
+            // Get current value at target position and merge with source
+            let target_value = self.get(CubeCoord::new(offset, depth));
+            let merged = target_value.add(source);
+            self.update(CubeCoord::new(offset, depth), merged)
+        } else {
+            // Recursive case: process each source octant
+            let mut result = self.clone();
+            let half_size = 1 << (scale - 1); // 2^(scale-1)
+
+            for octant_idx in 0..8 {
+                // Calculate target offset for this octant
+                let octant_pos = IVec3::from_octant_index(octant_idx);
+                let target_offset = offset + octant_pos * half_size;
+
+                // Get source child for this octant
+                let source_child = match source {
+                    Cube::Cubes(children) => children[octant_idx].as_ref(),
+                    Cube::Solid(_) => source, // Uniform non-empty: use for all
+                    _ => source,              // Other variants: treat as uniform
+                };
+
+                // Recursively merge (empty check happens at start of recursion)
+                result = result.merge(target_offset, depth, scale - 1, source_child);
+            }
+
+            result
+        }
+    }
+
     /// Shift octree to position within parent space
     /// Places this cube at 'pos' within depth 'depth' space
     pub fn shift(&self, depth: u32, pos: IVec3) -> Self {
@@ -1830,5 +1911,493 @@ mod tests {
             cube.get(CubeCoord::new(IVec3::new(15, 15, 15), depth)).id(),
             2
         );
+    }
+
+    // ==================== Merge Tests ====================
+
+    #[test]
+    fn test_merge_basic() {
+        // Merge a single solid value at offset (1,1,1) in depth-2 space
+        let target = Cube::Solid(0);
+        let source = Cube::Solid(42);
+
+        let result = target.merge(IVec3::new(1, 1, 1), 2, 0, &source);
+
+        // Position (1,1,1) should have value 42, others should be 0
+        assert_eq!(result.get(CubeCoord::new(IVec3::new(1, 1, 1), 2)).id(), 42);
+        assert_eq!(result.get(CubeCoord::new(IVec3::new(0, 0, 0), 2)).id(), 0);
+        assert_eq!(result.get(CubeCoord::new(IVec3::new(2, 2, 2), 2)).id(), 0);
+    }
+
+    #[test]
+    fn test_merge_center_of_cube() {
+        // Test case from spec: merge(self, Vec3i(1, 1, 1), 2, inner)
+        // Merges inner cube into center of target cube (depth 2)
+        let target = Cube::Solid(0);
+
+        // Create a 2x2x2 source cube (scale=1) with distinct values
+        let source = Cube::cubes([
+            Rc::new(Cube::Solid(10)), // octant 0: (0,0,0)
+            Rc::new(Cube::Solid(11)), // octant 1: (1,0,0)
+            Rc::new(Cube::Solid(12)), // octant 2: (0,1,0)
+            Rc::new(Cube::Solid(13)), // octant 3: (1,1,0)
+            Rc::new(Cube::Solid(14)), // octant 4: (0,0,1)
+            Rc::new(Cube::Solid(15)), // octant 5: (1,0,1)
+            Rc::new(Cube::Solid(16)), // octant 6: (0,1,1)
+            Rc::new(Cube::Solid(17)), // octant 7: (1,1,1)
+        ]);
+
+        // Merge at offset (1,1,1) with scale=1 (2x2x2)
+        // Source occupies positions (1,1,1) to (2,2,2) at depth 2
+        let result = target.merge(IVec3::new(1, 1, 1), 2, 1, &source);
+
+        // Verify positions outside merged area are still 0
+        assert_eq!(result.get(CubeCoord::new(IVec3::new(0, 0, 0), 2)).id(), 0);
+        assert_eq!(result.get(CubeCoord::new(IVec3::new(3, 3, 3), 2)).id(), 0);
+
+        // Verify merged values at correct positions
+        // Offset (1,1,1) + octant offsets
+        assert_eq!(result.get(CubeCoord::new(IVec3::new(1, 1, 1), 2)).id(), 10); // +0,0,0
+        assert_eq!(result.get(CubeCoord::new(IVec3::new(2, 1, 1), 2)).id(), 11); // +1,0,0
+        assert_eq!(result.get(CubeCoord::new(IVec3::new(1, 2, 1), 2)).id(), 12); // +0,1,0
+        assert_eq!(result.get(CubeCoord::new(IVec3::new(2, 2, 1), 2)).id(), 13); // +1,1,0
+        assert_eq!(result.get(CubeCoord::new(IVec3::new(1, 1, 2), 2)).id(), 14); // +0,0,1
+        assert_eq!(result.get(CubeCoord::new(IVec3::new(2, 1, 2), 2)).id(), 15); // +1,0,1
+        assert_eq!(result.get(CubeCoord::new(IVec3::new(1, 2, 2), 2)).id(), 16); // +0,1,1
+        assert_eq!(result.get(CubeCoord::new(IVec3::new(2, 2, 2), 2)).id(), 17);
+        // +1,1,1
+    }
+
+    #[test]
+    fn test_merge_skips_empty_regions() {
+        // Create source with some empty octants
+        let source = Cube::cubes([
+            Rc::new(Cube::Solid(1)), // octant 0: non-empty
+            Rc::new(Cube::Solid(0)), // octant 1: EMPTY - should skip
+            Rc::new(Cube::Solid(2)), // octant 2: non-empty
+            Rc::new(Cube::Solid(0)), // octant 3: EMPTY
+            Rc::new(Cube::Solid(0)), // octant 4: EMPTY
+            Rc::new(Cube::Solid(0)), // octant 5: EMPTY
+            Rc::new(Cube::Solid(0)), // octant 6: EMPTY
+            Rc::new(Cube::Solid(3)), // octant 7: non-empty
+        ]);
+
+        // Target with pre-existing values
+        let target = Cube::Solid(99);
+
+        let result = target.merge(IVec3::new(0, 0, 0), 2, 1, &source);
+
+        // Non-empty source positions overwrite target
+        assert_eq!(result.get(CubeCoord::new(IVec3::new(0, 0, 0), 2)).id(), 1);
+        assert_eq!(result.get(CubeCoord::new(IVec3::new(0, 1, 0), 2)).id(), 2);
+        assert_eq!(result.get(CubeCoord::new(IVec3::new(1, 1, 1), 2)).id(), 3);
+
+        // Empty source positions preserve target value
+        assert_eq!(result.get(CubeCoord::new(IVec3::new(1, 0, 0), 2)).id(), 99);
+        assert_eq!(result.get(CubeCoord::new(IVec3::new(1, 1, 0), 2)).id(), 99);
+        assert_eq!(result.get(CubeCoord::new(IVec3::new(0, 0, 1), 2)).id(), 99);
+        assert_eq!(result.get(CubeCoord::new(IVec3::new(1, 0, 1), 2)).id(), 99);
+        assert_eq!(result.get(CubeCoord::new(IVec3::new(0, 1, 1), 2)).id(), 99);
+    }
+
+    #[test]
+    fn test_merge_empty_source() {
+        // Merging empty source should not change target
+        let target = Cube::Solid(42);
+        let source = Cube::Solid(0);
+
+        let result = target.merge(IVec3::new(0, 0, 0), 2, 0, &source);
+
+        // Target unchanged
+        assert_eq!(result.get(CubeCoord::new(IVec3::new(0, 0, 0), 2)).id(), 42);
+    }
+
+    #[test]
+    fn test_merge_preserves_target_structure() {
+        // Target with existing structure
+        let target = Cube::cubes([
+            Rc::new(Cube::Solid(100)),
+            Rc::new(Cube::Solid(101)),
+            Rc::new(Cube::Solid(102)),
+            Rc::new(Cube::Solid(103)),
+            Rc::new(Cube::Solid(104)),
+            Rc::new(Cube::Solid(105)),
+            Rc::new(Cube::Solid(106)),
+            Rc::new(Cube::Solid(107)),
+        ]);
+
+        // Sparse source - only one non-empty octant
+        let source = Cube::cubes([
+            Rc::new(Cube::Solid(0)),
+            Rc::new(Cube::Solid(0)),
+            Rc::new(Cube::Solid(0)),
+            Rc::new(Cube::Solid(0)),
+            Rc::new(Cube::Solid(0)),
+            Rc::new(Cube::Solid(0)),
+            Rc::new(Cube::Solid(0)),
+            Rc::new(Cube::Solid(50)), // Only octant 7 non-empty
+        ]);
+
+        let result = target.merge(IVec3::new(0, 0, 0), 1, 1, &source);
+
+        // All target octants preserved except octant 7
+        assert_eq!(result.get(CubeCoord::new(IVec3::new(0, 0, 0), 1)).id(), 100);
+        assert_eq!(result.get(CubeCoord::new(IVec3::new(1, 0, 0), 1)).id(), 101);
+        assert_eq!(result.get(CubeCoord::new(IVec3::new(0, 1, 0), 1)).id(), 102);
+        assert_eq!(result.get(CubeCoord::new(IVec3::new(1, 1, 0), 1)).id(), 103);
+        assert_eq!(result.get(CubeCoord::new(IVec3::new(0, 0, 1), 1)).id(), 104);
+        assert_eq!(result.get(CubeCoord::new(IVec3::new(1, 0, 1), 1)).id(), 105);
+        assert_eq!(result.get(CubeCoord::new(IVec3::new(0, 1, 1), 1)).id(), 106);
+        // Octant 7 overwritten by source
+        assert_eq!(result.get(CubeCoord::new(IVec3::new(1, 1, 1), 1)).id(), 50);
+    }
+
+    #[test]
+    fn test_merge_nested_structure() {
+        // Source with nested structure (scale=2 means 4x4x4)
+        let source = Cube::cubes([
+            Rc::new(Cube::cubes([
+                Rc::new(Cube::Solid(11)),
+                Rc::new(Cube::Solid(12)),
+                Rc::new(Cube::Solid(13)),
+                Rc::new(Cube::Solid(14)),
+                Rc::new(Cube::Solid(15)),
+                Rc::new(Cube::Solid(16)),
+                Rc::new(Cube::Solid(17)),
+                Rc::new(Cube::Solid(18)),
+            ])),
+            Rc::new(Cube::Solid(0)),  // Empty - should skip
+            Rc::new(Cube::Solid(0)),  // Empty
+            Rc::new(Cube::Solid(0)),  // Empty
+            Rc::new(Cube::Solid(0)),  // Empty
+            Rc::new(Cube::Solid(0)),  // Empty
+            Rc::new(Cube::Solid(0)),  // Empty
+            Rc::new(Cube::Solid(99)), // Non-empty
+        ]);
+
+        let target = Cube::Solid(0);
+        let result = target.merge(IVec3::new(0, 0, 0), 3, 2, &source);
+
+        // Check nested structure was preserved in octant 0 (positions 0-1 in each axis)
+        assert_eq!(result.get(CubeCoord::new(IVec3::new(0, 0, 0), 3)).id(), 11);
+        assert_eq!(result.get(CubeCoord::new(IVec3::new(1, 0, 0), 3)).id(), 12);
+        assert_eq!(result.get(CubeCoord::new(IVec3::new(0, 1, 0), 3)).id(), 13);
+        assert_eq!(result.get(CubeCoord::new(IVec3::new(1, 1, 1), 3)).id(), 18);
+
+        // Octant 7 of source (positions 2-3 in each axis) has value 99
+        assert_eq!(result.get(CubeCoord::new(IVec3::new(2, 2, 2), 3)).id(), 99);
+        assert_eq!(result.get(CubeCoord::new(IVec3::new(3, 3, 3), 3)).id(), 99);
+
+        // Empty octants in source leave target unchanged (was 0)
+        assert_eq!(result.get(CubeCoord::new(IVec3::new(2, 0, 0), 3)).id(), 0);
+    }
+
+    #[test]
+    fn test_merge_vs_update_depth_tree_equivalence() {
+        // For a non-sparse source, merge should produce same result as update_depth_tree
+        let source = Cube::cubes([
+            Rc::new(Cube::Solid(1)),
+            Rc::new(Cube::Solid(2)),
+            Rc::new(Cube::Solid(3)),
+            Rc::new(Cube::Solid(4)),
+            Rc::new(Cube::Solid(5)),
+            Rc::new(Cube::Solid(6)),
+            Rc::new(Cube::Solid(7)),
+            Rc::new(Cube::Solid(8)),
+        ]);
+
+        let target = Cube::Solid(0);
+        let offset = IVec3::new(2, 2, 2);
+        let depth = 3;
+        let scale = 1;
+
+        let result_merge = target.merge(offset, depth, scale, &source);
+        let result_update = target.update_depth_tree(depth, offset, scale, &source);
+
+        // Compare all positions in the affected region
+        let size = 1 << scale;
+        for z in 0..size {
+            for y in 0..size {
+                for x in 0..size {
+                    let pos = offset + IVec3::new(x, y, z);
+                    let merge_id = result_merge.get(CubeCoord::new(pos, depth)).id();
+                    let update_id = result_update.get(CubeCoord::new(pos, depth)).id();
+                    assert_eq!(
+                        merge_id, update_id,
+                        "Mismatch at {:?}: merge={}, update_depth_tree={}",
+                        pos, merge_id, update_id
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_merge_multiple_sequential() {
+        // Merge multiple sources sequentially
+        let mut target = Cube::Solid(0);
+
+        let source1 = Cube::Solid(10);
+        let source2 = Cube::Solid(20);
+        let source3 = Cube::Solid(30);
+
+        target = target.merge(IVec3::new(0, 0, 0), 2, 0, &source1);
+        target = target.merge(IVec3::new(1, 1, 1), 2, 0, &source2);
+        target = target.merge(IVec3::new(3, 3, 3), 2, 0, &source3);
+
+        assert_eq!(target.get(CubeCoord::new(IVec3::new(0, 0, 0), 2)).id(), 10);
+        assert_eq!(target.get(CubeCoord::new(IVec3::new(1, 1, 1), 2)).id(), 20);
+        assert_eq!(target.get(CubeCoord::new(IVec3::new(3, 3, 3), 2)).id(), 30);
+        // Unmodified positions
+        assert_eq!(target.get(CubeCoord::new(IVec3::new(2, 2, 2), 2)).id(), 0);
+    }
+
+    #[test]
+    fn test_merge_uniform_source() {
+        // Uniform non-empty source should fill the entire region
+        let target = Cube::Solid(0);
+        let source = Cube::Solid(42);
+
+        let result = target.merge(IVec3::new(0, 0, 0), 2, 1, &source);
+
+        // All 8 positions in the 2x2x2 region should be 42
+        for z in 0..2 {
+            for y in 0..2 {
+                for x in 0..2 {
+                    assert_eq!(result.get(CubeCoord::new(IVec3::new(x, y, z), 2)).id(), 42);
+                }
+            }
+        }
+    }
+
+    // ==================== Merge Performance Benchmarks ====================
+
+    #[test]
+    fn test_merge_performance_sparse_source() {
+        use std::time::Instant;
+
+        // Create a sparse source cube (only 1/8 filled) at scale=4 (16x16x16)
+        let create_sparse_cube = || {
+            Cube::cubes([
+                Rc::new(Cube::tabulate(|i| Cube::Solid((i + 10) as u8))), // Only octant 0 has content
+                Rc::new(Cube::Solid(0)),
+                Rc::new(Cube::Solid(0)),
+                Rc::new(Cube::Solid(0)),
+                Rc::new(Cube::Solid(0)),
+                Rc::new(Cube::Solid(0)),
+                Rc::new(Cube::Solid(0)),
+                Rc::new(Cube::Solid(0)),
+            ])
+        };
+
+        let sparse_source = create_sparse_cube();
+        let target = Cube::Solid(0);
+        let scale = 2;
+        let depth = 5;
+        let iterations = 100;
+
+        // Warm up
+        for _ in 0..10 {
+            let _ = target.merge(IVec3::ZERO, depth, scale, &sparse_source);
+            let _ = target.update_depth_tree(depth, IVec3::ZERO, scale, &sparse_source);
+        }
+
+        // Benchmark merge (should skip empty octants)
+        let start = Instant::now();
+        for _ in 0..iterations {
+            let _ = target.merge(IVec3::ZERO, depth, scale, &sparse_source);
+        }
+        let merge_time = start.elapsed();
+
+        // Benchmark update_depth_tree (processes all octants)
+        let start = Instant::now();
+        for _ in 0..iterations {
+            let _ = target.update_depth_tree(depth, IVec3::ZERO, scale, &sparse_source);
+        }
+        let update_time = start.elapsed();
+
+        println!(
+            "\n--- Sparse Source Performance (scale={}, depth={}) ---",
+            scale, depth
+        );
+        println!(
+            "merge:            {:?} ({} iterations)",
+            merge_time, iterations
+        );
+        println!(
+            "update_depth_tree: {:?} ({} iterations)",
+            update_time, iterations
+        );
+        println!(
+            "merge speedup:    {:.2}x",
+            update_time.as_nanos() as f64 / merge_time.as_nanos() as f64
+        );
+
+        // merge should be faster for sparse sources
+        // We don't assert this since performance can vary, but we expect improvement
+    }
+
+    #[test]
+    fn test_merge_performance_dense_source() {
+        use std::time::Instant;
+
+        // Create a dense source cube (all filled) at scale=3 (8x8x8)
+        let dense_source = Cube::tabulate(|i| {
+            Cube::tabulate(|j| Cube::tabulate(|k| Cube::Solid(((i + j + k) % 255 + 1) as u8)))
+        });
+
+        let target = Cube::Solid(0);
+        let scale = 3;
+        let depth = 5;
+        let iterations = 100;
+
+        // Warm up
+        for _ in 0..10 {
+            let _ = target.merge(IVec3::ZERO, depth, scale, &dense_source);
+            let _ = target.update_depth_tree(depth, IVec3::ZERO, scale, &dense_source);
+        }
+
+        // Benchmark merge
+        let start = Instant::now();
+        for _ in 0..iterations {
+            let _ = target.merge(IVec3::ZERO, depth, scale, &dense_source);
+        }
+        let merge_time = start.elapsed();
+
+        // Benchmark update_depth_tree
+        let start = Instant::now();
+        for _ in 0..iterations {
+            let _ = target.update_depth_tree(depth, IVec3::ZERO, scale, &dense_source);
+        }
+        let update_time = start.elapsed();
+
+        println!(
+            "\n--- Dense Source Performance (scale={}, depth={}) ---",
+            scale, depth
+        );
+        println!(
+            "merge:            {:?} ({} iterations)",
+            merge_time, iterations
+        );
+        println!(
+            "update_depth_tree: {:?} ({} iterations)",
+            update_time, iterations
+        );
+        println!(
+            "Relative perf:    {:.2}x",
+            update_time.as_nanos() as f64 / merge_time.as_nanos() as f64
+        );
+
+        // For dense sources, performance should be similar (no empty regions to skip)
+    }
+
+    #[test]
+    fn test_merge_performance_large_scale() {
+        use std::time::Instant;
+
+        // Test with larger scale to see scaling characteristics
+        // Create source with varying sparsity at different depths
+        let create_partially_sparse = || {
+            Cube::cubes([
+                Rc::new(Cube::cubes([
+                    Rc::new(Cube::Solid(1)),
+                    Rc::new(Cube::Solid(0)), // Empty
+                    Rc::new(Cube::Solid(2)),
+                    Rc::new(Cube::Solid(0)), // Empty
+                    Rc::new(Cube::Solid(0)), // Empty
+                    Rc::new(Cube::Solid(0)), // Empty
+                    Rc::new(Cube::Solid(3)),
+                    Rc::new(Cube::Solid(4)),
+                ])),
+                Rc::new(Cube::Solid(0)), // Entire octant empty
+                Rc::new(Cube::Solid(5)), // Uniform non-empty
+                Rc::new(Cube::Solid(0)),
+                Rc::new(Cube::cubes([
+                    Rc::new(Cube::Solid(0)),
+                    Rc::new(Cube::Solid(6)),
+                    Rc::new(Cube::Solid(0)),
+                    Rc::new(Cube::Solid(0)),
+                    Rc::new(Cube::Solid(0)),
+                    Rc::new(Cube::Solid(0)),
+                    Rc::new(Cube::Solid(0)),
+                    Rc::new(Cube::Solid(7)),
+                ])),
+                Rc::new(Cube::Solid(0)),
+                Rc::new(Cube::Solid(0)),
+                Rc::new(Cube::Solid(8)),
+            ])
+        };
+
+        let source = create_partially_sparse();
+        let target = Cube::Solid(0);
+        let iterations = 100;
+
+        println!("\n--- Scaling Performance Test ---");
+
+        for scale in [2, 3, 4] {
+            let depth = scale + 3; // Always have room in target
+
+            // Warm up
+            for _ in 0..5 {
+                let _ = target.merge(IVec3::ZERO, depth, scale, &source);
+                let _ = target.update_depth_tree(depth, IVec3::ZERO, scale, &source);
+            }
+
+            let start = Instant::now();
+            for _ in 0..iterations {
+                let _ = target.merge(IVec3::ZERO, depth, scale, &source);
+            }
+            let merge_time = start.elapsed();
+
+            let start = Instant::now();
+            for _ in 0..iterations {
+                let _ = target.update_depth_tree(depth, IVec3::ZERO, scale, &source);
+            }
+            let update_time = start.elapsed();
+
+            let voxels = 1u32 << (3 * scale);
+            println!(
+                "scale={} ({}³={} voxels): merge={:?}, update={:?}, speedup={:.2}x",
+                scale,
+                1 << scale,
+                voxels,
+                merge_time,
+                update_time,
+                update_time.as_nanos() as f64 / merge_time.as_nanos() as f64
+            );
+        }
+    }
+
+    #[test]
+    fn test_merge_preserves_non_target_regions() {
+        // Test that merging doesn't affect regions outside the merge area
+        let target = Cube::cubes([
+            Rc::new(Cube::Solid(100)), // Will be overwritten
+            Rc::new(Cube::Solid(101)),
+            Rc::new(Cube::Solid(102)),
+            Rc::new(Cube::Solid(103)),
+            Rc::new(Cube::Solid(104)),
+            Rc::new(Cube::Solid(105)),
+            Rc::new(Cube::Solid(106)),
+            Rc::new(Cube::Solid(107)),
+        ]);
+
+        // Source that overwrites only at offset position
+        let source = Cube::Solid(50);
+
+        // Merge at position (0,0,0) in depth 1 space (only affects octant 0)
+        let result = target.merge(IVec3::new(0, 0, 0), 1, 0, &source);
+
+        // Octant 0 overwritten
+        assert_eq!(result.get(CubeCoord::new(IVec3::new(0, 0, 0), 1)).id(), 50);
+
+        // All other octants preserved
+        assert_eq!(result.get(CubeCoord::new(IVec3::new(1, 0, 0), 1)).id(), 101);
+        assert_eq!(result.get(CubeCoord::new(IVec3::new(0, 1, 0), 1)).id(), 102);
+        assert_eq!(result.get(CubeCoord::new(IVec3::new(1, 1, 0), 1)).id(), 103);
+        assert_eq!(result.get(CubeCoord::new(IVec3::new(0, 0, 1), 1)).id(), 104);
+        assert_eq!(result.get(CubeCoord::new(IVec3::new(1, 0, 1), 1)).id(), 105);
+        assert_eq!(result.get(CubeCoord::new(IVec3::new(0, 1, 1), 1)).id(), 106);
+        assert_eq!(result.get(CubeCoord::new(IVec3::new(1, 1, 1), 1)).id(), 107);
     }
 }
