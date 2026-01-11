@@ -5,48 +5,76 @@
 use nostr::prelude::*;
 
 /// Represents a logged-in Nostr account
+///
+/// Can be created from full keys (for local signing) or just a public key
+/// (for NIP-46 remote signing).
 #[derive(Debug, Clone)]
 pub struct NostrAccount {
-    /// The Nostr keypair
-    keys: Keys,
+    /// The Nostr keypair (None for remote-signer accounts)
+    keys: Option<Keys>,
+    /// Public key (always available)
+    pubkey: PublicKey,
 }
 
 impl NostrAccount {
-    /// Create an account from existing keys
+    /// Create an account from existing keys (full signing capability)
     pub fn from_keys(keys: Keys) -> Self {
-        Self { keys }
+        let pubkey = keys.public_key();
+        Self {
+            keys: Some(keys),
+            pubkey,
+        }
+    }
+
+    /// Create an account from just a public key (for NIP-46 remote signing)
+    ///
+    /// This creates an account that can display the user's identity but
+    /// requires a remote signer for any signing operations.
+    pub fn from_pubkey(pubkey: PublicKey) -> Self {
+        Self { keys: None, pubkey }
+    }
+
+    /// Check if this account has local signing keys
+    pub fn has_local_keys(&self) -> bool {
+        self.keys.is_some()
     }
 
     /// Get the public key in npub format (bech32)
     pub fn npub(&self) -> String {
-        self.keys
-            .public_key()
+        self.pubkey
             .to_bech32()
             .unwrap_or_else(|_| self.public_key_hex())
     }
 
     /// Get the private key in nsec format (bech32)
-    pub fn nsec(&self) -> String {
-        self.keys
-            .secret_key()
-            .to_bech32()
-            .unwrap_or_else(|_| "error".to_string())
+    /// Returns None for remote-signer accounts
+    pub fn nsec(&self) -> Option<String> {
+        self.keys.as_ref().map(|k| {
+            k.secret_key()
+                .to_bech32()
+                .unwrap_or_else(|_| "error".to_string())
+        })
     }
 
     /// Get the public key in hex format
     pub fn public_key_hex(&self) -> String {
-        self.keys.public_key().to_hex()
+        self.pubkey.to_hex()
     }
 
-    /// Get the short display name (first 8 chars of npub)
+    /// Get the short display name (first 12 chars of npub + ...)
     pub fn short_npub(&self) -> String {
         let npub = self.npub();
         format!("{}...", &npub[..12.min(npub.len())])
     }
 
-    /// Get a reference to the underlying keys
-    pub fn keys(&self) -> &Keys {
-        &self.keys
+    /// Get a reference to the underlying keys (if available)
+    pub fn keys(&self) -> Option<&Keys> {
+        self.keys.as_ref()
+    }
+
+    /// Get the public key
+    pub fn public_key(&self) -> &PublicKey {
+        &self.pubkey
     }
 }
 
@@ -155,8 +183,21 @@ mod tests {
         let account = NostrAccount::from_keys(keys.clone());
 
         assert!(account.npub().starts_with("npub1"));
-        assert!(account.nsec().starts_with("nsec1"));
+        assert!(account.nsec().unwrap().starts_with("nsec1"));
         assert_eq!(account.public_key_hex().len(), 64);
+        assert!(account.has_local_keys());
+    }
+
+    #[test]
+    fn test_account_from_pubkey() {
+        let keys = Keys::generate();
+        let pubkey = keys.public_key();
+        let account = NostrAccount::from_pubkey(pubkey);
+
+        assert!(account.npub().starts_with("npub1"));
+        assert!(account.nsec().is_none()); // No private key for remote accounts
+        assert_eq!(account.public_key_hex().len(), 64);
+        assert!(!account.has_local_keys());
     }
 
     #[test]

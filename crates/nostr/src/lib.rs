@@ -4,6 +4,7 @@
 //! - Key management (generation, import/export, storage)
 //! - Event types specific to Crossworld (live events, avatar state, position updates)
 //! - Account state management for the editor
+//! - NIP-46 remote signing support (with `nip46` feature)
 //!
 //! # Example
 //!
@@ -22,9 +23,18 @@ pub mod account;
 pub mod events;
 pub mod keys;
 
+#[cfg(feature = "nip46")]
+pub mod connect;
+
 pub use account::{AccountState, NostrAccount};
 pub use events::{AvatarState, LiveEvent, PositionUpdate, WorldModel};
 pub use keys::KeyManager;
+
+// Re-export common nostr types for convenience
+pub use nostr::{FromBech32, PublicKey, ToBech32};
+
+#[cfg(feature = "nip46")]
+pub use connect::{ConnectedSession, NostrConnectSession};
 
 /// Error types for the nostr crate
 #[derive(Debug, thiserror::Error)]

@@ -312,6 +312,9 @@ pub struct EditorApp {
     // Nostr integration
     nostr_account: AccountState,
     nostr_key_manager: KeyManager,
+
+    // QR code login state (NIP-46)
+    qr_login_state: Option<ui::QrLoginState>,
 }
 
 impl Default for EditorApp {
@@ -387,6 +390,7 @@ impl EditorApp {
             models_loaded_count: 0,
             nostr_account,
             nostr_key_manager,
+            qr_login_state: None,
         }
     }
 
@@ -1765,6 +1769,46 @@ impl App for EditorApp {
                     ui::NostrDialogResult::Open => {
                         // Dialog still open, nothing to do
                     }
+                    ui::NostrDialogResult::StartQrLogin => {
+                        // Initialize QR login state
+                        match ui::QrLoginState::new(crossworld_nostr::connect::DEFAULT_RELAY) {
+                            Ok(state) => {
+                                self.qr_login_state = Some(state);
+                                self.nostr_account.close_dialog();
+                            }
+                            Err(e) => {
+                                self.nostr_account
+                                    .set_error(format!("Failed to start QR login: {}", e));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Show QR login dialog if active
+        if let Some(ref mut qr_state) = self.qr_login_state {
+            match ui::show_qr_login_dialog(egui_ctx, qr_state) {
+                ui::QrLoginDialogResult::Connected(npub) => {
+                    println!("[Nostr] Connected via QR login: {}", npub);
+                    // Create a NostrAccount from the npub
+                    // Note: For NIP-46, we don't have access to the private key
+                    // We need a different approach for remote signing
+                    // For now, just store the npub as a display-only login
+                    use crossworld_nostr::{FromBech32, NostrAccount, PublicKey};
+                    if let Ok(pubkey) = PublicKey::from_bech32(&npub) {
+                        // Create a placeholder account (no signing capabilities)
+                        // In future, we'd store the ConnectedSession for remote signing
+                        let account = NostrAccount::from_pubkey(pubkey);
+                        self.nostr_account.login(account);
+                    }
+                    self.qr_login_state = None;
+                }
+                ui::QrLoginDialogResult::Cancelled => {
+                    self.qr_login_state = None;
+                }
+                ui::QrLoginDialogResult::Open => {
+                    // Dialog still open, nothing to do
                 }
             }
         }
