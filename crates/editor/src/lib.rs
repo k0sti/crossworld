@@ -11,6 +11,7 @@ pub mod raycast;
 pub mod ui;
 
 use app::{App, Camera, FrameContext, InputState, OrbitController, OrbitControllerConfig};
+use crossworld_nostr::{AccountState, KeyManager};
 use cube::CubeGrid;
 use glam::{IVec3, Quat, Vec2, Vec3};
 use glow::HasContext;
@@ -307,6 +308,10 @@ pub struct EditorApp {
     model_load_receiver: Option<Receiver<ModelLoadMessage>>,
     models_loading: bool,
     models_loaded_count: usize,
+
+    // Nostr integration
+    nostr_account: AccountState,
+    nostr_key_manager: KeyManager,
 }
 
 impl Default for EditorApp {
@@ -339,6 +344,19 @@ impl EditorApp {
             max_distance: 50.0,
         };
 
+        // Initialize Nostr key manager and try to load saved keys
+        let nostr_key_manager = KeyManager::new();
+        let mut nostr_account = AccountState::new();
+
+        // Auto-login if saved keys exist
+        if let Ok(Some(account)) = nostr_key_manager.load_account() {
+            println!(
+                "[Nostr] Auto-login with saved keys: {}",
+                account.short_npub()
+            );
+            nostr_account.login(account);
+        }
+
         Self {
             mesh_renderer: MeshRenderer::new(),
             skybox_renderer: SkyboxRenderer::new(),
@@ -367,6 +385,8 @@ impl EditorApp {
             model_load_receiver: None,
             models_loading: false,
             models_loaded_count: 0,
+            nostr_account,
+            nostr_key_manager,
         }
     }
 
@@ -1602,6 +1622,7 @@ impl App for EditorApp {
     fn ui(&mut self, ctx: &FrameContext, egui_ctx: &egui::Context) {
         // Track file operation to handle after UI
         let mut file_operation: Option<FileOperation> = None;
+        let mut nostr_button_action = ui::NostrButtonAction::None;
 
         // Top panel with menu bar and title
         egui::TopBottomPanel::top("editor_top_panel").show(egui_ctx, |ui| {
@@ -1640,8 +1661,113 @@ impl App for EditorApp {
                     self.world_scale(),
                     (1u32 << self.world_scale())
                 ));
+
+                // Right-align the Nostr button
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    nostr_button_action = ui::show_nostr_button(ui, &self.nostr_account);
+                });
             });
         });
+
+        // Handle Nostr button action
+        match nostr_button_action {
+            ui::NostrButtonAction::OpenDialog => {
+                self.nostr_account.open_dialog();
+            }
+            ui::NostrButtonAction::Logout => {
+                // If logged in, clicking opens account dialog instead of immediate logout
+                if self.nostr_account.is_logged_in() {
+                    self.nostr_account.open_dialog();
+                }
+            }
+            ui::NostrButtonAction::None => {}
+        }
+
+        // Show Nostr dialog if open
+        if self.nostr_account.should_show_dialog() {
+            if self.nostr_account.is_logged_in() {
+                // Show account info dialog
+                let has_saved_keys = self.nostr_key_manager.has_saved_keys();
+                let result =
+                    ui::show_nostr_account_dialog(egui_ctx, &self.nostr_account, has_saved_keys);
+                match result {
+                    ui::NostrAccountDialogResult::Logout => {
+                        println!("[Nostr] Logging out");
+                        self.nostr_account.logout();
+                        self.nostr_account.close_dialog();
+                    }
+                    ui::NostrAccountDialogResult::Close => {
+                        self.nostr_account.close_dialog();
+                    }
+                    ui::NostrAccountDialogResult::SaveKeys => {
+                        if let Some(account) = self.nostr_account.account() {
+                            if let Err(e) = self.nostr_key_manager.save_account(account) {
+                                eprintln!("[Nostr] Failed to save keys: {}", e);
+                            } else {
+                                println!("[Nostr] Keys saved successfully");
+                            }
+                        }
+                    }
+                    ui::NostrAccountDialogResult::Open => {
+                        // Dialog still open, nothing to do
+                    }
+                }
+            } else {
+                // Show login dialog
+                let result = ui::show_nostr_login_dialog(
+                    egui_ctx,
+                    &mut self.nostr_account,
+                    &self.nostr_key_manager,
+                );
+                match result {
+                    ui::NostrDialogResult::GenerateNew => {
+                        match self.nostr_key_manager.generate_account() {
+                            Ok(account) => {
+                                println!("[Nostr] Generated new keypair: {}", account.npub());
+                                self.nostr_account.login(account);
+                            }
+                            Err(e) => {
+                                self.nostr_account
+                                    .set_error(format!("Failed to generate keys: {}", e));
+                            }
+                        }
+                    }
+                    ui::NostrDialogResult::ImportNsec(nsec) => {
+                        match self.nostr_key_manager.import_from_nsec(&nsec) {
+                            Ok(account) => {
+                                println!("[Nostr] Imported account: {}", account.npub());
+                                self.nostr_account.login(account);
+                            }
+                            Err(e) => {
+                                self.nostr_account.set_error(format!("Invalid key: {}", e));
+                            }
+                        }
+                    }
+                    ui::NostrDialogResult::LoadSaved => {
+                        match self.nostr_key_manager.load_account() {
+                            Ok(Some(account)) => {
+                                println!("[Nostr] Loaded saved account: {}", account.npub());
+                                self.nostr_account.login(account);
+                            }
+                            Ok(None) => {
+                                self.nostr_account
+                                    .set_error("No saved keys found".to_string());
+                            }
+                            Err(e) => {
+                                self.nostr_account
+                                    .set_error(format!("Failed to load keys: {}", e));
+                            }
+                        }
+                    }
+                    ui::NostrDialogResult::Cancelled => {
+                        self.nostr_account.close_dialog();
+                    }
+                    ui::NostrDialogResult::Open => {
+                        // Dialog still open, nothing to do
+                    }
+                }
+            }
+        }
 
         // Status bar at the bottom
         let status_info =

@@ -1,7 +1,9 @@
 //! egui UI panels for the voxel editor
 //!
-//! Provides UI panels for palette selection, status display, and editor controls.
+//! Provides UI panels for palette selection, status display, editor controls,
+//! and Nostr login functionality.
 
+use crossworld_nostr::{AccountState, KeyManager};
 use egui::{Color32, Rect, Response, Sense, Ui, Vec2};
 use std::path::PathBuf;
 
@@ -1090,6 +1092,284 @@ fn hsv_to_rgb(h: f32, s: f32, v: f32) -> (f32, f32, f32) {
         4 => (t, p, v),
         _ => (v, p, q),
     }
+}
+
+// ============================================================================
+// Nostr Login UI
+// ============================================================================
+
+/// Result from the Nostr login button
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NostrButtonAction {
+    /// No action (button not clicked or dialog not triggered)
+    None,
+    /// Open the login dialog
+    OpenDialog,
+    /// User clicked logout
+    Logout,
+}
+
+/// Show the Nostr login button in the menu bar
+///
+/// # Arguments
+/// * `ui` - The egui UI context
+/// * `account_state` - Current account state
+///
+/// # Returns
+/// Action to take based on button interaction
+pub fn show_nostr_button(ui: &mut Ui, account_state: &AccountState) -> NostrButtonAction {
+    let button_text = account_state.button_text();
+    let is_logged_in = account_state.is_logged_in();
+
+    // Show button with appropriate styling
+    let button = if is_logged_in {
+        // Logged in: show npub with green tint
+        egui::Button::new(egui::RichText::new(&button_text).color(Color32::from_rgb(100, 200, 150)))
+    } else {
+        // Not logged in: show "Nostr Login" with purple tint
+        egui::Button::new(egui::RichText::new(&button_text).color(Color32::from_rgb(180, 100, 200)))
+    };
+
+    if ui.add(button).clicked() {
+        if is_logged_in {
+            // Show context menu or directly trigger logout
+            return NostrButtonAction::Logout;
+        } else {
+            return NostrButtonAction::OpenDialog;
+        }
+    }
+
+    NostrButtonAction::None
+}
+
+/// Result from the Nostr login dialog
+#[derive(Debug, Clone)]
+pub enum NostrDialogResult {
+    /// Dialog still open, no action
+    Open,
+    /// User cancelled the dialog
+    Cancelled,
+    /// User wants to generate a new keypair
+    GenerateNew,
+    /// User wants to import an nsec
+    ImportNsec(String),
+    /// User wants to load saved keys
+    LoadSaved,
+}
+
+/// Show the Nostr login dialog
+///
+/// # Arguments
+/// * `ctx` - The egui context
+/// * `account_state` - Current account state (mutable for input handling)
+/// * `key_manager` - Key manager for checking saved keys
+///
+/// # Returns
+/// Result indicating the user's choice
+pub fn show_nostr_login_dialog(
+    ctx: &egui::Context,
+    account_state: &mut AccountState,
+    key_manager: &KeyManager,
+) -> NostrDialogResult {
+    let mut result = NostrDialogResult::Open;
+
+    egui::Window::new("Nostr Login")
+        .collapsible(false)
+        .resizable(false)
+        .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+        .show(ctx, |ui| {
+            ui.set_min_width(350.0);
+
+            ui.heading("Connect with Nostr");
+            ui.add_space(8.0);
+
+            ui.label("Sign in with your Nostr identity to save and share your work.");
+            ui.add_space(16.0);
+
+            // Option 1: Generate new keypair
+            ui.group(|ui| {
+                ui.horizontal(|ui| {
+                    ui.label("New to Nostr?");
+                    if ui.button("Generate New Keys").clicked() {
+                        result = NostrDialogResult::GenerateNew;
+                    }
+                });
+                ui.label(
+                    egui::RichText::new("Creates a new random keypair for this device")
+                        .small()
+                        .color(Color32::GRAY),
+                );
+            });
+
+            ui.add_space(8.0);
+
+            // Option 2: Load saved keys (if available)
+            if key_manager.has_saved_keys() {
+                ui.group(|ui| {
+                    ui.horizontal(|ui| {
+                        ui.label("Saved keys found:");
+                        if ui.button("Load Saved Keys").clicked() {
+                            result = NostrDialogResult::LoadSaved;
+                        }
+                    });
+                });
+                ui.add_space(8.0);
+            }
+
+            // Option 3: Import nsec
+            ui.group(|ui| {
+                ui.label("Import existing key:");
+
+                // Show error message if any (before borrowing nsec_input mutably)
+                if let Some(error) = account_state.error_message() {
+                    ui.colored_label(Color32::RED, error);
+                }
+
+                let nsec_input = account_state.nsec_input_mut();
+                let response = ui.add(
+                    egui::TextEdit::singleline(nsec_input)
+                        .hint_text("nsec1...")
+                        .password(true)
+                        .desired_width(300.0),
+                );
+
+                ui.horizontal(|ui| {
+                    if ui.button("Import").clicked() && !nsec_input.is_empty() {
+                        result = NostrDialogResult::ImportNsec(nsec_input.clone());
+                    }
+
+                    // Submit on Enter key
+                    if response.lost_focus()
+                        && ui.input(|i| i.key_pressed(egui::Key::Enter))
+                        && !nsec_input.is_empty()
+                    {
+                        result = NostrDialogResult::ImportNsec(nsec_input.clone());
+                    }
+                });
+
+                ui.label(
+                    egui::RichText::new("Your private key is stored locally and never shared")
+                        .small()
+                        .color(Color32::GRAY),
+                );
+            });
+
+            ui.add_space(16.0);
+
+            // Cancel button
+            ui.horizontal(|ui| {
+                if ui.button("Cancel").clicked() {
+                    result = NostrDialogResult::Cancelled;
+                }
+            });
+        });
+
+    result
+}
+
+/// Result from the account dialog
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NostrAccountDialogResult {
+    /// Dialog still open, no action
+    Open,
+    /// User wants to logout
+    Logout,
+    /// User wants to close the dialog
+    Close,
+    /// User wants to save keys
+    SaveKeys,
+}
+
+/// Show the logged-in account info dialog
+///
+/// # Arguments
+/// * `ctx` - The egui context
+/// * `account_state` - Current account state
+/// * `has_saved_keys` - Whether there are saved keys
+///
+/// # Returns
+/// Result indicating the user's action
+pub fn show_nostr_account_dialog(
+    ctx: &egui::Context,
+    account_state: &AccountState,
+    has_saved_keys: bool,
+) -> NostrAccountDialogResult {
+    let mut result = NostrAccountDialogResult::Open;
+
+    if let Some(account) = account_state.account() {
+        // Pre-compute values to avoid borrow issues
+        let short_npub = account.short_npub();
+        let full_npub = account.npub();
+
+        egui::Window::new("Nostr Account")
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .show(ctx, |ui| {
+                ui.set_min_width(400.0);
+
+                ui.heading("Logged In");
+                ui.add_space(8.0);
+
+                // Show public key
+                ui.horizontal(|ui| {
+                    ui.label("Public Key:");
+                    ui.monospace(&short_npub);
+                    if ui.small_button("Copy").clicked() {
+                        ui.ctx().copy_text(full_npub.clone());
+                    }
+                });
+
+                ui.add_space(8.0);
+
+                // Full npub in a selectable text box
+                ui.collapsing("Show full npub", |ui| {
+                    let mut npub_display = full_npub.clone();
+                    ui.add(
+                        egui::TextEdit::singleline(&mut npub_display)
+                            .font(egui::TextStyle::Monospace)
+                            .desired_width(f32::INFINITY),
+                    );
+                });
+
+                ui.add_space(16.0);
+
+                // Action buttons
+                ui.horizontal(|ui| {
+                    // Save keys button
+                    if !has_saved_keys {
+                        if ui.button("Save Keys").clicked() {
+                            result = NostrAccountDialogResult::SaveKeys;
+                        }
+                        ui.label(
+                            egui::RichText::new("(for auto-login)")
+                                .small()
+                                .color(Color32::GRAY),
+                        );
+                    } else {
+                        ui.label(
+                            egui::RichText::new("Keys saved")
+                                .small()
+                                .color(Color32::from_rgb(100, 200, 100)),
+                        );
+                    }
+                });
+
+                ui.add_space(8.0);
+
+                ui.horizontal(|ui| {
+                    if ui.button("Logout").clicked() {
+                        result = NostrAccountDialogResult::Logout;
+                    }
+
+                    if ui.button("Close").clicked() {
+                        result = NostrAccountDialogResult::Close;
+                    }
+                });
+            });
+    }
+
+    result
 }
 
 #[cfg(test)]
