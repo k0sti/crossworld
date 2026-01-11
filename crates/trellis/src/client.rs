@@ -2,7 +2,7 @@
 //!
 //! This module provides the HTTP client for communicating with the Trellis inference server.
 
-use crate::types::{GenerationRequest, ServerStatus, TrellisResult};
+use crate::types::{GenerationRequest, Result, ServerStatus, TrellisResult};
 
 /// Trellis HTTP client
 #[allow(dead_code)]
@@ -21,12 +21,12 @@ impl TrellisClient {
     }
 
     /// Check server health
-    pub async fn health_check(&self) -> TrellisResult<ServerStatus> {
+    pub async fn health_check(&self) -> Result<ServerStatus> {
         todo!("Implement health check")
     }
 
-    /// Generate 3D model from prompt
-    pub async fn generate(&self, _request: &GenerationRequest) -> TrellisResult<()> {
+    /// Generate 3D model from image
+    pub async fn generate(&self, _request: &GenerationRequest) -> Result<TrellisResult> {
         todo!("Implement generate")
     }
 }

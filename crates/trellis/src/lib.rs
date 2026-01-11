@@ -15,7 +15,7 @@
 //! # Example
 //!
 //! ```no_run
-//! use trellis::{TrellisClient, GenerationRequest};
+//! use trellis::{TrellisClient, GenerationRequest, Resolution};
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -29,12 +29,16 @@
 //!         return Ok(());
 //!     }
 //!
-//!     // Generate 3D model from text
-//!     let request = GenerationRequest::new("a wooden chair");
+//!     // Generate 3D model from image
+//!     let base64_image = "..."; // Base64-encoded image
+//!     let request = GenerationRequest::new(base64_image)
+//!         .with_resolution(Resolution::R1024)
+//!         .with_seed(42);
 //!
 //!     let result = client.generate(&request).await?;
 //!
-//!     println!("Generated model with {} voxels", result.voxel_count());
+//!     println!("Generated mesh with {} vertices and {} faces",
+//!              result.vertex_count(), result.face_count());
 //!
 //!     Ok(())
 //! }
@@ -46,11 +50,13 @@ pub mod types;
 
 pub use client::TrellisClient;
 pub use convert::{trellis_to_csm, trellis_to_cube};
-pub use types::{GenerationRequest, ServerStatus, TrellisError, TrellisResult};
+pub use types::{GenerationRequest, Resolution, ServerStatus, TrellisError, TrellisResult};
 
 /// Re-export commonly used types
 pub mod prelude {
     pub use crate::client::TrellisClient;
     pub use crate::convert::{trellis_to_csm, trellis_to_cube};
-    pub use crate::types::{GenerationRequest, ServerStatus, TrellisError, TrellisResult};
+    pub use crate::types::{
+        GenerationRequest, Resolution, ServerStatus, TrellisError, TrellisResult,
+    };
 }
