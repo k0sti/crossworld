@@ -20,14 +20,50 @@ Rust client library and Python inference server for [XCube](https://github.com/n
 
 ## Server Setup
 
-### 1. Clone XCube Repository
+### Quick Setup (Recommended)
+
+Use the setup script to automate most of the installation:
+
+```bash
+# From crossworld root:
+just xcube-setup
+
+# Or run the script directly:
+crates/xcube/server/setup.sh
+```
+
+The setup script will:
+1. Clone XCube and fVDB repositories to `external/`
+2. Install Python dependencies via uv
+3. Install fVDB and XCube into the virtual environment
+4. Create checkpoint directory structure
+5. Provide instructions for downloading model checkpoints
+
+#### Setup Options
+
+```bash
+# Skip cloning (use existing XCube/fVDB installations)
+just xcube-setup --skip-deps
+
+# Use custom paths
+just xcube-setup --xcube-path /path/to/XCube --fvdb-path /path/to/fVDB
+
+# Custom checkpoint directory
+just xcube-setup --checkpoint-dir /path/to/checkpoints
+```
+
+### Manual Setup
+
+If you prefer manual installation, follow these steps:
+
+#### 1. Clone XCube Repository
 
 ```bash
 git clone https://github.com/nv-tlabs/XCube.git
 cd XCube
 ```
 
-### 2. Install fVDB Framework
+#### 2. Install fVDB Framework
 
 fVDB is NVIDIA's sparse voxel framework required by XCube. Follow the [official fVDB installation guide](https://github.com/nv-tlabs/fVDB):
 
@@ -40,7 +76,7 @@ cd fVDB
 pip install .
 ```
 
-### 3. Install XCube Dependencies
+#### 3. Install XCube Dependencies
 
 ```bash
 cd /path/to/XCube
@@ -52,7 +88,7 @@ pip install -r requirements.txt
 pip install -e .
 ```
 
-### 4. Install Server Dependencies
+#### 4. Install Server Dependencies
 
 The server uses [uv](https://github.com/astral-sh/uv) for Python package management (included in the Nix flake):
 
@@ -66,7 +102,7 @@ cd /path/to/crossworld/crates/xcube/server
 uv sync
 ```
 
-### 5. Download Model Checkpoints
+### Download Model Checkpoints
 
 Download pretrained XCube checkpoints from [Google Drive](https://drive.google.com/drive/folders/1M7K0eLm6aLGIW6wvHpTNQh6hd4s8BkN0):
 
@@ -84,7 +120,7 @@ checkpoints/
     └── last.ckpt
 ```
 
-### 6. Start the Server
+### Start the Server
 
 ```bash
 # From crossworld root (recommended):
@@ -152,6 +188,9 @@ curl -X POST http://localhost:8000/generate \
 ## Example Commands
 
 ```bash
+# Set up XCube environment (clone repos, install deps)
+just xcube-setup
+
 # Start the XCube inference server
 just xcube-server
 
