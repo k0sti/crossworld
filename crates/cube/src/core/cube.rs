@@ -583,6 +583,23 @@ impl Cube<u8> {
             return self.clone();
         }
 
+        // Optimization: check if source volume is entirely outside target bounds
+        // Target valid range is [0, 2^depth), source covers [offset, offset + 2^scale)
+        let target_size = 1i32 << depth;
+        let source_size = 1i32 << scale;
+        let source_end = offset + IVec3::splat(source_size);
+
+        // If source is entirely outside target bounds, return unchanged
+        if offset.x >= target_size
+            || offset.y >= target_size
+            || offset.z >= target_size
+            || source_end.x <= 0
+            || source_end.y <= 0
+            || source_end.z <= 0
+        {
+            return self.clone();
+        }
+
         if scale == 0 {
             // Base case: merge single position
             // Get current value at target position and merge with source
@@ -2399,5 +2416,92 @@ mod tests {
         assert_eq!(result.get(CubeCoord::new(IVec3::new(1, 0, 1), 1)).id(), 105);
         assert_eq!(result.get(CubeCoord::new(IVec3::new(0, 1, 1), 1)).id(), 106);
         assert_eq!(result.get(CubeCoord::new(IVec3::new(1, 1, 1), 1)).id(), 107);
+    }
+
+    #[test]
+    fn test_merge_out_of_bounds_optimization() {
+        // Test that merging outside target bounds returns unchanged
+        let target = Cube::cubes([
+            Rc::new(Cube::Solid(1)),
+            Rc::new(Cube::Solid(2)),
+            Rc::new(Cube::Solid(3)),
+            Rc::new(Cube::Solid(4)),
+            Rc::new(Cube::Solid(5)),
+            Rc::new(Cube::Solid(6)),
+            Rc::new(Cube::Solid(7)),
+            Rc::new(Cube::Solid(8)),
+        ]);
+
+        let source = Cube::Solid(99);
+
+        // Merge outside bounds (position >= 2^depth)
+        // At depth 2, valid range is [0, 4), so position 10 is out of bounds
+        let result = target.merge(IVec3::new(10, 0, 0), 2, 0, &source);
+        assert_eq!(result, target);
+
+        // Merge with negative offset that doesn't reach valid range
+        let result = target.merge(IVec3::new(-5, 0, 0), 2, 0, &source);
+        assert_eq!(result, target);
+
+        // Merge with larger source that's still out of bounds
+        let large_source = Cube::Solid(88);
+        let result = target.merge(IVec3::new(10, 10, 10), 2, 2, &large_source);
+        assert_eq!(result, target);
+
+        // Merge with source ending before valid range
+        let result = target.merge(IVec3::new(-10, 0, 0), 2, 2, &large_source);
+        assert_eq!(result, target); // -10 + 4 = -6, still < 0
+    }
+
+    #[test]
+    fn test_merge_out_of_bounds_performance() {
+        use std::time::Instant;
+
+        // Large complex source cube
+        let source = Cube::tabulate(|i| {
+            Cube::tabulate(|j| Cube::tabulate(|k| Cube::Solid(((i + j + k) % 255 + 1) as u8)))
+        });
+
+        let target = Cube::Solid(0);
+        let iterations = 1000;
+
+        // Warm up
+        for _ in 0..10 {
+            let _ = target.merge(IVec3::new(100, 0, 0), 5, 3, &source);
+        }
+
+        // Benchmark out-of-bounds merge (should be very fast due to early exit)
+        let start = Instant::now();
+        for _ in 0..iterations {
+            let _ = target.merge(IVec3::new(100, 0, 0), 5, 3, &source);
+        }
+        let out_of_bounds_time = start.elapsed();
+
+        // Benchmark in-bounds merge for comparison
+        let start = Instant::now();
+        for _ in 0..iterations {
+            let _ = target.merge(IVec3::ZERO, 5, 3, &source);
+        }
+        let in_bounds_time = start.elapsed();
+
+        println!("\n--- Out-of-Bounds Optimization Test ---");
+        println!(
+            "Out-of-bounds merge: {:?} ({} iterations)",
+            out_of_bounds_time, iterations
+        );
+        println!(
+            "In-bounds merge:     {:?} ({} iterations)",
+            in_bounds_time, iterations
+        );
+        println!(
+            "Speedup:             {:.2}x",
+            in_bounds_time.as_nanos() as f64 / out_of_bounds_time.as_nanos() as f64
+        );
+
+        // Out-of-bounds should be significantly faster
+        assert!(
+            out_of_bounds_time < in_bounds_time / 10,
+            "Out-of-bounds optimization not effective"
+        );
     }
 }
