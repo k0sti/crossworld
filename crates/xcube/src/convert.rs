@@ -24,7 +24,7 @@ use crate::types::{XCubeError, XCubeModel};
 pub fn xcube_to_csm(model: &XCubeModel) -> Result<String, XCubeError> {
     if model.voxels.is_empty() {
         return Err(XCubeError::ConversionError(
-            "Model has no voxels".to_string()
+            "Model has no voxels".to_string(),
         ));
     }
 
@@ -55,13 +55,7 @@ pub fn xcube_to_grid(model: &XCubeModel) -> Result<Vec<Vec<Vec<Option<u8>>>>, XC
     let depth = dims.depth as usize;
 
     // Initialize empty grid
-    let mut grid = vec![
-        vec![
-            vec![None; depth];
-            height
-        ];
-        width
-    ];
+    let mut grid = vec![vec![vec![None; depth]; height]; width];
 
     // Fill grid with voxels
     for voxel in &model.voxels {
@@ -89,8 +83,18 @@ mod tests {
             author: Some("Test Author".to_string()),
             description: None,
             voxels: vec![
-                Voxel { x: 0, y: 0, z: 0, color_index: 1 },
-                Voxel { x: 1, y: 0, z: 0, color_index: 2 },
+                Voxel {
+                    x: 0,
+                    y: 0,
+                    z: 0,
+                    color_index: 1,
+                },
+                Voxel {
+                    x: 1,
+                    y: 0,
+                    z: 0,
+                    color_index: 2,
+                },
             ],
             dimensions: Dimensions {
                 width: 8,
