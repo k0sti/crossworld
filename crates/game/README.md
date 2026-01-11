@@ -1,6 +1,6 @@
-# Game - Rotating Cube Demo
+# game
 
-A simple rotating cube demo that showcases hot-reload capabilities with the `app` runtime.
+Example game application showcasing voxel world rendering and interaction.
 
 ## What It Does
 

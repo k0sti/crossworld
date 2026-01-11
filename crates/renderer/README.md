@@ -1,6 +1,6 @@
-# Renderer
+# renderer
 
-Multi-implementation cube raytracer with five rendering backends for testing and comparison.
+OpenGL rendering implementations for voxel-based graphics.
 
 ## Features
 

@@ -1,6 +1,6 @@
-# Worldtool
+# worldtool
 
-CLI tool for managing Crossworld Nostr events.
+CLI tool for Nostr event management.
 
 ## Features
 

@@ -1,8 +1,8 @@
-# Crossworld Game Server
+# server
 
-**Status:** Prototype Implementation
+Game server draft using WebTransport (QUIC/HTTP3).
 
-This game server implementation is based on the specifications in `doc/server.md`. It provides authoritative multiplayer functionality using WebTransport (QUIC/HTTP3).
+**Status:** Draft implementation
 
 ## Current Status
 

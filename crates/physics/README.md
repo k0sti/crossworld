@@ -1,6 +1,6 @@
-# Crossworld Physics
+# physics
 
-Physics simulation system for Crossworld, integrating [Rapier](https://rapier.rs/) physics engine with octree-based voxel collision detection.
+Physics simulation system using Rapier3D.
 
 ## Features
 

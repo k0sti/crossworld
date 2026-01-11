@@ -51,6 +51,9 @@ mod note_overlay;
 mod review_overlay;
 #[cfg(feature = "runtime")]
 mod runner;
+// TODO: Fix compilation errors in hot_reload module
+// #[cfg(feature = "runtime")]
+// pub mod hot_reload;
 
 #[cfg(feature = "runtime")]
 pub use egui_integration::EguiIntegration;
@@ -60,6 +63,8 @@ pub use note_overlay::render_note_overlay;
 pub use review_overlay::{render_review_overlay, ReviewAction};
 #[cfg(feature = "runtime")]
 pub use runner::{create_event_loop, run_app, AppConfig, AppRuntime, DebugMode, ReviewConfig};
+// #[cfg(feature = "runtime")]
+// pub use hot_reload::{HotReloadConfig, HotReloadLibrary};
 
 // Re-export egui when runtime feature is enabled
 #[cfg(feature = "runtime")]

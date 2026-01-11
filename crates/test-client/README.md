@@ -1,6 +1,6 @@
-# Crossworld Test Client
+# test-client
 
-A Rust test client for the Crossworld game server using WebTransport.
+Test client for server development and validation.
 
 ## Features
 

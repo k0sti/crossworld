@@ -1,6 +1,6 @@
-# Planet - Crossworld Native Voxel Editor
+# editor
 
-A native voxel editor for Crossworld built with Bevy 0.17.3. This editor provides a desktop-native experience for creating and editing voxel models and worlds.
+Interactive voxel editor for creating and modifying cube-based 3D models.
 
 ## Features (In Development)
 

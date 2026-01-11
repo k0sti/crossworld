@@ -21,6 +21,9 @@ runtime = [
     "dep:egui-winit",
     "dep:egui_glow",
     "dep:image",
+    "dep:libloading",
+    "dep:notify",
+    "dep:notify-debouncer-mini",
 ]
 
 [dependencies]
@@ -42,6 +45,9 @@ egui = { version = "0.33", optional = true }
 egui-winit = { version = "0.33", optional = true }
 egui_glow = { version = "0.33", optional = true }
 image = { version = "0.25", optional = true }
+libloading = { version = "0.9", optional = true }
+notify = { version = "8.2", optional = true }
+notify-debouncer-mini = { version = "0.7", optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 winit = { version = "0.30", features = ["x11"] }

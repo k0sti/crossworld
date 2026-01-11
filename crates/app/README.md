@@ -1,6 +1,6 @@
-# App - Hot-Reload Runtime
+# app
 
-A lightweight OpenGL application runtime with subsecond hot-reload support for game development.
+Generic application platform interface for building native OpenGL applications with hot-reload support.
 
 ## Overview
 
