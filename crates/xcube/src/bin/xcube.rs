@@ -5,8 +5,8 @@ use indicatif::{ProgressBar, ProgressStyle};
 use std::fs;
 use std::path::PathBuf;
 use std::time::Duration;
-use xcube::{GenerationRequest, XCubeClient};
 use xcube::convert::xcube_to_csm;
+use xcube::{GenerationRequest, XCubeClient};
 
 /// XCube CLI - Text-to-voxel generation tool
 #[derive(Parser)]
@@ -85,10 +85,7 @@ async fn generate_command(
     timeout_secs: u64,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Determine output format from extension
-    let extension = output
-        .extension()
-        .and_then(|s| s.to_str())
-        .unwrap_or("");
+    let extension = output.extension().and_then(|s| s.to_str()).unwrap_or("");
     if extension != "csm" {
         eprintln!("Error: Output file must have .csm extension");
         std::process::exit(1);
@@ -106,8 +103,7 @@ async fn generate_command(
     println!();
 
     // Create client
-    let client = XCubeClient::new(server)
-        .with_generate_timeout(Duration::from_secs(timeout_secs));
+    let client = XCubeClient::new(server).with_generate_timeout(Duration::from_secs(timeout_secs));
 
     // Create generation request
     let mut request = GenerationRequest::new(&prompt).with_ddim_steps(steps);

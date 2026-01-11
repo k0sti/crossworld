@@ -27,6 +27,7 @@ default:
     @echo "  just game-watch       - Watch and auto-rebuild game (Terminal 2)"
     @echo "  just hot-reload       - Run hot-reload demo in tmux (auto-rebuild on save)"
     @echo "  just build-game       - Build game library once"
+    @echo "  just xcube-setup      - Set up XCube server environment"
     @echo "  just xcube-server     - Start XCube inference server"
     @echo "  just xcube-generate   - Generate 3D object from text prompt"
     @echo ""
@@ -255,6 +256,11 @@ hot-reload:
 
     # Attach to session
     tmux attach-session -t hot-reload
+
+# Set up XCube server environment (clone repos, install deps)
+xcube-setup *ARGS:
+    @echo "Setting up XCube server environment..."
+    crates/xcube/server/setup.sh {{ARGS}}
 
 # Start XCube inference server
 xcube-server:
