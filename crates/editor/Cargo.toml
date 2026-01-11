@@ -43,6 +43,15 @@ dirs = "6.0"
 # Image processing
 image = "0.25"
 
+# Nostr integration
+crossworld-nostr = { path = "../nostr", features = ["nip46"] }
+
+# QR code generation for login dialog
+qrcode = "0.14"
+
+# Async runtime for NIP-46
+tokio = { version = "1", features = ["rt-multi-thread", "sync"] }
+
 [target.'cfg(target_os = "linux")'.dependencies]
 winit = { version = "0.30", features = ["x11"] }
 

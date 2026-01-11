@@ -1,7 +1,9 @@
 //! egui UI panels for the voxel editor
 //!
-//! Provides UI panels for palette selection, status display, and editor controls.
+//! Provides UI panels for palette selection, status display, editor controls,
+//! and Nostr login functionality.
 
+use crossworld_nostr::{AccountState, KeyManager};
 use egui::{Color32, Rect, Response, Sense, Ui, Vec2};
 use std::path::PathBuf;
 
@@ -1090,6 +1092,577 @@ fn hsv_to_rgb(h: f32, s: f32, v: f32) -> (f32, f32, f32) {
         4 => (t, p, v),
         _ => (v, p, q),
     }
+}
+
+// ============================================================================
+// Nostr Login UI
+// ============================================================================
+
+/// Result from the Nostr login button
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NostrButtonAction {
+    /// No action (button not clicked or dialog not triggered)
+    None,
+    /// Open the login dialog
+    OpenDialog,
+    /// User clicked logout
+    Logout,
+}
+
+/// Show the Nostr login button in the menu bar
+///
+/// # Arguments
+/// * `ui` - The egui UI context
+/// * `account_state` - Current account state
+///
+/// # Returns
+/// Action to take based on button interaction
+pub fn show_nostr_button(ui: &mut Ui, account_state: &AccountState) -> NostrButtonAction {
+    let button_text = account_state.button_text();
+    let is_logged_in = account_state.is_logged_in();
+
+    // Show button with appropriate styling
+    let button = if is_logged_in {
+        // Logged in: show npub with green tint
+        egui::Button::new(egui::RichText::new(&button_text).color(Color32::from_rgb(100, 200, 150)))
+    } else {
+        // Not logged in: show "Nostr Login" with purple tint
+        egui::Button::new(egui::RichText::new(&button_text).color(Color32::from_rgb(180, 100, 200)))
+    };
+
+    if ui.add(button).clicked() {
+        if is_logged_in {
+            // Show context menu or directly trigger logout
+            return NostrButtonAction::Logout;
+        } else {
+            return NostrButtonAction::OpenDialog;
+        }
+    }
+
+    NostrButtonAction::None
+}
+
+/// Result from the Nostr login dialog
+#[derive(Debug, Clone)]
+pub enum NostrDialogResult {
+    /// Dialog still open, no action
+    Open,
+    /// User cancelled the dialog
+    Cancelled,
+    /// User wants to generate a new keypair
+    GenerateNew,
+    /// User wants to import an nsec
+    ImportNsec(String),
+    /// User wants to load saved keys
+    LoadSaved,
+    /// User wants to use QR code login (NIP-46)
+    StartQrLogin,
+}
+
+/// Show the Nostr login dialog
+///
+/// # Arguments
+/// * `ctx` - The egui context
+/// * `account_state` - Current account state (mutable for input handling)
+/// * `key_manager` - Key manager for checking saved keys
+///
+/// # Returns
+/// Result indicating the user's choice
+pub fn show_nostr_login_dialog(
+    ctx: &egui::Context,
+    account_state: &mut AccountState,
+    key_manager: &KeyManager,
+) -> NostrDialogResult {
+    let mut result = NostrDialogResult::Open;
+
+    egui::Window::new("Nostr Login")
+        .collapsible(false)
+        .resizable(false)
+        .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+        .show(ctx, |ui| {
+            ui.set_min_width(350.0);
+
+            ui.heading("Connect with Nostr");
+            ui.add_space(8.0);
+
+            ui.label("Sign in with your Nostr identity to save and share your work.");
+            ui.add_space(16.0);
+
+            // Option 1: QR Code Login (NIP-46)
+            ui.group(|ui| {
+                ui.horizontal(|ui| {
+                    ui.label("Recommended:");
+                    if ui.button("QR Code Login").clicked() {
+                        result = NostrDialogResult::StartQrLogin;
+                    }
+                });
+                ui.label(
+                    egui::RichText::new("Scan with Amber or other Nostr signer app")
+                        .small()
+                        .color(Color32::GRAY),
+                );
+            });
+
+            ui.add_space(8.0);
+
+            // Option 2: Generate new keypair
+            ui.group(|ui| {
+                ui.horizontal(|ui| {
+                    ui.label("New to Nostr?");
+                    if ui.button("Generate New Keys").clicked() {
+                        result = NostrDialogResult::GenerateNew;
+                    }
+                });
+                ui.label(
+                    egui::RichText::new("Creates a new random keypair for this device")
+                        .small()
+                        .color(Color32::GRAY),
+                );
+            });
+
+            ui.add_space(8.0);
+
+            // Option 2: Load saved keys (if available)
+            if key_manager.has_saved_keys() {
+                ui.group(|ui| {
+                    ui.horizontal(|ui| {
+                        ui.label("Saved keys found:");
+                        if ui.button("Load Saved Keys").clicked() {
+                            result = NostrDialogResult::LoadSaved;
+                        }
+                    });
+                });
+                ui.add_space(8.0);
+            }
+
+            // Option 3: Import nsec
+            ui.group(|ui| {
+                ui.label("Import existing key:");
+
+                // Show error message if any (before borrowing nsec_input mutably)
+                if let Some(error) = account_state.error_message() {
+                    ui.colored_label(Color32::RED, error);
+                }
+
+                let nsec_input = account_state.nsec_input_mut();
+                let response = ui.add(
+                    egui::TextEdit::singleline(nsec_input)
+                        .hint_text("nsec1...")
+                        .password(true)
+                        .desired_width(300.0),
+                );
+
+                ui.horizontal(|ui| {
+                    if ui.button("Import").clicked() && !nsec_input.is_empty() {
+                        result = NostrDialogResult::ImportNsec(nsec_input.clone());
+                    }
+
+                    // Submit on Enter key
+                    if response.lost_focus()
+                        && ui.input(|i| i.key_pressed(egui::Key::Enter))
+                        && !nsec_input.is_empty()
+                    {
+                        result = NostrDialogResult::ImportNsec(nsec_input.clone());
+                    }
+                });
+
+                ui.label(
+                    egui::RichText::new("Your private key is stored locally and never shared")
+                        .small()
+                        .color(Color32::GRAY),
+                );
+            });
+
+            ui.add_space(16.0);
+
+            // Cancel button
+            ui.horizontal(|ui| {
+                if ui.button("Cancel").clicked() {
+                    result = NostrDialogResult::Cancelled;
+                }
+            });
+        });
+
+    result
+}
+
+/// Result from the account dialog
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NostrAccountDialogResult {
+    /// Dialog still open, no action
+    Open,
+    /// User wants to logout
+    Logout,
+    /// User wants to close the dialog
+    Close,
+    /// User wants to save keys
+    SaveKeys,
+}
+
+/// Show the logged-in account info dialog
+///
+/// # Arguments
+/// * `ctx` - The egui context
+/// * `account_state` - Current account state
+/// * `has_saved_keys` - Whether there are saved keys
+///
+/// # Returns
+/// Result indicating the user's action
+pub fn show_nostr_account_dialog(
+    ctx: &egui::Context,
+    account_state: &AccountState,
+    has_saved_keys: bool,
+) -> NostrAccountDialogResult {
+    let mut result = NostrAccountDialogResult::Open;
+
+    if let Some(account) = account_state.account() {
+        // Pre-compute values to avoid borrow issues
+        let short_npub = account.short_npub();
+        let full_npub = account.npub();
+
+        egui::Window::new("Nostr Account")
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .show(ctx, |ui| {
+                ui.set_min_width(400.0);
+
+                ui.heading("Logged In");
+                ui.add_space(8.0);
+
+                // Show public key
+                ui.horizontal(|ui| {
+                    ui.label("Public Key:");
+                    ui.monospace(&short_npub);
+                    if ui.small_button("Copy").clicked() {
+                        ui.ctx().copy_text(full_npub.clone());
+                    }
+                });
+
+                ui.add_space(8.0);
+
+                // Full npub in a selectable text box
+                ui.collapsing("Show full npub", |ui| {
+                    let mut npub_display = full_npub.clone();
+                    ui.add(
+                        egui::TextEdit::singleline(&mut npub_display)
+                            .font(egui::TextStyle::Monospace)
+                            .desired_width(f32::INFINITY),
+                    );
+                });
+
+                ui.add_space(16.0);
+
+                // Action buttons
+                ui.horizontal(|ui| {
+                    // Save keys button
+                    if !has_saved_keys {
+                        if ui.button("Save Keys").clicked() {
+                            result = NostrAccountDialogResult::SaveKeys;
+                        }
+                        ui.label(
+                            egui::RichText::new("(for auto-login)")
+                                .small()
+                                .color(Color32::GRAY),
+                        );
+                    } else {
+                        ui.label(
+                            egui::RichText::new("Keys saved")
+                                .small()
+                                .color(Color32::from_rgb(100, 200, 100)),
+                        );
+                    }
+                });
+
+                ui.add_space(8.0);
+
+                ui.horizontal(|ui| {
+                    if ui.button("Logout").clicked() {
+                        result = NostrAccountDialogResult::Logout;
+                    }
+
+                    if ui.button("Close").clicked() {
+                        result = NostrAccountDialogResult::Close;
+                    }
+                });
+            });
+    }
+
+    result
+}
+
+// ============================================================================
+// QR Code Login (NIP-46)
+// ============================================================================
+
+use crossworld_nostr::{ConnectedSession, NostrConnectSession};
+use std::sync::mpsc;
+use tokio::runtime::Runtime;
+
+/// State for the QR code login process
+pub struct QrLoginState {
+    /// The NIP-46 session (before connection)
+    session: Option<NostrConnectSession>,
+    /// The connection URI for QR code
+    connect_uri: String,
+    /// Cached QR code texture
+    qr_texture: Option<egui::TextureHandle>,
+    /// Receiver for connection result from background thread
+    result_rx: Option<mpsc::Receiver<Result<ConnectedSession, String>>>,
+    /// Status message
+    status: String,
+    /// Whether connection is in progress
+    connecting: bool,
+    /// Error message if any
+    error: Option<String>,
+}
+
+impl QrLoginState {
+    /// Create a new QR login state
+    pub fn new(relay_url: &str) -> Result<Self, String> {
+        let session = NostrConnectSession::new(relay_url, std::time::Duration::from_secs(120))
+            .map_err(|e| e.to_string())?;
+
+        let connect_uri = session.connect_uri();
+
+        Ok(Self {
+            session: Some(session),
+            connect_uri,
+            qr_texture: None,
+            result_rx: None,
+            status: "Scan QR code with your Nostr signer app".to_string(),
+            connecting: false,
+            error: None,
+        })
+    }
+
+    /// Get the connection URI
+    pub fn connect_uri(&self) -> &str {
+        &self.connect_uri
+    }
+
+    /// Get the current status message
+    pub fn status(&self) -> &str {
+        &self.status
+    }
+
+    /// Check if connection is in progress
+    pub fn is_connecting(&self) -> bool {
+        self.connecting
+    }
+
+    /// Get error message if any
+    pub fn error(&self) -> Option<&str> {
+        self.error.as_deref()
+    }
+
+    /// Start the connection process in a background thread
+    pub fn start_connection(&mut self) {
+        if self.session.is_none() || self.connecting {
+            return;
+        }
+
+        let session = self.session.take().unwrap();
+        let (tx, rx) = mpsc::channel();
+        self.result_rx = Some(rx);
+        self.connecting = true;
+        self.status = "Waiting for signer approval...".to_string();
+
+        // Spawn background thread with tokio runtime
+        std::thread::spawn(move || {
+            let rt = Runtime::new().expect("Failed to create tokio runtime");
+            let result = rt.block_on(async { session.wait_for_connection().await });
+            let _ = tx.send(result.map_err(|e| e.to_string()));
+        });
+    }
+
+    /// Poll for connection result (non-blocking)
+    /// Returns Some(session) if connected, None if still waiting
+    pub fn poll_result(&mut self) -> Option<Result<ConnectedSession, String>> {
+        if let Some(rx) = &self.result_rx {
+            match rx.try_recv() {
+                Ok(result) => {
+                    self.result_rx = None;
+                    self.connecting = false;
+                    match &result {
+                        Ok(session) => {
+                            self.status = format!("Connected as {}", session.npub);
+                        }
+                        Err(e) => {
+                            self.status = "Connection failed".to_string();
+                            self.error = Some(e.clone());
+                        }
+                    }
+                    Some(result)
+                }
+                Err(mpsc::TryRecvError::Empty) => None,
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    self.result_rx = None;
+                    self.connecting = false;
+                    self.status = "Connection failed".to_string();
+                    self.error = Some("Connection thread terminated unexpectedly".to_string());
+                    Some(Err("Connection thread terminated".to_string()))
+                }
+            }
+        } else {
+            None
+        }
+    }
+
+    /// Generate or get cached QR code texture
+    pub fn qr_texture(&mut self, ctx: &egui::Context) -> &egui::TextureHandle {
+        if self.qr_texture.is_none() {
+            let qr_image = generate_qr_image(&self.connect_uri);
+            let texture = ctx.load_texture("qr_code", qr_image, egui::TextureOptions::NEAREST);
+            self.qr_texture = Some(texture);
+        }
+        self.qr_texture.as_ref().unwrap()
+    }
+}
+
+/// Generate QR code as egui ColorImage
+fn generate_qr_image(data: &str) -> egui::ColorImage {
+    use qrcode::{EcLevel, QrCode};
+
+    let code = QrCode::with_error_correction_level(data, EcLevel::M).unwrap();
+    let image = code.render::<image::Luma<u8>>().build();
+
+    let width = image.width() as usize;
+    let height = image.height() as usize;
+
+    // Scale up the QR code for better visibility (4x)
+    let scale = 4;
+    let scaled_width = width * scale;
+    let scaled_height = height * scale;
+
+    let mut pixels = Vec::with_capacity(scaled_width * scaled_height);
+    for y in 0..scaled_height {
+        for x in 0..scaled_width {
+            let src_x = x / scale;
+            let src_y = y / scale;
+            let pixel = image.get_pixel(src_x as u32, src_y as u32);
+            let color = if pixel.0[0] == 0 {
+                Color32::BLACK
+            } else {
+                Color32::WHITE
+            };
+            pixels.push(color);
+        }
+    }
+
+    egui::ColorImage::from_rgba_unmultiplied(
+        [scaled_width, scaled_height],
+        &pixels
+            .iter()
+            .flat_map(|c| [c.r(), c.g(), c.b(), c.a()])
+            .collect::<Vec<_>>(),
+    )
+}
+
+/// Result from the QR login dialog
+#[derive(Debug, Clone)]
+pub enum QrLoginDialogResult {
+    /// Dialog still open
+    Open,
+    /// User cancelled
+    Cancelled,
+    /// Connection successful
+    Connected(String), // npub
+}
+
+/// Show the QR code login dialog
+///
+/// # Arguments
+/// * `ctx` - The egui context
+/// * `state` - The QR login state (mutable)
+///
+/// # Returns
+/// Result indicating the dialog state
+pub fn show_qr_login_dialog(ctx: &egui::Context, state: &mut QrLoginState) -> QrLoginDialogResult {
+    let mut result = QrLoginDialogResult::Open;
+
+    // Start connection if not already started
+    if !state.is_connecting() && state.error.is_none() {
+        state.start_connection();
+    }
+
+    // Poll for connection result
+    if let Some(conn_result) = state.poll_result() {
+        match conn_result {
+            Ok(session) => {
+                result = QrLoginDialogResult::Connected(session.npub.clone());
+                // Note: caller should handle storing the session
+            }
+            Err(_) => {
+                // Error will be displayed in the dialog
+            }
+        }
+    }
+
+    egui::Window::new("QR Code Login")
+        .collapsible(false)
+        .resizable(false)
+        .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+        .show(ctx, |ui| {
+            ui.set_min_width(350.0);
+
+            ui.heading("Scan with Nostr Signer");
+            ui.add_space(8.0);
+
+            // Display QR code
+            let texture = state.qr_texture(ctx);
+            let size = texture.size_vec2();
+            let max_size = 250.0;
+            let scale = (max_size / size.x.max(size.y)).min(1.0);
+            let display_size = egui::vec2(size.x * scale, size.y * scale);
+
+            ui.vertical_centered(|ui| {
+                ui.image((texture.id(), display_size));
+            });
+
+            ui.add_space(8.0);
+
+            // Status message
+            ui.vertical_centered(|ui| {
+                if state.is_connecting() {
+                    ui.horizontal(|ui| {
+                        ui.spinner();
+                        ui.label(&state.status);
+                    });
+                } else if let Some(error) = state.error() {
+                    ui.colored_label(Color32::RED, error);
+                } else {
+                    ui.label(&state.status);
+                }
+            });
+
+            ui.add_space(8.0);
+
+            // Connection URI (collapsible)
+            ui.collapsing("Show connection URI", |ui| {
+                let mut uri = state.connect_uri().to_string();
+                ui.add(
+                    egui::TextEdit::multiline(&mut uri)
+                        .font(egui::TextStyle::Monospace)
+                        .desired_width(f32::INFINITY)
+                        .desired_rows(3),
+                );
+                if ui.small_button("Copy").clicked() {
+                    ui.ctx().copy_text(state.connect_uri().to_string());
+                }
+            });
+
+            ui.add_space(16.0);
+
+            // Cancel button
+            ui.horizontal(|ui| {
+                if ui.button("Cancel").clicked() {
+                    result = QrLoginDialogResult::Cancelled;
+                }
+            });
+        });
+
+    result
 }
 
 #[cfg(test)]
