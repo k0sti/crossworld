@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# Model checkpoints (large files)
+checkpoints/
+*.ckpt
+*.pth
+*.pt
+
+# Output files
+test_output.json
+*.ply
+results/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo

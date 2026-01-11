@@ -1,0 +1,32 @@
+# XCube Inference Server Dependencies
+
+# Web framework
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+pydantic==2.5.3
+
+# Deep learning
+torch>=2.0.0
+torchvision>=0.15.0
+transformers>=4.35.0
+
+# XCube dependencies
+# Note: XCube itself must be installed separately from the GitHub repository
+# See README.md for installation instructions
+
+# CLIP support
+ftfy>=6.1.0
+regex>=2023.10.0
+
+# Utilities
+numpy>=1.24.0
+pyyaml>=6.0
+
+# Optional: CUDA acceleration
+# Requires NVIDIA GPU with CUDA 11.8+ and drivers
+# Install PyTorch with CUDA support:
+# pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+
+# Optional: Development dependencies
+# pytest>=7.4.0
+# httpx>=0.26.0  # For testing FastAPI endpoints
