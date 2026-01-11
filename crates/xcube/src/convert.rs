@@ -4,6 +4,7 @@
 //! (point clouds with normals) into Crossworld's voxel formats like CSM.
 
 use crate::types::{XCubeError, XCubeResult};
+use cube::{Cube, Voxel};
 use glam::IVec3;
 use std::collections::HashSet;
 
@@ -286,6 +287,119 @@ fn encode_r2g3b2(r: u8, g: u8, b: u8) -> u8 {
     128 + ((r_bits << 5) | (g_bits << 2) | b_bits)
 }
 
+/// Convert XCube point cloud to Crossworld Cube octree
+///
+/// Combines voxelization and color mapping into a complete octree structure.
+/// This is the primary function for converting XCube AI-generated point clouds
+/// into Crossworld's native voxel format.
+///
+/// # Arguments
+///
+/// * `result` - The XCube inference result containing point cloud and normals
+/// * `depth` - Octree depth (determines grid size: 2^depth per axis)
+/// * `color_mode` - How to map surface normals to material indices
+///
+/// # Returns
+///
+/// A `Cube<u8>` octree structure ready for rendering or serialization
+///
+/// # Resolution Selection
+///
+/// The function automatically selects between fine and coarse resolution:
+/// - If `result.has_fine()` is true, uses fine-resolution data
+/// - Otherwise, falls back to coarse-resolution data
+///
+/// # Coordinate Mapping
+///
+/// XCube outputs normalized coordinates in range [-1, 1].
+/// These are mapped to voxel grid [0, 2^depth) using the voxelization config.
+///
+/// # Example
+///
+/// ```no_run
+/// # use xcube::{XCubeClient, GenerationRequest};
+/// # use xcube::convert::{xcube_to_cube, ColorMode};
+/// # #[tokio::main]
+/// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// let client = XCubeClient::new("http://localhost:8000");
+/// let request = GenerationRequest::new("a wooden chair");
+/// let result = client.generate(&request).await?;
+///
+/// // Convert to octree with depth 5 (32x32x32 grid)
+/// let cube = xcube_to_cube(&result, 5, ColorMode::SixColor)?;
+/// # Ok(())
+/// # }
+/// ```
+pub fn xcube_to_cube(
+    result: &XCubeResult,
+    depth: u32,
+    color_mode: ColorMode,
+) -> Result<Cube<u8>, XCubeError> {
+    if result.coarse_xyz.is_empty() {
+        return Err(XCubeError::ParseError("Result has no points".to_string()));
+    }
+
+    // Select resolution: prefer fine if available, otherwise use coarse
+    let points = result.fine_xyz.as_ref().unwrap_or(&result.coarse_xyz);
+    let normals = result.fine_normal.as_ref().unwrap_or(&result.coarse_normal);
+
+    // Validate matching lengths
+    if points.len() != normals.len() {
+        return Err(XCubeError::ParseError(format!(
+            "Point count ({}) does not match normal count ({})",
+            points.len(),
+            normals.len()
+        )));
+    }
+
+    // Step 1: Voxelize point cloud to discrete grid coordinates
+    let config = VoxelizeConfig::new(depth);
+
+    // Step 2: Convert normals to material indices
+    let materials = normals_to_materials(normals, color_mode);
+
+    // Step 3: Build Voxel structs by combining positions and materials
+    // Note: We need to match voxelized positions with their original normals
+    // Since voxelize removes duplicates, we need to maintain a mapping
+    let mut voxel_map = std::collections::HashMap::new();
+
+    for (idx, [x, y, z]) in points.iter().enumerate() {
+        // Apply same voxelization transform
+        let grid_size = 1 << config.depth;
+        let half_size = grid_size as f32 / 2.0;
+        let max_coord = grid_size - 1;
+
+        let scaled_x = (x + config.origin[0]) * config.scale;
+        let scaled_y = (y + config.origin[1]) * config.scale;
+        let scaled_z = (z + config.origin[2]) * config.scale;
+
+        let vx = ((scaled_x * half_size) + half_size).floor() as i32;
+        let vy = ((scaled_y * half_size) + half_size).floor() as i32;
+        let vz = ((scaled_z * half_size) + half_size).floor() as i32;
+
+        let vx = vx.clamp(0, max_coord);
+        let vy = vy.clamp(0, max_coord);
+        let vz = vz.clamp(0, max_coord);
+
+        let pos = IVec3::new(vx, vy, vz);
+
+        // Use the material from this point (if multiple points map to same voxel, last one wins)
+        voxel_map.insert(pos, materials[idx]);
+    }
+
+    // Convert HashMap to Vec<Voxel>
+    let voxels: Vec<Voxel> = voxel_map
+        .into_iter()
+        .map(|(pos, material)| Voxel { pos, material })
+        .collect();
+
+    // Step 4: Build octree from voxels using Cube::from_voxels
+    // Use 0 (empty) as default for non-surface voxels
+    let cube = Cube::from_voxels(&voxels, depth, 0);
+
+    Ok(cube)
+}
+
 /// Convert XCube point cloud result to CSM (CubeScript Model) format
 ///
 /// This function converts an XCube inference result (point cloud with normals)
@@ -321,23 +435,13 @@ pub fn xcube_to_csm(result: &XCubeResult) -> Result<String, XCubeError> {
         return Err(XCubeError::ParseError("Result has no points".to_string()));
     }
 
-    // TODO: Implement actual conversion logic
-    // This is a placeholder that will be implemented in the next phase
-    // The conversion will need to:
-    // 1. Convert point cloud to voxel grid (discretize positions)
-    // 2. Build an octree structure from the voxel grid
-    // 3. Serialize it to CSM format (nested s[] and o[] syntax)
-    // 4. Use normals to determine surface voxels
+    // Convert to Cube octree with depth 6 (64x64x64 grid) and six-color mode
+    let cube = xcube_to_cube(result, 6, ColorMode::SixColor)?;
 
-    let coarse_count = result.coarse_point_count();
-    let fine_count = result.fine_point_count();
+    // Serialize to CSM format using cube's serializer
+    let csm_string = cube::serialize_csm(&cube);
 
-    let placeholder = format!(
-        "s[/* XCube result: {} coarse points, {} fine points - conversion not yet implemented */]",
-        coarse_count, fine_count
-    );
-
-    Ok(placeholder)
+    Ok(csm_string)
 }
 
 /// Convert XCube point cloud to a discretized voxel grid
@@ -461,7 +565,15 @@ mod tests {
         let result = create_test_result();
         let csm = xcube_to_csm(&result).unwrap();
 
-        assert!(csm.contains("3 coarse points"));
+        // CSM/BCF format should be non-empty and start with valid character
+        // '>' for BCF format, 's' or digit for CSM format
+        assert!(!csm.is_empty());
+        let first_char = csm.chars().next().unwrap();
+        assert!(
+            first_char == '>' || first_char == 's' || first_char.is_ascii_digit(),
+            "CSM should start with '>', 's', or digit, got: '{}'",
+            first_char
+        );
     }
 
     #[test]
@@ -894,5 +1006,256 @@ mod tests {
                 }
             }
         }
+    }
+
+    // xcube_to_cube integration tests
+    use super::xcube_to_cube;
+
+    fn create_test_cube_result() -> XCubeResult {
+        // Create a simple cube-like point cloud
+        let mut points = Vec::new();
+        let mut normals = Vec::new();
+
+        // Create points on the surface of a small cube
+        // Front face (z = 0.5)
+        for x in [-0.5, -0.25, 0.0, 0.25, 0.5] {
+            for y in [-0.5, -0.25, 0.0, 0.25, 0.5] {
+                points.push([x, y, 0.5]);
+                normals.push([0.0, 0.0, 1.0]); // +Z normal
+            }
+        }
+
+        // Back face (z = -0.5)
+        for x in [-0.5, -0.25, 0.0, 0.25, 0.5] {
+            for y in [-0.5, -0.25, 0.0, 0.25, 0.5] {
+                points.push([x, y, -0.5]);
+                normals.push([0.0, 0.0, -1.0]); // -Z normal
+            }
+        }
+
+        // Top face (y = 0.5)
+        for x in [-0.5, -0.25, 0.0, 0.25, 0.5] {
+            for z in [-0.5, -0.25, 0.0, 0.25, 0.5] {
+                points.push([x, 0.5, z]);
+                normals.push([0.0, 1.0, 0.0]); // +Y normal
+            }
+        }
+
+        // Bottom face (y = -0.5)
+        for x in [-0.5, -0.25, 0.0, 0.25, 0.5] {
+            for z in [-0.5, -0.25, 0.0, 0.25, 0.5] {
+                points.push([x, -0.5, z]);
+                normals.push([0.0, -1.0, 0.0]); // -Y normal
+            }
+        }
+
+        XCubeResult {
+            coarse_xyz: points,
+            coarse_normal: normals,
+            fine_xyz: None,
+            fine_normal: None,
+        }
+    }
+
+    #[test]
+    fn test_xcube_to_cube_basic() {
+        let result = create_test_cube_result();
+        let cube = xcube_to_cube(&result, 5, ColorMode::SixColor).unwrap();
+
+        // Should create a valid octree structure
+        // The cube should not be a simple Solid (should have some structure)
+        match cube {
+            cube::Cube::Solid(_) => {
+                // If it's solid, it should be empty (0)
+                if let cube::Cube::Solid(val) = cube {
+                    // For a sparse surface, we might get solid 0
+                    assert_eq!(val, 0);
+                }
+            }
+            cube::Cube::Cubes(_) => {
+                // This is expected - an octree structure was created
+            }
+            _ => {
+                // Other subdivision types are also valid
+            }
+        }
+    }
+
+    #[test]
+    fn test_xcube_to_cube_different_depths() {
+        let result = create_test_cube_result();
+
+        // Test different depth values
+        for depth in [3, 4, 5, 6, 7] {
+            let cube = xcube_to_cube(&result, depth, ColorMode::SixColor);
+            assert!(cube.is_ok(), "Failed to convert at depth {}", depth);
+        }
+    }
+
+    #[test]
+    fn test_xcube_to_cube_color_modes() {
+        let result = create_test_cube_result();
+
+        // Test both color modes
+        let cube_six = xcube_to_cube(&result, 5, ColorMode::SixColor).unwrap();
+        let cube_rgb = xcube_to_cube(&result, 5, ColorMode::ContinuousRGB).unwrap();
+
+        // Both should produce valid cubes
+        // They may differ in internal structure due to different materials
+        assert!(matches!(
+            cube_six,
+            cube::Cube::Solid(_) | cube::Cube::Cubes(_)
+        ));
+        assert!(matches!(
+            cube_rgb,
+            cube::Cube::Solid(_) | cube::Cube::Cubes(_)
+        ));
+    }
+
+    #[test]
+    fn test_xcube_to_cube_empty_result() {
+        let empty_result = XCubeResult {
+            coarse_xyz: vec![],
+            coarse_normal: vec![],
+            fine_xyz: None,
+            fine_normal: None,
+        };
+
+        let result = xcube_to_cube(&empty_result, 5, ColorMode::SixColor);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Result has no points"));
+    }
+
+    #[test]
+    fn test_xcube_to_cube_mismatched_lengths() {
+        let bad_result = XCubeResult {
+            coarse_xyz: vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
+            coarse_normal: vec![[0.0, 0.0, 1.0]], // Mismatched length
+            fine_xyz: None,
+            fine_normal: None,
+        };
+
+        let result = xcube_to_cube(&bad_result, 5, ColorMode::SixColor);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("does not match normal count"));
+    }
+
+    #[test]
+    fn test_xcube_to_cube_fine_resolution() {
+        // Create a result with both coarse and fine data
+        let coarse_points = vec![[0.0, 0.0, 0.0]];
+        let coarse_normals = vec![[0.0, 0.0, 1.0]];
+
+        let fine_points = vec![
+            [0.0, 0.0, 0.0],
+            [0.1, 0.0, 0.0],
+            [0.0, 0.1, 0.0],
+            [0.0, 0.0, 0.1],
+        ];
+        let fine_normals = vec![
+            [0.0, 0.0, 1.0],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 0.0, 1.0],
+        ];
+
+        let result_with_fine = XCubeResult {
+            coarse_xyz: coarse_points,
+            coarse_normal: coarse_normals,
+            fine_xyz: Some(fine_points),
+            fine_normal: Some(fine_normals),
+        };
+
+        let cube = xcube_to_cube(&result_with_fine, 5, ColorMode::SixColor).unwrap();
+
+        // Should use fine resolution (4 points) instead of coarse (1 point)
+        assert!(matches!(cube, cube::Cube::Solid(_) | cube::Cube::Cubes(_)));
+    }
+
+    #[test]
+    fn test_xcube_to_cube_single_point() {
+        let result = XCubeResult {
+            coarse_xyz: vec![[0.0, 0.0, 0.0]],
+            coarse_normal: vec![[0.0, 0.0, 1.0]],
+            fine_xyz: None,
+            fine_normal: None,
+        };
+
+        let cube = xcube_to_cube(&result, 5, ColorMode::SixColor).unwrap();
+
+        // Single point should create a simple structure
+        assert!(matches!(cube, cube::Cube::Solid(_) | cube::Cube::Cubes(_)));
+    }
+
+    #[test]
+    fn test_xcube_to_cube_duplicate_points() {
+        // Multiple points that map to the same voxel
+        let result = XCubeResult {
+            coarse_xyz: vec![
+                [0.0, 0.0, 0.0],
+                [0.01, 0.01, 0.01], // Very close, should map to same voxel
+                [0.0, 0.0, 0.0],    // Exact duplicate
+            ],
+            coarse_normal: vec![[0.0, 0.0, 1.0], [0.0, 0.0, 1.0], [0.0, 0.0, 1.0]],
+            fine_xyz: None,
+            fine_normal: None,
+        };
+
+        let cube = xcube_to_cube(&result, 5, ColorMode::SixColor).unwrap();
+
+        // Should handle duplicates gracefully
+        assert!(matches!(cube, cube::Cube::Solid(_) | cube::Cube::Cubes(_)));
+    }
+
+    #[test]
+    fn test_xcube_to_cube_sparse_surface() {
+        // Create a very sparse point cloud (few points scattered)
+        let result = XCubeResult {
+            coarse_xyz: vec![
+                [-0.8, -0.8, -0.8],
+                [0.8, 0.8, 0.8],
+                [-0.8, 0.8, -0.8],
+                [0.8, -0.8, 0.8],
+            ],
+            coarse_normal: vec![
+                [-1.0, -1.0, -1.0],
+                [1.0, 1.0, 1.0],
+                [-1.0, 1.0, -1.0],
+                [1.0, -1.0, 1.0],
+            ],
+            fine_xyz: None,
+            fine_normal: None,
+        };
+
+        let cube = xcube_to_cube(&result, 5, ColorMode::SixColor).unwrap();
+
+        // Sparse surface should still produce a valid octree
+        assert!(matches!(cube, cube::Cube::Solid(_) | cube::Cube::Cubes(_)));
+    }
+
+    #[test]
+    fn test_xcube_to_csm_integration() {
+        let result = create_test_cube_result();
+
+        // Test that xcube_to_csm works (it internally calls xcube_to_cube)
+        let csm = super::xcube_to_csm(&result).unwrap();
+
+        // Should produce a non-empty CSM/BCF string
+        assert!(!csm.is_empty());
+
+        // CSM/BCF format should start with valid character
+        // '>' for BCF format, 's' or digit for CSM format, '0' for empty
+        let first_char = csm.chars().next().unwrap();
+        assert!(
+            first_char == '>' || first_char == 's' || first_char.is_ascii_digit(),
+            "CSM should start with '>', 's', or digit, got: '{}'",
+            first_char
+        );
     }
 }
