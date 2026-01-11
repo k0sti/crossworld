@@ -3,9 +3,24 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-/// XCube API error types
+/// XCube client error types
 #[derive(Debug, Error)]
 pub enum XCubeError {
+    #[error("Connection error: {0}")]
+    ConnectionError(String),
+
+    #[error("Request timeout after {0}s")]
+    TimeoutError(u64),
+
+    #[error("Server error: {0}")]
+    ServerError(String),
+
+    #[error("Parse error: {0}")]
+    ParseError(String),
+
+    #[error("Models not loaded on server")]
+    ModelsNotLoaded,
+
     #[error("HTTP request failed: {0}")]
     RequestFailed(#[from] reqwest::Error),
 
@@ -76,34 +91,53 @@ pub struct XCubeResult {
     /// Coarse mesh vertex normals (nx, ny, nz)
     pub coarse_normal: Vec<[f32; 3]>,
 
-    /// Fine mesh vertex positions (x, y, z)
-    pub fine_xyz: Vec<[f32; 3]>,
+    /// Fine mesh vertex positions (x, y, z) - only present if use_fine=true
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fine_xyz: Option<Vec<[f32; 3]>>,
 
-    /// Fine mesh vertex normals (nx, ny, nz)
-    pub fine_normal: Vec<[f32; 3]>,
+    /// Fine mesh vertex normals (nx, ny, nz) - only present if use_fine=true
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fine_normal: Option<Vec<[f32; 3]>>,
+}
+
+impl XCubeResult {
+    /// Get the number of points in the coarse point cloud
+    pub fn coarse_point_count(&self) -> usize {
+        self.coarse_xyz.len()
+    }
+
+    /// Get the number of points in the fine point cloud
+    pub fn fine_point_count(&self) -> usize {
+        self.fine_xyz.as_ref().map_or(0, |xyz| xyz.len())
+    }
+
+    /// Check if fine-resolution data is available
+    pub fn has_fine(&self) -> bool {
+        self.fine_xyz.is_some()
+    }
 }
 
 /// Request parameters for XCube generation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GenerationRequest {
-    /// Text prompt describing the voxel model to generate
+    /// Text prompt describing the 3D object to generate
     pub prompt: String,
 
-    /// Number of DDIM sampling steps (default: 50, range: 1-1000)
+    /// Number of DDIM diffusion steps (1-1000, default: 100)
     #[serde(default = "default_ddim_steps")]
     pub ddim_steps: u32,
 
-    /// Guidance scale for classifier-free guidance (default: 7.5, range: 1.0-20.0)
+    /// Classifier-free guidance scale (1.0-20.0, default: 7.5)
     #[serde(default = "default_guidance_scale")]
     pub guidance_scale: f32,
 
-    /// Random seed for reproducibility (None = random)
+    /// Random seed for reproducibility (null for random)
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub seed: Option<u64>,
+    pub seed: Option<i32>,
 
-    /// Number of models to generate in parallel (default: 1, range: 1-8)
-    #[serde(default = "default_batch_size")]
-    pub batch_size: u32,
+    /// Use fine-resolution model (slower but higher quality, default: true)
+    #[serde(default = "default_use_fine")]
+    pub use_fine: bool,
 }
 
 /// Configuration for XCube inference server
@@ -132,51 +166,73 @@ pub struct GenerationConfig {
 /// Health check response from XCube server
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerStatus {
-    /// Server status ("healthy", "degraded", "unavailable")
+    /// Server status: 'ready', 'loading', or 'error'
     pub status: String,
 
-    /// Server version string
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub version: Option<String>,
+    /// Whether XCube dependencies are available
+    pub xcube_available: bool,
 
-    /// Model loaded status
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub model_loaded: Option<bool>,
+    /// Whether CUDA GPU is available
+    pub gpu_available: bool,
 
-    /// GPU availability
+    /// GPU device name (if available)
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub gpu_available: Option<bool>,
+    pub gpu_name: Option<String>,
 
-    /// Additional server info
+    /// Whether XCube models are loaded
+    pub model_loaded: bool,
+
+    /// Error message if status is 'error'
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub info: Option<String>,
+    pub error: Option<String>,
+}
+
+impl ServerStatus {
+    /// Check if the server is ready to handle generation requests
+    pub fn is_ready(&self) -> bool {
+        self.status == "ready" && self.model_loaded
+    }
+
+    /// Check if the server is still loading models
+    pub fn is_loading(&self) -> bool {
+        self.status == "loading"
+    }
+
+    /// Check if the server encountered an error
+    pub fn is_error(&self) -> bool {
+        self.status == "error"
+    }
 }
 
 // Default value functions for Serde
 fn default_ddim_steps() -> u32 {
-    50
+    100
 }
 
 fn default_guidance_scale() -> f32 {
     7.5
 }
 
-fn default_batch_size() -> u32 {
-    1
+fn default_use_fine() -> bool {
+    true
 }
 
 fn default_timeout() -> u64 {
     300
 }
 
+fn default_batch_size() -> u32 {
+    1
+}
+
 impl Default for GenerationRequest {
     fn default() -> Self {
         Self {
             prompt: String::new(),
-            ddim_steps: default_ddim_steps(),
-            guidance_scale: default_guidance_scale(),
+            ddim_steps: 100,
+            guidance_scale: 7.5,
             seed: None,
-            batch_size: default_batch_size(),
+            use_fine: true,
         }
     }
 }
@@ -202,92 +258,27 @@ impl GenerationRequest {
         }
     }
 
-    /// Set DDIM steps (builder pattern)
+    /// Set the number of DDIM steps
     pub fn with_ddim_steps(mut self, steps: u32) -> Self {
-        self.ddim_steps = steps;
+        self.ddim_steps = steps.clamp(1, 1000);
         self
     }
 
-    /// Set guidance scale (builder pattern)
+    /// Set the guidance scale
     pub fn with_guidance_scale(mut self, scale: f32) -> Self {
-        self.guidance_scale = scale;
+        self.guidance_scale = scale.clamp(1.0, 20.0);
         self
     }
 
-    /// Set random seed (builder pattern)
-    pub fn with_seed(mut self, seed: u64) -> Self {
+    /// Set the random seed
+    pub fn with_seed(mut self, seed: i32) -> Self {
         self.seed = Some(seed);
         self
     }
 
-    /// Set batch size (builder pattern)
-    pub fn with_batch_size(mut self, size: u32) -> Self {
-        self.batch_size = size;
+    /// Enable or disable fine-resolution generation
+    pub fn with_fine(mut self, use_fine: bool) -> Self {
+        self.use_fine = use_fine;
         self
-    }
-
-    /// Validate request parameters
-    pub fn validate(&self) -> Result<(), XCubeError> {
-        if self.prompt.is_empty() {
-            return Err(XCubeError::InvalidModelData(
-                "Prompt cannot be empty".to_string(),
-            ));
-        }
-
-        if self.ddim_steps == 0 || self.ddim_steps > 1000 {
-            return Err(XCubeError::InvalidModelData(format!(
-                "DDIM steps must be between 1 and 1000, got {}",
-                self.ddim_steps
-            )));
-        }
-
-        if self.guidance_scale < 1.0 || self.guidance_scale > 20.0 {
-            return Err(XCubeError::InvalidModelData(format!(
-                "Guidance scale must be between 1.0 and 20.0, got {}",
-                self.guidance_scale
-            )));
-        }
-
-        if self.batch_size == 0 || self.batch_size > 8 {
-            return Err(XCubeError::InvalidModelData(format!(
-                "Batch size must be between 1 and 8, got {}",
-                self.batch_size
-            )));
-        }
-
-        Ok(())
-    }
-}
-
-impl XCubeResult {
-    /// Validate that result has consistent data
-    pub fn validate(&self) -> Result<(), XCubeError> {
-        if self.coarse_xyz.len() != self.coarse_normal.len() {
-            return Err(XCubeError::InvalidModelData(format!(
-                "Coarse vertex count mismatch: {} positions vs {} normals",
-                self.coarse_xyz.len(),
-                self.coarse_normal.len()
-            )));
-        }
-
-        if self.fine_xyz.len() != self.fine_normal.len() {
-            return Err(XCubeError::InvalidModelData(format!(
-                "Fine vertex count mismatch: {} positions vs {} normals",
-                self.fine_xyz.len(),
-                self.fine_normal.len()
-            )));
-        }
-
-        Ok(())
-    }
-
-    /// Get number of vertices in coarse mesh
-    pub fn coarse_vertex_count(&self) -> usize {
-        self.coarse_xyz.len()
-    }
-
-    /// Get number of vertices in fine mesh
-    pub fn fine_vertex_count(&self) -> usize {
-        self.fine_xyz.len()
     }
 }
