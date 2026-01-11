@@ -27,6 +27,8 @@ default:
     @echo "  just game-watch       - Watch and auto-rebuild game (Terminal 2)"
     @echo "  just hot-reload       - Run hot-reload demo in tmux (auto-rebuild on save)"
     @echo "  just build-game       - Build game library once"
+    @echo "  just xcube-server     - Start XCube inference server"
+    @echo "  just xcube-generate   - Generate 3D object from text prompt"
     @echo ""
 
 # Build WASM module in development mode
@@ -253,6 +255,21 @@ hot-reload:
 
     # Attach to session
     tmux attach-session -t hot-reload
+
+# Start XCube inference server
+xcube-server:
+    @echo "Starting XCube inference server on http://0.0.0.0:8000..."
+    @echo "API docs: http://localhost:8000/docs"
+    @echo ""
+    cd crates/xcube/server && uv run server.py
+
+# Generate 3D object from text prompt using XCube
+xcube-generate PROMPT:
+    @echo "Generating 3D object: '{{PROMPT}}'"
+    @curl -s -X POST http://localhost:8000/generate \
+        -H "Content-Type: application/json" \
+        -d '{"prompt": "{{PROMPT}}", "ddim_steps": 50, "guidance_scale": 7.5, "use_fine": false}' \
+        | uv run python -c "import sys, json; r = json.load(sys.stdin); print(f'Generated {len(r[\"coarse_xyz\"])} coarse points')"
 
 # Run hot-reload demo (manual two-terminal method)
 hot-reload-manual:

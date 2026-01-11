@@ -76,6 +76,9 @@
           gdb
           valgrind
           heaptrack
+
+          # Python (for XCube server)
+          uv
         ];
 
         # Library path for dynamic libraries
