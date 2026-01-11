@@ -33,10 +33,7 @@ impl XCubeClient {
     pub async fn fetch_model(&self, model_id: &str) -> Result<XCubeModel, XCubeError> {
         let url = format!("{}/models/{}", self.base_url, model_id);
 
-        let response = self.client
-            .get(&url)
-            .send()
-            .await?;
+        let response = self.client.get(&url).send().await?;
 
         if !response.status().is_success() {
             return Err(XCubeError::ModelNotFound(model_id.to_string()));
@@ -46,27 +43,26 @@ impl XCubeClient {
 
         if !xcube_response.success {
             return Err(XCubeError::InvalidModelData(
-                xcube_response.error.unwrap_or_else(|| "Unknown error".to_string())
+                xcube_response
+                    .error
+                    .unwrap_or_else(|| "Unknown error".to_string()),
             ));
         }
 
-        xcube_response.data.ok_or_else(|| {
-            XCubeError::InvalidModelData("No model data in response".to_string())
-        })
+        xcube_response
+            .data
+            .ok_or_else(|| XCubeError::InvalidModelData("No model data in response".to_string()))
     }
 
     /// Search for models by name or author
     pub async fn search_models(&self, query: &str) -> Result<Vec<XCubeModel>, XCubeError> {
         let url = format!("{}/models/search?q={}", self.base_url, query);
 
-        let response = self.client
-            .get(&url)
-            .send()
-            .await?;
+        let response = self.client.get(&url).send().await?;
 
         if !response.status().is_success() {
             return Err(XCubeError::RequestFailed(
-                response.error_for_status().unwrap_err()
+                response.error_for_status().unwrap_err(),
             ));
         }
 
@@ -81,14 +77,11 @@ impl XCubeClient {
             url.push_str(&format!("?limit={}", limit));
         }
 
-        let response = self.client
-            .get(&url)
-            .send()
-            .await?;
+        let response = self.client.get(&url).send().await?;
 
         if !response.status().is_success() {
             return Err(XCubeError::RequestFailed(
-                response.error_for_status().unwrap_err()
+                response.error_for_status().unwrap_err(),
             ));
         }
 
