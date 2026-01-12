@@ -70,14 +70,14 @@ echo ""
 # Check prerequisites
 echo -e "${YELLOW}Checking prerequisites...${NC}"
 
-# Check for uv
-if ! command -v uv &> /dev/null; then
-    echo -e "${RED}✗ uv not found${NC}"
-    echo "  Install uv: curl -LsSf https://astral.sh/uv/install.sh | sh"
-    echo "  Or via pip: pip install uv"
+# Check for conda
+if ! command -v conda &> /dev/null; then
+    echo -e "${RED}✗ conda not found${NC}"
+    echo "  Install Miniconda: https://docs.anaconda.com/miniconda/install/"
+    echo "  Or Anaconda: https://www.anaconda.com/download"
     exit 1
 fi
-echo -e "${GREEN}✓ uv found${NC}"
+echo -e "${GREEN}✓ conda found${NC}"
 
 # Check for git
 if ! command -v git &> /dev/null; then
@@ -115,36 +115,38 @@ if [ "$SKIP_DEPS" = false ]; then
     echo ""
 fi
 
-# Install Python dependencies
-echo -e "${YELLOW}Installing Python dependencies...${NC}"
-cd "$SCRIPT_DIR"
-
-# Sync uv dependencies
-echo -e "${BLUE}Running uv sync...${NC}"
-uv sync
-
-echo -e "${GREEN}✓ Python dependencies installed${NC}"
-echo ""
-
-# Configure Trellis Python path
-echo -e "${YELLOW}Configuring Trellis...${NC}"
+# Install Trellis with conda
+echo -e "${YELLOW}Installing Trellis and dependencies with conda...${NC}"
 if [ -d "$TRELLIS_PATH" ]; then
-    echo -e "${BLUE}Setting up Trellis from $TRELLIS_PATH...${NC}"
+    echo -e "${BLUE}Running TRELLIS setup.sh...${NC}"
 
-    # Check if trellis is importable (using PYTHONPATH)
-    if PYTHONPATH="$TRELLIS_PATH:${PYTHONPATH:-}" uv run python -c "from trellis.pipelines import Trellis2ImageTo3DPipeline; print('trellis OK')" 2>/dev/null; then
-        echo -e "${GREEN}✓ Trellis is accessible${NC}"
+    # Navigate to TRELLIS directory
+    cd "$TRELLIS_PATH"
+
+    # Check if trellis conda environment already exists
+    if conda env list | grep -q "^trellis "; then
+        echo -e "${GREEN}✓ Conda environment 'trellis' already exists${NC}"
+        echo -e "${BLUE}Activating and updating environment...${NC}"
+
+        # Source the setup script to update the environment
+        . ./setup.sh --basic --xformers
     else
-        echo -e "${YELLOW}⚠ Could not import Trellis - you may need to install additional dependencies${NC}"
-        echo "  Run TRELLIS setup.sh script: cd $TRELLIS_PATH && . ./setup.sh --basic"
+        echo -e "${BLUE}Creating new conda environment 'trellis'...${NC}"
+        echo -e "${YELLOW}This may take 10-20 minutes to download and install packages${NC}"
+
+        # Run TRELLIS setup with conda
+        # --new-env: Create new conda environment named 'trellis'
+        # --basic: Install basic dependencies (including rembg)
+        # --xformers: Install xformers for attention optimization
+        . ./setup.sh --new-env --basic --xformers
     fi
 
-    # Create a .env file to set PYTHONPATH for the server
-    echo "PYTHONPATH=$TRELLIS_PATH" > "$SCRIPT_DIR/.env"
-    echo -e "${GREEN}✓ Created .env file with PYTHONPATH${NC}"
+    cd "$SCRIPT_DIR"
+    echo -e "${GREEN}✓ Trellis environment configured${NC}"
 else
-    echo -e "${YELLOW}⚠ Trellis not found at $TRELLIS_PATH - skipping configuration${NC}"
-    echo "  Run without --skip-deps or set TRELLIS_PATH to configure Trellis"
+    echo -e "${RED}✗ Trellis not found at $TRELLIS_PATH${NC}"
+    echo "  Cannot proceed without TRELLIS repository"
+    exit 1
 fi
 echo ""
 
@@ -155,7 +157,7 @@ echo ""
 
 # Test if model can be loaded (will trigger HuggingFace download if needed)
 echo -e "${YELLOW}Testing model loading (this may download ~4GB of data)...${NC}"
-if PYTHONPATH="$TRELLIS_PATH:${PYTHONPATH:-}" uv run python -c "
+if conda run -n trellis python -c "
 from trellis.pipelines import Trellis2ImageTo3DPipeline
 import torch
 print('Loading pipeline...')
@@ -166,7 +168,6 @@ print('Pipeline loaded successfully')
 else
     echo -e "${YELLOW}⚠ Model loading test failed - server may fail to start${NC}"
     echo "  Check your internet connection and HuggingFace access"
-    echo "  You may need to install additional Trellis dependencies"
 fi
 
 echo ""
@@ -182,11 +183,13 @@ echo "Start the server with:"
 echo -e "  ${BLUE}just trellis-server${NC}"
 echo ""
 echo "Or manually:"
-echo -e "  ${BLUE}cd crates/trellis/server && uv run server.py${NC}"
+echo -e "  ${BLUE}conda run -n trellis --no-capture-output python crates/trellis/server/server.py${NC}"
 echo ""
 echo "Server will be available at:"
 echo -e "  ${BLUE}http://localhost:8001${NC}"
 echo ""
 echo "Check health status:"
 echo -e "  ${BLUE}curl http://localhost:8001/health${NC}"
+echo ""
+echo "Conda environment: ${BLUE}trellis${NC}"
 echo ""

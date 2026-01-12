@@ -289,7 +289,7 @@ trellis-server:
     @echo "Starting Trellis.2 inference server on http://0.0.0.0:8001..."
     @echo "API docs: http://localhost:8001/docs"
     @echo ""
-    cd crates/trellis/server && uv run server.py
+    conda run -n trellis --no-capture-output python crates/trellis/server/server.py
 
 # Run hot-reload demo (manual two-terminal method)
 hot-reload-manual:
