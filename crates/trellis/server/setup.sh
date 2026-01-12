@@ -126,23 +126,25 @@ uv sync
 echo -e "${GREEN}✓ Python dependencies installed${NC}"
 echo ""
 
-# Install Trellis into the virtual environment
-echo -e "${YELLOW}Installing Trellis...${NC}"
+# Configure Trellis Python path
+echo -e "${YELLOW}Configuring Trellis...${NC}"
 if [ -d "$TRELLIS_PATH" ]; then
-    echo -e "${BLUE}Installing Trellis from $TRELLIS_PATH...${NC}"
+    echo -e "${BLUE}Setting up Trellis from $TRELLIS_PATH...${NC}"
 
-    # Check if trellis is already installed
-    if uv run python -c "from trellis.pipelines import Trellis2ImageTo3DPipeline; print('trellis OK')" 2>/dev/null; then
-        echo -e "${GREEN}✓ Trellis already installed${NC}"
+    # Check if trellis is importable (using PYTHONPATH)
+    if PYTHONPATH="$TRELLIS_PATH:${PYTHONPATH:-}" uv run python -c "from trellis.pipelines import Trellis2ImageTo3DPipeline; print('trellis OK')" 2>/dev/null; then
+        echo -e "${GREEN}✓ Trellis is accessible${NC}"
     else
-        cd "$TRELLIS_PATH"
-        uv pip install -e .
-        cd "$SCRIPT_DIR"
-        echo -e "${GREEN}✓ Trellis installed${NC}"
+        echo -e "${YELLOW}⚠ Could not import Trellis - you may need to install additional dependencies${NC}"
+        echo "  Run TRELLIS setup.sh script: cd $TRELLIS_PATH && . ./setup.sh --basic"
     fi
+
+    # Create a .env file to set PYTHONPATH for the server
+    echo "PYTHONPATH=$TRELLIS_PATH" > "$SCRIPT_DIR/.env"
+    echo -e "${GREEN}✓ Created .env file with PYTHONPATH${NC}"
 else
-    echo -e "${YELLOW}⚠ Trellis not found at $TRELLIS_PATH - skipping installation${NC}"
-    echo "  Run without --skip-deps or set TRELLIS_PATH to install Trellis"
+    echo -e "${YELLOW}⚠ Trellis not found at $TRELLIS_PATH - skipping configuration${NC}"
+    echo "  Run without --skip-deps or set TRELLIS_PATH to configure Trellis"
 fi
 echo ""
 
@@ -153,7 +155,7 @@ echo ""
 
 # Test if model can be loaded (will trigger HuggingFace download if needed)
 echo -e "${YELLOW}Testing model loading (this may download ~4GB of data)...${NC}"
-if uv run python -c "
+if PYTHONPATH="$TRELLIS_PATH:${PYTHONPATH:-}" uv run python -c "
 from trellis.pipelines import Trellis2ImageTo3DPipeline
 import torch
 print('Loading pipeline...')
@@ -164,6 +166,7 @@ print('Pipeline loaded successfully')
 else
     echo -e "${YELLOW}⚠ Model loading test failed - server may fail to start${NC}"
     echo "  Check your internet connection and HuggingFace access"
+    echo "  You may need to install additional Trellis dependencies"
 fi
 
 echo ""
