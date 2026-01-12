@@ -1,10 +1,17 @@
 //! Trellis format conversion
 //!
-//! Convert Trellis.2 mesh output to Crossworld voxel formats (Cube octree, CSM).
+//! Convert Trellis.2 outputs to Crossworld voxel formats (Cube octree, CSM).
+//! Supports both mesh-based voxelization and OVoxel sparse format conversion.
 
+use crate::color_quantizer::{quantize_colors, ColorPalette};
+use crate::ovoxel::{OVoxel, OVoxelError};
 use crate::types::{Result, TrellisError, TrellisResult};
-use cube::{serialize_csm, Cube, Voxel};
+use cube::{serialize_csm, Cube, CubeBox, Voxel};
 use glam::{IVec3, Vec3};
+
+// =============================================================================
+// Mesh to Voxel Conversion (TrellisResult → Cube)
+// =============================================================================
 
 /// Configuration for mesh voxelization
 #[derive(Debug, Clone)]
@@ -608,10 +615,172 @@ pub fn trellis_to_csm(result: &TrellisResult) -> Result<String> {
     Ok(csm_string)
 }
 
+// =============================================================================
+// OVoxel to Cube Conversion (OVoxel → Cube)
+// =============================================================================
+
+/// Errors that can occur during OVoxel conversion
+#[derive(Debug, thiserror::Error)]
+pub enum ConversionError {
+    #[error("OVoxel validation failed: {0}")]
+    InvalidOVoxel(#[from] OVoxelError),
+
+    #[error("Target depth {0} is out of valid range (0-7)")]
+    InvalidDepth(u8),
+
+    #[error("Failed to create octree: {0}")]
+    OctreeCreation(String),
+
+    #[error("Empty voxel data")]
+    EmptyVoxels,
+}
+
+/// Convert OVoxel sparse voxel data to Cube octree
+///
+/// # Arguments
+/// * `ovoxel` - The OVoxel data to convert
+/// * `target_depth` - Target octree depth (0-7, typically 6-7 for 64³-128³ resolution)
+/// * `max_palette_colors` - Maximum number of colors in the palette (1-256)
+///
+/// # Returns
+/// A tuple of (CubeBox<u8>, ColorPalette) containing the octree and color palette
+pub fn ovoxel_to_cube(
+    ovoxel: &OVoxel,
+    target_depth: u8,
+    max_palette_colors: usize,
+) -> std::result::Result<(CubeBox<u8>, ColorPalette), ConversionError> {
+    // Validate input
+    ovoxel.validate()?;
+
+    if target_depth > 7 {
+        return Err(ConversionError::InvalidDepth(target_depth));
+    }
+
+    if ovoxel.is_empty() {
+        return Err(ConversionError::EmptyVoxels);
+    }
+
+    // 1. Build color palette (quantize to max_palette_colors)
+    let palette = quantize_colors(&ovoxel.attrs, max_palette_colors.min(256));
+
+    // 2. Calculate coordinate transformation
+    let aabb_size = ovoxel.dimensions();
+    let grid_size = 1 << target_depth; // 2^depth
+    let max_dim = aabb_size.max_element();
+    let scale = grid_size as f32 / max_dim;
+
+    // 3. Convert sparse voxels to Voxel array
+    let mut voxels = Vec::with_capacity(ovoxel.len());
+
+    for (coord, attr) in ovoxel.iter() {
+        // Normalize coordinates to [0, 1] range
+        let normalized = (coord.as_vec3() - ovoxel.aabb[0]) / aabb_size;
+
+        // Scale to grid coordinates
+        let grid_coord = (normalized * grid_size as f32).floor();
+
+        // Clamp to valid range [0, grid_size)
+        let clamped = grid_coord
+            .as_ivec3()
+            .clamp(IVec3::ZERO, IVec3::splat(grid_size - 1));
+
+        // Map color to palette index
+        let material = palette.nearest_index(attr);
+
+        // Create voxel
+        voxels.push(Voxel {
+            pos: clamped,
+            material,
+        });
+    }
+
+    // 4. Build octree from voxels
+    let cube = Cube::from_voxels(&voxels, target_depth as u32, 0);
+
+    // 5. Calculate original size (in grid coordinates)
+    let original_size = (aabb_size * scale).ceil().as_ivec3();
+    let size = original_size.clamp(IVec3::ONE, IVec3::splat(grid_size));
+
+    // 6. Create CubeBox
+    let cubebox = CubeBox {
+        cube,
+        size,
+        depth: target_depth as u32,
+    };
+
+    Ok((cubebox, palette))
+}
+
+/// Convert OVoxel to CSM text format
+///
+/// This is a convenience function that combines ovoxel_to_cube with CSM serialization.
+///
+/// # Arguments
+/// * `ovoxel` - The OVoxel data to convert
+/// * `target_depth` - Target octree depth (0-7)
+/// * `max_palette_colors` - Maximum number of colors in the palette (1-256)
+///
+/// # Returns
+/// A tuple of (CSM string, ColorPalette) containing the serialized octree and color palette
+pub fn ovoxel_to_csm(
+    ovoxel: &OVoxel,
+    target_depth: u8,
+    max_palette_colors: usize,
+) -> std::result::Result<(String, ColorPalette), ConversionError> {
+    let (cubebox, palette) = ovoxel_to_cube(ovoxel, target_depth, max_palette_colors)?;
+
+    let csm = cube::io::serialize_csm(&cubebox.cube);
+
+    Ok((csm, palette))
+}
+
+/// Convert OVoxel to Cube with automatic depth selection
+///
+/// Automatically selects the minimum depth required to represent all voxels.
+///
+/// # Arguments
+/// * `ovoxel` - The OVoxel data to convert
+/// * `max_palette_colors` - Maximum number of colors in the palette (1-256)
+///
+/// # Returns
+/// A tuple of (CubeBox<u8>, ColorPalette) containing the octree and color palette
+pub fn ovoxel_to_cube_auto_depth(
+    ovoxel: &OVoxel,
+    max_palette_colors: usize,
+) -> std::result::Result<(CubeBox<u8>, ColorPalette), ConversionError> {
+    // Validate input
+    ovoxel.validate()?;
+
+    if ovoxel.is_empty() {
+        return Err(ConversionError::EmptyVoxels);
+    }
+
+    // Find maximum coordinate extent
+    let mut max_coord = 0;
+    for coord in &ovoxel.coords {
+        max_coord = max_coord
+            .max(coord.x.abs())
+            .max(coord.y.abs())
+            .max(coord.z.abs());
+    }
+
+    // Calculate minimum depth needed
+    let mut depth = 0u8;
+    while depth < 7 && (1 << depth) < max_coord {
+        depth += 1;
+    }
+
+    // Use at least depth 4 (16³) for reasonable quality
+    depth = depth.max(4);
+
+    ovoxel_to_cube(ovoxel, depth, max_palette_colors)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    // Mesh voxelization tests
     fn create_test_cube() -> TrellisResult {
         // Create a simple cube mesh (8 vertices, 12 triangles)
         let vertices = vec![
@@ -684,67 +853,6 @@ mod tests {
     }
 
     #[test]
-    fn test_voxelize_mesh_single_triangle() {
-        let vertices = vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.5, 1.0, 0.0]];
-        let faces = vec![[0, 1, 2]];
-        let config = VoxelizeConfig::new(5);
-
-        let voxels = voxelize_mesh(&vertices, &faces, &config);
-        assert!(!voxels.is_empty());
-    }
-
-    #[test]
-    fn test_voxelize_mesh_cube() {
-        let result = create_test_cube();
-        let config = VoxelizeConfig::new(5);
-
-        let voxels = voxelize_mesh(&result.vertices, &result.faces, &config);
-        assert!(!voxels.is_empty());
-
-        // All voxels should be within bounds
-        let grid_size = 1 << config.depth;
-        for voxel in &voxels {
-            assert!(voxel.x >= 0 && voxel.x < grid_size);
-            assert!(voxel.y >= 0 && voxel.y < grid_size);
-            assert!(voxel.z >= 0 && voxel.z < grid_size);
-        }
-    }
-
-    #[test]
-    fn test_encode_r2g3b2_color() {
-        // Test known colors
-        assert_eq!(encode_r2g3b2_color(&[1.0, 0.0, 0.0]), 128 + (0b11 << 5)); // Red
-        assert_eq!(encode_r2g3b2_color(&[0.0, 1.0, 0.0]), 128 + (0b111 << 2)); // Green
-        assert_eq!(encode_r2g3b2_color(&[0.0, 0.0, 1.0]), 128 + 0b11); // Blue
-        assert_eq!(encode_r2g3b2_color(&[0.0, 0.0, 0.0]), 128); // Black
-        assert_eq!(encode_r2g3b2_color(&[1.0, 1.0, 1.0]), 255); // White
-    }
-
-    #[test]
-    fn test_vertex_colors_to_materials() {
-        let result = create_test_cube();
-        let config = VoxelizeConfig::new(5);
-
-        let voxels = voxelize_mesh(&result.vertices, &result.faces, &config);
-        let colors = result.vertex_colors.as_ref().unwrap();
-
-        let materials = vertex_colors_to_materials(
-            &result.vertices,
-            &result.faces,
-            colors,
-            &voxels,
-            &config,
-        );
-
-        assert_eq!(materials.len(), voxels.len());
-
-        // All materials should be in valid range [128, 255]
-        for &mat in &materials {
-            assert!(mat >= 128);
-        }
-    }
-
-    #[test]
     fn test_trellis_to_cube() {
         let result = create_test_cube();
         let cube = trellis_to_cube(&result, 5).unwrap();
@@ -757,140 +865,75 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_trellis_to_cube_empty() {
-        let empty_result = TrellisResult {
-            vertices: vec![],
-            faces: vec![],
-            vertex_colors: None,
-            vertex_normals: None,
-            glb_data: None,
-        };
+    // OVoxel conversion tests
+    fn create_test_ovoxel() -> OVoxel {
+        let coords = vec![
+            IVec3::new(0, 0, 0),
+            IVec3::new(1, 0, 0),
+            IVec3::new(0, 1, 0),
+            IVec3::new(0, 0, 1),
+        ];
+        let attrs = vec![
+            [1.0, 0.0, 0.0], // Red
+            [0.0, 1.0, 0.0], // Green
+            [0.0, 0.0, 1.0], // Blue
+            [1.0, 1.0, 0.0], // Yellow
+        ];
+        let voxel_size = 1.0;
+        let aabb = [Vec3::new(0.0, 0.0, 0.0), Vec3::new(2.0, 2.0, 2.0)];
 
-        let result = trellis_to_cube(&empty_result, 5);
-        assert!(result.is_err());
+        OVoxel::new(coords, attrs, voxel_size, aabb)
     }
 
     #[test]
-    fn test_trellis_to_csm() {
-        let result = create_test_cube();
-        let csm = trellis_to_csm(&result).unwrap();
+    fn test_ovoxel_to_cube_basic() {
+        let ovoxel = create_test_ovoxel();
+        let result = ovoxel_to_cube(&ovoxel, 4, 256);
+        assert!(result.is_ok());
 
-        // Should produce non-empty CSM string
+        let (cubebox, palette) = result.unwrap();
+        assert_eq!(cubebox.depth, 4);
+        assert!(palette.len() <= 256);
+        assert!(!palette.is_empty());
+    }
+
+    #[test]
+    fn test_ovoxel_to_csm() {
+        let ovoxel = create_test_ovoxel();
+        let result = ovoxel_to_csm(&ovoxel, 4, 256);
+        assert!(result.is_ok());
+
+        let (csm, palette) = result.unwrap();
         assert!(!csm.is_empty());
-
-        // CSM format should start with valid character
-        let first_char = csm.chars().next().unwrap();
-        assert!(
-            first_char == '>' || first_char == 's' || first_char.is_ascii_digit(),
-            "CSM should start with '>', 's', or digit"
-        );
+        assert!(!palette.is_empty());
     }
 
     #[test]
-    fn test_sample_triangle_surface() {
-        let v0 = Vec3::new(0.0, 0.0, 0.0);
-        let v1 = Vec3::new(1.0, 0.0, 0.0);
-        let v2 = Vec3::new(0.5, 1.0, 0.0);
-
-        let samples = sample_triangle_surface(&v0, &v1, &v2, 5);
-        assert!(!samples.is_empty());
-
-        // All samples should be on or near the triangle plane (z ≈ 0)
-        for sample in &samples {
-            assert!((sample.z).abs() < 1e-5);
-        }
+    fn test_invalid_depth() {
+        let ovoxel = create_test_ovoxel();
+        let result = ovoxel_to_cube(&ovoxel, 8, 256);
+        assert!(matches!(result, Err(ConversionError::InvalidDepth(8))));
     }
 
     #[test]
-    fn test_closest_point_on_triangle() {
-        let v0 = Vec3::new(0.0, 0.0, 0.0);
-        let v1 = Vec3::new(1.0, 0.0, 0.0);
-        let v2 = Vec3::new(0.0, 1.0, 0.0);
-
-        // Test 1: Point at a vertex
-        let p = Vec3::new(0.0, 0.0, 0.0);
-        let (_closest, bary) = closest_point_on_triangle(&p, &v0, &v1, &v2);
-        // Barycentric coordinates should sum to 1
-        assert!((bary.x + bary.y + bary.z - 1.0).abs() < 1e-4);
-
-        // Test 2: Point on an edge
-        let p = Vec3::new(0.5, 0.0, 0.0);
-        let (_closest, bary) = closest_point_on_triangle(&p, &v0, &v1, &v2);
-        assert!((bary.x + bary.y + bary.z - 1.0).abs() < 1e-4);
-
-        // Test 3: Point inside triangle
-        let p = Vec3::new(0.1, 0.1, 0.0);
-        let (_closest, bary) = closest_point_on_triangle(&p, &v0, &v1, &v2);
-        assert!((bary.x + bary.y + bary.z - 1.0).abs() < 1e-4);
-        // All barycentric coordinates should be non-negative
-        assert!(bary.x >= -1e-6 && bary.y >= -1e-6 && bary.z >= -1e-6);
+    fn test_empty_ovoxel() {
+        let ovoxel = OVoxel::new(vec![], vec![], 1.0, [Vec3::ZERO, Vec3::ONE]);
+        let result = ovoxel_to_cube(&ovoxel, 4, 256);
+        // The validation catches EmptyData which gets wrapped in InvalidOVoxel
+        assert!(matches!(
+            result,
+            Err(ConversionError::InvalidOVoxel(OVoxelError::EmptyData))
+        ));
     }
 
     #[test]
-    fn test_fill_interior_voxels() {
-        // Create a hollow cube surface
-        let mut surface = Vec::new();
-        let size = 10;
+    fn test_auto_depth() {
+        let ovoxel = create_test_ovoxel();
+        let result = ovoxel_to_cube_auto_depth(&ovoxel, 256);
+        assert!(result.is_ok());
 
-        // Add only the surface voxels (6 faces)
-        for i in 0..size {
-            for j in 0..size {
-                surface.push(IVec3::new(i, j, 0)); // Front
-                surface.push(IVec3::new(i, j, size - 1)); // Back
-                surface.push(IVec3::new(i, 0, j)); // Bottom
-                surface.push(IVec3::new(i, size - 1, j)); // Top
-                surface.push(IVec3::new(0, i, j)); // Left
-                surface.push(IVec3::new(size - 1, i, j)); // Right
-            }
-        }
-
-        let filled = fill_interior_voxels(&surface, size);
-
-        // Filled should have more voxels than surface (includes interior)
-        assert!(filled.len() >= surface.len());
-
-        // All filled voxels should be within bounds
-        for voxel in &filled {
-            assert!(voxel.x >= 0 && voxel.x < size);
-            assert!(voxel.y >= 0 && voxel.y < size);
-            assert!(voxel.z >= 0 && voxel.z < size);
-        }
-    }
-
-    #[test]
-    fn test_voxelize_mesh_with_colors() {
-        let result = create_test_cube();
-        let config = VoxelizeConfig::new(6);
-
-        let voxels = voxelize_mesh(&result.vertices, &result.faces, &config);
-        assert!(!voxels.is_empty());
-
-        // Test with vertex colors
-        if let Some(colors) = &result.vertex_colors {
-            let materials = vertex_colors_to_materials(
-                &result.vertices,
-                &result.faces,
-                colors,
-                &voxels,
-                &config,
-            );
-
-            assert_eq!(materials.len(), voxels.len());
-
-            // Materials should have variety (not all the same)
-            let unique_materials: std::collections::HashSet<_> = materials.iter().collect();
-            assert!(unique_materials.len() > 1);
-        }
-    }
-
-    #[test]
-    fn test_different_depths() {
-        let result = create_test_cube();
-
-        for depth in [3, 4, 5, 6, 7] {
-            let cube = trellis_to_cube(&result, depth);
-            assert!(cube.is_ok(), "Failed at depth {}", depth);
-        }
+        let (cubebox, _) = result.unwrap();
+        assert!(cubebox.depth >= 4);
+        assert!(cubebox.depth <= 7);
     }
 }

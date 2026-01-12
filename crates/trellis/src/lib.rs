@@ -45,17 +45,23 @@
 //! ```
 
 pub mod client;
+pub mod color_quantizer;
 pub mod convert;
+pub mod ovoxel;
 pub mod types;
 
 pub use client::TrellisClient;
-pub use convert::{trellis_to_csm, trellis_to_cube};
+pub use color_quantizer::{quantize_colors, ColorPalette};
+pub use convert::{ovoxel_to_csm, ovoxel_to_cube, ovoxel_to_cube_auto_depth, ConversionError};
+pub use ovoxel::{OVoxel, OVoxelError};
 pub use types::{GenerationRequest, Resolution, ServerStatus, TrellisError, TrellisResult};
 
 /// Re-export commonly used types
 pub mod prelude {
     pub use crate::client::TrellisClient;
-    pub use crate::convert::{trellis_to_csm, trellis_to_cube};
+    pub use crate::color_quantizer::{quantize_colors, ColorPalette};
+    pub use crate::convert::{ovoxel_to_csm, ovoxel_to_cube, ovoxel_to_cube_auto_depth};
+    pub use crate::ovoxel::OVoxel;
     pub use crate::types::{
         GenerationRequest, Resolution, ServerStatus, TrellisError, TrellisResult,
     };
