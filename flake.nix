@@ -104,12 +104,18 @@
       in
       {
         devShells.default = pkgs.mkShell {
-          buildInputs = buildInputs ++ devTools;
+          buildInputs = buildInputs ++ devTools ++ condaDeps;
           inherit nativeBuildInputs;
 
           shellHook = ''
             export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:$LD_LIBRARY_PATH"
             export PKG_CONFIG_PATH="${pkgs.alsa-lib.dev}/lib/pkgconfig:${pkgs.udev.dev}/lib/pkgconfig:${pkgs.openssl.dev}/lib/pkgconfig:$PKG_CONFIG_PATH"
+
+            # Micromamba/conda setup
+            export MAMBA_ROOT_PREFIX="$HOME/.micromamba"
+            eval "$(micromamba shell hook --shell bash)"
+            # Create conda alias for compatibility
+            alias conda='micromamba'
 
             # Wayland/X11 environment
             export WAYLAND_DISPLAY="''${WAYLAND_DISPLAY:-wayland-1}"
@@ -120,6 +126,7 @@
             echo "Toolchain:"
             echo "  Rust: $(rustc --version)"
             echo "  Bun: $(bun --version)"
+            echo "  Conda: micromamba $(micromamba --version | head -1)"
             echo ""
             echo "Quick start:"
             echo "  just dev       - Start development server (web)"
@@ -131,6 +138,10 @@
             echo "  just planet    - Run native voxel editor"
             echo "  just proto     - Run physics prototype"
             echo "  just server    - Run game server"
+            echo ""
+            echo "AI Inference (requires GPU):"
+            echo "  nix develop .#cuda  - Enter CUDA shell for Trellis setup"
+            echo "  just trellis-setup  - Set up Trellis (after entering cuda shell)"
             echo ""
             echo "Build optimizations:"
             echo "  ✓ mold linker configured in .cargo/config.toml"
