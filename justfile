@@ -30,6 +30,8 @@ default:
     @echo "  just xcube-setup      - Set up XCube server environment"
     @echo "  just xcube-server     - Start XCube inference server"
     @echo "  just xcube-generate   - Generate 3D object from text prompt"
+    @echo "  just trellis-setup    - Set up Trellis.2 server environment"
+    @echo "  just trellis-server   - Start Trellis.2 inference server"
     @echo ""
 
 # Build WASM module in development mode
@@ -276,6 +278,18 @@ xcube-generate PROMPT:
         -H "Content-Type: application/json" \
         -d '{"prompt": "{{PROMPT}}", "ddim_steps": 50, "guidance_scale": 7.5, "use_fine": false}' \
         | uv run python -c "import sys, json; r = json.load(sys.stdin); print(f'Generated {len(r[\"coarse_xyz\"])} coarse points')"
+
+# Set up Trellis.2 inference server environment
+trellis-setup *ARGS:
+    @echo "Setting up Trellis.2 server environment..."
+    crates/trellis/server/setup.sh {{ARGS}}
+
+# Start Trellis.2 inference server
+trellis-server:
+    @echo "Starting Trellis.2 inference server on http://0.0.0.0:8001..."
+    @echo "API docs: http://localhost:8001/docs"
+    @echo ""
+    cd crates/trellis/server && uv run server.py
 
 # Run hot-reload demo (manual two-terminal method)
 hot-reload-manual:
