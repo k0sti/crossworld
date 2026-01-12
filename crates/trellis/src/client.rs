@@ -356,6 +356,37 @@ mod tests {
     }
 
     #[test]
+    fn test_client_with_multiple_trailing_slashes() {
+        let client = TrellisClient::new("http://localhost:8001///");
+        // trim_end_matches('/') removes all trailing slashes
+        assert_eq!(client.base_url, "http://localhost:8001");
+    }
+
+    #[test]
+    fn test_client_with_path() {
+        let client = TrellisClient::new("http://localhost:8001/api/v1");
+        assert_eq!(client.base_url, "http://localhost:8001/api/v1");
+    }
+
+    #[test]
+    fn test_client_with_path_and_trailing_slash() {
+        let client = TrellisClient::new("http://localhost:8001/api/v1/");
+        assert_eq!(client.base_url, "http://localhost:8001/api/v1");
+    }
+
+    #[test]
+    fn test_client_with_https() {
+        let client = TrellisClient::new("https://trellis.example.com:8443");
+        assert_eq!(client.base_url, "https://trellis.example.com:8443");
+    }
+
+    #[test]
+    fn test_client_with_empty_url() {
+        let client = TrellisClient::new("");
+        assert_eq!(client.base_url, "");
+    }
+
+    #[test]
     fn test_client_configuration() {
         let client = TrellisClient::new("http://localhost:8001")
             .with_health_timeout(Duration::from_secs(10))
@@ -367,6 +398,47 @@ mod tests {
         assert_eq!(client.generate_timeout, Duration::from_secs(1200));
         assert_eq!(client.max_retries, 5);
         assert_eq!(client.base_delay_ms, 2000);
+    }
+
+    #[test]
+    fn test_client_configuration_chain_order() {
+        // Test that builder methods can be called in any order
+        let client1 = TrellisClient::new("http://localhost:8001")
+            .with_health_timeout(Duration::from_secs(10))
+            .with_max_retries(5);
+
+        let client2 = TrellisClient::new("http://localhost:8001")
+            .with_max_retries(5)
+            .with_health_timeout(Duration::from_secs(10));
+
+        assert_eq!(client1.health_timeout, client2.health_timeout);
+        assert_eq!(client1.max_retries, client2.max_retries);
+    }
+
+    #[test]
+    fn test_client_zero_retries() {
+        let client = TrellisClient::new("http://localhost:8001").with_max_retries(0);
+
+        assert_eq!(client.max_retries, 0);
+    }
+
+    #[test]
+    fn test_client_zero_delay() {
+        let client = TrellisClient::new("http://localhost:8001").with_base_delay_ms(0);
+
+        assert_eq!(client.base_delay_ms, 0);
+        assert_eq!(client.calculate_backoff_delay(0), Duration::from_millis(0));
+        assert_eq!(client.calculate_backoff_delay(1), Duration::from_millis(0));
+    }
+
+    #[test]
+    fn test_client_very_short_timeout() {
+        let client = TrellisClient::new("http://localhost:8001")
+            .with_health_timeout(Duration::from_millis(1))
+            .with_generate_timeout(Duration::from_millis(1));
+
+        assert_eq!(client.health_timeout, Duration::from_millis(1));
+        assert_eq!(client.generate_timeout, Duration::from_millis(1));
     }
 
     #[test]
@@ -392,14 +464,87 @@ mod tests {
     }
 
     #[test]
+    fn test_backoff_delay_with_custom_base() {
+        let client = TrellisClient::new("http://localhost:8001").with_base_delay_ms(500);
+
+        assert_eq!(
+            client.calculate_backoff_delay(0),
+            Duration::from_millis(500)
+        );
+        assert_eq!(
+            client.calculate_backoff_delay(1),
+            Duration::from_millis(1000)
+        );
+        assert_eq!(
+            client.calculate_backoff_delay(2),
+            Duration::from_millis(2000)
+        );
+        assert_eq!(
+            client.calculate_backoff_delay(3),
+            Duration::from_millis(4000)
+        );
+    }
+
+    #[test]
+    fn test_backoff_delay_exponential_growth() {
+        let client = TrellisClient::new("http://localhost:8001").with_base_delay_ms(100);
+
+        // Verify exponential growth pattern
+        for attempt in 0..5 {
+            let expected = Duration::from_millis(100 * 2u64.pow(attempt));
+            assert_eq!(client.calculate_backoff_delay(attempt), expected);
+        }
+    }
+
+    #[test]
     fn test_default_client() {
         let client = TrellisClient::default();
         assert_eq!(client.base_url, "http://localhost:8001");
     }
 
     #[test]
+    fn test_default_client_has_default_values() {
+        let client = TrellisClient::default();
+
+        assert_eq!(client.health_timeout, DEFAULT_HEALTH_TIMEOUT);
+        assert_eq!(client.generate_timeout, DEFAULT_GENERATE_TIMEOUT);
+        assert_eq!(client.max_retries, DEFAULT_MAX_RETRIES);
+        assert_eq!(client.base_delay_ms, DEFAULT_BASE_DELAY_MS);
+    }
+
+    #[test]
     fn test_generate_timeout_default() {
         let client = TrellisClient::new("http://localhost:8001");
         assert_eq!(client.generate_timeout, Duration::from_secs(600));
+    }
+
+    #[test]
+    fn test_health_timeout_default() {
+        let client = TrellisClient::new("http://localhost:8001");
+        assert_eq!(client.health_timeout, Duration::from_secs(5));
+    }
+
+    #[test]
+    fn test_default_constants() {
+        // Verify the default constants have sensible values
+        assert_eq!(DEFAULT_HEALTH_TIMEOUT, Duration::from_secs(5));
+        assert_eq!(DEFAULT_GENERATE_TIMEOUT, Duration::from_secs(600));
+        assert_eq!(DEFAULT_MAX_RETRIES, 3);
+        assert_eq!(DEFAULT_BASE_DELAY_MS, 1000);
+    }
+
+    #[test]
+    fn test_client_from_string() {
+        // Test that new() works with String (not just &str)
+        let url = String::from("http://localhost:8001");
+        let client = TrellisClient::new(url);
+        assert_eq!(client.base_url, "http://localhost:8001");
+    }
+
+    #[test]
+    fn test_client_from_string_with_trailing_slash() {
+        let url = String::from("http://localhost:8001/");
+        let client = TrellisClient::new(url);
+        assert_eq!(client.base_url, "http://localhost:8001");
     }
 }

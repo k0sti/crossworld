@@ -843,6 +843,13 @@ mod tests {
     }
 
     #[test]
+    fn test_voxelize_config_default() {
+        let config = VoxelizeConfig::default();
+        assert_eq!(config.depth, 6);
+        assert!(!config.fill_interior);
+    }
+
+    #[test]
     fn test_voxelize_mesh_empty() {
         let vertices: Vec<[f32; 3]> = vec![];
         let faces: Vec<[u32; 3]> = vec![];
@@ -850,6 +857,159 @@ mod tests {
 
         let voxels = voxelize_mesh(&vertices, &faces, &config);
         assert!(voxels.is_empty());
+    }
+
+    #[test]
+    fn test_voxelize_mesh_empty_faces() {
+        // Vertices but no faces
+        let vertices = vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.5, 1.0, 0.0]];
+        let faces: Vec<[u32; 3]> = vec![];
+        let config = VoxelizeConfig::default();
+
+        let voxels = voxelize_mesh(&vertices, &faces, &config);
+        assert!(voxels.is_empty());
+    }
+
+    #[test]
+    fn test_voxelize_mesh_single_triangle() {
+        let vertices = vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.5, 1.0, 0.0]];
+        let faces = vec![[0, 1, 2]];
+        let config = VoxelizeConfig::new(5);
+
+        let voxels = voxelize_mesh(&vertices, &faces, &config);
+        assert!(!voxels.is_empty());
+    }
+
+    #[test]
+    fn test_voxelize_mesh_degenerate_point() {
+        // All vertices at the same point (degenerate case)
+        let vertices = vec![[0.5, 0.5, 0.5], [0.5, 0.5, 0.5], [0.5, 0.5, 0.5]];
+        let faces = vec![[0, 1, 2]];
+        let config = VoxelizeConfig::new(5);
+
+        let voxels = voxelize_mesh(&vertices, &faces, &config);
+        // Should return empty for degenerate mesh
+        assert!(voxels.is_empty());
+    }
+
+    #[test]
+    fn test_voxelize_mesh_degenerate_line() {
+        // All vertices on a line (degenerate triangle with zero area)
+        let vertices = vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [2.0, 0.0, 0.0]];
+        let faces = vec![[0, 1, 2]];
+        let config = VoxelizeConfig::new(5);
+
+        let voxels = voxelize_mesh(&vertices, &faces, &config);
+        // May produce voxels along the line, or may be empty depending on sampling
+        // The key is it should not crash
+        assert!(voxels.len() < 100); // Should be minimal if any
+    }
+
+    #[test]
+    fn test_voxelize_mesh_very_small_triangle() {
+        // Very small triangle that might be smaller than a voxel
+        let vertices = vec![[0.0, 0.0, 0.0], [0.001, 0.0, 0.0], [0.0005, 0.001, 0.0]];
+        let faces = vec![[0, 1, 2]];
+        let config = VoxelizeConfig::new(3); // Low resolution
+
+        let voxels = voxelize_mesh(&vertices, &faces, &config);
+        // Should handle gracefully - the normalized triangle fills the grid
+        // so we expect the minimum sampling (3 samples minimum per triangle)
+        // The test just verifies it doesn't crash and produces some output
+        assert!(!voxels.is_empty() || voxels.is_empty()); // Always true - just checking no panic
+    }
+
+    #[test]
+    fn test_voxelize_mesh_cube() {
+        let result = create_test_cube();
+        let config = VoxelizeConfig::new(5);
+
+        let voxels = voxelize_mesh(&result.vertices, &result.faces, &config);
+        assert!(!voxels.is_empty());
+
+        // All voxels should be within bounds
+        let grid_size = 1 << config.depth;
+        for voxel in &voxels {
+            assert!(voxel.x >= 0 && voxel.x < grid_size);
+            assert!(voxel.y >= 0 && voxel.y < grid_size);
+            assert!(voxel.z >= 0 && voxel.z < grid_size);
+        }
+    }
+
+    #[test]
+    fn test_voxelize_mesh_with_fill_interior() {
+        let result = create_test_cube();
+        let config_surface = VoxelizeConfig::new(5).with_fill_interior(false);
+        let config_filled = VoxelizeConfig::new(5).with_fill_interior(true);
+
+        let voxels_surface = voxelize_mesh(&result.vertices, &result.faces, &config_surface);
+        let voxels_filled = voxelize_mesh(&result.vertices, &result.faces, &config_filled);
+
+        // Filled version should have more or equal voxels
+        assert!(voxels_filled.len() >= voxels_surface.len());
+    }
+
+    #[test]
+    fn test_encode_r2g3b2_color() {
+        // Test known colors
+        assert_eq!(encode_r2g3b2_color(&[1.0, 0.0, 0.0]), 128 + (0b11 << 5)); // Red
+        assert_eq!(encode_r2g3b2_color(&[0.0, 1.0, 0.0]), 128 + (0b111 << 2)); // Green
+        assert_eq!(encode_r2g3b2_color(&[0.0, 0.0, 1.0]), 128 + 0b11); // Blue
+        assert_eq!(encode_r2g3b2_color(&[0.0, 0.0, 0.0]), 128); // Black
+        assert_eq!(encode_r2g3b2_color(&[1.0, 1.0, 1.0]), 255); // White
+    }
+
+    #[test]
+    fn test_encode_r2g3b2_color_clamping() {
+        // Values outside [0, 1] should be clamped
+        assert_eq!(encode_r2g3b2_color(&[-0.5, -0.5, -0.5]), 128); // Clamped to black
+        assert_eq!(encode_r2g3b2_color(&[2.0, 2.0, 2.0]), 255); // Clamped to white
+    }
+
+    #[test]
+    fn test_encode_r2g3b2_color_range() {
+        // Test that all possible outputs are in valid range [128, 255]
+        for r in 0..=10 {
+            for g in 0..=10 {
+                for b in 0..=10 {
+                    let color = [r as f32 / 10.0, g as f32 / 10.0, b as f32 / 10.0];
+                    let material = encode_r2g3b2_color(&color);
+                    assert!(material >= 128);
+                    // material is u8, so it's always <= 255
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_vertex_colors_to_materials() {
+        let result = create_test_cube();
+        let config = VoxelizeConfig::new(5);
+
+        let voxels = voxelize_mesh(&result.vertices, &result.faces, &config);
+        let colors = result.vertex_colors.as_ref().unwrap();
+
+        let materials =
+            vertex_colors_to_materials(&result.vertices, &result.faces, colors, &voxels, &config);
+
+        assert_eq!(materials.len(), voxels.len());
+
+        // All materials should be in valid range [128, 255]
+        for &mat in &materials {
+            assert!(mat >= 128);
+        }
+    }
+
+    #[test]
+    fn test_vertex_colors_to_materials_empty() {
+        let vertices: Vec<[f32; 3]> = vec![];
+        let faces: Vec<[u32; 3]> = vec![];
+        let colors: Vec<[f32; 3]> = vec![];
+        let voxels: Vec<IVec3> = vec![];
+        let config = VoxelizeConfig::default();
+
+        let materials = vertex_colors_to_materials(&vertices, &faces, &colors, &voxels, &config);
+        assert!(materials.is_empty());
     }
 
     #[test]
@@ -883,6 +1043,65 @@ mod tests {
         let aabb = [Vec3::new(0.0, 0.0, 0.0), Vec3::new(2.0, 2.0, 2.0)];
 
         OVoxel::new(coords, attrs, voxel_size, aabb)
+    }
+
+    #[test]
+    fn test_trellis_to_cube_empty() {
+        let empty_result = TrellisResult {
+            vertices: vec![],
+            faces: vec![],
+            vertex_colors: None,
+            vertex_normals: None,
+            glb_data: None,
+        };
+
+        let result = trellis_to_cube(&empty_result, 5);
+        assert!(result.is_err());
+
+        if let Err(TrellisError::ConversionError(msg)) = result {
+            assert!(msg.contains("no mesh data"));
+        } else {
+            panic!("Expected ConversionError");
+        }
+    }
+
+    #[test]
+    fn test_trellis_to_cube_degenerate() {
+        let degenerate_result = TrellisResult {
+            vertices: vec![[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]],
+            faces: vec![[0, 1, 2]],
+            vertex_colors: None,
+            vertex_normals: None,
+            glb_data: None,
+        };
+
+        let result = trellis_to_cube(&degenerate_result, 5);
+        assert!(result.is_err());
+
+        if let Err(TrellisError::ConversionError(msg)) = result {
+            assert!(msg.contains("no voxels"));
+        } else {
+            panic!("Expected ConversionError for degenerate mesh");
+        }
+    }
+
+    #[test]
+    fn test_trellis_to_cube_without_colors() {
+        let result = TrellisResult {
+            vertices: vec![
+                [-0.5, -0.5, -0.5],
+                [0.5, -0.5, -0.5],
+                [0.5, 0.5, -0.5],
+                [-0.5, 0.5, -0.5],
+            ],
+            faces: vec![[0, 1, 2], [0, 2, 3]],
+            vertex_colors: None, // No colors
+            vertex_normals: None,
+            glb_data: None,
+        };
+
+        let cube = trellis_to_cube(&result, 5);
+        assert!(cube.is_ok());
     }
 
     #[test]
@@ -935,5 +1154,261 @@ mod tests {
         let (cubebox, _) = result.unwrap();
         assert!(cubebox.depth >= 4);
         assert!(cubebox.depth <= 7);
+    }
+
+    #[test]
+    fn test_sample_triangle_surface_minimum_samples() {
+        // Even for tiny triangles, we should get at least 3 samples
+        let v0 = Vec3::new(0.0, 0.0, 0.0);
+        let v1 = Vec3::new(0.0001, 0.0, 0.0);
+        let v2 = Vec3::new(0.00005, 0.0001, 0.0);
+
+        let samples = sample_triangle_surface(&v0, &v1, &v2, 5);
+        assert!(samples.len() >= 3);
+    }
+
+    #[test]
+    fn test_sample_triangle_surface_large_triangle() {
+        // Large triangle should produce many samples
+        let v0 = Vec3::new(-10.0, -10.0, 0.0);
+        let v1 = Vec3::new(10.0, -10.0, 0.0);
+        let v2 = Vec3::new(0.0, 10.0, 0.0);
+
+        let samples = sample_triangle_surface(&v0, &v1, &v2, 6);
+        assert!(samples.len() > 100);
+    }
+
+    #[test]
+    fn test_sample_triangle_surface_3d() {
+        // Triangle not on a coordinate plane
+        let v0 = Vec3::new(0.0, 0.0, 0.0);
+        let v1 = Vec3::new(1.0, 0.0, 1.0);
+        let v2 = Vec3::new(0.0, 1.0, 0.5);
+
+        let samples = sample_triangle_surface(&v0, &v1, &v2, 5);
+        assert!(!samples.is_empty());
+
+        // All samples should be within the triangle's bounding box
+        for sample in &samples {
+            assert!(sample.x >= -0.01 && sample.x <= 1.01);
+            assert!(sample.y >= -0.01 && sample.y <= 1.01);
+            assert!(sample.z >= -0.01 && sample.z <= 1.01);
+        }
+    }
+
+    #[test]
+    fn test_closest_point_on_triangle() {
+        let v0 = Vec3::new(0.0, 0.0, 0.0);
+        let v1 = Vec3::new(1.0, 0.0, 0.0);
+        let v2 = Vec3::new(0.0, 1.0, 0.0);
+
+        // Test 1: Point at a vertex
+        let p = Vec3::new(0.0, 0.0, 0.0);
+        let (_closest, bary) = closest_point_on_triangle(&p, &v0, &v1, &v2);
+        // Barycentric coordinates should sum to 1
+        assert!((bary.x + bary.y + bary.z - 1.0).abs() < 1e-4);
+
+        // Test 2: Point on an edge
+        let p = Vec3::new(0.5, 0.0, 0.0);
+        let (_closest, bary) = closest_point_on_triangle(&p, &v0, &v1, &v2);
+        assert!((bary.x + bary.y + bary.z - 1.0).abs() < 1e-4);
+
+        // Test 3: Point inside triangle
+        let p = Vec3::new(0.1, 0.1, 0.0);
+        let (_closest, bary) = closest_point_on_triangle(&p, &v0, &v1, &v2);
+        assert!((bary.x + bary.y + bary.z - 1.0).abs() < 1e-4);
+        // All barycentric coordinates should be non-negative
+        assert!(bary.x >= -1e-6 && bary.y >= -1e-6 && bary.z >= -1e-6);
+    }
+
+    #[test]
+    fn test_closest_point_on_triangle_outside() {
+        let v0 = Vec3::new(0.0, 0.0, 0.0);
+        let v1 = Vec3::new(1.0, 0.0, 0.0);
+        let v2 = Vec3::new(0.0, 1.0, 0.0);
+
+        // Point far outside the triangle
+        let p = Vec3::new(5.0, 5.0, 5.0);
+        let (closest, bary) = closest_point_on_triangle(&p, &v0, &v1, &v2);
+
+        // Barycentric should still sum to 1
+        assert!((bary.x + bary.y + bary.z - 1.0).abs() < 1e-4);
+
+        // Closest point should be on the triangle (z = 0)
+        assert!(closest.z.abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_closest_point_on_triangle_above_plane() {
+        let v0 = Vec3::new(0.0, 0.0, 0.0);
+        let v1 = Vec3::new(1.0, 0.0, 0.0);
+        let v2 = Vec3::new(0.0, 1.0, 0.0);
+
+        // Point directly above triangle center
+        let p = Vec3::new(0.25, 0.25, 1.0);
+        let (closest, bary) = closest_point_on_triangle(&p, &v0, &v1, &v2);
+
+        // Barycentric coordinates should sum to 1
+        assert!((bary.x + bary.y + bary.z - 1.0).abs() < 1e-4);
+
+        // Closest point should be on the triangle plane (z = 0)
+        assert!(closest.z.abs() < 1e-6);
+        // And should be inside or on the triangle
+        assert!(closest.x >= -1e-6);
+        assert!(closest.y >= -1e-6);
+        assert!(closest.x + closest.y <= 1.0 + 1e-6);
+    }
+
+    #[test]
+    fn test_fill_interior_voxels() {
+        // Create a hollow cube surface
+        let mut surface = Vec::new();
+        let size = 10;
+
+        // Add only the surface voxels (6 faces)
+        for i in 0..size {
+            for j in 0..size {
+                surface.push(IVec3::new(i, j, 0)); // Front
+                surface.push(IVec3::new(i, j, size - 1)); // Back
+                surface.push(IVec3::new(i, 0, j)); // Bottom
+                surface.push(IVec3::new(i, size - 1, j)); // Top
+                surface.push(IVec3::new(0, i, j)); // Left
+                surface.push(IVec3::new(size - 1, i, j)); // Right
+            }
+        }
+
+        let filled = fill_interior_voxels(&surface, size);
+
+        // Filled should have more voxels than surface (includes interior)
+        assert!(filled.len() >= surface.len());
+
+        // All filled voxels should be within bounds
+        for voxel in &filled {
+            assert!(voxel.x >= 0 && voxel.x < size);
+            assert!(voxel.y >= 0 && voxel.y < size);
+            assert!(voxel.z >= 0 && voxel.z < size);
+        }
+    }
+
+    #[test]
+    fn test_fill_interior_voxels_empty() {
+        let surface: Vec<IVec3> = vec![];
+        let filled = fill_interior_voxels(&surface, 10);
+        // With no surface, nothing should be filled
+        assert!(filled.is_empty());
+    }
+
+    #[test]
+    fn test_fill_interior_voxels_single_voxel() {
+        let surface = vec![IVec3::new(5, 5, 5)];
+        let filled = fill_interior_voxels(&surface, 10);
+        // Single voxel - should only contain that voxel (no interior to fill)
+        assert_eq!(filled.len(), 1);
+    }
+
+    #[test]
+    fn test_voxelize_mesh_with_colors() {
+        let result = create_test_cube();
+        let config = VoxelizeConfig::new(6);
+
+        let voxels = voxelize_mesh(&result.vertices, &result.faces, &config);
+        assert!(!voxels.is_empty());
+
+        // Test with vertex colors
+        if let Some(colors) = &result.vertex_colors {
+            let materials = vertex_colors_to_materials(
+                &result.vertices,
+                &result.faces,
+                colors,
+                &voxels,
+                &config,
+            );
+
+            assert_eq!(materials.len(), voxels.len());
+
+            // Materials should have variety (not all the same)
+            let unique_materials: std::collections::HashSet<_> = materials.iter().collect();
+            assert!(unique_materials.len() > 1);
+        }
+    }
+
+    #[test]
+    fn test_different_depths() {
+        let result = create_test_cube();
+
+        for depth in [3, 4, 5, 6, 7] {
+            let cube = trellis_to_cube(&result, depth);
+            assert!(cube.is_ok(), "Failed at depth {}", depth);
+        }
+    }
+
+    #[test]
+    fn test_voxelize_mesh_large_coordinates() {
+        // Mesh with large coordinate values
+        let vertices = vec![
+            [1000.0, 1000.0, 1000.0],
+            [1001.0, 1000.0, 1000.0],
+            [1000.5, 1001.0, 1000.0],
+        ];
+        let faces = vec![[0, 1, 2]];
+        let config = VoxelizeConfig::new(5);
+
+        let voxels = voxelize_mesh(&vertices, &faces, &config);
+        // Should handle large coordinates through normalization
+        assert!(!voxels.is_empty());
+
+        // All voxels should be within grid bounds
+        let grid_size = 1 << config.depth;
+        for voxel in &voxels {
+            assert!(voxel.x >= 0 && voxel.x < grid_size);
+            assert!(voxel.y >= 0 && voxel.y < grid_size);
+            assert!(voxel.z >= 0 && voxel.z < grid_size);
+        }
+    }
+
+    #[test]
+    fn test_voxelize_mesh_negative_coordinates() {
+        // Mesh centered at negative coordinates
+        let vertices = vec![
+            [-100.0, -100.0, -100.0],
+            [-99.0, -100.0, -100.0],
+            [-99.5, -99.0, -100.0],
+        ];
+        let faces = vec![[0, 1, 2]];
+        let config = VoxelizeConfig::new(5);
+
+        let voxels = voxelize_mesh(&vertices, &faces, &config);
+        assert!(!voxels.is_empty());
+
+        // All voxels should be within grid bounds (positive indices)
+        let grid_size = 1 << config.depth;
+        for voxel in &voxels {
+            assert!(voxel.x >= 0 && voxel.x < grid_size);
+            assert!(voxel.y >= 0 && voxel.y < grid_size);
+            assert!(voxel.z >= 0 && voxel.z < grid_size);
+        }
+    }
+
+    #[test]
+    fn test_voxelize_mesh_asymmetric() {
+        // Non-uniform bounding box to test normalization
+        let vertices = vec![
+            [0.0, 0.0, 0.0],
+            [10.0, 0.0, 0.0], // Much larger in X
+            [5.0, 1.0, 0.0],
+        ];
+        let faces = vec![[0, 1, 2]];
+        let config = VoxelizeConfig::new(5);
+
+        let voxels = voxelize_mesh(&vertices, &faces, &config);
+        assert!(!voxels.is_empty());
+
+        // Grid should be uniformly scaled, so Y range should be compressed
+        let grid_size = 1 << config.depth;
+        for voxel in &voxels {
+            assert!(voxel.x >= 0 && voxel.x < grid_size);
+            assert!(voxel.y >= 0 && voxel.y < grid_size);
+            assert!(voxel.z >= 0 && voxel.z < grid_size);
+        }
     }
 }

@@ -309,6 +309,41 @@ mod tests {
     }
 
     #[test]
+    fn test_resolution_display() {
+        assert_eq!(format!("{}", Resolution::R512), "512");
+        assert_eq!(format!("{}", Resolution::R1024), "1024");
+        assert_eq!(format!("{}", Resolution::R1536), "1536");
+    }
+
+    #[test]
+    fn test_resolution_serialization() {
+        // Test JSON serialization
+        let r512 = Resolution::R512;
+        let json = serde_json::to_string(&r512).unwrap();
+        assert_eq!(json, "\"512\"");
+
+        let r1024 = Resolution::R1024;
+        let json = serde_json::to_string(&r1024).unwrap();
+        assert_eq!(json, "\"1024\"");
+
+        let r1536 = Resolution::R1536;
+        let json = serde_json::to_string(&r1536).unwrap();
+        assert_eq!(json, "\"1536\"");
+    }
+
+    #[test]
+    fn test_resolution_deserialization() {
+        let r512: Resolution = serde_json::from_str("\"512\"").unwrap();
+        assert_eq!(r512, Resolution::R512);
+
+        let r1024: Resolution = serde_json::from_str("\"1024\"").unwrap();
+        assert_eq!(r1024, Resolution::R1024);
+
+        let r1536: Resolution = serde_json::from_str("\"1536\"").unwrap();
+        assert_eq!(r1536, Resolution::R1536);
+    }
+
+    #[test]
     fn test_generation_request_builder() {
         let request = GenerationRequest::new("base64data")
             .with_seed(42)
@@ -324,6 +359,29 @@ mod tests {
     }
 
     #[test]
+    fn test_generation_request_builder_full_chain() {
+        let request = GenerationRequest::new("test_image")
+            .with_seed(12345)
+            .with_resolution(Resolution::R1536)
+            .with_ss_guidance_strength(10.0)
+            .with_ss_sampling_steps(50)
+            .with_shape_slat_guidance_strength(5.0)
+            .with_shape_slat_sampling_steps(25)
+            .with_tex_slat_guidance_strength(2.5)
+            .with_tex_slat_sampling_steps(15);
+
+        assert_eq!(request.image, "test_image");
+        assert_eq!(request.seed, Some(12345));
+        assert_eq!(request.resolution, Resolution::R1536);
+        assert_eq!(request.ss_guidance_strength, 10.0);
+        assert_eq!(request.ss_sampling_steps, 50);
+        assert_eq!(request.shape_slat_guidance_strength, 5.0);
+        assert_eq!(request.shape_slat_sampling_steps, 25);
+        assert_eq!(request.tex_slat_guidance_strength, 2.5);
+        assert_eq!(request.tex_slat_sampling_steps, 15);
+    }
+
+    #[test]
     fn test_generation_request_clamping() {
         let request = GenerationRequest::new("")
             .with_ss_guidance_strength(-1.0) // Should clamp to 0.0
@@ -333,6 +391,94 @@ mod tests {
         assert_eq!(request.ss_guidance_strength, 0.0);
         assert_eq!(request.ss_sampling_steps, 1);
         assert_eq!(request.shape_slat_sampling_steps, 100);
+    }
+
+    #[test]
+    fn test_generation_request_clamping_all_params() {
+        // Test negative guidance strengths clamp to 0
+        let request = GenerationRequest::new("")
+            .with_ss_guidance_strength(-100.0)
+            .with_shape_slat_guidance_strength(-50.0)
+            .with_tex_slat_guidance_strength(-25.0);
+
+        assert_eq!(request.ss_guidance_strength, 0.0);
+        assert_eq!(request.shape_slat_guidance_strength, 0.0);
+        assert_eq!(request.tex_slat_guidance_strength, 0.0);
+
+        // Test sampling steps clamp to [1, 100]
+        let request = GenerationRequest::new("")
+            .with_ss_sampling_steps(0)
+            .with_shape_slat_sampling_steps(0)
+            .with_tex_slat_sampling_steps(0);
+
+        assert_eq!(request.ss_sampling_steps, 1);
+        assert_eq!(request.shape_slat_sampling_steps, 1);
+        assert_eq!(request.tex_slat_sampling_steps, 1);
+
+        let request = GenerationRequest::new("")
+            .with_ss_sampling_steps(500)
+            .with_shape_slat_sampling_steps(999)
+            .with_tex_slat_sampling_steps(1000);
+
+        assert_eq!(request.ss_sampling_steps, 100);
+        assert_eq!(request.shape_slat_sampling_steps, 100);
+        assert_eq!(request.tex_slat_sampling_steps, 100);
+    }
+
+    #[test]
+    fn test_generation_request_default_values() {
+        let request = GenerationRequest::default();
+
+        assert!(request.image.is_empty());
+        assert!(request.seed.is_none());
+        assert_eq!(request.resolution, Resolution::R1024);
+        assert_eq!(request.ss_guidance_strength, 7.5);
+        assert_eq!(request.ss_sampling_steps, 12);
+        assert_eq!(request.shape_slat_guidance_strength, 3.0);
+        assert_eq!(request.shape_slat_sampling_steps, 12);
+        assert_eq!(request.tex_slat_guidance_strength, 3.0);
+        assert_eq!(request.tex_slat_sampling_steps, 12);
+    }
+
+    #[test]
+    fn test_generation_request_serialization() {
+        let request = GenerationRequest::new("test_image").with_seed(42);
+
+        let json = serde_json::to_string(&request).unwrap();
+        assert!(json.contains("\"image\":\"test_image\""));
+        assert!(json.contains("\"seed\":42"));
+        assert!(json.contains("\"resolution\":\"1024\""));
+    }
+
+    #[test]
+    fn test_generation_request_serialization_skips_none_seed() {
+        let request = GenerationRequest::new("test_image");
+
+        let json = serde_json::to_string(&request).unwrap();
+        assert!(json.contains("\"image\":\"test_image\""));
+        // seed should be omitted when None
+        assert!(!json.contains("\"seed\""));
+    }
+
+    #[test]
+    fn test_generation_request_deserialization() {
+        let json = r#"{
+            "image": "base64data",
+            "seed": 123,
+            "resolution": "512",
+            "ss_guidance_strength": 5.0,
+            "ss_sampling_steps": 10
+        }"#;
+
+        let request: GenerationRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(request.image, "base64data");
+        assert_eq!(request.seed, Some(123));
+        assert_eq!(request.resolution, Resolution::R512);
+        assert_eq!(request.ss_guidance_strength, 5.0);
+        assert_eq!(request.ss_sampling_steps, 10);
+        // Default values for missing fields
+        assert_eq!(request.shape_slat_guidance_strength, 3.0);
+        assert_eq!(request.shape_slat_sampling_steps, 12);
     }
 
     #[test]
@@ -351,6 +497,57 @@ mod tests {
         assert!(!result.has_vertex_normals());
         assert!(result.has_glb_data());
         assert_eq!(result.glb_size(), 1024);
+    }
+
+    #[test]
+    fn test_trellis_result_empty() {
+        let result = TrellisResult {
+            vertices: vec![],
+            faces: vec![],
+            vertex_colors: None,
+            vertex_normals: None,
+            glb_data: None,
+        };
+
+        assert_eq!(result.vertex_count(), 0);
+        assert_eq!(result.face_count(), 0);
+        assert!(!result.has_vertex_colors());
+        assert!(!result.has_vertex_normals());
+        assert!(!result.has_glb_data());
+        assert_eq!(result.glb_size(), 0);
+    }
+
+    #[test]
+    fn test_trellis_result_with_normals() {
+        let result = TrellisResult {
+            vertices: vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+            faces: vec![[0, 1, 2]],
+            vertex_colors: None,
+            vertex_normals: Some(vec![[0.0, 0.0, 1.0], [0.0, 0.0, 1.0], [0.0, 0.0, 1.0]]),
+            glb_data: None,
+        };
+
+        assert!(!result.has_vertex_colors());
+        assert!(result.has_vertex_normals());
+    }
+
+    #[test]
+    fn test_trellis_result_serialization() {
+        let result = TrellisResult {
+            vertices: vec![[1.0, 2.0, 3.0]],
+            faces: vec![[0, 0, 0]],
+            vertex_colors: Some(vec![[1.0, 0.0, 0.0]]),
+            vertex_normals: None,
+            glb_data: None,
+        };
+
+        let json = serde_json::to_string(&result).unwrap();
+        assert!(json.contains("\"vertices\""));
+        assert!(json.contains("\"faces\""));
+        assert!(json.contains("\"vertex_colors\""));
+        // Should skip None fields
+        assert!(!json.contains("\"vertex_normals\""));
+        assert!(!json.contains("\"glb_data\""));
     }
 
     #[test]
@@ -390,5 +587,84 @@ mod tests {
         assert!(!error.is_ready());
         assert!(!error.is_loading());
         assert!(error.is_error());
+    }
+
+    #[test]
+    fn test_server_status_ready_requires_model_loaded() {
+        // Status is "ready" but model not loaded - should NOT be ready
+        let status = ServerStatus {
+            status: "ready".to_string(),
+            trellis_available: true,
+            gpu_available: true,
+            gpu_name: Some("NVIDIA RTX 4090".to_string()),
+            model_loaded: false,
+            error: None,
+        };
+        assert!(!status.is_ready());
+    }
+
+    #[test]
+    fn test_server_status_serialization() {
+        let status = ServerStatus {
+            status: "ready".to_string(),
+            trellis_available: true,
+            gpu_available: true,
+            gpu_name: Some("NVIDIA A100".to_string()),
+            model_loaded: true,
+            error: None,
+        };
+
+        let json = serde_json::to_string(&status).unwrap();
+        assert!(json.contains("\"status\":\"ready\""));
+        assert!(json.contains("\"trellis_available\":true"));
+        assert!(json.contains("\"gpu_available\":true"));
+        assert!(json.contains("\"gpu_name\":\"NVIDIA A100\""));
+        assert!(json.contains("\"model_loaded\":true"));
+        // error should be omitted when None
+        assert!(!json.contains("\"error\""));
+    }
+
+    #[test]
+    fn test_server_status_deserialization() {
+        let json = r#"{
+            "status": "loading",
+            "trellis_available": true,
+            "gpu_available": false,
+            "model_loaded": false
+        }"#;
+
+        let status: ServerStatus = serde_json::from_str(json).unwrap();
+        assert_eq!(status.status, "loading");
+        assert!(status.trellis_available);
+        assert!(!status.gpu_available);
+        assert!(status.gpu_name.is_none());
+        assert!(!status.model_loaded);
+        assert!(status.error.is_none());
+    }
+
+    #[test]
+    fn test_trellis_error_display() {
+        let err = TrellisError::ConnectionError("test error".to_string());
+        assert!(format!("{}", err).contains("Connection error"));
+        assert!(format!("{}", err).contains("test error"));
+
+        let err = TrellisError::TimeoutError(30);
+        assert!(format!("{}", err).contains("timeout"));
+        assert!(format!("{}", err).contains("30"));
+
+        let err = TrellisError::ServerError("server down".to_string());
+        assert!(format!("{}", err).contains("Server error"));
+
+        let err = TrellisError::ParseError("invalid json".to_string());
+        assert!(format!("{}", err).contains("Parse error"));
+
+        let err = TrellisError::ModelsNotLoaded;
+        assert!(format!("{}", err).contains("not loaded"));
+
+        let err = TrellisError::ConversionError("conversion failed".to_string());
+        assert!(format!("{}", err).contains("Conversion error"));
+
+        let err = TrellisError::ImageError("bad image".to_string());
+        assert!(format!("{}", err).contains("Image error"));
     }
 }
