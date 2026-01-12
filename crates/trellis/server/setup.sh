@@ -112,6 +112,13 @@ if [ "$SKIP_DEPS" = false ]; then
         echo -e "${GREEN}✓ Trellis already exists at $TRELLIS_PATH${NC}"
     fi
 
+    # Initialize git submodules (needed for flexicubes)
+    echo -e "${BLUE}Initializing submodules...${NC}"
+    cd "$TRELLIS_PATH"
+    git submodule update --init --recursive
+    cd - > /dev/null
+    echo -e "${GREEN}✓ Submodules initialized${NC}"
+
     echo ""
 fi
 
@@ -120,25 +127,56 @@ echo -e "${YELLOW}Installing Trellis and dependencies with conda...${NC}"
 if [ -d "$TRELLIS_PATH" ]; then
     echo -e "${BLUE}Running TRELLIS setup.sh...${NC}"
 
+    # Initialize conda in this shell if not already done
+    # This is required for TRELLIS setup.sh to activate environments
+    if [ -f "$HOME/.local/share/miniconda3/etc/profile.d/conda.sh" ]; then
+        source "$HOME/.local/share/miniconda3/etc/profile.d/conda.sh"
+    fi
+
     # Navigate to TRELLIS directory
     cd "$TRELLIS_PATH"
 
-    # Check if trellis conda environment already exists
+    # Check if trellis conda environment already exists and has PyTorch
     if conda env list | grep -q "^trellis "; then
         echo -e "${GREEN}✓ Conda environment 'trellis' already exists${NC}"
-        echo -e "${BLUE}Activating and updating environment...${NC}"
 
-        # Source the setup script to update the environment
-        . ./setup.sh --basic --xformers
+        # Check if PyTorch is installed in the environment
+        if conda run -n trellis python -c "import torch" 2>/dev/null; then
+            echo -e "${GREEN}✓ PyTorch is installed${NC}"
+            echo -e "${BLUE}Activating and updating environment...${NC}"
+            # Activate environment and source the setup script
+            # --basic: Install basic dependencies (rembg, etc.)
+            # --xformers: Install xformers (may fail on CPU-only)
+            # --kaolin: Install kaolin (required for flexicubes)
+            conda activate trellis
+            . ./setup.sh --basic --xformers --kaolin
+            conda deactivate
+        else
+            echo -e "${YELLOW}⚠ PyTorch not found - installing with pip${NC}"
+            # Install PyTorch via pip (conda version has iJIT_NotifyEvent issues on NixOS)
+            echo -e "${BLUE}Installing PyTorch 2.4.0+cu118 via pip...${NC}"
+            conda run -n trellis pip install torch==2.4.0 torchvision==0.19.0 --index-url https://download.pytorch.org/whl/cu118
+            echo -e "${BLUE}Running TRELLIS setup for remaining dependencies...${NC}"
+            conda activate trellis
+            . ./setup.sh --basic --xformers --kaolin
+            conda deactivate
+        fi
     else
         echo -e "${BLUE}Creating new conda environment 'trellis'...${NC}"
         echo -e "${YELLOW}This may take 10-20 minutes to download and install packages${NC}"
 
-        # Run TRELLIS setup with conda
-        # --new-env: Create new conda environment named 'trellis'
-        # --basic: Install basic dependencies (including rembg)
-        # --xformers: Install xformers for attention optimization
-        . ./setup.sh --new-env --basic --xformers
+        # Create environment with just Python (not PyTorch from conda)
+        conda create -n trellis python=3.10 -y
+
+        # Install PyTorch via pip (conda version has iJIT_NotifyEvent issues on NixOS)
+        echo -e "${BLUE}Installing PyTorch 2.4.0+cu118 via pip...${NC}"
+        conda run -n trellis pip install torch==2.4.0 torchvision==0.19.0 --index-url https://download.pytorch.org/whl/cu118
+
+        # Now run TRELLIS setup for remaining dependencies (skip --new-env since env exists)
+        echo -e "${BLUE}Running TRELLIS setup for remaining dependencies...${NC}"
+        conda activate trellis
+        . ./setup.sh --basic --xformers --kaolin
+        conda deactivate
     fi
 
     cd "$SCRIPT_DIR"
@@ -183,7 +221,7 @@ echo "Start the server with:"
 echo -e "  ${BLUE}just trellis-server${NC}"
 echo ""
 echo "Or manually:"
-echo -e "  ${BLUE}conda run -n trellis --no-capture-output python crates/trellis/server/server.py${NC}"
+echo -e "  ${BLUE}LD_LIBRARY_PATH=/run/opengl-driver/lib:\$LD_LIBRARY_PATH conda run -n trellis --no-capture-output python crates/trellis/server/server.py${NC}"
 echo ""
 echo "Server will be available at:"
 echo -e "  ${BLUE}http://localhost:8001${NC}"
@@ -192,4 +230,5 @@ echo "Check health status:"
 echo -e "  ${BLUE}curl http://localhost:8001/health${NC}"
 echo ""
 echo "Conda environment: ${BLUE}trellis${NC}"
+echo -e "${YELLOW}Note: Set LD_LIBRARY_PATH=/run/opengl-driver/lib for CUDA support${NC}"
 echo ""
