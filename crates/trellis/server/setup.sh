@@ -70,14 +70,14 @@ echo ""
 # Check prerequisites
 echo -e "${YELLOW}Checking prerequisites...${NC}"
 
-# Check for uv
-if ! command -v uv &> /dev/null; then
-    echo -e "${RED}✗ uv not found${NC}"
-    echo "  Install uv: curl -LsSf https://astral.sh/uv/install.sh | sh"
-    echo "  Or via pip: pip install uv"
+# Check for conda
+if ! command -v conda &> /dev/null; then
+    echo -e "${RED}✗ conda not found${NC}"
+    echo "  Install Miniconda: https://docs.anaconda.com/miniconda/install/"
+    echo "  Or Anaconda: https://www.anaconda.com/download"
     exit 1
 fi
-echo -e "${GREEN}✓ uv found${NC}"
+echo -e "${GREEN}✓ conda found${NC}"
 
 # Check for git
 if ! command -v git &> /dev/null; then
@@ -112,37 +112,79 @@ if [ "$SKIP_DEPS" = false ]; then
         echo -e "${GREEN}✓ Trellis already exists at $TRELLIS_PATH${NC}"
     fi
 
+    # Initialize git submodules (needed for flexicubes)
+    echo -e "${BLUE}Initializing submodules...${NC}"
+    cd "$TRELLIS_PATH"
+    git submodule update --init --recursive
+    cd - > /dev/null
+    echo -e "${GREEN}✓ Submodules initialized${NC}"
+
     echo ""
 fi
 
-# Install Python dependencies
-echo -e "${YELLOW}Installing Python dependencies...${NC}"
-cd "$SCRIPT_DIR"
-
-# Sync uv dependencies
-echo -e "${BLUE}Running uv sync...${NC}"
-uv sync
-
-echo -e "${GREEN}✓ Python dependencies installed${NC}"
-echo ""
-
-# Install Trellis into the virtual environment
-echo -e "${YELLOW}Installing Trellis...${NC}"
+# Install Trellis with conda
+echo -e "${YELLOW}Installing Trellis and dependencies with conda...${NC}"
 if [ -d "$TRELLIS_PATH" ]; then
-    echo -e "${BLUE}Installing Trellis from $TRELLIS_PATH...${NC}"
+    echo -e "${BLUE}Running TRELLIS setup.sh...${NC}"
 
-    # Check if trellis is already installed
-    if uv run python -c "from trellis.pipelines import Trellis2ImageTo3DPipeline; print('trellis OK')" 2>/dev/null; then
-        echo -e "${GREEN}✓ Trellis already installed${NC}"
-    else
-        cd "$TRELLIS_PATH"
-        uv pip install -e .
-        cd "$SCRIPT_DIR"
-        echo -e "${GREEN}✓ Trellis installed${NC}"
+    # Initialize conda in this shell if not already done
+    # This is required for TRELLIS setup.sh to activate environments
+    if [ -f "$HOME/.local/share/miniconda3/etc/profile.d/conda.sh" ]; then
+        source "$HOME/.local/share/miniconda3/etc/profile.d/conda.sh"
     fi
+
+    # Navigate to TRELLIS directory
+    cd "$TRELLIS_PATH"
+
+    # Check if trellis conda environment already exists and has PyTorch
+    if conda env list | grep -q "^trellis "; then
+        echo -e "${GREEN}✓ Conda environment 'trellis' already exists${NC}"
+
+        # Check if PyTorch is installed in the environment
+        if conda run -n trellis python -c "import torch" 2>/dev/null; then
+            echo -e "${GREEN}✓ PyTorch is installed${NC}"
+            echo -e "${BLUE}Activating and updating environment...${NC}"
+            # Activate environment and source the setup script
+            # --basic: Install basic dependencies (rembg, etc.)
+            # --xformers: Install xformers (may fail on CPU-only)
+            # --kaolin: Install kaolin (required for flexicubes)
+            conda activate trellis
+            . ./setup.sh --basic --xformers --kaolin
+            conda deactivate
+        else
+            echo -e "${YELLOW}⚠ PyTorch not found - installing with pip${NC}"
+            # Install PyTorch via pip (conda version has iJIT_NotifyEvent issues on NixOS)
+            echo -e "${BLUE}Installing PyTorch 2.4.0+cu118 via pip...${NC}"
+            conda run -n trellis pip install torch==2.4.0 torchvision==0.19.0 --index-url https://download.pytorch.org/whl/cu118
+            echo -e "${BLUE}Running TRELLIS setup for remaining dependencies...${NC}"
+            conda activate trellis
+            . ./setup.sh --basic --xformers --kaolin
+            conda deactivate
+        fi
+    else
+        echo -e "${BLUE}Creating new conda environment 'trellis'...${NC}"
+        echo -e "${YELLOW}This may take 10-20 minutes to download and install packages${NC}"
+
+        # Create environment with just Python (not PyTorch from conda)
+        conda create -n trellis python=3.10 -y
+
+        # Install PyTorch via pip (conda version has iJIT_NotifyEvent issues on NixOS)
+        echo -e "${BLUE}Installing PyTorch 2.4.0+cu118 via pip...${NC}"
+        conda run -n trellis pip install torch==2.4.0 torchvision==0.19.0 --index-url https://download.pytorch.org/whl/cu118
+
+        # Now run TRELLIS setup for remaining dependencies (skip --new-env since env exists)
+        echo -e "${BLUE}Running TRELLIS setup for remaining dependencies...${NC}"
+        conda activate trellis
+        . ./setup.sh --basic --xformers --kaolin
+        conda deactivate
+    fi
+
+    cd "$SCRIPT_DIR"
+    echo -e "${GREEN}✓ Trellis environment configured${NC}"
 else
-    echo -e "${YELLOW}⚠ Trellis not found at $TRELLIS_PATH - skipping installation${NC}"
-    echo "  Run without --skip-deps or set TRELLIS_PATH to install Trellis"
+    echo -e "${RED}✗ Trellis not found at $TRELLIS_PATH${NC}"
+    echo "  Cannot proceed without TRELLIS repository"
+    exit 1
 fi
 echo ""
 
@@ -153,7 +195,7 @@ echo ""
 
 # Test if model can be loaded (will trigger HuggingFace download if needed)
 echo -e "${YELLOW}Testing model loading (this may download ~4GB of data)...${NC}"
-if uv run python -c "
+if conda run -n trellis python -c "
 from trellis.pipelines import Trellis2ImageTo3DPipeline
 import torch
 print('Loading pipeline...')
@@ -179,11 +221,14 @@ echo "Start the server with:"
 echo -e "  ${BLUE}just trellis-server${NC}"
 echo ""
 echo "Or manually:"
-echo -e "  ${BLUE}cd crates/trellis/server && uv run server.py${NC}"
+echo -e "  ${BLUE}LD_LIBRARY_PATH=/run/opengl-driver/lib:\$LD_LIBRARY_PATH conda run -n trellis --no-capture-output python crates/trellis/server/server.py${NC}"
 echo ""
 echo "Server will be available at:"
 echo -e "  ${BLUE}http://localhost:8001${NC}"
 echo ""
 echo "Check health status:"
 echo -e "  ${BLUE}curl http://localhost:8001/health${NC}"
+echo ""
+echo "Conda environment: ${BLUE}trellis${NC}"
+echo -e "${YELLOW}Note: Set LD_LIBRARY_PATH=/run/opengl-driver/lib for CUDA support${NC}"
 echo ""

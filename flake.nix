@@ -90,6 +90,10 @@
           cudnn
         ];
 
+        # Note: Conda is not included in the nix shell due to packaging issues.
+        # Install conda/miniconda manually: https://docs.anaconda.com/miniconda/install/
+        # The nix shell will work with system-installed conda.
+
         # Library path for dynamic libraries
         LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath buildInputs;
 
@@ -127,6 +131,11 @@
             echo "  just proto     - Run physics prototype"
             echo "  just server    - Run game server"
             echo ""
+            echo "AI Inference (requires GPU + conda):"
+            echo "  Install conda: https://docs.anaconda.com/miniconda/install/"
+            echo "  just trellis-setup  - Set up Trellis environment"
+            echo "  just trellis-server - Start Trellis server"
+            echo ""
             echo "Build optimizations:"
             echo "  ✓ mold linker configured in .cargo/config.toml"
             echo "  ✓ cargo build --profile dev-cranelift  (cranelift backend)"
@@ -135,7 +144,7 @@
           '';
         };
 
-        # CUDA-enabled shell for XCube/fVDB development
+        # CUDA-enabled shell for XCube/fVDB development and Trellis
         devShells.cuda = pkgs.mkShell {
           buildInputs = buildInputs ++ devTools ++ cudaDeps;
           inherit nativeBuildInputs;
@@ -160,8 +169,10 @@
             echo "  CUDA: $(nvcc --version | grep release | sed 's/.*release //' | sed 's/,.*//')"
             echo "  CUDA_HOME: $CUDA_HOME"
             echo ""
-            echo "XCube setup:"
-            echo "  just xcube-setup   - Set up XCube environment (clones repos, installs deps)"
+            echo "AI Inference Servers:"
+            echo "  just trellis-setup - Set up Trellis environment (conda, ~4GB download)"
+            echo "  just trellis-server - Start Trellis inference server"
+            echo "  just xcube-setup   - Set up XCube environment (uv)"
             echo "  just xcube-server  - Start XCube inference server"
             echo ""
             echo "Quick start:"
