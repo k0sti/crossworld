@@ -92,7 +92,7 @@
 
         # Conda for Trellis environment management
         condaDeps = with pkgs; [
-          micromamba  # Fast, lightweight conda alternative
+          conda  # Conda package manager
         ];
 
         # Library path for dynamic libraries
@@ -111,11 +111,8 @@
             export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:$LD_LIBRARY_PATH"
             export PKG_CONFIG_PATH="${pkgs.alsa-lib.dev}/lib/pkgconfig:${pkgs.udev.dev}/lib/pkgconfig:${pkgs.openssl.dev}/lib/pkgconfig:$PKG_CONFIG_PATH"
 
-            # Micromamba/conda setup
-            export MAMBA_ROOT_PREFIX="$HOME/.micromamba"
-            eval "$(micromamba shell hook --shell bash)"
-            # Create conda alias for compatibility
-            alias conda='micromamba'
+            # Conda setup - initialize conda for bash
+            eval "$(conda shell.bash hook)"
 
             # Wayland/X11 environment
             export WAYLAND_DISPLAY="''${WAYLAND_DISPLAY:-wayland-1}"
@@ -126,7 +123,7 @@
             echo "Toolchain:"
             echo "  Rust: $(rustc --version)"
             echo "  Bun: $(bun --version)"
-            echo "  Conda: micromamba $(micromamba --version | head -1)"
+            echo "  Conda: $(conda --version)"
             echo ""
             echo "Quick start:"
             echo "  just dev       - Start development server (web)"
@@ -164,11 +161,8 @@
             export CUDA_HOME="${pkgs.cudaPackages.cudatoolkit}"
             export CUDA_PATH="${pkgs.cudaPackages.cudatoolkit}"
 
-            # Micromamba/conda setup
-            export MAMBA_ROOT_PREFIX="$HOME/.micromamba"
-            eval "$(micromamba shell hook --shell bash)"
-            # Create conda alias for compatibility
-            alias conda='micromamba'
+            # Conda setup - initialize conda for bash
+            eval "$(conda shell.bash hook)"
 
             # Wayland/X11 environment
             export WAYLAND_DISPLAY="''${WAYLAND_DISPLAY:-wayland-1}"
@@ -180,7 +174,7 @@
             echo "  Rust: $(rustc --version)"
             echo "  Bun: $(bun --version)"
             echo "  CUDA: $(nvcc --version | grep release | sed 's/.*release //' | sed 's/,.*//')"
-            echo "  Conda: micromamba $(micromamba --version | head -1)"
+            echo "  Conda: $(conda --version)"
             echo "  CUDA_HOME: $CUDA_HOME"
             echo ""
             echo "AI Inference Servers:"
