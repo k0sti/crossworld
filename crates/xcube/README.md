@@ -32,6 +32,16 @@ just xcube-setup
 crates/xcube/server/setup.sh
 ```
 
+**NixOS Users**: Enter the CUDA-enabled development shell first:
+
+```bash
+# Enter CUDA shell (includes nvcc, cudnn, CUDA_HOME)
+nix develop .#cuda
+
+# Then run setup
+just xcube-setup
+```
+
 The setup script will:
 1. Clone XCube and fVDB repositories to `external/`
 2. Install Python dependencies via uv
@@ -65,15 +75,22 @@ cd XCube
 
 #### 2. Install fVDB Framework
 
-fVDB is NVIDIA's sparse voxel framework required by XCube. Follow the [official fVDB installation guide](https://github.com/nv-tlabs/fVDB):
+fVDB is NVIDIA's sparse voxel framework required by XCube. It's a feature branch of OpenVDB:
 
 ```bash
-# Clone fVDB
-git clone https://github.com/nv-tlabs/fVDB.git
-cd fVDB
+# Clone OpenVDB
+git clone https://github.com/AcademySoftwareFoundation/openvdb.git
+cd openvdb
 
-# Build and install (requires CMake, CUDA toolkit)
-pip install .
+# Fetch and checkout the fVDB feature branch
+git fetch origin pull/1808/head:feature/fvdb
+git checkout feature/fvdb
+
+# Replace setup.py with XCube's patched version
+rm fvdb/setup.py && cp /path/to/XCube/assets/setup.py fvdb/
+
+# Build and install (requires CUDA toolkit, may take several minutes)
+cd fvdb && pip install .
 ```
 
 #### 3. Install XCube Dependencies
@@ -104,7 +121,7 @@ uv sync
 
 ### Download Model Checkpoints
 
-Download pretrained XCube checkpoints from [Google Drive](https://drive.google.com/drive/folders/1M7K0eLm6aLGIW6wvHpTNQh6hd4s8BkN0):
+Download pretrained XCube checkpoints from [Google Drive](https://drive.google.com/drive/folders/1PEh0ofpSFcgH56SZtu6iQPC8xAxzhmke):
 
 ```bash
 # Create checkpoints directory
@@ -218,7 +235,7 @@ open http://localhost:8000/docs
 **Symptoms**: `Missing checkpoint file: checkpoints/objaverse_coarse/last.ckpt`
 
 **Solutions**:
-1. Download checkpoints from the [Google Drive link](https://drive.google.com/drive/folders/1M7K0eLm6aLGIW6wvHpTNQh6hd4s8BkN0)
+1. Download checkpoints from the [Google Drive link](https://drive.google.com/drive/folders/1PEh0ofpSFcgH56SZtu6iQPC8xAxzhmke)
 2. Verify directory structure matches expected layout
 3. Set `XCUBE_CHECKPOINT_DIR` environment variable if using custom path
 

@@ -16,6 +16,7 @@
         overlays = [ (import rust-overlay) ];
         pkgs = import nixpkgs {
           inherit system overlays;
+          config.allowUnfree = true;  # Required for CUDA packages
         };
 
         # Rust nightly toolchain with cranelift backend for faster dev builds
@@ -81,8 +82,19 @@
           uv
         ];
 
+        # CUDA toolkit for XCube/fVDB compilation
+        # PyTorch wheel must match this version (see crates/xcube/server/pyproject.toml)
+        cudaDeps = with pkgs.cudaPackages; [
+          cuda_nvcc
+          cuda_cudart
+          cudnn
+        ];
+
         # Library path for dynamic libraries
         LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath buildInputs;
+
+        # CUDA library path (for cuda shell)
+        CUDA_LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath (buildInputs ++ cudaDeps);
 
       in
       {
@@ -119,6 +131,43 @@
             echo "  ✓ mold linker configured in .cargo/config.toml"
             echo "  ✓ cargo build --profile dev-cranelift  (cranelift backend)"
             echo "  ✓ cargo build --profile fast-dev       (cranelift + opt-level=1)"
+            echo ""
+          '';
+        };
+
+        # CUDA-enabled shell for XCube/fVDB development
+        devShells.cuda = pkgs.mkShell {
+          buildInputs = buildInputs ++ devTools ++ cudaDeps;
+          inherit nativeBuildInputs;
+
+          shellHook = ''
+            export LD_LIBRARY_PATH="${CUDA_LD_LIBRARY_PATH}:$LD_LIBRARY_PATH"
+            export PKG_CONFIG_PATH="${pkgs.alsa-lib.dev}/lib/pkgconfig:${pkgs.udev.dev}/lib/pkgconfig:${pkgs.openssl.dev}/lib/pkgconfig:$PKG_CONFIG_PATH"
+
+            # CUDA environment
+            export CUDA_HOME="${pkgs.cudaPackages.cudatoolkit}"
+            export CUDA_PATH="${pkgs.cudaPackages.cudatoolkit}"
+
+            # Wayland/X11 environment
+            export WAYLAND_DISPLAY="''${WAYLAND_DISPLAY:-wayland-1}"
+            export XDG_RUNTIME_DIR="''${XDG_RUNTIME_DIR:-/run/user/1000}"
+
+            echo "🦀 Crossworld development environment loaded (with CUDA)"
+            echo ""
+            echo "Toolchain:"
+            echo "  Rust: $(rustc --version)"
+            echo "  Bun: $(bun --version)"
+            echo "  CUDA: $(nvcc --version | grep release | sed 's/.*release //' | sed 's/,.*//')"
+            echo "  CUDA_HOME: $CUDA_HOME"
+            echo ""
+            echo "XCube setup:"
+            echo "  just xcube-setup   - Set up XCube environment (clones repos, installs deps)"
+            echo "  just xcube-server  - Start XCube inference server"
+            echo ""
+            echo "Quick start:"
+            echo "  just dev       - Start development server (web)"
+            echo "  just build     - Production build"
+            echo "  just check     - Run all checks"
             echo ""
           '';
         };
