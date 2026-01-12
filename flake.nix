@@ -90,10 +90,9 @@
           cudnn
         ];
 
-        # Conda for Trellis environment management
-        condaDeps = with pkgs; [
-          conda  # Conda package manager
-        ];
+        # Note: Conda is not included in the nix shell due to packaging issues.
+        # Install conda/miniconda manually: https://docs.anaconda.com/miniconda/install/
+        # The nix shell will work with system-installed conda.
 
         # Library path for dynamic libraries
         LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath buildInputs;
@@ -104,15 +103,12 @@
       in
       {
         devShells.default = pkgs.mkShell {
-          buildInputs = buildInputs ++ devTools ++ condaDeps;
+          buildInputs = buildInputs ++ devTools;
           inherit nativeBuildInputs;
 
           shellHook = ''
             export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:$LD_LIBRARY_PATH"
             export PKG_CONFIG_PATH="${pkgs.alsa-lib.dev}/lib/pkgconfig:${pkgs.udev.dev}/lib/pkgconfig:${pkgs.openssl.dev}/lib/pkgconfig:$PKG_CONFIG_PATH"
-
-            # Conda setup - initialize conda for bash
-            eval "$(conda shell.bash hook)"
 
             # Wayland/X11 environment
             export WAYLAND_DISPLAY="''${WAYLAND_DISPLAY:-wayland-1}"
@@ -123,7 +119,6 @@
             echo "Toolchain:"
             echo "  Rust: $(rustc --version)"
             echo "  Bun: $(bun --version)"
-            echo "  Conda: $(conda --version)"
             echo ""
             echo "Quick start:"
             echo "  just dev       - Start development server (web)"
@@ -136,9 +131,10 @@
             echo "  just proto     - Run physics prototype"
             echo "  just server    - Run game server"
             echo ""
-            echo "AI Inference (requires GPU):"
-            echo "  nix develop .#cuda  - Enter CUDA shell for Trellis setup"
-            echo "  just trellis-setup  - Set up Trellis (after entering cuda shell)"
+            echo "AI Inference (requires GPU + conda):"
+            echo "  Install conda: https://docs.anaconda.com/miniconda/install/"
+            echo "  just trellis-setup  - Set up Trellis environment"
+            echo "  just trellis-server - Start Trellis server"
             echo ""
             echo "Build optimizations:"
             echo "  ✓ mold linker configured in .cargo/config.toml"
@@ -150,7 +146,7 @@
 
         # CUDA-enabled shell for XCube/fVDB development and Trellis
         devShells.cuda = pkgs.mkShell {
-          buildInputs = buildInputs ++ devTools ++ cudaDeps ++ condaDeps;
+          buildInputs = buildInputs ++ devTools ++ cudaDeps;
           inherit nativeBuildInputs;
 
           shellHook = ''
@@ -161,20 +157,16 @@
             export CUDA_HOME="${pkgs.cudaPackages.cudatoolkit}"
             export CUDA_PATH="${pkgs.cudaPackages.cudatoolkit}"
 
-            # Conda setup - initialize conda for bash
-            eval "$(conda shell.bash hook)"
-
             # Wayland/X11 environment
             export WAYLAND_DISPLAY="''${WAYLAND_DISPLAY:-wayland-1}"
             export XDG_RUNTIME_DIR="''${XDG_RUNTIME_DIR:-/run/user/1000}"
 
-            echo "🦀 Crossworld development environment loaded (with CUDA + conda)"
+            echo "🦀 Crossworld development environment loaded (with CUDA)"
             echo ""
             echo "Toolchain:"
             echo "  Rust: $(rustc --version)"
             echo "  Bun: $(bun --version)"
             echo "  CUDA: $(nvcc --version | grep release | sed 's/.*release //' | sed 's/,.*//')"
-            echo "  Conda: $(conda --version)"
             echo "  CUDA_HOME: $CUDA_HOME"
             echo ""
             echo "AI Inference Servers:"
