@@ -84,18 +84,25 @@ impl EditorHit {
         self.voxel_coord + self.normal.to_ivec3()
     }
 
-    /// Compute voxel coordinate at a specific depth from hit position
+    /// Compute voxel coordinate at a specific scale from hit position
     ///
     /// Uses the precise hit position to calculate the voxel coordinate
-    /// at any depth level, regardless of the hit's actual depth.
+    /// at any scale level, regardless of the hit's actual depth.
     /// The calculation biases towards the near side (the voxel we actually hit)
     /// by offsetting slightly in the opposite direction of the face normal.
     ///
     /// # Arguments
-    /// * `depth` - Target depth level (e.g., 4 for 16x16x16)
+    /// * `scale` - Target scale level (0 = unit cube, negative = sub-unit, positive = multi-unit)
     /// * `cube_position` - World position of the cube's center
     /// * `cube_scale` - Scale factor of the cube in world space (edge size)
-    pub fn voxel_at_depth(&self, depth: u32, cube_position: Vec3, cube_scale: f32) -> IVec3 {
+    /// * `world_scale` - The scale level of the world cube (for relative sizing)
+    pub fn voxel_at_scale(
+        &self,
+        scale: i32,
+        cube_position: Vec3,
+        cube_scale: f32,
+        world_scale: u32,
+    ) -> IVec3 {
         // Convert world position back to cube's [-1,1]³ space
         // World space: cube_position + [-0.5, 0.5] * cube_scale
         // Raycast space: [-1, 1]
@@ -109,65 +116,80 @@ impl EditorHit {
         let bias = -self.normal.to_vec3() * epsilon;
         let biased_pos = cube_pos + bias;
 
-        // Convert to [0, 2^depth] range and floor to get voxel index
-        // cube space: [-1, 1] → voxel space: [0, 2^depth]
-        let scale = (1 << depth) as f32 / 2.0;
+        // Convert cursor scale to depth for coordinate calculation relative to world scale
+        // With world scale 4, cursor scale 0 maps to depth 4 (16x16x16 grid)
+        // With world scale 4, cursor scale -1 maps to depth 5 (32x32x32 grid)
+        let cursor_depth = world_scale as i32 - scale;
+
+        // Coordinates should be in the range [0, 2^cursor_depth)
+        // The cube space [-1, 1] maps to [0, 2^cursor_depth)
+        let depth_factor = 2.0_f32.powi(cursor_depth - 1);
         IVec3::new(
-            ((biased_pos.x + 1.0) * scale).floor() as i32,
-            ((biased_pos.y + 1.0) * scale).floor() as i32,
-            ((biased_pos.z + 1.0) * scale).floor() as i32,
+            ((biased_pos.x + 1.0) * depth_factor).floor() as i32,
+            ((biased_pos.y + 1.0) * depth_factor).floor() as i32,
+            ((biased_pos.z + 1.0) * depth_factor).floor() as i32,
         )
     }
 
-    /// Compute placement position at a specific depth (adjacent to hit face)
+    /// Compute placement position at a specific scale (adjacent to hit face)
     ///
     /// # Arguments
-    /// * `depth` - Target depth level for placement
+    /// * `scale` - Target scale level for placement
     /// * `cube_position` - World position of the cube's center
     /// * `cube_scale` - Scale factor of the cube in world space
-    pub fn placement_at_depth(&self, depth: u32, cube_position: Vec3, cube_scale: f32) -> IVec3 {
-        // Get the hit voxel at target depth
-        let hit_voxel = self.voxel_at_depth(depth, cube_position, cube_scale);
+    /// * `world_scale` - The scale level of the world cube (for relative sizing)
+    pub fn placement_at_scale(
+        &self,
+        scale: i32,
+        cube_position: Vec3,
+        cube_scale: f32,
+        world_scale: u32,
+    ) -> IVec3 {
+        // Get the hit voxel at target scale
+        let hit_voxel = self.voxel_at_scale(scale, cube_position, cube_scale, world_scale);
         // Add normal to get adjacent position
         hit_voxel + self.normal.to_ivec3()
     }
 
-    /// Select the appropriate CubeCoord based on far/near mode and hit depth
+    /// Select the appropriate coordinate based on far/near mode and hit scale
     ///
-    /// When the raycast hit is at a face that corresponds to a boundary at the cursor depth,
+    /// When the raycast hit is at a face that corresponds to a boundary at the cursor scale,
     /// far mode selects the cube on the far side (placement), near mode selects the near side (removal).
-    /// When the hit is inside a cube at cursor depth (hit depth > cursor depth), we select that cube.
+    /// When the hit is inside a cube at cursor scale, we select that cube.
     ///
     /// # Arguments
-    /// * `cursor_depth` - The depth level of the cursor
+    /// * `cursor_scale` - The scale level of the cursor
     /// * `far_mode` - If true, select far side; if false, select near side
     /// * `cube_position` - World position of the cube's center
     /// * `cube_scale` - Scale factor of the cube in world space
+    /// * `world_scale` - The scale level of the world cube (for relative sizing)
     ///
     /// # Returns
     /// A tuple of (selected_coord, is_boundary_face) where:
-    /// - selected_coord is the voxel coordinate at cursor_depth
-    /// - is_boundary_face is true if the hit face aligns with cursor depth grid
-    pub fn select_coord_at_depth(
+    /// - selected_coord is the voxel coordinate at cursor_scale
+    /// - is_boundary_face is true if the hit face aligns with cursor scale grid
+    pub fn select_coord_at_scale(
         &self,
-        cursor_depth: u32,
+        cursor_scale: i32,
         far_mode: bool,
         cube_position: Vec3,
         cube_scale: f32,
+        world_scale: u32,
     ) -> (IVec3, bool) {
-        // Get the voxel coordinate at cursor depth
-        let voxel_coord = self.voxel_at_depth(cursor_depth, cube_position, cube_scale);
+        // Get the voxel coordinate at cursor scale
+        let voxel_coord = self.voxel_at_scale(cursor_scale, cube_position, cube_scale, world_scale);
 
-        // Check if the hit face aligns with a boundary at cursor depth
-        // The hit is at a boundary if the hit position lies on a grid line at cursor depth
+        // Check if the hit face aligns with a boundary at cursor scale
+        // The hit is at a boundary if the hit position lies on a grid line at cursor scale
         //
         // Convert world position to cube space [-1, 1]
         let half_scale = cube_scale * 0.5;
         let cube_pos = (self.world_pos - cube_position) / half_scale;
 
-        // Convert to voxel space [0, 2^depth]
-        let voxel_scale = (1 << cursor_depth) as f32;
-        let voxel_pos = (cube_pos + Vec3::ONE) * 0.5 * voxel_scale;
+        // Convert cursor scale to depth for boundary detection relative to world scale
+        let cursor_depth = world_scale as i32 - cursor_scale;
+        let depth_factor = 2.0_f32.powi(cursor_depth - 1);
+        let voxel_pos = (cube_pos + Vec3::ONE) * depth_factor;
 
         // Check if hit position is on a grid boundary along the normal axis
         let axis_idx = self.normal.index();
@@ -177,11 +199,9 @@ impl EditorHit {
         let frac = pos_on_axis - pos_on_axis.floor();
         let is_boundary = !(0.001..=0.999).contains(&frac);
 
-        // Also check: if hit depth equals cursor depth, it's definitely a boundary case
-        // because we hit a voxel face at exactly the cursor's resolution
-        let hit_at_cursor_depth = self.cube_coord.depth == cursor_depth;
-
-        let is_boundary_face = is_boundary || hit_at_cursor_depth;
+        // Note: We can't directly compare scales since hit depth and cursor scale are different units
+        // The boundary detection above should be sufficient for all scales
+        let is_boundary_face = is_boundary;
 
         if is_boundary_face && far_mode {
             // Far mode on boundary: select the adjacent cube (placement side)

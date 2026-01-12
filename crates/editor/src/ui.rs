@@ -771,7 +771,7 @@ pub fn show_model_palette_panel(ctx: &egui::Context, model_palette: &mut ModelPa
 /// * `ui` - The egui UI context
 /// * `cursor` - The current cursor state (mutable for depth controls)
 /// * `max_depth` - Maximum allowed depth for the cursor
-pub fn show_cursor_info(ui: &mut Ui, cursor: &mut CubeCursor, max_depth: u32) {
+pub fn show_cursor_info(ui: &mut Ui, cursor: &mut CubeCursor, min_scale: i32, world_scale: u32) {
     // Validity indicator
     ui.horizontal(|ui| {
         let (status, color) = if cursor.valid {
@@ -797,27 +797,32 @@ pub fn show_cursor_info(ui: &mut Ui, cursor: &mut CubeCursor, max_depth: u32) {
 
     ui.add_space(4.0);
 
-    // Depth controls with increment/decrement buttons
+    // Scale controls with increment/decrement buttons
     ui.group(|ui| {
-        ui.label("Depth:");
+        ui.label("Cursor Scale:");
         ui.horizontal(|ui| {
             // Decrement button
             if ui.button("-").clicked() {
-                cursor.decrease_depth();
+                cursor.decrease_scale(min_scale);
             }
 
-            // Current depth display
-            ui.monospace(format!("{}", cursor.coord.depth));
+            // Current scale display
+            ui.monospace(format!("{}", cursor.coord.scale));
 
             // Increment button
             if ui.button("+").clicked() {
-                cursor.increase_depth(max_depth);
+                cursor.increase_scale();
             }
 
-            // Show voxel size at this depth
-            let voxel_count = 1u32 << cursor.coord.depth;
-            ui.label(format!("({}x{}x{})", voxel_count, voxel_count, voxel_count));
+            // Calculate relative scale to world (cursor_scale - world_scale)
+            let relative_scale = cursor.coord.scale - world_scale as i32;
+            let relative_factor = 2.0_f32.powi(relative_scale);
+            ui.label(format!("({}× world cube)", relative_factor));
         });
+        // Tooltip explanation
+        ui.label("ⓘ").on_hover_text(
+            "Cursor scale relative to world cube. 0 = full world cube, -1 = half, +1 = double",
+        );
     });
 
     ui.add_space(4.0);
@@ -905,7 +910,8 @@ pub struct SidebarResult {
 /// # Arguments
 /// * `ctx` - The egui context
 /// * `cursor` - The cursor state (mutable for depth controls)
-/// * `max_depth` - Maximum allowed depth for the cursor
+/// * `min_scale` - Minimum allowed scale for the cursor
+/// * `max_scale` - Maximum allowed scale for the cursor
 /// * `color_palette` - The color palette state
 /// * `material_palette` - The material palette state
 /// * `model_palette` - The model palette state
@@ -913,10 +919,12 @@ pub struct SidebarResult {
 ///
 /// # Returns
 /// SidebarResult with flags for what was selected
+#[allow(clippy::too_many_arguments)]
 pub fn show_unified_sidebar(
     ctx: &egui::Context,
     cursor: &mut CubeCursor,
-    max_depth: u32,
+    min_scale: i32,
+    world_scale: u32,
     color_palette: &mut ColorPalette,
     material_palette: &mut MaterialPalette,
     model_palette: &mut ModelPalette,
@@ -938,7 +946,7 @@ pub fn show_unified_sidebar(
                 .show(ui, |ui| {
                     // Cursor Info section
                     ui.collapsing("Cursor Info", |ui| {
-                        show_cursor_info(ui, cursor, max_depth);
+                        show_cursor_info(ui, cursor, min_scale, world_scale);
                     });
 
                     ui.add_space(8.0);

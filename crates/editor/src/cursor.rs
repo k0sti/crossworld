@@ -73,28 +73,28 @@ impl CursorAlign {
 pub struct CursorCoord {
     /// Position in octree space
     pub pos: IVec3,
-    /// Depth level (determines voxel size)
-    pub depth: u32,
+    /// Scale level (power-of-2 size multiplier, 0 = unit cube, negative = sub-unit)
+    pub scale: i32,
 }
 
 impl Default for CursorCoord {
     fn default() -> Self {
         Self {
             pos: IVec3::ZERO,
-            depth: 4, // Default to depth 4 (16x16x16 voxels)
+            scale: 0, // Default to scale 0 (unit cube)
         }
     }
 }
 
 impl CursorCoord {
     /// Create a new cursor coordinate
-    pub fn new(pos: IVec3, depth: u32) -> Self {
-        Self { pos, depth }
+    pub fn new(pos: IVec3, scale: i32) -> Self {
+        Self { pos, scale }
     }
 
-    /// Get the voxel size at this depth (2^(max_depth - depth))
-    pub fn voxel_size(&self, max_depth: u32) -> u32 {
-        1 << (max_depth.saturating_sub(self.depth))
+    /// Get the scale factor (2^scale)
+    pub fn scale_factor(&self) -> f32 {
+        2.0_f32.powi(self.scale)
     }
 }
 
@@ -163,21 +163,21 @@ impl CubeCursor {
         self.align = self.align.next();
     }
 
-    /// Increase cursor depth (finer voxels, max 7)
-    pub fn increase_depth(&mut self, max_depth: u32) {
-        if self.coord.depth < max_depth {
-            self.coord.depth += 1;
+    /// Increase cursor scale (larger voxels)
+    pub fn increase_scale(&mut self) {
+        self.coord.scale += 1;
+    }
+
+    /// Decrease cursor scale (smaller voxels)
+    pub fn decrease_scale(&mut self, min_scale: i32) {
+        if self.coord.scale > min_scale {
+            self.coord.scale -= 1;
         }
     }
 
-    /// Decrease cursor depth (coarser voxels, min 0)
-    pub fn decrease_depth(&mut self) {
-        self.coord.depth = self.coord.depth.saturating_sub(1);
-    }
-
-    /// Set cursor depth directly
-    pub fn set_depth(&mut self, depth: u32, max_depth: u32) {
-        self.coord.depth = depth.min(max_depth);
+    /// Set cursor scale directly
+    pub fn set_scale(&mut self, scale: i32, min_scale: i32, max_scale: i32) {
+        self.coord.scale = scale.clamp(min_scale, max_scale);
     }
 
     /// Get the wireframe color based on current focus mode
@@ -210,8 +210,11 @@ impl CubeCursor {
     ///
     /// # Arguments
     /// * `cube_scale` - The world scale of the root cube (edge size)
-    pub fn world_size(&self, cube_scale: f32) -> Vec3 {
-        let voxel_size = cube_scale / (1 << self.coord.depth) as f32;
+    /// * `world_scale` - The scale level of the world cube (for relative sizing)
+    pub fn world_size(&self, cube_scale: f32, world_scale: u32) -> Vec3 {
+        // Cursor scale is relative to world scale
+        let relative_scale = self.coord.scale - world_scale as i32;
+        let voxel_size = cube_scale * 2.0_f32.powi(relative_scale);
         Vec3::new(
             self.size.x as f32 * voxel_size,
             self.size.y as f32 * voxel_size,
@@ -226,8 +229,11 @@ impl CubeCursor {
     /// # Arguments
     /// * `cube_position` - The center position of the root cube in world space
     /// * `cube_scale` - The world scale of the root cube (edge size)
-    pub fn world_corner(&self, cube_position: Vec3, cube_scale: f32) -> Vec3 {
-        let voxel_size = cube_scale / (1 << self.coord.depth) as f32;
+    /// * `world_scale` - The scale level of the world cube (for relative sizing)
+    pub fn world_corner(&self, cube_position: Vec3, cube_scale: f32, world_scale: u32) -> Vec3 {
+        // Cursor scale is relative to world scale
+        let relative_scale = self.coord.scale - world_scale as i32;
+        let voxel_size = cube_scale * 2.0_f32.powi(relative_scale);
         let cube_corner = cube_position - Vec3::splat(cube_scale * 0.5);
         cube_corner
             + Vec3::new(
@@ -242,9 +248,10 @@ impl CubeCursor {
     /// # Arguments
     /// * `cube_position` - The center position of the root cube in world space
     /// * `cube_scale` - The world scale of the root cube (edge size)
-    pub fn world_center(&self, cube_position: Vec3, cube_scale: f32) -> Vec3 {
-        let corner = self.world_corner(cube_position, cube_scale);
-        let size = self.world_size(cube_scale);
+    /// * `world_scale` - The scale level of the world cube (for relative sizing)
+    pub fn world_center(&self, cube_position: Vec3, cube_scale: f32, world_scale: u32) -> Vec3 {
+        let corner = self.world_corner(cube_position, cube_scale, world_scale);
+        let size = self.world_size(cube_scale, world_scale);
         corner + size * 0.5
     }
 
@@ -291,18 +298,18 @@ impl CubeCursor {
     /// * `hit_position` - World position of the raycast hit
     /// * `face` - The face that was hit
     /// * `voxel_coord` - Integer voxel coordinate of the hit
-    /// * `depth` - Depth level for the cursor
+    /// * `scale` - Scale level for the cursor
     pub fn update_from_raycast_with_face(
         &mut self,
         hit_position: Vec3,
         face: Axis,
         voxel_coord: IVec3,
-        depth: u32,
+        scale: i32,
     ) {
         self.valid = true;
         self.hit_face = Some(face);
         self.hit_position = hit_position;
-        self.coord.depth = depth;
+        self.coord.scale = scale;
 
         let base_pos = match self.focus_mode {
             FocusMode::Near => voxel_coord,
@@ -334,32 +341,32 @@ impl CubeCursor {
             Axis::NegZ
         };
 
-        self.update_from_raycast_with_face(hit_position, face, voxel_coord, self.coord.depth);
+        self.update_from_raycast_with_face(hit_position, face, voxel_coord, self.coord.scale);
     }
 
     /// Update cursor position using the new coord selection logic
     ///
-    /// This method uses the EditorHit's select_coord_at_depth to properly handle
-    /// far/near mode based on whether the hit face is at a boundary of the cursor depth.
+    /// This method uses the EditorHit's select_coord_at_scale to properly handle
+    /// far/near mode based on whether the hit face is at a boundary of the cursor scale.
     ///
     /// # Arguments
     /// * `hit_position` - World position of the raycast hit
     /// * `face` - The face that was hit
-    /// * `selected_coord` - The voxel coordinate selected by select_coord_at_depth
-    /// * `depth` - The depth level for the cursor
+    /// * `selected_coord` - The voxel coordinate selected by select_coord_at_scale
+    /// * `scale` - The scale level for the cursor
     /// * `is_boundary` - Whether the hit was at a boundary face
     pub fn update_from_selected_coord(
         &mut self,
         hit_position: Vec3,
         face: Axis,
         selected_coord: IVec3,
-        depth: u32,
+        scale: i32,
         is_boundary: bool,
     ) {
         self.valid = true;
         self.hit_face = Some(face);
         self.hit_position = hit_position;
-        self.coord.depth = depth;
+        self.coord.scale = scale;
 
         // The selected_coord already accounts for far/near mode
         // Apply alignment based on face
@@ -369,17 +376,17 @@ impl CubeCursor {
         let _ = is_boundary; // Currently unused but available for future use
     }
 
-    /// Update cursor position while preserving the current depth
+    /// Update cursor position while preserving the current scale
     ///
-    /// Similar to update_from_selected_coord but does not change the cursor's depth.
-    /// The selected_coord should already be calculated at the cursor's current depth.
+    /// Similar to update_from_selected_coord but does not change the cursor's scale.
+    /// The selected_coord should already be calculated at the cursor's current scale.
     ///
     /// # Arguments
     /// * `hit_position` - World position of the raycast hit
     /// * `face` - The face that was hit
-    /// * `selected_coord` - The voxel coordinate selected at cursor's current depth
+    /// * `selected_coord` - The voxel coordinate selected at cursor's current scale
     /// * `is_boundary` - Whether the hit was at a boundary face
-    pub fn update_from_selected_coord_preserve_depth(
+    pub fn update_from_selected_coord_preserve_scale(
         &mut self,
         hit_position: Vec3,
         face: Axis,
@@ -389,7 +396,7 @@ impl CubeCursor {
         self.valid = true;
         self.hit_face = Some(face);
         self.hit_position = hit_position;
-        // Don't change self.coord.depth - preserve current cursor depth
+        // Don't change self.coord.scale - preserve current cursor scale
 
         // The selected_coord already accounts for far/near mode
         // Apply alignment based on face
@@ -498,10 +505,15 @@ mod tests {
 
     #[test]
     fn test_cursor_coord() {
-        let coord = CursorCoord::new(IVec3::new(1, 2, 3), 4);
+        let coord = CursorCoord::new(IVec3::new(1, 2, 3), 0);
         assert_eq!(coord.pos, IVec3::new(1, 2, 3));
-        assert_eq!(coord.depth, 4);
-        assert_eq!(coord.voxel_size(4), 1);
-        assert_eq!(coord.voxel_size(5), 2);
+        assert_eq!(coord.scale, 0);
+        assert_eq!(coord.scale_factor(), 1.0);
+
+        let coord2 = CursorCoord::new(IVec3::ZERO, -3);
+        assert_eq!(coord2.scale_factor(), 0.125); // 2^-3 = 1/8
+
+        let coord3 = CursorCoord::new(IVec3::ZERO, 2);
+        assert_eq!(coord3.scale_factor(), 4.0); // 2^2 = 4
     }
 }

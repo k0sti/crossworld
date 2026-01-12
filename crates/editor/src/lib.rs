@@ -95,8 +95,8 @@ use crate::ui::{FileOperation, FileState};
 const CUBE_POSITION: Vec3 = Vec3::ZERO;
 /// Base world scale - edge size of 1 unit (before world_scale factor)
 const BASE_CUBE_SCALE: f32 = 1.0;
-/// Depth for edited cube (4 = 16x16x16 voxels)
-const EDIT_DEPTH: u32 = 4;
+/// Minimum cursor scale (allows 128× smaller than unit cube)
+const MIN_CURSOR_SCALE: i32 = -7;
 /// Line width/strength for all wireframes and gizmo lines (relative to voxel size)
 const LINE_WIDTH_FACTOR: f32 = 0.01;
 /// Half line width for lines drawn behind/inside model (thinner, obscured lines)
@@ -278,6 +278,10 @@ pub struct EditorApp {
     // Current drag target world position (exact ray-plane intersection, not snapped)
     drag_target_world_pos: Option<Vec3>,
 
+    // Track last painted position and scale to avoid repeated painting
+    last_painted_pos: Option<IVec3>,
+    last_painted_scale: Option<i32>,
+
     // Current mouse position (for 2D gizmo)
     current_mouse_pos: Option<Vec2>,
 
@@ -375,6 +379,8 @@ impl EditorApp {
             prev_left_mouse_pressed: false,
             edit_plane: None,
             drag_target_world_pos: None,
+            last_painted_pos: None,
+            last_painted_scale: None,
             current_mouse_pos: None,
             color_palette: ColorPalette::new(),
             material_palette: MaterialPalette::new(),
@@ -443,13 +449,16 @@ impl EditorApp {
         }
     }
 
-    /// Get the effective edit depth (EDIT_DEPTH + 2 * scale from CubeGrid)
-    /// Each scale increment corresponds to 2 octree levels from expansion
+    /// Get the effective edit depth (world_scale + 2 * grid_scale from CubeGrid)
+    /// Each grid expansion corresponds to 2 octree levels
     #[allow(dead_code)]
     fn effective_edit_depth(&self) -> u32 {
         match &self.cube_grid {
-            Some(grid) => grid.effective_depth(EDIT_DEPTH),
-            None => EDIT_DEPTH,
+            Some(grid) => {
+                let world_scale = grid.scale();
+                grid.effective_depth(world_scale)
+            }
+            None => 0,
         }
     }
 
@@ -469,32 +478,41 @@ impl EditorApp {
     /// # Arguments
     /// * `gl` - OpenGL context
     /// * `pos` - Position in corner-based coordinates
-    /// * `depth` - Base depth level for placement (e.g., EDIT_DEPTH)
-    fn place_voxel(&mut self, gl: &glow::Context, pos: IVec3, cursor_depth: u32) {
+    /// * `cursor_scale` - Scale level of the cursor (0 = unit cube)
+    fn place_voxel(&mut self, gl: &glow::Context, pos: IVec3, cursor_scale: i32) {
         let Some(grid) = self.cube_grid.take() else {
             return;
         };
 
         let old_scale = grid.scale();
+        let world_scale = grid.scale();
         let material = self.editor_state.effective_material();
 
-        // The cursor coordinates are at cursor_depth resolution.
-        // We need to scale them to effective_depth resolution.
-        // effective_depth = EDIT_DEPTH + 2*scale
-        // Scale factor = 2^(effective_depth - cursor_depth)
-        let effective_depth = grid.effective_depth(EDIT_DEPTH);
-        let depth_diff = effective_depth.saturating_sub(cursor_depth);
-        let scale_factor = 1i32 << depth_diff;
-        let scaled_pos = pos * scale_factor;
+        // Voxel should be painted at depth = world_scale - cursor_scale
+        // With world_scale=4, cursor_scale=0: paint_depth=4 (16×16×16 grid)
+        // With world_scale=4, cursor_scale=-1: paint_depth=5 (32×32×32 grid, finer detail)
+        // With world_scale=4, cursor_scale=1: paint_depth=3 (8×8×8 grid, coarser)
+        let paint_depth = (world_scale as i32 - cursor_scale).max(0) as u32;
 
-        // CubeGrid handles expansion internally
-        let new_grid = grid.set_cube(scaled_pos, EDIT_DEPTH, material);
+        // Debug logging
+        println!(
+            "[place_voxel] pos=({},{},{}), cursor_scale={}, world_scale={}, paint_depth={}, material={}",
+            pos.x, pos.y, pos.z,
+            cursor_scale,
+            world_scale,
+            paint_depth,
+            material
+        );
+
+        // CubeGrid.set_cube takes coordinates at effective_depth(paint_depth) and paints at paint_depth
+        // The pos coordinates are already in the right space for paint_depth
+        let new_grid = grid.set_cube(pos, paint_depth, material);
 
         if new_grid.scale() > old_scale {
             println!("[Editor] Expanded cube, new scale: {}", new_grid.scale());
         }
 
-        let effective_depth = new_grid.effective_depth(EDIT_DEPTH);
+        let effective_depth = new_grid.effective_depth(world_scale);
         let root = new_grid.root_rc();
 
         self.cube_grid = Some(new_grid);
@@ -521,30 +539,26 @@ impl EditorApp {
     /// # Arguments
     /// * `gl` - OpenGL context
     /// * `pos` - Position in corner-based coordinates
-    /// * `cursor_depth` - Cursor depth level for removal
-    fn remove_voxel(&mut self, gl: &glow::Context, pos: IVec3, cursor_depth: u32) {
+    /// * `cursor_scale` - Scale level of the cursor (0 = unit cube)
+    fn remove_voxel(&mut self, gl: &glow::Context, pos: IVec3, cursor_scale: i32) {
         let Some(grid) = self.cube_grid.take() else {
             return;
         };
 
-        // The cursor coordinates are at cursor_depth resolution.
-        // We need to scale them to effective_depth resolution.
-        // effective_depth = EDIT_DEPTH + 2*scale
-        // Scale factor = 2^(effective_depth - cursor_depth)
-        let effective_depth = grid.effective_depth(EDIT_DEPTH);
-        let depth_diff = effective_depth.saturating_sub(cursor_depth);
-        let scale_factor = 1i32 << depth_diff;
-        let scaled_pos = pos * scale_factor;
+        let world_scale = grid.scale();
+
+        // Voxel should be removed at depth = world_scale - cursor_scale
+        let paint_depth = (world_scale as i32 - cursor_scale).max(0) as u32;
 
         // Check bounds - don't expand for removal
-        if !grid.in_bounds(scaled_pos, EDIT_DEPTH) {
+        if !grid.in_bounds(pos, paint_depth) {
             self.cube_grid = Some(grid);
             return;
         }
 
-        // Set voxel to 0 (empty)
-        let new_grid = grid.set_cube(scaled_pos, EDIT_DEPTH, 0);
-        let effective_depth = new_grid.effective_depth(EDIT_DEPTH);
+        // Set voxel to 0 (empty) at paint_depth
+        let new_grid = grid.set_cube(pos, paint_depth, 0);
+        let effective_depth = new_grid.effective_depth(paint_depth);
         let root = new_grid.root_rc();
 
         self.cube_grid = Some(new_grid);
@@ -570,8 +584,9 @@ impl EditorApp {
 
     /// Create a new empty cube and reset file state
     fn new_cube(&mut self, gl: &glow::Context) {
-        // Create fresh CubeGrid with a solid cube
-        let grid = CubeGrid::solid(156);
+        // Create fresh CubeGrid with a solid cube at scale 4
+        let grid = CubeGrid::solid(156).with_scale(4);
+        let world_scale = grid.scale();
         let root = grid.root_rc();
         self.cube_grid = Some(grid);
 
@@ -581,7 +596,7 @@ impl EditorApp {
         // Re-upload mesh
         unsafe {
             self.mesh_renderer.clear_meshes(gl);
-            match self.mesh_renderer.upload_mesh(gl, &root, EDIT_DEPTH) {
+            match self.mesh_renderer.upload_mesh(gl, &root, world_scale) {
                 Ok(idx) => {
                     self.cube_mesh_index = Some(idx);
                     println!("[Editor] New cube created");
@@ -611,8 +626,9 @@ impl EditorApp {
             }
         };
 
-        // Create CubeGrid from loaded cube at scale 0
-        let grid = CubeGrid::from_cube(cube);
+        // Create CubeGrid from loaded cube at scale 4
+        let grid = CubeGrid::from_cube_with_scale(cube, 4);
+        let world_scale = grid.scale();
         let root = grid.root_rc();
         self.cube_grid = Some(grid);
         self.file_state.set_file(path.clone());
@@ -623,7 +639,7 @@ impl EditorApp {
         // Re-upload mesh
         unsafe {
             self.mesh_renderer.clear_meshes(gl);
-            match self.mesh_renderer.upload_mesh(gl, &root, EDIT_DEPTH) {
+            match self.mesh_renderer.upload_mesh(gl, &root, world_scale) {
                 Ok(idx) => {
                     self.cube_mesh_index = Some(idx);
                     println!("[Editor] Loaded CSM file: {:?}", path);
@@ -894,13 +910,14 @@ impl App for EditorApp {
             }
         }
 
-        // Create initial CubeGrid - solid with a colorful material (material index 156 = green-ish)
-        let grid = CubeGrid::solid(156);
+        // Create initial CubeGrid - solid with a colorful material (material index 156 = green-ish) at scale 4
+        let grid = CubeGrid::solid(156).with_scale(4);
+        let world_scale = grid.scale();
         let root = grid.root_rc();
         self.cube_grid = Some(grid);
 
-        // Upload cube mesh at EDIT_DEPTH for voxel editing
-        match unsafe { self.mesh_renderer.upload_mesh(ctx.gl, &root, EDIT_DEPTH) } {
+        // Upload cube mesh at world_scale for voxel editing
+        match unsafe { self.mesh_renderer.upload_mesh(ctx.gl, &root, world_scale) } {
             Ok(idx) => {
                 self.cube_mesh_index = Some(idx);
                 println!("[Editor] Cube mesh uploaded (index: {})", idx);
@@ -1017,11 +1034,12 @@ impl App for EditorApp {
         if let (Some(ref grid), Some(mouse_pos)) = (&self.cube_grid, effective_input.mouse_pos) {
             let screen_size = Vec2::new(ctx.size.0 as f32, ctx.size.1 as f32);
 
-            // Use the cursor's current depth for raycast selection
-            let cursor_depth = self.cursor.coord.depth;
+            // Use the cursor's current scale for raycast selection
+            let cursor_scale = self.cursor.coord.scale;
+            let world_scale = grid.scale();
 
             // Use effective edit depth for raycast traversal (accounts for grid expansion)
-            let effective_depth = grid.effective_depth(EDIT_DEPTH);
+            let effective_depth = grid.effective_depth(world_scale);
 
             if let Some(hit) = raycast_from_mouse(
                 mouse_pos,
@@ -1033,41 +1051,44 @@ impl App for EditorApp {
                 Some(effective_depth),
             ) {
                 // Use the new coord selection logic that handles far/near based on boundary detection
-                // Select at cursor's depth, not EDIT_DEPTH
+                // Select at cursor's scale, not EDIT_DEPTH
                 let far_mode = self.cursor.focus_mode == FocusMode::Far;
-                let (selected_coord, is_boundary) = hit.select_coord_at_depth(
-                    cursor_depth,
+                let world_scale = self.world_scale();
+                let (selected_coord, is_boundary) = hit.select_coord_at_scale(
+                    cursor_scale,
                     far_mode,
                     CUBE_POSITION,
                     self.effective_cube_scale(),
+                    world_scale,
                 );
 
-                // Debug logging for selected CubeCoord
+                // Debug logging for selected coordinate
                 if self.test_config.is_some() {
                     let mode_name = if far_mode { "Far" } else { "Near" };
                     let boundary_str = if is_boundary { "boundary" } else { "interior" };
                     println!(
-                        "[DEBUG Frame {}] Raycast hit: world_pos=({:.3}, {:.3}, {:.3}), normal={:?}, hit_depth={}, cursor_depth={}, hit_voxel=({}, {}, {})",
+                        "[DEBUG Frame {}] Raycast hit: world_pos=({:.3}, {:.3}, {:.3}), normal={:?}, hit_depth={}, cursor_scale={}, hit_voxel=({}, {}, {})",
                         ctx.frame, hit.world_pos.x, hit.world_pos.y, hit.world_pos.z,
-                        hit.normal, hit.cube_coord.depth, cursor_depth,
+                        hit.normal, hit.cube_coord.depth, cursor_scale,
                         hit.voxel_coord.x, hit.voxel_coord.y, hit.voxel_coord.z
                     );
-                    // Also log the voxel_at_depth result before far/near adjustment
-                    let base_voxel = hit.voxel_at_depth(
-                        cursor_depth,
+                    // Also log the voxel_at_scale result before far/near adjustment
+                    let base_voxel = hit.voxel_at_scale(
+                        cursor_scale,
                         CUBE_POSITION,
                         self.effective_cube_scale(),
+                        world_scale,
                     );
                     println!(
-                        "[DEBUG Frame {}] voxel_at_depth({})=({}, {}, {}), Selected=({}, {}, {}), mode={}, face_type={}",
-                        ctx.frame, cursor_depth, base_voxel.x, base_voxel.y, base_voxel.z,
+                        "[DEBUG Frame {}] voxel_at_scale({})=({}, {}, {}), Selected=({}, {}, {}), mode={}, face_type={}",
+                        ctx.frame, cursor_scale, base_voxel.x, base_voxel.y, base_voxel.z,
                         selected_coord.x, selected_coord.y, selected_coord.z,
                         mode_name, boundary_str
                     );
                 }
 
-                // Update cursor position without changing its depth
-                self.cursor.update_from_selected_coord_preserve_depth(
+                // Update cursor position without changing its scale
+                self.cursor.update_from_selected_coord_preserve_scale(
                     hit.world_pos,
                     hit.normal,
                     selected_coord,
@@ -1096,8 +1117,12 @@ impl App for EditorApp {
         if left_click && self.cursor.valid {
             if let Some(ref hit) = self.last_hit {
                 let cursor_pos = self.cursor.coord.pos;
-                let cursor_depth = self.cursor.coord.depth;
+                let cursor_scale = self.cursor.coord.scale;
+                let world_scale = self.world_scale();
                 let normal = hit.normal.to_vec3();
+
+                // Convert cursor scale to depth for EditPlane
+                let cursor_depth = (world_scale as i32 - cursor_scale).max(0) as u32;
 
                 self.edit_plane = Some(EditPlane::from_cursor(
                     cursor_pos,
@@ -1108,12 +1133,14 @@ impl App for EditorApp {
                     hit.world_pos,
                 ));
 
-                // Place/remove first voxel
+                // Place/remove first voxel (reset tracking)
                 if shift_held {
-                    self.remove_voxel(ctx.gl, cursor_pos, cursor_depth);
+                    self.remove_voxel(ctx.gl, cursor_pos, cursor_scale);
                 } else {
-                    self.place_voxel(ctx.gl, cursor_pos, cursor_depth);
+                    self.place_voxel(ctx.gl, cursor_pos, cursor_scale);
                 }
+                self.last_painted_pos = Some(cursor_pos);
+                self.last_painted_scale = Some(cursor_scale);
             }
         }
 
@@ -1129,33 +1156,45 @@ impl App for EditorApp {
 
                     // Compute the voxel coordinate using proper boundary handling
                     let far_mode = self.cursor.focus_mode == FocusMode::Far;
+                    let world_scale = self.world_scale();
                     let voxel_coord = plane.world_to_voxel_coord(
                         world_pos,
                         CUBE_POSITION,
                         self.effective_cube_scale(),
                         far_mode,
                     );
-                    let cursor_depth = plane.depth;
+                    // Convert plane depth back to scale: scale = world_scale - depth
+                    let cursor_scale = world_scale as i32 - plane.depth as i32;
 
                     // Update cursor to show where we're drawing
                     self.cursor.coord.pos = voxel_coord;
-                    self.cursor.coord.depth = cursor_depth;
+                    self.cursor.coord.scale = cursor_scale;
                     self.cursor.valid = true;
 
-                    // Place/remove voxel at projected position
-                    if shift_held {
-                        self.remove_voxel(ctx.gl, voxel_coord, cursor_depth);
-                    } else {
-                        self.place_voxel(ctx.gl, voxel_coord, cursor_depth);
+                    // Only paint if position or scale changed
+                    let should_paint = self.last_painted_pos != Some(voxel_coord)
+                        || self.last_painted_scale != Some(cursor_scale);
+
+                    if should_paint {
+                        // Place/remove voxel at projected position
+                        if shift_held {
+                            self.remove_voxel(ctx.gl, voxel_coord, cursor_scale);
+                        } else {
+                            self.place_voxel(ctx.gl, voxel_coord, cursor_scale);
+                        }
+                        self.last_painted_pos = Some(voxel_coord);
+                        self.last_painted_scale = Some(cursor_scale);
                     }
                 }
             }
         }
 
-        // On mouse release: clear edit plane and drag target
+        // On mouse release: clear edit plane, drag target, and paint tracking
         if left_release {
             self.edit_plane = None;
             self.drag_target_world_pos = None;
+            self.last_painted_pos = None;
+            self.last_painted_scale = None;
         }
 
         self.prev_left_mouse_pressed = left_mouse_pressed;
@@ -1517,10 +1556,13 @@ impl App for EditorApp {
         // Render cursor wireframe when valid
         if self.cursor.valid {
             // Get cursor position and size in world space
-            let cursor_center = self
+            let world_scale = self.world_scale();
+            let cursor_center =
+                self.cursor
+                    .world_center(CUBE_POSITION, self.effective_cube_scale(), world_scale);
+            let cursor_size = self
                 .cursor
-                .world_center(CUBE_POSITION, self.effective_cube_scale());
-            let cursor_size = self.cursor.world_size(self.effective_cube_scale());
+                .world_size(self.effective_cube_scale(), world_scale);
             // Use magenta color when erase mode is active, otherwise use normal cursor color
             let cursor_color = if self.editor_state.is_erase_mode() {
                 [1.0, 0.0, 1.0] // Magenta for erase mode
@@ -1818,13 +1860,15 @@ impl App for EditorApp {
             ui::StatusBarInfo::from_state(&self.cursor, &self.editor_state, ctx.delta_time);
         ui::show_status_bar(egui_ctx, &status_info);
 
+        // Capture world scale before mutable borrows (for sidebar)
+        let world_scale = self.world_scale();
+
         // Unified sidebar on the left with all palettes and cursor info
-        // Use effective depth as max cursor depth (allows deeper editing after expansion)
-        let max_cursor_depth = self.effective_edit_depth();
         let _sidebar_result = ui::show_unified_sidebar(
             egui_ctx,
             &mut self.cursor,
-            max_cursor_depth,
+            MIN_CURSOR_SCALE,
+            world_scale,
             &mut self.color_palette,
             &mut self.material_palette,
             &mut self.model_palette,
