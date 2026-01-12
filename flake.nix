@@ -90,6 +90,11 @@
           cudnn
         ];
 
+        # Conda for Trellis environment management
+        condaDeps = with pkgs; [
+          micromamba  # Fast, lightweight conda alternative
+        ];
+
         # Library path for dynamic libraries
         LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath buildInputs;
 
@@ -135,9 +140,9 @@
           '';
         };
 
-        # CUDA-enabled shell for XCube/fVDB development
+        # CUDA-enabled shell for XCube/fVDB development and Trellis
         devShells.cuda = pkgs.mkShell {
-          buildInputs = buildInputs ++ devTools ++ cudaDeps;
+          buildInputs = buildInputs ++ devTools ++ cudaDeps ++ condaDeps;
           inherit nativeBuildInputs;
 
           shellHook = ''
@@ -148,20 +153,29 @@
             export CUDA_HOME="${pkgs.cudaPackages.cudatoolkit}"
             export CUDA_PATH="${pkgs.cudaPackages.cudatoolkit}"
 
+            # Micromamba/conda setup
+            export MAMBA_ROOT_PREFIX="$HOME/.micromamba"
+            eval "$(micromamba shell hook --shell bash)"
+            # Create conda alias for compatibility
+            alias conda='micromamba'
+
             # Wayland/X11 environment
             export WAYLAND_DISPLAY="''${WAYLAND_DISPLAY:-wayland-1}"
             export XDG_RUNTIME_DIR="''${XDG_RUNTIME_DIR:-/run/user/1000}"
 
-            echo "🦀 Crossworld development environment loaded (with CUDA)"
+            echo "🦀 Crossworld development environment loaded (with CUDA + conda)"
             echo ""
             echo "Toolchain:"
             echo "  Rust: $(rustc --version)"
             echo "  Bun: $(bun --version)"
             echo "  CUDA: $(nvcc --version | grep release | sed 's/.*release //' | sed 's/,.*//')"
+            echo "  Conda: micromamba $(micromamba --version | head -1)"
             echo "  CUDA_HOME: $CUDA_HOME"
             echo ""
-            echo "XCube setup:"
-            echo "  just xcube-setup   - Set up XCube environment (clones repos, installs deps)"
+            echo "AI Inference Servers:"
+            echo "  just trellis-setup - Set up Trellis environment (conda, ~4GB download)"
+            echo "  just trellis-server - Start Trellis inference server"
+            echo "  just xcube-setup   - Set up XCube environment (uv)"
             echo "  just xcube-server  - Start XCube inference server"
             echo ""
             echo "Quick start:"
