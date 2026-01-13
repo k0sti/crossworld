@@ -29,7 +29,7 @@ const DEFAULT_BASE_DELAY_MS: u64 = 1000;
 ///
 /// #[tokio::main]
 /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
-///     let client = TrellisClient::new("http://localhost:8001");
+///     let client = TrellisClient::new("http://localhost:3642");
 ///
 ///     // Check server health
 ///     let status = client.health_check().await?;
@@ -63,7 +63,7 @@ impl TrellisClient {
     ///
     /// # Arguments
     ///
-    /// * `server_url` - Base URL of the Trellis.2 inference server (e.g., "http://localhost:8001")
+    /// * `server_url` - Base URL of the Trellis.2 inference server (e.g., "http://localhost:3642")
     pub fn new(server_url: impl Into<String>) -> Self {
         Self {
             client: Client::new(),
@@ -118,7 +118,7 @@ impl TrellisClient {
     /// # use trellis::TrellisClient;
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// let client = TrellisClient::new("http://localhost:8001");
+    /// let client = TrellisClient::new("http://localhost:3642");
     /// let status = client.health_check().await?;
     ///
     /// if status.is_ready() {
@@ -193,7 +193,7 @@ impl TrellisClient {
     /// # use trellis::{TrellisClient, GenerationRequest, Resolution};
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// let client = TrellisClient::new("http://localhost:8001");
+    /// let client = TrellisClient::new("http://localhost:3642");
     ///
     /// let image_base64 = "..."; // Base64-encoded image
     /// let request = GenerationRequest::new(image_base64)
@@ -332,7 +332,7 @@ impl TrellisClient {
 impl Default for TrellisClient {
     /// Create a client with default localhost URL
     fn default() -> Self {
-        Self::new("http://localhost:8001")
+        Self::new("http://localhost:3642")
     }
 }
 
@@ -342,8 +342,8 @@ mod tests {
 
     #[test]
     fn test_client_creation() {
-        let client = TrellisClient::new("http://localhost:8001");
-        assert_eq!(client.base_url, "http://localhost:8001");
+        let client = TrellisClient::new("http://localhost:3642");
+        assert_eq!(client.base_url, "http://localhost:3642");
         assert_eq!(client.health_timeout, DEFAULT_HEALTH_TIMEOUT);
         assert_eq!(client.generate_timeout, DEFAULT_GENERATE_TIMEOUT);
         assert_eq!(client.max_retries, DEFAULT_MAX_RETRIES);
@@ -351,27 +351,27 @@ mod tests {
 
     #[test]
     fn test_client_with_trailing_slash() {
-        let client = TrellisClient::new("http://localhost:8001/");
-        assert_eq!(client.base_url, "http://localhost:8001");
+        let client = TrellisClient::new("http://localhost:3642/");
+        assert_eq!(client.base_url, "http://localhost:3642");
     }
 
     #[test]
     fn test_client_with_multiple_trailing_slashes() {
-        let client = TrellisClient::new("http://localhost:8001///");
+        let client = TrellisClient::new("http://localhost:3642///");
         // trim_end_matches('/') removes all trailing slashes
-        assert_eq!(client.base_url, "http://localhost:8001");
+        assert_eq!(client.base_url, "http://localhost:3642");
     }
 
     #[test]
     fn test_client_with_path() {
-        let client = TrellisClient::new("http://localhost:8001/api/v1");
-        assert_eq!(client.base_url, "http://localhost:8001/api/v1");
+        let client = TrellisClient::new("http://localhost:3642/api/v1");
+        assert_eq!(client.base_url, "http://localhost:3642/api/v1");
     }
 
     #[test]
     fn test_client_with_path_and_trailing_slash() {
-        let client = TrellisClient::new("http://localhost:8001/api/v1/");
-        assert_eq!(client.base_url, "http://localhost:8001/api/v1");
+        let client = TrellisClient::new("http://localhost:3642/api/v1/");
+        assert_eq!(client.base_url, "http://localhost:3642/api/v1");
     }
 
     #[test]
@@ -388,7 +388,7 @@ mod tests {
 
     #[test]
     fn test_client_configuration() {
-        let client = TrellisClient::new("http://localhost:8001")
+        let client = TrellisClient::new("http://localhost:3642")
             .with_health_timeout(Duration::from_secs(10))
             .with_generate_timeout(Duration::from_secs(1200))
             .with_max_retries(5)
@@ -403,11 +403,11 @@ mod tests {
     #[test]
     fn test_client_configuration_chain_order() {
         // Test that builder methods can be called in any order
-        let client1 = TrellisClient::new("http://localhost:8001")
+        let client1 = TrellisClient::new("http://localhost:3642")
             .with_health_timeout(Duration::from_secs(10))
             .with_max_retries(5);
 
-        let client2 = TrellisClient::new("http://localhost:8001")
+        let client2 = TrellisClient::new("http://localhost:3642")
             .with_max_retries(5)
             .with_health_timeout(Duration::from_secs(10));
 
@@ -417,14 +417,14 @@ mod tests {
 
     #[test]
     fn test_client_zero_retries() {
-        let client = TrellisClient::new("http://localhost:8001").with_max_retries(0);
+        let client = TrellisClient::new("http://localhost:3642").with_max_retries(0);
 
         assert_eq!(client.max_retries, 0);
     }
 
     #[test]
     fn test_client_zero_delay() {
-        let client = TrellisClient::new("http://localhost:8001").with_base_delay_ms(0);
+        let client = TrellisClient::new("http://localhost:3642").with_base_delay_ms(0);
 
         assert_eq!(client.base_delay_ms, 0);
         assert_eq!(client.calculate_backoff_delay(0), Duration::from_millis(0));
@@ -433,7 +433,7 @@ mod tests {
 
     #[test]
     fn test_client_very_short_timeout() {
-        let client = TrellisClient::new("http://localhost:8001")
+        let client = TrellisClient::new("http://localhost:3642")
             .with_health_timeout(Duration::from_millis(1))
             .with_generate_timeout(Duration::from_millis(1));
 
@@ -443,7 +443,7 @@ mod tests {
 
     #[test]
     fn test_backoff_delay_calculation() {
-        let client = TrellisClient::new("http://localhost:8001");
+        let client = TrellisClient::new("http://localhost:3642");
 
         assert_eq!(
             client.calculate_backoff_delay(0),
@@ -465,7 +465,7 @@ mod tests {
 
     #[test]
     fn test_backoff_delay_with_custom_base() {
-        let client = TrellisClient::new("http://localhost:8001").with_base_delay_ms(500);
+        let client = TrellisClient::new("http://localhost:3642").with_base_delay_ms(500);
 
         assert_eq!(
             client.calculate_backoff_delay(0),
@@ -487,7 +487,7 @@ mod tests {
 
     #[test]
     fn test_backoff_delay_exponential_growth() {
-        let client = TrellisClient::new("http://localhost:8001").with_base_delay_ms(100);
+        let client = TrellisClient::new("http://localhost:3642").with_base_delay_ms(100);
 
         // Verify exponential growth pattern
         for attempt in 0..5 {
@@ -499,7 +499,7 @@ mod tests {
     #[test]
     fn test_default_client() {
         let client = TrellisClient::default();
-        assert_eq!(client.base_url, "http://localhost:8001");
+        assert_eq!(client.base_url, "http://localhost:3642");
     }
 
     #[test]
@@ -514,13 +514,13 @@ mod tests {
 
     #[test]
     fn test_generate_timeout_default() {
-        let client = TrellisClient::new("http://localhost:8001");
+        let client = TrellisClient::new("http://localhost:3642");
         assert_eq!(client.generate_timeout, Duration::from_secs(600));
     }
 
     #[test]
     fn test_health_timeout_default() {
-        let client = TrellisClient::new("http://localhost:8001");
+        let client = TrellisClient::new("http://localhost:3642");
         assert_eq!(client.health_timeout, Duration::from_secs(5));
     }
 
@@ -536,15 +536,15 @@ mod tests {
     #[test]
     fn test_client_from_string() {
         // Test that new() works with String (not just &str)
-        let url = String::from("http://localhost:8001");
+        let url = String::from("http://localhost:3642");
         let client = TrellisClient::new(url);
-        assert_eq!(client.base_url, "http://localhost:8001");
+        assert_eq!(client.base_url, "http://localhost:3642");
     }
 
     #[test]
     fn test_client_from_string_with_trailing_slash() {
-        let url = String::from("http://localhost:8001/");
+        let url = String::from("http://localhost:3642/");
         let client = TrellisClient::new(url);
-        assert_eq!(client.base_url, "http://localhost:8001");
+        assert_eq!(client.base_url, "http://localhost:3642");
     }
 }

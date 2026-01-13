@@ -34,7 +34,7 @@ Trellis is a unified 3D generative model that supports both text-to-3D and image
 
 ```bash
 # Check server health
-cargo run -p trellis -- health --server http://localhost:8000
+cargo run -p trellis -- health --server http://localhost:3642
 
 # Generate voxel model from text (to be implemented)
 # cargo run -p trellis -- generate "a wooden chair" -o chair.csm

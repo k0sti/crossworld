@@ -20,7 +20,7 @@
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn std::error::Error>> {
 //!     // Create client
-//!     let client = TrellisClient::new("http://localhost:8000");
+//!     let client = TrellisClient::new("http://localhost:3642");
 //!
 //!     // Check server health
 //!     let status = client.health_check().await?;

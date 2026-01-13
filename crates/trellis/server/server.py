@@ -421,7 +421,7 @@ if __name__ == "__main__":
 
     # Configuration from environment variables
     host = os.getenv("TRELLIS_HOST", "0.0.0.0")
-    port = int(os.getenv("TRELLIS_PORT", "8001"))
+    port = int(os.getenv("TRELLIS_PORT", "3642"))
     workers = int(os.getenv("TRELLIS_WORKERS", "1"))
 
     logger.info(f"Starting server on {host}:{port} with {workers} workers")

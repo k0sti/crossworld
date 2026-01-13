@@ -286,8 +286,8 @@ trellis-setup *ARGS:
 
 # Start Trellis.2 inference server
 trellis-server:
-    @echo "Starting Trellis.2 inference server on http://0.0.0.0:8001..."
-    @echo "API docs: http://localhost:8001/docs"
+    @echo "Starting Trellis.2 inference server on http://0.0.0.0:3642..."
+    @echo "API docs: http://localhost:3642/docs"
     @echo ""
     LD_LIBRARY_PATH=/run/opengl-driver/lib:${LD_LIBRARY_PATH:-} \
     ATTN_BACKEND=xformers \

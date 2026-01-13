@@ -524,7 +524,7 @@ fn encode_r2g3b2_color(color: &[f32; 3]) -> u8 {
 /// # use trellis::convert::trellis_to_cube;
 /// # #[tokio::main]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let client = TrellisClient::new("http://localhost:8000");
+/// let client = TrellisClient::new("http://localhost:3642");
 /// let request = GenerationRequest::new("base64_image_data");
 /// let result = client.generate(&request).await?;
 ///
@@ -597,7 +597,7 @@ pub fn trellis_to_cube(result: &TrellisResult, depth: u32) -> Result<Cube<u8>> {
 /// # use trellis::convert::trellis_to_csm;
 /// # #[tokio::main]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let client = TrellisClient::new("http://localhost:8000");
+/// let client = TrellisClient::new("http://localhost:3642");
 /// let request = GenerationRequest::new("base64_image_data");
 /// let result = client.generate(&request).await?;
 ///

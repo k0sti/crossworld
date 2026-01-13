@@ -83,11 +83,11 @@ cd crates/trellis/server
 uv run server.py
 
 # Or with custom configuration
-TRELLIS_HOST=0.0.0.0 TRELLIS_PORT=8001 uv run server.py
+TRELLIS_HOST=0.0.0.0 TRELLIS_PORT=3642 uv run server.py
 ```
 
 The server will:
-1. Start on `http://0.0.0.0:8001` by default
+1. Start on `http://0.0.0.0:3642` by default
 2. Load the Trellis.2 pipeline on startup (may take 30-60 seconds)
 3. Expose endpoints at `/health`, `/generate`, and `/docs`
 
@@ -97,7 +97,7 @@ The server will:
 |----------|---------|-------------|
 | `TRELLIS_MODEL_PATH` | `microsoft/TRELLIS.2-4B` | HuggingFace model name |
 | `TRELLIS_HOST` | `0.0.0.0` | Server bind address |
-| `TRELLIS_PORT` | `8001` | Server port |
+| `TRELLIS_PORT` | `3642` | Server port |
 | `TRELLIS_WORKERS` | `1` | Uvicorn worker count (keep at 1 for GPU) |
 
 ## API Endpoints
@@ -181,10 +181,10 @@ Interactive API documentation (Swagger UI).
 
 ```bash
 # Check health
-curl http://localhost:8001/health
+curl http://localhost:3642/health
 
 # Generate from image
-curl -X POST http://localhost:8001/generate \
+curl -X POST http://localhost:3642/generate \
   -H "Content-Type: application/json" \
   -d '{
     "image": "data:image/png;base64,iVBORw0KGgoAAAANS...",
@@ -206,7 +206,7 @@ image_data = base64.b64encode(image_path.read_bytes()).decode()
 
 # Generate mesh
 response = requests.post(
-    "http://localhost:8001/generate",
+    "http://localhost:3642/generate",
     json={
         "image": image_data,
         "seed": 42,
@@ -225,7 +225,7 @@ use trellis::{TrellisClient, GenerationRequest, Resolution};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let client = TrellisClient::new("http://localhost:8001");
+    let client = TrellisClient::new("http://localhost:3642");
 
     // Check health
     let status = client.health_check().await?;
@@ -331,7 +331,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 uv run pytest
 
 # Manual API test
-curl http://localhost:8001/health
+curl http://localhost:3642/health
 ```
 
 ### Logging
@@ -345,7 +345,7 @@ TRELLIS_LOG_LEVEL=DEBUG uv run server.py
 ### Hot Reload (Development)
 
 ```bash
-uv run uvicorn server:app --reload --host 0.0.0.0 --port 8001
+uv run uvicorn server:app --reload --host 0.0.0.0 --port 3642
 ```
 
 ## Deployment
@@ -369,7 +369,7 @@ RUN uv sync
 RUN uv pip install -e /app/external/TRELLIS
 
 # Expose port
-EXPOSE 8001
+EXPOSE 3642
 
 # Run server
 CMD ["uv", "run", "server.py"]
@@ -379,7 +379,7 @@ Build and run:
 
 ```bash
 docker build -t trellis-server .
-docker run --gpus all -p 8001:8001 trellis-server
+docker run --gpus all -p 3642:3642 trellis-server
 ```
 
 ### Systemd Service
@@ -396,7 +396,7 @@ WorkingDirectory=/opt/crossworld/crates/trellis/server
 ExecStart=/home/trellis/.local/bin/uv run server.py
 Restart=on-failure
 Environment="TRELLIS_MODEL_PATH=microsoft/TRELLIS.2-4B"
-Environment="TRELLIS_PORT=8001"
+Environment="TRELLIS_PORT=3642"
 
 [Install]
 WantedBy=multi-user.target

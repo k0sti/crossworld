@@ -38,7 +38,7 @@ enum Commands {
         seed: Option<i64>,
 
         /// Trellis server URL
-        #[arg(long, default_value = "http://localhost:8000")]
+        #[arg(long, default_value = "http://localhost:3642")]
         server: String,
 
         /// Request timeout in seconds
@@ -53,7 +53,7 @@ enum Commands {
     /// Check Trellis server health
     Health {
         /// Trellis server URL
-        #[arg(long, default_value = "http://localhost:8000")]
+        #[arg(long, default_value = "http://localhost:3642")]
         server: String,
     },
 }
