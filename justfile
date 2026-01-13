@@ -292,7 +292,6 @@ trellis-server:
     LD_LIBRARY_PATH=/run/opengl-driver/lib:${LD_LIBRARY_PATH:-} \
     ATTN_BACKEND=xformers \
     PYTHONPATH=external/TRELLIS:${PYTHONPATH:-} \
-    TRELLIS_MODEL_PATH=~/.cache/huggingface/hub/models--microsoft--TRELLIS-image-large/snapshots/25e0d31ffbebe4b5a97464dd851910efc3002d96 \
     conda run -n trellis --no-capture-output python crates/trellis/server/server.py
 
 # Run hot-reload demo (manual two-terminal method)
