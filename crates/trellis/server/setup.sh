@@ -160,6 +160,16 @@ if [ -d "$TRELLIS_PATH" ]; then
             conda activate trellis
             . ./setup.sh --basic --xformers --kaolin
             conda deactivate
+
+            # Fix numpy/opencv version conflicts (kaolin needs numpy<2.0)
+            echo -e "${BLUE}Fixing numpy/opencv compatibility...${NC}"
+            conda run -n trellis pip install 'numpy<2.0' 'opencv-python-headless<4.8' --force-reinstall -q
+
+            # Install xformers compatible with PyTorch 2.4.0
+            echo -e "${BLUE}Installing xformers 0.0.27.post2...${NC}"
+            conda run -n trellis pip install xformers==0.0.27.post2 --no-deps -q
+
+            echo -e "${GREEN}✓ Dependencies fixed${NC}"
         fi
     else
         echo -e "${BLUE}Creating new conda environment 'trellis'...${NC}"
@@ -177,6 +187,16 @@ if [ -d "$TRELLIS_PATH" ]; then
         conda activate trellis
         . ./setup.sh --basic --xformers --kaolin
         conda deactivate
+
+        # Fix numpy/opencv version conflicts (kaolin needs numpy<2.0)
+        echo -e "${BLUE}Fixing numpy/opencv compatibility...${NC}"
+        conda run -n trellis pip install 'numpy<2.0' 'opencv-python-headless<4.8' --force-reinstall -q
+
+        # Install xformers compatible with PyTorch 2.4.0
+        echo -e "${BLUE}Installing xformers 0.0.27.post2...${NC}"
+        conda run -n trellis pip install xformers==0.0.27.post2 --no-deps -q
+
+        echo -e "${GREEN}✓ Dependencies fixed${NC}"
     fi
 
     cd "$SCRIPT_DIR"
