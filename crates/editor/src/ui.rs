@@ -763,15 +763,14 @@ pub fn show_model_palette_panel(ctx: &egui::Context, model_palette: &mut ModelPa
 /// Displays details about the current cursor state including:
 /// - Cursor position (CubeCoord)
 /// - Cursor size
-/// - Depth controls (increment/decrement buttons)
+/// - Size controls (increment/decrement buttons)
 /// - Alignment mode
 /// - Hit face
 ///
 /// # Arguments
 /// * `ui` - The egui UI context
-/// * `cursor` - The current cursor state (mutable for depth controls)
-/// * `max_depth` - Maximum allowed depth for the cursor
-pub fn show_cursor_info(ui: &mut Ui, cursor: &mut CubeCursor, min_scale: i32, world_scale: u32) {
+/// * `cursor` - The current cursor state (mutable for size controls)
+pub fn show_cursor_info(ui: &mut Ui, cursor: &mut CubeCursor) {
     // Validity indicator
     ui.horizontal(|ui| {
         let (status, color) = if cursor.valid {
@@ -797,32 +796,23 @@ pub fn show_cursor_info(ui: &mut Ui, cursor: &mut CubeCursor, min_scale: i32, wo
 
     ui.add_space(4.0);
 
-    // Scale controls with increment/decrement buttons
+    // Cursor scale controls with increment/decrement buttons
     ui.group(|ui| {
         ui.label("Cursor Scale:");
         ui.horizontal(|ui| {
-            // Decrement button
+            // Decrement button (decreases scale, making cursor smaller)
             if ui.button("-").clicked() {
-                cursor.decrease_scale(min_scale);
+                cursor.decrease_scale();
             }
 
             // Current scale display
             ui.monospace(format!("{}", cursor.coord.scale));
 
-            // Increment button
+            // Increment button (increases scale, making cursor larger)
             if ui.button("+").clicked() {
                 cursor.increase_scale();
             }
-
-            // Calculate relative scale to world (cursor_scale - world_scale)
-            let relative_scale = cursor.coord.scale - world_scale as i32;
-            let relative_factor = 2.0_f32.powi(relative_scale);
-            ui.label(format!("({}× world cube)", relative_factor));
         });
-        // Tooltip explanation
-        ui.label("ⓘ").on_hover_text(
-            "Cursor scale relative to world cube. 0 = full world cube, -1 = half, +1 = double",
-        );
     });
 
     ui.add_space(4.0);
@@ -919,12 +909,9 @@ pub struct SidebarResult {
 ///
 /// # Returns
 /// SidebarResult with flags for what was selected
-#[allow(clippy::too_many_arguments)]
 pub fn show_unified_sidebar(
     ctx: &egui::Context,
     cursor: &mut CubeCursor,
-    min_scale: i32,
-    world_scale: u32,
     color_palette: &mut ColorPalette,
     material_palette: &mut MaterialPalette,
     model_palette: &mut ModelPalette,
@@ -946,7 +933,7 @@ pub fn show_unified_sidebar(
                 .show(ui, |ui| {
                     // Cursor Info section
                     ui.collapsing("Cursor Info", |ui| {
-                        show_cursor_info(ui, cursor, min_scale, world_scale);
+                        show_cursor_info(ui, cursor);
                     });
 
                     ui.add_space(8.0);

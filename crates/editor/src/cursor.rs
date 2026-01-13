@@ -3,6 +3,13 @@
 //! Provides the 3D cursor that follows mouse raycast and determines
 //! where voxels will be placed or removed. The cursor is a CubeBox
 //! with configurable size and face alignment.
+//!
+//! # Coordinate System
+//!
+//! Cursor coordinates are origin-centric, matching CubeGrid:
+//! - At scale `s`, valid coords are `[-size/2, size/2)` where `size = 1 << s`
+//! - Cursor position maps directly to CubeGrid position at the same scale
+//! - No world_scale conversion needed
 
 use cube::Axis;
 use glam::{IVec3, Vec3};
@@ -68,12 +75,18 @@ impl CursorAlign {
     }
 }
 
-/// Cursor coordinate in octree space
+/// Cursor coordinate in origin-centric space
+///
+/// Coordinates are origin-centric: `[-size/2, size/2)` where `size = 1 << scale`.
+/// This matches CubeGrid's coordinate system directly.
+///
+/// Scale can be negative for sub-voxel precision (cursor smaller than 1 grid unit).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CursorCoord {
-    /// Position in octree space
+    /// Position in origin-centric space (matches CubeGrid coordinates)
     pub pos: IVec3,
-    /// Scale level (power-of-2 size multiplier, 0 = unit cube, negative = sub-unit)
+    /// Scale level: size = 1 << scale, coords in [-size/2, size/2)
+    /// Can be negative for sub-voxel sizes.
     pub scale: i32,
 }
 
@@ -81,7 +94,7 @@ impl Default for CursorCoord {
     fn default() -> Self {
         Self {
             pos: IVec3::ZERO,
-            scale: 0, // Default to scale 0 (unit cube)
+            scale: 0, // Default to scale 0 (1x1x1 - single voxel)
         }
     }
 }
@@ -92,16 +105,33 @@ impl CursorCoord {
         Self { pos, scale }
     }
 
-    /// Get the scale factor (2^scale)
-    pub fn scale_factor(&self) -> f32 {
+    /// Get the grid size at this scale (1 << scale for non-negative, fraction for negative)
+    pub fn size(&self) -> i32 {
+        if self.scale >= 0 {
+            1i32 << self.scale
+        } else {
+            // For negative scale, size is still 1 (minimum displayable)
+            1
+        }
+    }
+
+    /// Get the cursor size as a float (handles negative scales)
+    pub fn size_f32(&self) -> f32 {
         2.0_f32.powi(self.scale)
+    }
+
+    /// Get voxel size as fraction of world (1.0 / size)
+    pub fn voxel_fraction(&self) -> f32 {
+        1.0 / self.size_f32()
     }
 }
 
 /// 3D cursor for voxel editing (CubeBox-based)
+///
+/// Uses origin-centric coordinates that map directly to CubeGrid.
 #[derive(Debug, Clone)]
 pub struct CubeCursor {
-    /// Current coordinate in octree space
+    /// Current coordinate in origin-centric space
     pub coord: CursorCoord,
     /// Size of cursor in voxels (x, y, z)
     pub size: IVec3,
@@ -137,6 +167,14 @@ impl CubeCursor {
         Self::default()
     }
 
+    /// Create a cursor with a specific scale
+    pub fn with_scale(scale: i32) -> Self {
+        Self {
+            coord: CursorCoord::new(IVec3::ZERO, scale),
+            ..Self::default()
+        }
+    }
+
     /// Increase cursor size (max 16)
     pub fn increase_size(&mut self) {
         self.size = (self.size + IVec3::ONE).min(IVec3::splat(16));
@@ -163,21 +201,20 @@ impl CubeCursor {
         self.align = self.align.next();
     }
 
-    /// Increase cursor scale (larger voxels)
+    /// Increase cursor scale (larger grid, more voxels)
     pub fn increase_scale(&mut self) {
         self.coord.scale += 1;
     }
 
-    /// Decrease cursor scale (smaller voxels)
-    pub fn decrease_scale(&mut self, min_scale: i32) {
-        if self.coord.scale > min_scale {
-            self.coord.scale -= 1;
-        }
+    /// Decrease cursor scale (smaller grid, fewer voxels)
+    /// Scale can go negative for sub-voxel precision.
+    pub fn decrease_scale(&mut self) {
+        self.coord.scale -= 1;
     }
 
     /// Set cursor scale directly
-    pub fn set_scale(&mut self, scale: i32, min_scale: i32, max_scale: i32) {
-        self.coord.scale = scale.clamp(min_scale, max_scale);
+    pub fn set_scale(&mut self, scale: i32) {
+        self.coord.scale = scale;
     }
 
     /// Get the wireframe color based on current focus mode
@@ -209,12 +246,11 @@ impl CubeCursor {
     /// Get cursor size in world space
     ///
     /// # Arguments
-    /// * `cube_scale` - The world scale of the root cube (edge size)
-    /// * `world_scale` - The scale level of the world cube (for relative sizing)
-    pub fn world_size(&self, cube_scale: f32, world_scale: u32) -> Vec3 {
-        // Cursor scale is relative to world scale
-        let relative_scale = self.coord.scale - world_scale as i32;
-        let voxel_size = cube_scale * 2.0_f32.powi(relative_scale);
+    /// * `cube_scale` - The world scale of the root cube (edge size in world units)
+    pub fn world_size(&self, cube_scale: f32) -> Vec3 {
+        // Each voxel is cube_scale / grid_size in world units
+        // Use size_f32 to handle negative scales properly
+        let voxel_size = cube_scale / self.coord.size_f32();
         Vec3::new(
             self.size.x as f32 * voxel_size,
             self.size.y as f32 * voxel_size,
@@ -224,34 +260,29 @@ impl CubeCursor {
 
     /// Get cursor corner position in world space (min corner of the cursor box)
     ///
-    /// The cube is centered at cube_position, so voxel (0,0,0) corner is at cube_position - cube_scale/2
+    /// Origin-centric: coord (0,0,0) is at world origin, coords map linearly
     ///
     /// # Arguments
-    /// * `cube_position` - The center position of the root cube in world space
-    /// * `cube_scale` - The world scale of the root cube (edge size)
-    /// * `world_scale` - The scale level of the world cube (for relative sizing)
-    pub fn world_corner(&self, cube_position: Vec3, cube_scale: f32, world_scale: u32) -> Vec3 {
-        // Cursor scale is relative to world scale
-        let relative_scale = self.coord.scale - world_scale as i32;
-        let voxel_size = cube_scale * 2.0_f32.powi(relative_scale);
-        let cube_corner = cube_position - Vec3::splat(cube_scale * 0.5);
-        cube_corner
-            + Vec3::new(
-                self.coord.pos.x as f32 * voxel_size,
-                self.coord.pos.y as f32 * voxel_size,
-                self.coord.pos.z as f32 * voxel_size,
-            )
+    /// * `cube_scale` - The world scale of the root cube (edge size in world units)
+    pub fn world_corner(&self, cube_scale: f32) -> Vec3 {
+        // Each voxel is cube_scale / grid_size in world units
+        // Origin-centric: coord 0 maps to world 0
+        // Use size_f32 to handle negative scales properly
+        let voxel_size = cube_scale / self.coord.size_f32();
+        Vec3::new(
+            self.coord.pos.x as f32 * voxel_size,
+            self.coord.pos.y as f32 * voxel_size,
+            self.coord.pos.z as f32 * voxel_size,
+        )
     }
 
     /// Get cursor center position in world space
     ///
     /// # Arguments
-    /// * `cube_position` - The center position of the root cube in world space
-    /// * `cube_scale` - The world scale of the root cube (edge size)
-    /// * `world_scale` - The scale level of the world cube (for relative sizing)
-    pub fn world_center(&self, cube_position: Vec3, cube_scale: f32, world_scale: u32) -> Vec3 {
-        let corner = self.world_corner(cube_position, cube_scale, world_scale);
-        let size = self.world_size(cube_scale, world_scale);
+    /// * `cube_scale` - The world scale of the root cube (edge size in world units)
+    pub fn world_center(&self, cube_scale: f32) -> Vec3 {
+        let corner = self.world_corner(cube_scale);
+        let size = self.world_size(cube_scale);
         corner + size * 0.5
     }
 
@@ -297,7 +328,7 @@ impl CubeCursor {
     /// # Arguments
     /// * `hit_position` - World position of the raycast hit
     /// * `face` - The face that was hit
-    /// * `voxel_coord` - Integer voxel coordinate of the hit
+    /// * `voxel_coord` - Integer voxel coordinate of the hit (origin-centric)
     /// * `scale` - Scale level for the cursor
     pub fn update_from_raycast_with_face(
         &mut self,
@@ -352,7 +383,7 @@ impl CubeCursor {
     /// # Arguments
     /// * `hit_position` - World position of the raycast hit
     /// * `face` - The face that was hit
-    /// * `selected_coord` - The voxel coordinate selected by select_coord_at_scale
+    /// * `selected_coord` - The voxel coordinate selected by select_coord_at_scale (origin-centric)
     /// * `scale` - The scale level for the cursor
     /// * `is_boundary` - Whether the hit was at a boundary face
     pub fn update_from_selected_coord(
@@ -384,7 +415,7 @@ impl CubeCursor {
     /// # Arguments
     /// * `hit_position` - World position of the raycast hit
     /// * `face` - The face that was hit
-    /// * `selected_coord` - The voxel coordinate selected at cursor's current scale
+    /// * `selected_coord` - The voxel coordinate selected at cursor's current scale (origin-centric)
     /// * `is_boundary` - Whether the hit was at a boundary face
     pub fn update_from_selected_coord_preserve_scale(
         &mut self,
@@ -442,10 +473,18 @@ mod tests {
     fn test_cursor_default() {
         let cursor = CubeCursor::default();
         assert_eq!(cursor.coord.pos, IVec3::ZERO);
+        assert_eq!(cursor.coord.scale, 0); // Default scale is 0 (single voxel)
         assert_eq!(cursor.size, IVec3::ONE);
         assert!(!cursor.valid);
         assert_eq!(cursor.focus_mode, FocusMode::Far);
         assert_eq!(cursor.align, CursorAlign::Corner);
+    }
+
+    #[test]
+    fn test_cursor_with_scale() {
+        let cursor = CubeCursor::with_scale(6);
+        assert_eq!(cursor.coord.scale, 6);
+        assert_eq!(cursor.coord.size(), 64); // 2^6 = 64
     }
 
     #[test]
@@ -482,12 +521,12 @@ mod tests {
     #[test]
     fn test_cursor_bounds() {
         let mut cursor = CubeCursor::new();
-        cursor.coord.pos = IVec3::new(5, 5, 5);
+        cursor.coord.pos = IVec3::new(-3, 2, 0); // Origin-centric coords
         cursor.size = IVec3::ONE;
 
         let (min, max) = cursor.bounds();
-        assert_eq!(min, IVec3::new(5, 5, 5));
-        assert_eq!(max, IVec3::new(6, 6, 6));
+        assert_eq!(min, IVec3::new(-3, 2, 0));
+        assert_eq!(max, IVec3::new(-2, 3, 1));
     }
 
     #[test]
@@ -505,15 +544,48 @@ mod tests {
 
     #[test]
     fn test_cursor_coord() {
-        let coord = CursorCoord::new(IVec3::new(1, 2, 3), 0);
+        let coord = CursorCoord::new(IVec3::new(1, 2, 3), 4);
         assert_eq!(coord.pos, IVec3::new(1, 2, 3));
-        assert_eq!(coord.scale, 0);
-        assert_eq!(coord.scale_factor(), 1.0);
+        assert_eq!(coord.scale, 4);
+        assert_eq!(coord.size(), 16); // 2^4 = 16
+        assert_eq!(coord.voxel_fraction(), 1.0 / 16.0);
 
-        let coord2 = CursorCoord::new(IVec3::ZERO, -3);
-        assert_eq!(coord2.scale_factor(), 0.125); // 2^-3 = 1/8
+        let coord2 = CursorCoord::new(IVec3::ZERO, 0);
+        assert_eq!(coord2.size(), 1); // 2^0 = 1
+        assert_eq!(coord2.voxel_fraction(), 1.0);
 
         let coord3 = CursorCoord::new(IVec3::ZERO, 2);
-        assert_eq!(coord3.scale_factor(), 4.0); // 2^2 = 4
+        assert_eq!(coord3.size(), 4); // 2^2 = 4
+    }
+
+    #[test]
+    fn test_world_corner_origin_centric() {
+        let mut cursor = CubeCursor::with_scale(4); // 16x16x16 grid
+        cursor.coord.pos = IVec3::ZERO;
+
+        // At scale 4, cube_scale 16.0: each voxel is 1.0 unit
+        // Coord (0,0,0) should be at world (0,0,0)
+        let corner = cursor.world_corner(16.0);
+        assert!((corner.x - 0.0).abs() < 0.001);
+        assert!((corner.y - 0.0).abs() < 0.001);
+        assert!((corner.z - 0.0).abs() < 0.001);
+
+        // Coord (-8,0,0) should be at world (-8,0,0)
+        cursor.coord.pos = IVec3::new(-8, 0, 0);
+        let corner = cursor.world_corner(16.0);
+        assert!((corner.x - (-8.0)).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_world_size() {
+        let mut cursor = CubeCursor::with_scale(4); // 16x16x16 grid
+        cursor.size = IVec3::splat(2);
+
+        // At scale 4, cube_scale 16.0: each voxel is 1.0 unit
+        // Size 2 voxels = 2.0 units
+        let size = cursor.world_size(16.0);
+        assert!((size.x - 2.0).abs() < 0.001);
+        assert!((size.y - 2.0).abs() < 0.001);
+        assert!((size.z - 2.0).abs() < 0.001);
     }
 }

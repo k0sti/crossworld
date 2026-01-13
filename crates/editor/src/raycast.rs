@@ -86,48 +86,39 @@ impl EditorHit {
 
     /// Compute voxel coordinate at a specific scale from hit position
     ///
+    /// Returns origin-centric coordinates that match CubeGrid's coordinate system.
     /// Uses the precise hit position to calculate the voxel coordinate
     /// at any scale level, regardless of the hit's actual depth.
     /// The calculation biases towards the near side (the voxel we actually hit)
     /// by offsetting slightly in the opposite direction of the face normal.
     ///
     /// # Arguments
-    /// * `scale` - Target scale level (0 = unit cube, negative = sub-unit, positive = multi-unit)
-    /// * `cube_position` - World position of the cube's center
+    /// * `scale` - Target scale level (grid size = 2^scale, can be negative)
     /// * `cube_scale` - Scale factor of the cube in world space (edge size)
-    /// * `world_scale` - The scale level of the world cube (for relative sizing)
-    pub fn voxel_at_scale(
-        &self,
-        scale: i32,
-        cube_position: Vec3,
-        cube_scale: f32,
-        world_scale: u32,
-    ) -> IVec3 {
-        // Convert world position back to cube's [-1,1]³ space
-        // World space: cube_position + [-0.5, 0.5] * cube_scale
-        // Raycast space: [-1, 1]
-        let half_scale = cube_scale * 0.5;
-        let cube_pos = (self.world_pos - cube_position) / half_scale;
+    ///
+    /// # Returns
+    /// Origin-centric voxel coordinate in range [-size/2, size/2) where size = 2^scale
+    pub fn voxel_at_scale(&self, scale: i32, cube_scale: f32) -> IVec3 {
+        // Convert world position to normalized [-0.5, 0.5] space
+        // (cube is centered at origin, so world_pos is already relative to center)
+        let normalized_pos = self.world_pos / cube_scale;
 
         // Bias slightly towards the near side to avoid floating point issues
         // at boundaries. The hit is on the surface, so we offset by a small
         // amount in the opposite direction of the normal.
         let epsilon = 0.001;
-        let bias = -self.normal.to_vec3() * epsilon;
-        let biased_pos = cube_pos + bias;
+        let bias = -self.normal.to_vec3() * epsilon / cube_scale;
+        let biased_pos = normalized_pos + bias;
 
-        // Convert cursor scale to depth for coordinate calculation relative to world scale
-        // With world scale 4, cursor scale 0 maps to depth 4 (16x16x16 grid)
-        // With world scale 4, cursor scale -1 maps to depth 5 (32x32x32 grid)
-        let cursor_depth = world_scale as i32 - scale;
+        // Grid size at this scale (2^scale, works for negative scales too)
+        let grid_size = 2.0_f32.powi(scale);
 
-        // Coordinates should be in the range [0, 2^cursor_depth)
-        // The cube space [-1, 1] maps to [0, 2^cursor_depth)
-        let depth_factor = 2.0_f32.powi(cursor_depth - 1);
+        // Convert normalized [-0.5, 0.5] to origin-centric [-size/2, size/2)
+        // normalized * grid_size gives us the origin-centric coordinate
         IVec3::new(
-            ((biased_pos.x + 1.0) * depth_factor).floor() as i32,
-            ((biased_pos.y + 1.0) * depth_factor).floor() as i32,
-            ((biased_pos.z + 1.0) * depth_factor).floor() as i32,
+            (biased_pos.x * grid_size).floor() as i32,
+            (biased_pos.y * grid_size).floor() as i32,
+            (biased_pos.z * grid_size).floor() as i32,
         )
     }
 
@@ -135,18 +126,13 @@ impl EditorHit {
     ///
     /// # Arguments
     /// * `scale` - Target scale level for placement
-    /// * `cube_position` - World position of the cube's center
     /// * `cube_scale` - Scale factor of the cube in world space
-    /// * `world_scale` - The scale level of the world cube (for relative sizing)
-    pub fn placement_at_scale(
-        &self,
-        scale: i32,
-        cube_position: Vec3,
-        cube_scale: f32,
-        world_scale: u32,
-    ) -> IVec3 {
+    ///
+    /// # Returns
+    /// Origin-centric voxel coordinate for placement
+    pub fn placement_at_scale(&self, scale: i32, cube_scale: f32) -> IVec3 {
         // Get the hit voxel at target scale
-        let hit_voxel = self.voxel_at_scale(scale, cube_position, cube_scale, world_scale);
+        let hit_voxel = self.voxel_at_scale(scale, cube_scale);
         // Add normal to get adjacent position
         hit_voxel + self.normal.to_ivec3()
     }
@@ -158,49 +144,37 @@ impl EditorHit {
     /// When the hit is inside a cube at cursor scale, we select that cube.
     ///
     /// # Arguments
-    /// * `cursor_scale` - The scale level of the cursor
+    /// * `cursor_scale` - The scale level of the cursor (grid size = 2^cursor_scale)
     /// * `far_mode` - If true, select far side; if false, select near side
-    /// * `cube_position` - World position of the cube's center
     /// * `cube_scale` - Scale factor of the cube in world space
-    /// * `world_scale` - The scale level of the world cube (for relative sizing)
     ///
     /// # Returns
     /// A tuple of (selected_coord, is_boundary_face) where:
-    /// - selected_coord is the voxel coordinate at cursor_scale
+    /// - selected_coord is the origin-centric voxel coordinate at cursor_scale
     /// - is_boundary_face is true if the hit face aligns with cursor scale grid
     pub fn select_coord_at_scale(
         &self,
         cursor_scale: i32,
         far_mode: bool,
-        cube_position: Vec3,
         cube_scale: f32,
-        world_scale: u32,
     ) -> (IVec3, bool) {
         // Get the voxel coordinate at cursor scale
-        let voxel_coord = self.voxel_at_scale(cursor_scale, cube_position, cube_scale, world_scale);
+        let voxel_coord = self.voxel_at_scale(cursor_scale, cube_scale);
 
         // Check if the hit face aligns with a boundary at cursor scale
-        // The hit is at a boundary if the hit position lies on a grid line at cursor scale
-        //
-        // Convert world position to cube space [-1, 1]
-        let half_scale = cube_scale * 0.5;
-        let cube_pos = (self.world_pos - cube_position) / half_scale;
-
-        // Convert cursor scale to depth for boundary detection relative to world scale
-        let cursor_depth = world_scale as i32 - cursor_scale;
-        let depth_factor = 2.0_f32.powi(cursor_depth - 1);
-        let voxel_pos = (cube_pos + Vec3::ONE) * depth_factor;
+        // Convert world position to grid-relative position
+        let grid_size = 2.0_f32.powi(cursor_scale);
+        let normalized_pos = self.world_pos / cube_scale;
+        let grid_pos = normalized_pos * grid_size;
 
         // Check if hit position is on a grid boundary along the normal axis
         let axis_idx = self.normal.index();
-        let pos_on_axis = voxel_pos[axis_idx];
+        let pos_on_axis = grid_pos[axis_idx];
 
         // A position is on a boundary if it's very close to an integer
         let frac = pos_on_axis - pos_on_axis.floor();
         let is_boundary = !(0.001..=0.999).contains(&frac);
 
-        // Note: We can't directly compare scales since hit depth and cursor scale are different units
-        // The boundary detection above should be sufficient for all scales
         let is_boundary_face = is_boundary;
 
         if is_boundary_face && far_mode {
