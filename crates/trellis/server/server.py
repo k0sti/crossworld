@@ -24,8 +24,9 @@ from PIL import Image
 
 # Trellis imports
 # These assume Trellis is installed or available in PYTHONPATH
+# Import directly to avoid loading text pipeline which needs open3d with GUI
 try:
-    from trellis.pipelines import Trellis2ImageTo3DPipeline
+    from trellis.pipelines.trellis_image_to_3d import TrellisImageTo3DPipeline
     TRELLIS_AVAILABLE = True
 except ImportError as e:
     TRELLIS_AVAILABLE = False
@@ -104,20 +105,35 @@ async def load_models():
         if not TRELLIS_AVAILABLE:
             raise RuntimeError(f"Trellis not available: {IMPORT_ERROR}")
 
-        if not torch.cuda.is_available():
+        # Check if CUDA is available and properly supported
+        cuda_available = False
+        if torch.cuda.is_available():
+            try:
+                # Test CUDA by creating a simple tensor
+                test_tensor = torch.zeros(1, device='cuda')
+                del test_tensor
+                cuda_available = True
+                logger.info("CUDA is available and working")
+            except RuntimeError as e:
+                logger.warning(f"CUDA available but not functional: {e}")
+                logger.warning("Will use CPU - inference will be slow")
+        else:
             logger.warning("CUDA not available - inference will be slow")
 
         # Model path (configurable via environment variable)
-        model_path = os.getenv("TRELLIS_MODEL_PATH", "microsoft/TRELLIS.2-4B")
+        model_path = os.getenv("TRELLIS_MODEL_PATH", "microsoft/TRELLIS-image-large")
         logger.info(f"Loading Trellis pipeline from {model_path}")
 
-        # Load pipeline
-        state.pipeline = Trellis2ImageTo3DPipeline.from_pretrained(model_path)
-
-        # Move to GPU if available
-        if torch.cuda.is_available():
+        # Load pipeline (force CPU if CUDA not working)
+        if cuda_available:
+            state.pipeline = TrellisImageTo3DPipeline.from_pretrained(model_path)
             state.pipeline = state.pipeline.to("cuda")
-            logger.info("Pipeline moved to GPU")
+            logger.info("Pipeline loaded and moved to GPU")
+        else:
+            # Force CPU mode to avoid CUDA errors
+            with torch.cuda.device("cpu"):
+                state.pipeline = TrellisImageTo3DPipeline.from_pretrained(model_path)
+            logger.info("Pipeline loaded on CPU")
 
         state.pipeline.eval()
         logger.info("Model loading complete")

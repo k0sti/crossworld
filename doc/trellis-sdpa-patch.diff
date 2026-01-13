@@ -1,0 +1,182 @@
+diff --git a/trellis/modules/sparse/__init__.py b/trellis/modules/sparse/__init__.py
+index 726756c..0f2a2a7 100755
+--- a/trellis/modules/sparse/__init__.py
++++ b/trellis/modules/sparse/__init__.py
+@@ -21,7 +21,7 @@ def __from_env():
+         BACKEND = env_sparse_backend
+     if env_sparse_debug is not None:
+         DEBUG = env_sparse_debug == '1'
+-    if env_sparse_attn is not None and env_sparse_attn in ['xformers', 'flash_attn']:
++    if env_sparse_attn is not None and env_sparse_attn in ['xformers', 'flash_attn', 'sdpa', 'naive']:
+         ATTN = env_sparse_attn
+         
+     print(f"[SPARSE] Backend: {BACKEND}, Attention: {ATTN}")
+@@ -38,7 +38,7 @@ def set_debug(debug: bool):
+     global DEBUG
+     DEBUG = debug
+ 
+-def set_attn(attn: Literal['xformers', 'flash_attn']):
++def set_attn(attn: Literal['xformers', 'flash_attn', 'sdpa', 'naive']):
+     global ATTN
+     ATTN = attn
+     
+diff --git a/trellis/modules/sparse/attention/full_attn.py b/trellis/modules/sparse/attention/full_attn.py
+index e9e27ae..bd2abcd 100755
+--- a/trellis/modules/sparse/attention/full_attn.py
++++ b/trellis/modules/sparse/attention/full_attn.py
+@@ -7,6 +7,8 @@ if ATTN == 'xformers':
+     import xformers.ops as xops
+ elif ATTN == 'flash_attn':
+     import flash_attn
++elif ATTN in ['sdpa', 'naive']:
++    import torch.nn.functional as F
+ else:
+     raise ValueError(f"Unknown attention module: {ATTN}")
+ 
+@@ -206,6 +208,35 @@ def sparse_scaled_dot_product_attention(*args, **kwargs):
+             out = flash_attn.flash_attn_varlen_kvpacked_func(q, kv, cu_seqlens_q, cu_seqlens_kv, max(q_seqlen), max(kv_seqlen))
+         elif num_all_args == 3:
+             out = flash_attn.flash_attn_varlen_func(q, k, v, cu_seqlens_q, cu_seqlens_kv, max(q_seqlen), max(kv_seqlen))
++    elif ATTN in ['sdpa', 'naive']:
++        # Use PyTorch's native scaled_dot_product_attention
++        # Process each batch item separately since sequences have variable lengths
++        if num_all_args == 1:
++            q, k, v = qkv.unbind(dim=1)
++        elif num_all_args == 2:
++            k, v = kv.unbind(dim=1)
++
++        # Split by sequence length and process each batch item
++        outputs = []
++        q_offset = 0
++        kv_offset = 0
++        for i in range(len(q_seqlen)):
++            q_len = q_seqlen[i]
++            kv_len = kv_seqlen[i]
++
++            q_batch = q[q_offset:q_offset + q_len].unsqueeze(0).transpose(1, 2)  # [1, H, Lq, C]
++            k_batch = k[kv_offset:kv_offset + kv_len].unsqueeze(0).transpose(1, 2)  # [1, H, Lkv, Ci]
++            v_batch = v[kv_offset:kv_offset + kv_len].unsqueeze(0).transpose(1, 2)  # [1, H, Lkv, Co]
++
++            # Apply scaled dot product attention
++            out_batch = F.scaled_dot_product_attention(q_batch, k_batch, v_batch)  # [1, H, Lq, Co]
++            out_batch = out_batch.transpose(1, 2).squeeze(0)  # [Lq, H, Co]
++
++            outputs.append(out_batch)
++            q_offset += q_len
++            kv_offset += kv_len
++
++        out = torch.cat(outputs, dim=0)
+     else:
+         raise ValueError(f"Unknown attention module: {ATTN}")
+     
+diff --git a/trellis/modules/sparse/attention/serialized_attn.py b/trellis/modules/sparse/attention/serialized_attn.py
+index 5950b75..9d2d377 100755
+--- a/trellis/modules/sparse/attention/serialized_attn.py
++++ b/trellis/modules/sparse/attention/serialized_attn.py
+@@ -9,6 +9,8 @@ if ATTN == 'xformers':
+     import xformers.ops as xops
+ elif ATTN == 'flash_attn':
+     import flash_attn
++elif ATTN in ['sdpa', 'naive']:
++    import torch.nn.functional as F
+ else:
+     raise ValueError(f"Unknown attention module: {ATTN}")
+ 
+@@ -168,6 +170,13 @@ def sparse_serialized_scaled_dot_product_self_attention(
+             out = xops.memory_efficient_attention(q, k, v)          # [B, N, H, C]
+         elif ATTN == 'flash_attn':
+             out = flash_attn.flash_attn_qkvpacked_func(qkv_feats)   # [B, N, H, C]
++        elif ATTN in ['sdpa', 'naive']:
++            q, k, v = qkv_feats.unbind(dim=2)                       # [B, N, H, C]
++            q = q.transpose(1, 2)                                    # [B, H, N, C]
++            k = k.transpose(1, 2)                                    # [B, H, N, C]
++            v = v.transpose(1, 2)                                    # [B, H, N, C]
++            out = F.scaled_dot_product_attention(q, k, v)           # [B, H, N, C]
++            out = out.transpose(1, 2)                                # [B, N, H, C]
+         else:
+             raise ValueError(f"Unknown attention module: {ATTN}")
+         out = out.reshape(B * N, H, C)                              # [M, H, C]
+@@ -183,6 +192,20 @@ def sparse_serialized_scaled_dot_product_self_attention(
+             cu_seqlens = torch.cat([torch.tensor([0]), torch.cumsum(torch.tensor(seq_lens), dim=0)], dim=0) \
+                         .to(qkv.device).int()
+             out = flash_attn.flash_attn_varlen_qkvpacked_func(qkv_feats, cu_seqlens, max(seq_lens)) # [M, H, C]
++        elif ATTN in ['sdpa', 'naive']:
++            q, k, v = qkv_feats.unbind(dim=1)                       # [M, H, C]
++            # Process each sequence separately
++            outputs = []
++            offset = 0
++            for seq_len in seq_lens:
++                q_seq = q[offset:offset + seq_len].unsqueeze(0).transpose(1, 2)  # [1, H, L, C]
++                k_seq = k[offset:offset + seq_len].unsqueeze(0).transpose(1, 2)  # [1, H, L, C]
++                v_seq = v[offset:offset + seq_len].unsqueeze(0).transpose(1, 2)  # [1, H, L, C]
++                out_seq = F.scaled_dot_product_attention(q_seq, k_seq, v_seq)     # [1, H, L, C]
++                out_seq = out_seq.transpose(1, 2).squeeze(0)                       # [L, H, C]
++                outputs.append(out_seq)
++                offset += seq_len
++            out = torch.cat(outputs, dim=0)                                        # [M, H, C]
+ 
+     out = out[bwd_indices]      # [T, H, C]
+ 
+diff --git a/trellis/modules/sparse/attention/windowed_attn.py b/trellis/modules/sparse/attention/windowed_attn.py
+index cd642c5..7cc8ea5 100755
+--- a/trellis/modules/sparse/attention/windowed_attn.py
++++ b/trellis/modules/sparse/attention/windowed_attn.py
+@@ -8,6 +8,8 @@ if ATTN == 'xformers':
+     import xformers.ops as xops
+ elif ATTN == 'flash_attn':
+     import flash_attn
++elif ATTN in ['sdpa', 'naive']:
++    import torch.nn.functional as F
+ else:
+     raise ValueError(f"Unknown attention module: {ATTN}")
+ 
+@@ -110,6 +112,13 @@ def sparse_windowed_scaled_dot_product_self_attention(
+             out = xops.memory_efficient_attention(q, k, v)          # [B, N, H, C]
+         elif ATTN == 'flash_attn':
+             out = flash_attn.flash_attn_qkvpacked_func(qkv_feats)   # [B, N, H, C]
++        elif ATTN in ['sdpa', 'naive']:
++            q, k, v = qkv_feats.unbind(dim=2)                       # [B, N, H, C]
++            q = q.transpose(1, 2)                                    # [B, H, N, C]
++            k = k.transpose(1, 2)                                    # [B, H, N, C]
++            v = v.transpose(1, 2)                                    # [B, H, N, C]
++            out = F.scaled_dot_product_attention(q, k, v)           # [B, H, N, C]
++            out = out.transpose(1, 2)                                # [B, N, H, C]
+         else:
+             raise ValueError(f"Unknown attention module: {ATTN}")
+         out = out.reshape(B * N, H, C)                              # [M, H, C]
+@@ -125,6 +134,20 @@ def sparse_windowed_scaled_dot_product_self_attention(
+             cu_seqlens = torch.cat([torch.tensor([0]), torch.cumsum(torch.tensor(seq_lens), dim=0)], dim=0) \
+                         .to(qkv.device).int()
+             out = flash_attn.flash_attn_varlen_qkvpacked_func(qkv_feats, cu_seqlens, max(seq_lens)) # [M, H, C]
++        elif ATTN in ['sdpa', 'naive']:
++            q, k, v = qkv_feats.unbind(dim=1)                       # [M, H, C]
++            # Process each sequence separately
++            outputs = []
++            offset = 0
++            for seq_len in seq_lens:
++                q_seq = q[offset:offset + seq_len].unsqueeze(0).transpose(1, 2)  # [1, H, L, C]
++                k_seq = k[offset:offset + seq_len].unsqueeze(0).transpose(1, 2)  # [1, H, L, C]
++                v_seq = v[offset:offset + seq_len].unsqueeze(0).transpose(1, 2)  # [1, H, L, C]
++                out_seq = F.scaled_dot_product_attention(q_seq, k_seq, v_seq)     # [1, H, L, C]
++                out_seq = out_seq.transpose(1, 2).squeeze(0)                       # [L, H, C]
++                outputs.append(out_seq)
++                offset += seq_len
++            out = torch.cat(outputs, dim=0)                                        # [M, H, C]
+ 
+     out = out[bwd_indices]      # [T, H, C]
+ 
+diff --git a/trellis/pipelines/base.py b/trellis/pipelines/base.py
+index 9d214e4..3279d54 100644
+--- a/trellis/pipelines/base.py
++++ b/trellis/pipelines/base.py
+@@ -40,7 +40,9 @@ class Pipeline:
+         for k, v in args['models'].items():
+             try:
+                 _models[k] = models.from_pretrained(f"{path}/{v}")
+-            except:
++            except Exception as e:
++                print(f"Failed to load {k} from {path}/{v}: {e}")
++                print(f"Trying fallback: {v}")
+                 _models[k] = models.from_pretrained(v)
+ 
+         new_pipeline = Pipeline(_models)

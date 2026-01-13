@@ -22,4 +22,5 @@ assets/scratch/
 .auto-claude
 .worktrees
 crates/trellis/server/.env
-external/TRELLIS
+external
+
