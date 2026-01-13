@@ -131,9 +131,9 @@ async def load_models():
             logger.info("Pipeline loaded and moved to GPU")
         else:
             # Force CPU mode to avoid CUDA errors
-            with torch.cuda.device("cpu"):
-                state.pipeline = TrellisImageTo3DPipeline.from_pretrained(model_path)
-            logger.info("Pipeline loaded on CPU")
+            # Note: No need for torch.cuda.device() when using CPU
+            state.pipeline = TrellisImageTo3DPipeline.from_pretrained(model_path)
+            logger.info("Pipeline loaded on CPU (inference will be slow)")
 
         state.pipeline.eval()
         logger.info("Model loading complete")

@@ -25,7 +25,7 @@ CROSSWORLD_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
 # Default paths (can be overridden via environment or arguments)
 TRELLIS_PATH="${TRELLIS_PATH:-$CROSSWORLD_ROOT/external/TRELLIS}"
-MODEL_NAME="${TRELLIS_MODEL_PATH:-microsoft/TRELLIS.2-4B}"
+MODEL_NAME="${TRELLIS_MODEL_PATH:-microsoft/TRELLIS-image-large}"
 
 # Flags
 SKIP_DEPS=false
@@ -154,8 +154,11 @@ if [ -d "$TRELLIS_PATH" ]; then
         else
             echo -e "${YELLOW}⚠ PyTorch not found - installing with pip${NC}"
             # Install PyTorch via pip (conda version has iJIT_NotifyEvent issues on NixOS)
-            echo -e "${BLUE}Installing PyTorch 2.4.0+cu118 via pip...${NC}"
-            conda run -n trellis pip install torch==2.4.0 torchvision==0.19.0 --index-url https://download.pytorch.org/whl/cu118
+            # PyTorch 2.9.1+cu128 required for:
+            # - RTX 5090 support (compute capability 12.0)
+            # - xformers 0.0.33+ compatibility
+            echo -e "${BLUE}Installing PyTorch 2.9.1+cu128 via pip...${NC}"
+            conda run -n trellis pip install torch==2.9.1+cu128 torchvision --index-url https://download.pytorch.org/whl/cu128
             echo -e "${BLUE}Running TRELLIS setup for remaining dependencies...${NC}"
             conda activate trellis
             . ./setup.sh --basic --xformers --kaolin
@@ -165,9 +168,14 @@ if [ -d "$TRELLIS_PATH" ]; then
             echo -e "${BLUE}Fixing numpy/opencv compatibility...${NC}"
             conda run -n trellis pip install 'numpy<2.0' 'opencv-python-headless<4.8' --force-reinstall -q
 
-            # Install xformers compatible with PyTorch 2.4.0
-            echo -e "${BLUE}Installing xformers 0.0.27.post2...${NC}"
-            conda run -n trellis pip install xformers==0.0.27.post2 --no-deps -q
+            # Install xformers compatible with PyTorch 2.9.1
+            echo -e "${BLUE}Installing xformers 0.0.33.post2...${NC}"
+            conda run -n trellis pip install xformers==0.0.33.post2 --no-deps -q
+
+            # Rebuild kaolin for PyTorch 2.9.1 (kaolin 0.18.0 only officially supports <=2.8.0)
+            echo -e "${BLUE}Rebuilding kaolin 0.18.0 for PyTorch 2.9.1...${NC}"
+            echo -e "${YELLOW}This may take 10-20 minutes to compile${NC}"
+            conda run -n trellis bash -c 'IGNORE_TORCH_VER=1 pip install git+https://github.com/NVIDIAGameWorks/kaolin.git@v0.18.0 --no-build-isolation -q'
 
             echo -e "${GREEN}✓ Dependencies fixed${NC}"
         fi
@@ -179,8 +187,11 @@ if [ -d "$TRELLIS_PATH" ]; then
         conda create -n trellis python=3.10 -y
 
         # Install PyTorch via pip (conda version has iJIT_NotifyEvent issues on NixOS)
-        echo -e "${BLUE}Installing PyTorch 2.4.0+cu118 via pip...${NC}"
-        conda run -n trellis pip install torch==2.4.0 torchvision==0.19.0 --index-url https://download.pytorch.org/whl/cu118
+        # PyTorch 2.9.1+cu128 required for:
+        # - RTX 5090 support (compute capability 12.0)
+        # - xformers 0.0.33+ compatibility
+        echo -e "${BLUE}Installing PyTorch 2.9.1+cu128 via pip...${NC}"
+        conda run -n trellis pip install torch==2.9.1+cu128 torchvision --index-url https://download.pytorch.org/whl/cu128
 
         # Now run TRELLIS setup for remaining dependencies (skip --new-env since env exists)
         echo -e "${BLUE}Running TRELLIS setup for remaining dependencies...${NC}"
@@ -192,9 +203,14 @@ if [ -d "$TRELLIS_PATH" ]; then
         echo -e "${BLUE}Fixing numpy/opencv compatibility...${NC}"
         conda run -n trellis pip install 'numpy<2.0' 'opencv-python-headless<4.8' --force-reinstall -q
 
-        # Install xformers compatible with PyTorch 2.4.0
-        echo -e "${BLUE}Installing xformers 0.0.27.post2...${NC}"
-        conda run -n trellis pip install xformers==0.0.27.post2 --no-deps -q
+        # Install xformers compatible with PyTorch 2.9.1
+        echo -e "${BLUE}Installing xformers 0.0.33.post2...${NC}"
+        conda run -n trellis pip install xformers==0.0.33.post2 --no-deps -q
+
+        # Rebuild kaolin for PyTorch 2.9.1 (kaolin 0.18.0 only officially supports <=2.8.0)
+        echo -e "${BLUE}Rebuilding kaolin 0.18.0 for PyTorch 2.9.1...${NC}"
+        echo -e "${YELLOW}This may take 10-20 minutes to compile${NC}"
+        conda run -n trellis bash -c 'IGNORE_TORCH_VER=1 pip install git+https://github.com/NVIDIAGameWorks/kaolin.git@v0.18.0 --no-build-isolation -q'
 
         echo -e "${GREEN}✓ Dependencies fixed${NC}"
     fi
@@ -215,17 +231,24 @@ echo ""
 
 # Test if model can be loaded (will trigger HuggingFace download if needed)
 echo -e "${YELLOW}Testing model loading (this may download ~4GB of data)...${NC}"
-if conda run -n trellis python -c "
-from trellis.pipelines import Trellis2ImageTo3DPipeline
+if ATTN_BACKEND=xformers PYTHONPATH="$TRELLIS_PATH:\${PYTHONPATH:-}" LD_LIBRARY_PATH="/run/opengl-driver/lib:\${LD_LIBRARY_PATH:-}" conda run -n trellis python -c "
+from trellis.pipelines import TrellisImageTo3DPipeline
 import torch
 print('Loading pipeline...')
-pipeline = Trellis2ImageTo3DPipeline.from_pretrained('$MODEL_NAME')
+pipeline = TrellisImageTo3DPipeline.from_pretrained('$MODEL_NAME')
 print('Pipeline loaded successfully')
 " 2>&1; then
     echo -e "${GREEN}✓ Model loaded successfully${NC}"
 else
-    echo -e "${YELLOW}⚠ Model loading test failed - server may fail to start${NC}"
-    echo "  Check your internet connection and HuggingFace access"
+    echo -e "${YELLOW}⚠ Model loading test failed${NC}"
+    echo -e "${YELLOW}  This is likely due to an incorrect checkpoint reference in pipeline.json${NC}"
+    echo -e "${YELLOW}  The microsoft/TRELLIS-image-large model has a known bug where it references${NC}"
+    echo -e "${YELLOW}  'slat_flow_img_dit_L_64l8p2_fp16' which doesn't exist.${NC}"
+    echo ""
+    echo -e "${BLUE}To fix: Edit the HuggingFace cache pipeline.json and replace line 10:${NC}"
+    echo -e "${BLUE}  File: ~/.cache/huggingface/hub/models--microsoft--TRELLIS-image-large/snapshots/*/pipeline.json${NC}"
+    echo -e "${BLUE}  Change: 'slat_flow_model': 'ckpts/slat_flow_img_dit_L_64l8p2_fp16'${NC}"
+    echo -e "${BLUE}  To:     'slat_flow_model': 'ckpts/ss_flow_img_dit_L_16l8_fp16'${NC}"
 fi
 
 echo ""

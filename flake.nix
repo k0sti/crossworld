@@ -82,12 +82,26 @@
           uv
         ];
 
-        # CUDA toolkit for XCube/fVDB compilation
+        # CUDA toolkit for XCube/fVDB compilation and Trellis
         # PyTorch wheel must match this version (see crates/xcube/server/pyproject.toml)
-        cudaDeps = with pkgs.cudaPackages; [
+        # Trellis requires CUDA 12.8+ for RTX 5090 support (compute capability 12.0)
+        cudaPackages = pkgs.cudaPackages_12;
+        cudaDeps = with cudaPackages; [
+          # CUDA compiler and runtime
           cuda_nvcc
           cuda_cudart
+          cuda_cupti
+
+          # CUDA libraries required by PyTorch and kaolin
+          libcublas
+          libcufft
+          libcurand
+          libcusolver
+          libcusparse
           cudnn
+
+          # Full toolkit for building from source (e.g., kaolin)
+          cudatoolkit
         ];
 
         # Note: Conda is not included in the nix shell due to packaging issues.
@@ -154,8 +168,18 @@
             export PKG_CONFIG_PATH="${pkgs.alsa-lib.dev}/lib/pkgconfig:${pkgs.udev.dev}/lib/pkgconfig:${pkgs.openssl.dev}/lib/pkgconfig:$PKG_CONFIG_PATH"
 
             # CUDA environment
-            export CUDA_HOME="${pkgs.cudaPackages.cudatoolkit}"
-            export CUDA_PATH="${pkgs.cudaPackages.cudatoolkit}"
+            export CUDA_HOME="${cudaPackages.cudatoolkit}"
+            export CUDA_PATH="${cudaPackages.cudatoolkit}"
+            export CUDA_TOOLKIT_ROOT_DIR="${cudaPackages.cudatoolkit}"
+
+            # Add nvcc to PATH
+            export PATH="${cudaPackages.cuda_nvcc}/bin:$PATH"
+
+            # PyTorch CUDA arch list (include sm_120 for RTX 5090)
+            export TORCH_CUDA_ARCH_LIST="7.0 7.5 8.0 8.6 8.9 9.0 12.0"
+
+            # Force CUDA build for packages like kaolin
+            export FORCE_CUDA=1
 
             # Wayland/X11 environment
             export WAYLAND_DISPLAY="''${WAYLAND_DISPLAY:-wayland-1}"

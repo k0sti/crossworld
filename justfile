@@ -280,8 +280,11 @@ xcube-generate PROMPT:
         | uv run python -c "import sys, json; r = json.load(sys.stdin); print(f'Generated {len(r[\"coarse_xyz\"])} coarse points')"
 
 # Set up Trellis.2 inference server environment
+# Requires CUDA environment (use: nix develop .#cuda)
 trellis-setup *ARGS:
     @echo "Setting up Trellis.2 server environment..."
+    @echo "Note: This requires CUDA toolkit. Make sure you're in 'nix develop .#cuda' shell"
+    @echo ""
     crates/trellis/server/setup.sh {{ARGS}}
 
 # Start Trellis.2 inference server
@@ -292,6 +295,7 @@ trellis-server:
     LD_LIBRARY_PATH=/run/opengl-driver/lib:${LD_LIBRARY_PATH:-} \
     ATTN_BACKEND=xformers \
     PYTHONPATH=external/TRELLIS:${PYTHONPATH:-} \
+    TRELLIS_MODEL_PATH=microsoft/TRELLIS-image-large \
     conda run -n trellis --no-capture-output python crates/trellis/server/server.py
 
 # Run hot-reload demo (manual two-terminal method)
