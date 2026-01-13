@@ -24,3 +24,4 @@ assets/scratch/
 crates/trellis/server/.env
 external
 
+__pycache__/
