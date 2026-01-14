@@ -32,6 +32,8 @@ default:
     @echo "  just xcube-generate   - Generate 3D object from text prompt"
     @echo "  just trellis-setup    - Set up Trellis.2 server environment"
     @echo "  just trellis-server   - Start Trellis.2 inference server"
+    @echo "  just robocube-setup   - Set up Robocube (Cube3D) server environment"
+    @echo "  just robocube-server  - Start Robocube (Cube3D) inference server"
     @echo ""
 
 # Build WASM module in development mode
@@ -297,6 +299,22 @@ trellis-server:
     PYTHONPATH=external/TRELLIS:${PYTHONPATH:-} \
     TRELLIS_MODEL_PATH=microsoft/TRELLIS-image-large \
     conda run -n trellis --no-capture-output python crates/trellis/server/server.py
+
+# Set up Robocube (Cube3D) server environment
+robocube-setup:
+    @echo "Setting up Robocube (Cube3D) server environment..."
+    crates/robocube/server/setup.sh
+
+# Start Robocube (Cube3D) inference server
+robocube-server:
+    #!/usr/bin/env bash
+    echo "Starting Robocube (Cube3D) inference server on http://0.0.0.0:8642..."
+    echo "API docs: http://localhost:8642/docs"
+    echo ""
+    export PYTHONPATH="$(pwd)/external/cube:${PYTHONPATH:-}"
+    export CUBE3D_MODEL_PATH="$(pwd)/external/cube/model_weights"
+    export CUBE3D_CONFIG_PATH="$(pwd)/external/cube/cube3d/configs/open_model_v0.5.yaml"
+    cd crates/robocube/server && uv run server.py
 
 # Run hot-reload demo (manual two-terminal method)
 hot-reload-manual:

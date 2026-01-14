@@ -1,0 +1,20 @@
+# Cube3D Occupancy Server Requirements
+
+# Web framework
+fastapi>=0.109.0
+uvicorn>=0.27.0
+pydantic>=2.0.0
+
+# Deep learning
+torch>=2.0.0
+numpy>=1.24.0
+
+# Cube3D (install separately)
+# pip install -e /path/to/cube[meshlab]
+
+# Transformers for text encoding
+transformers>=4.35.0
+safetensors>=0.4.0
+
+# Hugging Face Hub for model downloads
+huggingface-hub>=0.20.0

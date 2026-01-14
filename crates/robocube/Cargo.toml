@@ -1,0 +1,43 @@
+[package]
+name = "robocube"
+version = "0.1.0"
+edition = "2021"
+description = "Roblox cube3d text-to-3D to Crossworld voxel format converter"
+license = "MIT OR Apache-2.0"
+keywords = ["voxel", "roblox", "cube3d", "text-to-3d", "csm"]
+
+[[bin]]
+name = "robocube"
+path = "src/bin/robocube.rs"
+
+[dependencies]
+# Cube crate for octree and CSM serialization
+cube = { path = "../cube" }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# HTTP client (async)
+reqwest = { version = "0.12", features = ["json"] }
+
+# Async runtime
+tokio = { version = "1.0", features = ["full"] }
+
+# Math library
+glam = { version = "0.30", features = ["serde"] }
+
+# Error handling
+thiserror = "2.0"
+
+# CLI parsing
+clap = { version = "4.5", features = ["derive"] }
+
+# Progress indication
+indicatif = "0.17"
+
+# OBJ file parsing
+tobj = "4.0"
+
+[dev-dependencies]
+tempfile = "3.10"
