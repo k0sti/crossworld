@@ -50,6 +50,15 @@ class OccupancyRequest(BaseModel):
     bounding_box_xyz: Optional[List[float]] = Field(None, description="Bounding box aspect ratio [x, y, z]")
     threshold: float = Field(0.0, description="Occupancy threshold")
     include_logits: bool = Field(False, description="Include raw logits in response")
+    # Color support
+    color_mode: Optional[str] = Field(
+        None,
+        description="Color generation mode: 'height', 'radial', 'density', or None for no colors"
+    )
+    base_color: Optional[List[float]] = Field(
+        None,
+        description="Base RGB color [r, g, b] in 0-1 range for color modes"
+    )
 
 
 class GenerationMetadata(BaseModel):
@@ -65,6 +74,10 @@ class OccupancyResult(BaseModel):
     bbox_min: List[float] = Field(..., description="Bounding box minimum [x, y, z]")
     bbox_max: List[float] = Field(..., description="Bounding box maximum [x, y, z]")
     occupied_voxels: List[List[int]] = Field(..., description="Occupied voxel positions [[x,y,z], ...]")
+    voxel_colors: Optional[List[List[float]]] = Field(
+        None,
+        description="RGB colors for each voxel [[r,g,b], ...] in 0-1 range, same order as occupied_voxels"
+    )
     logits: Optional[List[float]] = Field(None, description="Raw occupancy logits (resolution^3 values)")
     metadata: Optional[GenerationMetadata] = None
 
@@ -198,6 +211,110 @@ async def load_models():
         state.loading = False
 
 
+def generate_voxel_colors(
+    occupied_voxels: List[List[int]],
+    logits_np: np.ndarray,
+    occupied_indices: np.ndarray,
+    nx: int, ny: int, nz: int,
+    color_mode: str,
+    base_color: Tuple[float, float, float],
+) -> List[List[float]]:
+    """
+    Generate RGB colors for occupied voxels based on color mode.
+
+    Color modes:
+    - 'height': Color varies with Y coordinate (vertical gradient)
+    - 'radial': Color varies with distance from center
+    - 'density': Color varies with occupancy logit value (confidence)
+    - 'solid': Use base_color for all voxels
+
+    Args:
+        occupied_voxels: List of [x, y, z] voxel positions
+        logits_np: Raw occupancy logits for all grid points
+        occupied_indices: Indices of occupied voxels in the logits array
+        nx, ny, nz: Grid dimensions
+        color_mode: Color generation mode
+        base_color: Base RGB color (r, g, b) in 0-1 range
+
+    Returns:
+        List of [r, g, b] colors for each occupied voxel
+    """
+    if not occupied_voxels:
+        return []
+
+    colors = []
+    base_r, base_g, base_b = base_color
+
+    if color_mode == 'solid':
+        # Use base color for all voxels
+        for _ in occupied_voxels:
+            colors.append([base_r, base_g, base_b])
+
+    elif color_mode == 'height':
+        # Color varies with Y coordinate (vertical gradient)
+        # Normalize Y to 0-1 range
+        y_coords = [v[1] for v in occupied_voxels]
+        y_min, y_max = min(y_coords), max(y_coords)
+        y_range = max(y_max - y_min, 1)
+
+        for voxel in occupied_voxels:
+            t = (voxel[1] - y_min) / y_range
+            # Gradient from darker at bottom to brighter at top
+            r = base_r * (0.5 + 0.5 * t)
+            g = base_g * (0.5 + 0.5 * t)
+            b = base_b * (0.5 + 0.5 * t)
+            colors.append([min(1.0, r), min(1.0, g), min(1.0, b)])
+
+    elif color_mode == 'radial':
+        # Color varies with distance from center
+        center_x, center_y, center_z = nx / 2, ny / 2, nz / 2
+
+        # Calculate max distance for normalization
+        max_dist = 0.0
+        for voxel in occupied_voxels:
+            dx = voxel[0] - center_x
+            dy = voxel[1] - center_y
+            dz = voxel[2] - center_z
+            dist = (dx*dx + dy*dy + dz*dz) ** 0.5
+            max_dist = max(max_dist, dist)
+        max_dist = max(max_dist, 1.0)
+
+        for voxel in occupied_voxels:
+            dx = voxel[0] - center_x
+            dy = voxel[1] - center_y
+            dz = voxel[2] - center_z
+            dist = (dx*dx + dy*dy + dz*dz) ** 0.5
+            t = dist / max_dist
+            # Gradient from base color at center to darker at edges
+            r = base_r * (1.0 - 0.4 * t)
+            g = base_g * (1.0 - 0.4 * t)
+            b = base_b * (1.0 - 0.4 * t)
+            colors.append([max(0.0, r), max(0.0, g), max(0.0, b)])
+
+    elif color_mode == 'density':
+        # Color varies with occupancy logit value (confidence)
+        # Higher logit = more saturated/brighter color
+        occupied_logits = logits_np[occupied_indices]
+        logit_min, logit_max = occupied_logits.min(), occupied_logits.max()
+        logit_range = max(logit_max - logit_min, 1e-6)
+
+        for i, voxel in enumerate(occupied_voxels):
+            t = (occupied_logits[i] - logit_min) / logit_range
+            # Higher confidence = more saturated
+            r = base_r * (0.4 + 0.6 * t)
+            g = base_g * (0.4 + 0.6 * t)
+            b = base_b * (0.4 + 0.6 * t)
+            colors.append([min(1.0, r), min(1.0, g), min(1.0, b)])
+
+    else:
+        # Unknown mode, use solid base color
+        logger.warning(f"Unknown color mode '{color_mode}', using solid color")
+        for _ in occupied_voxels:
+            colors.append([base_r, base_g, base_b])
+
+    return colors
+
+
 def generate_occupancy_field(
     prompt: str,
     resolution: int,
@@ -207,6 +324,8 @@ def generate_occupancy_field(
     bounding_box_xyz: Optional[Tuple[float, float, float]] = None,
     threshold: float = 0.0,
     include_logits: bool = False,
+    color_mode: Optional[str] = None,
+    base_color: Optional[Tuple[float, float, float]] = None,
 ) -> OccupancyResult:
     """
     Generate occupancy field from text prompt.
@@ -305,6 +424,19 @@ def generate_occupancy_field(
 
         logger.info(f"Found {len(occupied_voxels)} occupied voxels ({100*len(occupied_voxels)/num_points:.1f}%)")
 
+        # Step 5: Generate colors if requested
+        voxel_colors = None
+        if color_mode and occupied_voxels:
+            voxel_colors = generate_voxel_colors(
+                occupied_voxels,
+                logits_np,
+                occupied_indices,
+                nx, ny, nz,
+                color_mode,
+                base_color or (0.8, 0.8, 0.8),  # Default light gray
+            )
+            logger.info(f"Generated colors using mode: {color_mode}")
+
     generation_time = time.time() - start_time
 
     # Return actual grid resolution (number of cells, not points)
@@ -315,6 +447,7 @@ def generate_occupancy_field(
         bbox_min=bbox_min.tolist(),
         bbox_max=bbox_max.tolist(),
         occupied_voxels=occupied_voxels,
+        voxel_colors=voxel_colors,
         logits=logits_np.tolist() if include_logits else None,
         metadata=GenerationMetadata(
             generation_time_secs=generation_time,
@@ -375,6 +508,7 @@ async def generate_occupancy(request: OccupancyRequest):
 
     try:
         bbox = tuple(request.bounding_box_xyz) if request.bounding_box_xyz else None
+        base_color = tuple(request.base_color) if request.base_color else None
 
         result = await asyncio.to_thread(
             generate_occupancy_field,
@@ -386,6 +520,8 @@ async def generate_occupancy(request: OccupancyRequest):
             bounding_box_xyz=bbox,
             threshold=request.threshold,
             include_logits=request.include_logits,
+            color_mode=request.color_mode,
+            base_color=base_color,
         )
         return result
 

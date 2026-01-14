@@ -5,11 +5,61 @@
 use clap::{Parser, Subcommand};
 use indicatif::{ProgressBar, ProgressStyle};
 use robocube::{
-    convert::{occupancy_to_csm, occupancy_to_cube},
+    convert::{encode_r2g3b2, occupancy_to_csm, occupancy_to_cube},
     OccupancyRequest, RobocubeClient, DEFAULT_SERVER_URL,
 };
 use std::path::PathBuf;
 use std::time::Duration;
+
+/// Parse RGB color string (e.g., "255,0,0") to R2G3B2 material index
+fn parse_rgb_color(s: &str) -> Result<u8, String> {
+    let parts: Vec<&str> = s.split(',').collect();
+    if parts.len() != 3 {
+        return Err("Color must be in format 'R,G,B' (e.g., '255,0,0')".to_string());
+    }
+
+    let r: u8 = parts[0]
+        .trim()
+        .parse()
+        .map_err(|_| format!("Invalid red value: {}", parts[0]))?;
+    let g: u8 = parts[1]
+        .trim()
+        .parse()
+        .map_err(|_| format!("Invalid green value: {}", parts[1]))?;
+    let b: u8 = parts[2]
+        .trim()
+        .parse()
+        .map_err(|_| format!("Invalid blue value: {}", parts[2]))?;
+
+    Ok(encode_r2g3b2(
+        r as f32 / 255.0,
+        g as f32 / 255.0,
+        b as f32 / 255.0,
+    ))
+}
+
+/// Parse RGB color string (e.g., "255,0,0") to float array [r, g, b] in 0-1 range
+fn parse_rgb_color_float(s: &str) -> Result<[f32; 3], String> {
+    let parts: Vec<&str> = s.split(',').collect();
+    if parts.len() != 3 {
+        return Err("Color must be in format 'R,G,B' (e.g., '255,128,0')".to_string());
+    }
+
+    let r: u8 = parts[0]
+        .trim()
+        .parse()
+        .map_err(|_| format!("Invalid red value: {}", parts[0]))?;
+    let g: u8 = parts[1]
+        .trim()
+        .parse()
+        .map_err(|_| format!("Invalid green value: {}", parts[1]))?;
+    let b: u8 = parts[2]
+        .trim()
+        .parse()
+        .map_err(|_| format!("Invalid blue value: {}", parts[2]))?;
+
+    Ok([r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0])
+}
 
 #[derive(Parser)]
 #[command(name = "robocube")]
@@ -59,8 +109,27 @@ enum Commands {
         timeout: u64,
 
         /// Material index for occupied voxels (128-255)
-        #[arg(short, long)]
+        /// Use --color for RGB input instead.
+        /// Ignored if --color-mode is set.
+        #[arg(short, long, conflicts_with = "color")]
         material: Option<u8>,
+
+        /// RGB color for occupied voxels (e.g., "255,0,0" for red)
+        /// Will be converted to R2G3B2 encoding (materials 128-255)
+        /// Ignored if --color-mode is set.
+        #[arg(long, value_parser = parse_rgb_color, conflicts_with = "material")]
+        color: Option<u8>,
+
+        /// Server-side color generation mode.
+        /// When set, the server generates per-voxel colors based on the mode.
+        /// Modes: "solid", "height", "radial", "density"
+        #[arg(long)]
+        color_mode: Option<String>,
+
+        /// Base RGB color for server-side color modes (e.g., "255,128,0")
+        /// Used with --color-mode. Default: light gray (204,204,204)
+        #[arg(long, value_parser = parse_rgb_color_float)]
+        base_color: Option<[f32; 3]>,
 
         /// Include raw logits in output (for debugging)
         #[arg(long)]
@@ -108,8 +177,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             server,
             timeout,
             material,
+            color,
+            color_mode,
+            base_color,
             include_logits: _,
         } => {
+            // Determine material: prefer --color over --material, default to white
+            // (only used if color_mode is not set, since server colors take precedence)
+            let final_material = color.or(material);
+
             // Validate output path
             if output.extension().is_none_or(|ext| ext != "csm") {
                 eprintln!("Error: Output file must have .csm extension");
@@ -174,6 +250,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 request = request.with_seed(s);
             }
 
+            // Add server-side color generation if requested
+            if let Some(mode) = &color_mode {
+                request = request.with_color_mode(mode);
+                if let Some([r, g, b]) = base_color {
+                    request = request.with_base_color(r, g, b);
+                }
+            }
+
             // Generate
             progress.set_message(format!(
                 "Generating \"{}\" at {}³ resolution...",
@@ -191,8 +275,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             progress.set_message("Converting to CSM format...");
 
-            // Convert to CSM
-            let csm = match occupancy_to_csm(&result, material) {
+            // Convert to CSM:
+            // - If server returned colors (via color_mode), use those (pass None for material)
+            // - Otherwise, use the determined material (from --color or --material)
+            let use_material = if result.has_colors() {
+                None // Server colors take precedence
+            } else {
+                final_material
+            };
+
+            let csm = match occupancy_to_csm(&result, use_material) {
                 Ok(s) => s,
                 Err(e) => {
                     progress.finish_with_message(format!("Conversion failed: {}", e));
@@ -207,9 +299,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 std::process::exit(1);
             }
 
+            let color_info = if result.has_colors() {
+                format!(
+                    " (with {} colors)",
+                    color_mode.as_deref().unwrap_or("server")
+                )
+            } else {
+                String::new()
+            };
+
             progress.finish_with_message(format!(
-                "Generated {} voxels → {}",
+                "Generated {} voxels{} → {}",
                 result.occupied_count(),
+                color_info,
                 output.display()
             ));
 
@@ -218,6 +320,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("Statistics:");
             println!("  Resolution:  {}³", result.resolution);
             println!("  Occupied:    {} voxels", result.occupied_count());
+            if result.has_colors() {
+                println!(
+                    "  Colors:      {} mode",
+                    color_mode.as_deref().unwrap_or("server")
+                );
+            }
             println!("  Occupancy:   {:.2}%", result.occupancy_ratio() * 100.0);
             println!("  File size:   {} bytes", csm.len());
 

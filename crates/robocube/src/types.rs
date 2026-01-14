@@ -351,6 +351,23 @@ impl ServerStatus {
 // Occupancy Field Types
 // =============================================================================
 
+/// Color generation mode for voxel coloring
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ColorMode {
+    /// No color generation (use default material)
+    #[default]
+    None,
+    /// Solid base color for all voxels
+    Solid,
+    /// Color varies with Y coordinate (vertical gradient)
+    Height,
+    /// Color varies with distance from center
+    Radial,
+    /// Color varies with occupancy confidence (logit value)
+    Density,
+}
+
 /// Request for occupancy field generation
 ///
 /// Instead of returning a mesh, this endpoint returns the raw occupancy values
@@ -384,6 +401,14 @@ pub struct OccupancyRequest {
     /// Occupancy threshold (default: 0.0, values > threshold are occupied)
     #[serde(default)]
     pub threshold: f32,
+
+    /// Color generation mode
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color_mode: Option<String>,
+
+    /// Base RGB color for color modes [r, g, b] in 0-1 range
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub base_color: Option<[f32; 3]>,
 }
 
 fn default_grid_resolution() -> u32 {
@@ -404,6 +429,8 @@ impl Default for OccupancyRequest {
             top_p: None,
             bounding_box_xyz: None,
             threshold: 0.0,
+            color_mode: None,
+            base_color: None,
         }
     }
 }
@@ -454,6 +481,26 @@ impl OccupancyRequest {
         self
     }
 
+    /// Set the color generation mode
+    ///
+    /// Available modes:
+    /// - "solid": Use base_color for all voxels
+    /// - "height": Color varies with Y coordinate (vertical gradient)
+    /// - "radial": Color varies with distance from center
+    /// - "density": Color varies with occupancy confidence
+    pub fn with_color_mode(mut self, mode: impl Into<String>) -> Self {
+        self.color_mode = Some(mode.into());
+        self
+    }
+
+    /// Set the base RGB color for color modes
+    ///
+    /// Color components should be in 0.0-1.0 range
+    pub fn with_base_color(mut self, r: f32, g: f32, b: f32) -> Self {
+        self.base_color = Some([r.clamp(0.0, 1.0), g.clamp(0.0, 1.0), b.clamp(0.0, 1.0)]);
+        self
+    }
+
     /// Validate the request parameters
     pub fn validate(&self) -> Result<()> {
         if self.prompt.trim().is_empty() {
@@ -493,6 +540,11 @@ pub struct OccupancyResult {
     /// Occupied voxel positions as [x, y, z] indices
     /// Only voxels with occupancy > threshold are included
     pub occupied_voxels: Vec<[u32; 3]>,
+
+    /// Optional: RGB colors for each voxel [r, g, b] in 0-1 range
+    /// Same order as occupied_voxels
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub voxel_colors: Option<Vec<[f32; 3]>>,
 
     /// Optional: raw occupancy logits for all grid points
     /// Shape: resolution^3 values in row-major order (x fastest, then y, then z)
@@ -534,6 +586,11 @@ impl OccupancyResult {
         self.logits.is_some()
     }
 
+    /// Check if this result has per-voxel colors
+    pub fn has_colors(&self) -> bool {
+        self.voxel_colors.is_some()
+    }
+
     /// Validate the occupancy result
     pub fn validate(&self) -> Result<()> {
         if self.resolution == 0 {
@@ -563,6 +620,17 @@ impl OccupancyResult {
                     "Logits length {} doesn't match expected {} (resolution^3)",
                     logits.len(),
                     expected_len
+                )));
+            }
+        }
+
+        // Validate colors length if present
+        if let Some(colors) = &self.voxel_colors {
+            if colors.len() != self.occupied_voxels.len() {
+                return Err(RobocubeError::ConversionError(format!(
+                    "Colors length {} doesn't match occupied_voxels length {}",
+                    colors.len(),
+                    self.occupied_voxels.len()
                 )));
             }
         }
@@ -816,6 +884,7 @@ mod tests {
             bbox_min: [-1.0, -1.0, -1.0],
             bbox_max: [1.0, 1.0, 1.0],
             occupied_voxels: vec![[0, 0, 0], [1, 1, 1], [2, 2, 2]],
+            voxel_colors: None,
             logits: None,
             metadata: None,
         };
@@ -825,6 +894,7 @@ mod tests {
         assert!((result.occupancy_ratio() - 3.0 / 32768.0).abs() < 1e-6);
         assert_eq!(result.bbox_dimensions(), [2.0, 2.0, 2.0]);
         assert!(!result.has_logits());
+        assert!(!result.has_colors());
     }
 
     #[test]
@@ -835,6 +905,7 @@ mod tests {
             bbox_min: [-1.0, -1.0, -1.0],
             bbox_max: [1.0, 1.0, 1.0],
             occupied_voxels: vec![[0, 0, 0], [31, 31, 31]],
+            voxel_colors: None,
             logits: None,
             metadata: None,
         };
@@ -846,6 +917,7 @@ mod tests {
             bbox_min: [-1.0, -1.0, -1.0],
             bbox_max: [1.0, 1.0, 1.0],
             occupied_voxels: vec![[32, 0, 0]], // 32 is out of bounds for resolution 32
+            voxel_colors: None,
             logits: None,
             metadata: None,
         };
@@ -857,6 +929,7 @@ mod tests {
             bbox_min: [-1.0, -1.0, -1.0],
             bbox_max: [1.0, 1.0, 1.0],
             occupied_voxels: vec![],
+            voxel_colors: None,
             logits: Some(vec![0.0; 32]), // Should be 64 (4^3)
             metadata: None,
         };
@@ -872,11 +945,40 @@ mod tests {
             bbox_min: [-1.0, -1.0, -1.0],
             bbox_max: [1.0, 1.0, 1.0],
             occupied_voxels: vec![],
+            voxel_colors: None,
             logits: Some(vec![0.0; total]),
             metadata: None,
         };
 
         assert!(result.has_logits());
         assert!(result.validate().is_ok());
+    }
+
+    #[test]
+    fn test_occupancy_result_with_colors() {
+        let result = OccupancyResult {
+            resolution: 4,
+            bbox_min: [-1.0, -1.0, -1.0],
+            bbox_max: [1.0, 1.0, 1.0],
+            occupied_voxels: vec![[0, 0, 0], [1, 1, 1]],
+            voxel_colors: Some(vec![[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]),
+            logits: None,
+            metadata: None,
+        };
+
+        assert!(result.has_colors());
+        assert!(result.validate().is_ok());
+
+        // Mismatched colors length should fail
+        let bad_colors = OccupancyResult {
+            resolution: 4,
+            bbox_min: [-1.0, -1.0, -1.0],
+            bbox_max: [1.0, 1.0, 1.0],
+            occupied_voxels: vec![[0, 0, 0], [1, 1, 1]],
+            voxel_colors: Some(vec![[1.0, 0.0, 0.0]]), // Only 1 color for 2 voxels
+            logits: None,
+            metadata: None,
+        };
+        assert!(bad_colors.validate().is_err());
     }
 }

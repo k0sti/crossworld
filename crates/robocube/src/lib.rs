@@ -72,8 +72,11 @@ pub mod types;
 
 // Re-export main types for convenience
 pub use client::{RobocubeClient, DEFAULT_SERVER_URL};
-pub use convert::{occupancy_to_csm, occupancy_to_cube, DEFAULT_MATERIAL};
+pub use convert::{
+    decode_r2g3b2, encode_r2g3b2, encode_r2g3b2_u8, occupancy_to_csm, occupancy_to_cube,
+    DEFAULT_MATERIAL,
+};
 pub use types::{
-    GenerationMetadata, GenerationRequest, OccupancyRequest, OccupancyResult, Result,
+    ColorMode, GenerationMetadata, GenerationRequest, OccupancyRequest, OccupancyResult, Result,
     RobocubeError, RobocubeResult, ServerStatus,
 };
