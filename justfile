@@ -30,6 +30,7 @@ default:
     @echo "  just xcube-setup      - Set up XCube server environment"
     @echo "  just xcube-server     - Start XCube inference server"
     @echo "  just xcube-generate   - Generate 3D object from text prompt"
+    @echo "  just xcube-train      - Train XCube on ShapeNet (downloads data if needed)"
     @echo "  just trellis-setup    - Set up Trellis.2 server environment"
     @echo "  just trellis-server   - Start Trellis.2 inference server"
     @echo "  just robocube-setup   - Set up Robocube (Cube3D) server environment"
@@ -280,6 +281,18 @@ xcube-generate PROMPT:
         -H "Content-Type: application/json" \
         -d '{"prompt": "{{PROMPT}}", "ddim_steps": 50, "guidance_scale": 7.5, "use_fine": false}' \
         | uv run python -c "import sys, json; r = json.load(sys.stdin); print(f'Generated {len(r[\"coarse_xyz\"])} coarse points')"
+
+# Train XCube on ShapeNet data (downloads dataset if not present)
+# Usage: just xcube-train [ARGS]
+# Examples:
+#   just xcube-train                           # Train Stage 1 VAE on chairs (default)
+#   just xcube-train --category car            # Train on cars
+#   just xcube-train --model diffusion         # Train diffusion model
+#   just xcube-train --stage 2                 # Train Stage 2 (fine, needs more VRAM)
+#   just xcube-train --dry-run                 # Show command without running
+xcube-train *ARGS:
+    @echo "Starting XCube training..."
+    crates/xcube/server/train.sh {{ARGS}}
 
 # Set up Trellis.2 inference server environment
 # Requires CUDA environment (use: nix develop .#cuda)

@@ -2,6 +2,9 @@
 ref
 moq-relay
 
+# Training data (large datasets)
+data/
+
 # Dependencies
 node_modules
 
