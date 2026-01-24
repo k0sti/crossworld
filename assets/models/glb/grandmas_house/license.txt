@@ -1,0 +1,11 @@
+Model Information:
+* title:	DAE Diorama - Grandma's House
+* source:	https://sketchfab.com/3d-models/dae-diorama-grandmas-house-b9af6b5ebb0e477b801d0a80b6b50bbe
+* author:	Cat Top (https://sketchfab.com/cathelijnetop)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "DAE Diorama - Grandma's House" (https://sketchfab.com/3d-models/dae-diorama-grandmas-house-b9af6b5ebb0e477b801d0a80b6b50bbe) by Cat Top (https://sketchfab.com/cathelijnetop) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
