@@ -90,6 +90,29 @@ The current PyTorch install supports CUDA capabilities sm_50 sm_60 sm_70 sm_75 s
 
 **Fix**: Use PyTorch 2.9.1+cu128 which includes sm_120 support.
 
+### 5. xformers dtype Requirements for RTX 5090
+
+**Problem**: xformers 0.0.33.post2 requires bfloat16 or float16 inputs (not float32) and only supports compute capability up to 9.0, but RTX 5090 is sm_120.
+
+**Error**:
+```
+NotImplementedError: No operator found for `memory_efficient_attention_forward`
+- requires device with capability <= (9, 0) but your GPU has capability (12.0) (too new)
+- dtype=torch.float32 (supported: {torch.bfloat16, torch.float16})
+```
+
+**Root Cause**: TRELLIS loads models in float32 by default, but xformers operators require bfloat16/float16.
+
+**Fix**: The server automatically converts all models and inputs to bfloat16 during loading:
+
+1. **Model Conversion**: All pipeline models are converted to bfloat16 on GPU during `load_models()`
+2. **Input Conversion**: Image encoding is patched to convert inputs to bfloat16
+3. **Tensor Operations**: `pipeline.run()` is wrapped in `torch.set_default_dtype(torch.bfloat16)` context
+
+This is implemented in `crates/trellis/server/server.py` lines 133-227 and 414-426.
+
+**Note**: bfloat16 provides sufficient numerical precision for inference while satisfying xformers requirements.
+
 ## Dependency Chain Explanation
 
 The dependency chain that led to these specific versions:

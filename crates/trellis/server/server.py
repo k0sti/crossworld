@@ -126,17 +126,243 @@ async def load_models():
 
         # Load pipeline (force CPU if CUDA not working)
         if cuda_available:
+            logger.info("Loading pipeline for GPU...")
             state.pipeline = TrellisImageTo3DPipeline.from_pretrained(model_path)
-            state.pipeline = state.pipeline.to("cuda")
-            logger.info("Pipeline loaded and moved to GPU")
+            if state.pipeline is None:
+                raise RuntimeError("Pipeline from_pretrained returned None")
+            logger.info("Pipeline loaded, converting to bfloat16 and moving to GPU...")
+            # Convert all models to bfloat16 for RTX 5090 compatibility with xformers
+            # xformers requires bfloat16 or float16 (not float32) and RTX 5090 is sm_120
+            # EXCEPTION: sparse_structure_decoder must stay in float32 due to custom norm layer
+            if hasattr(state.pipeline, 'models'):
+                for name, model in state.pipeline.models.items():
+                    if hasattr(model, 'to'):
+                        try:
+                            # IMPORTANT: .to() doesn't modify in place, must reassign
+                            state.pipeline.models[name] = model.to(dtype=torch.bfloat16, device='cuda')
+                            logger.info(f"  {name}: converted to bfloat16 on cuda")
+                        except Exception as e:
+                            logger.warning(f"  {name}: failed to convert - {e}")
+            # Also convert image_cond_model if it exists (DINOv2)
+            if hasattr(state.pipeline, 'image_cond_model') and state.pipeline.image_cond_model is not None:
+                try:
+                    state.pipeline.image_cond_model = state.pipeline.image_cond_model.to(dtype=torch.bfloat16, device='cuda')
+                    logger.info("  image_cond_model: converted to bfloat16 on cuda")
+                except Exception as e:
+                    logger.warning(f"  image_cond_model: failed to convert - {e}")
+            logger.info("Pipeline loaded, converted to bfloat16, and moved to GPU")
         else:
             # Force CPU mode to avoid CUDA errors
             # Note: No need for torch.cuda.device() when using CPU
+            logger.info("Loading pipeline for CPU...")
             state.pipeline = TrellisImageTo3DPipeline.from_pretrained(model_path)
+            if state.pipeline is None:
+                raise RuntimeError("Pipeline from_pretrained returned None")
             logger.info("Pipeline loaded on CPU (inference will be slow)")
 
-        state.pipeline.eval()
+        if state.pipeline is None:
+            raise RuntimeError("Pipeline is None after loading")
+
+        # Set models to eval mode (pipeline itself doesn't have eval, but its models do)
+        if hasattr(state.pipeline, 'eval'):
+            state.pipeline.eval()
+            logger.info("Pipeline set to eval mode")
+        elif hasattr(state.pipeline, 'models'):
+            # Set each model in the pipeline to eval mode
+            for model_name, model in state.pipeline.models.items():
+                if hasattr(model, 'eval'):
+                    model.eval()
+            logger.info("Pipeline models set to eval mode")
+        else:
+            logger.warning("Pipeline has no eval() method, skipping")
+
+        # Monkey-patch encode_image to convert inputs to model dtype (bfloat16)
+        # This is necessary because TRELLIS hardcodes .float() but we need bfloat16 for RTX 5090
+        if hasattr(state.pipeline, 'encode_image'):
+            original_encode_image = state.pipeline.encode_image
+            def encode_image_bfloat16(image):
+                import torch.nn.functional as F
+                from PIL import Image as PILImage
+                import numpy as np
+
+                # Convert image to tensor if needed
+                if isinstance(image, torch.Tensor):
+                    if image.ndim == 3:
+                        image = image.unsqueeze(0)
+                    assert image.ndim == 4, "Image tensor should be batched (B, C, H, W)"
+                elif isinstance(image, list):
+                    assert all(isinstance(i, PILImage.Image) for i in image), "Image list should be list of PIL images"
+                    image = [i.resize((518, 518), PILImage.LANCZOS) for i in image]
+                    image = [np.array(i.convert('RGB')).astype(np.float32) / 255 for i in image]
+                    image = [torch.from_numpy(i).permute(2, 0, 1) for i in image]
+                    image = torch.stack(image).to(device='cuda', dtype=torch.bfloat16)
+                else:
+                    raise ValueError(f"Unsupported type of image: {type(image)}")
+
+                # Ensure image is bfloat16
+                if image.dtype != torch.bfloat16:
+                    image = image.to(dtype=torch.bfloat16)
+
+                # Apply transform and ensure bfloat16
+                image = state.pipeline.image_cond_model_transform(image).to(device='cuda', dtype=torch.bfloat16)
+                features = state.pipeline.models['image_cond_model'](image, is_training=True)['x_prenorm']
+                patchtokens = F.layer_norm(features, features.shape[-1:])
+                return patchtokens
+
+            state.pipeline.encode_image = encode_image_bfloat16
+            logger.info("Patched encode_image to use bfloat16 for RTX 5090 compatibility")
+
+        # Monkey-patch sparse_structure_sampler._inference_model to use bfloat16 timestamps
+        # IMPORTANT: Patch instance methods, not the class, to avoid conflicts between samplers
+        import types
+
+        if hasattr(state.pipeline, 'sparse_structure_sampler'):
+            sampler = state.pipeline.sparse_structure_sampler
+            # Find the original _inference_model from the class
+            original_inference_model = None
+            for cls in sampler.__class__.__mro__:
+                if cls.__name__ == 'FlowEulerSampler' and hasattr(cls, '_inference_model'):
+                    original_inference_model = cls._inference_model
+                    break
+
+            if original_inference_model:
+                def inference_model_bfloat16_sparse(self, model, x_t, t, cond=None, **kwargs):
+                    # For sparse structure sampling with dense tensors
+                    # Note: sparse_structure_flow doesn't accept **kwargs, only (x, t, cond)
+                    t_tensor = torch.tensor([1000 * t] * x_t.shape[0], device=x_t.device, dtype=torch.bfloat16)
+                    if cond is not None and cond.shape[0] == 1 and x_t.shape[0] > 1:
+                        cond = cond.repeat(x_t.shape[0], *([1] * (len(cond.shape) - 1)))
+                    with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
+                        return model(x_t, t_tensor, cond)
+
+                # Bind to THIS instance only
+                sampler._inference_model = types.MethodType(inference_model_bfloat16_sparse, sampler)
+                logger.info("Patched sparse_structure_sampler._inference_model (instance method)")
+
+        if hasattr(state.pipeline, 'slat_sampler'):
+            sampler = state.pipeline.slat_sampler
+            # Find the original _inference_model from the class
+            original_inference_model = None
+            for cls in sampler.__class__.__mro__:
+                if cls.__name__ == 'FlowEulerSampler' and hasattr(cls, '_inference_model'):
+                    original_inference_model = cls._inference_model
+                    break
+
+            if original_inference_model:
+                def inference_model_bfloat16_slat(self, model, x_t, t, cond=None, **kwargs):
+                    # For SLAT sampling with sparse tensors
+                    if hasattr(x_t, 'features'):
+                        batch_size = 1
+                        device = x_t.features.device
+                    else:
+                        batch_size = x_t.shape[0]
+                        device = x_t.device
+
+                    t_tensor = torch.tensor([1000 * t] * batch_size, device=device, dtype=torch.bfloat16)
+                    if cond is not None and cond.shape[0] == 1 and batch_size > 1:
+                        cond = cond.repeat(batch_size, *([1] * (len(cond.shape) - 1)))
+
+                    # Don't pass kwargs to model - only (x, t, cond) are accepted
+                    # Guidance params like neg_cond, cfg_strength are handled by sampler wrapper
+                    with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
+                        return model(x_t, t_tensor, cond)
+
+                # Bind to THIS instance only
+                sampler._inference_model = types.MethodType(inference_model_bfloat16_slat, sampler)
+                logger.info("Patched slat_sampler._inference_model (instance method)")
+
+        # Patch custom norm layers to handle bfloat16 weights
+        # The norm layers (LayerNorm32/GroupNorm32) call x.float() but expect float32 weights
+        # We need to patch them to temporarily convert weights to float32 during forward pass
+        decoder = state.pipeline.models.get('sparse_structure_decoder')
+        if decoder is not None:
+            # Set decoder's dtype attribute to bfloat16 to match the actual weights
+            decoder.dtype = torch.bfloat16
+            decoder.use_fp16 = False  # We're using bfloat16, not float16
+
+            import torch.nn as nn
+            from functools import wraps
+
+            norm_layer_count = 0
+            for module in decoder.modules():
+                # Check if it's a custom norm layer (has the signature of calling x.float())
+                if isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
+                    # Save original forward
+                    original_forward = module.forward
+
+                    def make_patched_forward(orig_forward, mod):
+                        @wraps(orig_forward)
+                        def patched_forward(x):
+                            # Temporarily convert weights/bias to float32 for this forward pass
+                            orig_weight_dtype = mod.weight.dtype if mod.weight is not None else None
+                            orig_bias_dtype = mod.bias.dtype if mod.bias is not None else None
+
+                            if mod.weight is not None:
+                                mod.weight.data = mod.weight.data.float()
+                            if mod.bias is not None:
+                                mod.bias.data = mod.bias.data.float()
+
+                            # Call original forward (which calls x.float() internally)
+                            result = orig_forward(x)
+
+                            # Restore original dtypes
+                            if mod.weight is not None and orig_weight_dtype is not None:
+                                mod.weight.data = mod.weight.data.to(orig_weight_dtype)
+                            if mod.bias is not None and orig_bias_dtype is not None:
+                                mod.bias.data = mod.bias.data.to(orig_bias_dtype)
+
+                            return result
+                        return patched_forward
+
+                    module.forward = make_patched_forward(original_forward, module)
+                    norm_layer_count += 1
+
+            logger.info(f"Patched {norm_layer_count} norm layers to handle bfloat16 weights")
+
+        # Patch sample_sparse_structure to convert sampler output to bfloat16
+        # The sampler outputs float16 from autocast, but decoder weights are bfloat16
+        original_sample_sparse_structure = state.pipeline.sample_sparse_structure
+        def sample_sparse_structure_bfloat16(self, cond, num_samples=1, sampler_params={}):
+            # Replicate original logic from trellis_image_to_3d.py line 176-193
+            flow_model = self.models['sparse_structure_flow_model']
+            reso = flow_model.resolution
+            noise = torch.randn(num_samples, flow_model.in_channels, reso, reso, reso).to(self.device)
+            sampler_params = {**self.sparse_structure_sampler_params, **sampler_params}
+
+            # Extract neg_cond separately - sampler needs it but flow model doesn't
+            # Don't modify original cond dict - make a copy
+            neg_cond = cond.get('neg_cond', None)
+            cond_without_neg = {k: v for k, v in cond.items() if k != 'neg_cond'}
+
+            z_s = self.sparse_structure_sampler.sample(
+                flow_model,
+                noise,
+                neg_cond=neg_cond,
+                **cond_without_neg,
+                **sampler_params,
+                verbose=True
+            ).samples
+
+            # Convert sampler output from float16 to bfloat16 to match decoder weights
+            if hasattr(z_s, 'dtype'):
+                z_s = z_s.to(dtype=torch.bfloat16)
+            elif hasattr(z_s, 'features'):
+                # Sparse tensor - convert features
+                z_s = z_s.replace(features=z_s.features.to(dtype=torch.bfloat16))
+
+            # Decode occupancy latent - decoder is in bfloat16
+            decoder = self.models['sparse_structure_decoder']
+            coords = torch.argwhere(decoder(z_s)>0)[:, [0, 2, 3, 4]].int()
+            return coords
+
+        state.pipeline.sample_sparse_structure = types.MethodType(
+            sample_sparse_structure_bfloat16,
+            state.pipeline
+        )
+        logger.info("Patched sample_sparse_structure to convert sampler output to bfloat16")
+
         logger.info("Model loading complete")
+        # models_loaded is a property based on pipeline being not None
         state.error = None
 
     except Exception as e:
@@ -302,19 +528,27 @@ def run_inference(
 
     # Run Trellis pipeline
     logger.info(f"Running Trellis inference (seed: {seed})")
-    logger.info(f"  SS: guidance={ss_guidance_strength}, steps={ss_sampling_steps}")
-    logger.info(f"  Shape SLAT: guidance={shape_slat_guidance_strength}, steps={shape_slat_sampling_steps}")
-    logger.info(f"  Texture SLAT: guidance={tex_slat_guidance_strength}, steps={tex_slat_sampling_steps}")
+    logger.info(f"  SS: cfg_strength={ss_guidance_strength}, steps={ss_sampling_steps}")
+    logger.info(f"  SLAT: cfg_strength={shape_slat_guidance_strength}, steps={shape_slat_sampling_steps}")
 
+    # Prepare sampler parameters as dictionaries
+    sparse_structure_sampler_params = {
+        "steps": ss_sampling_steps,
+        "cfg_strength": ss_guidance_strength,
+    }
+
+    slat_sampler_params = {
+        "steps": shape_slat_sampling_steps,
+        "cfg_strength": shape_slat_guidance_strength,
+    }
+
+    # Run pipeline - models are already in bfloat16, samplers handle dtype conversion
+    # Do NOT set default dtype globally as it breaks custom norm layers
     result = state.pipeline.run(
         pil_image,
         seed=seed,
-        ss_guidance_strength=ss_guidance_strength,
-        ss_sampling_steps=ss_sampling_steps,
-        shape_slat_guidance_strength=shape_slat_guidance_strength,
-        shape_slat_sampling_steps=shape_slat_sampling_steps,
-        tex_slat_guidance_strength=tex_slat_guidance_strength,
-        tex_slat_sampling_steps=tex_slat_sampling_steps,
+        sparse_structure_sampler_params=sparse_structure_sampler_params,
+        slat_sampler_params=slat_sampler_params,
     )
 
     # Extract mesh data
