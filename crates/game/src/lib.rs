@@ -57,7 +57,7 @@ impl VoxelGame {
     /// Get the effective world scale (base scale * 2^scale from CubeGrid)
     fn effective_world_scale(&self) -> f32 {
         match &self.cube_grid {
-            Some(grid) => BASE_WORLD_SCALE * grid.scale_factor(),
+            Some(grid) => BASE_WORLD_SCALE * grid.size() as f32,
             None => BASE_WORLD_SCALE,
         }
     }
