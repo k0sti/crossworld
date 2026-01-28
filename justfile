@@ -268,11 +268,15 @@ xcube-setup *ARGS:
     crates/xcube/server/setup.sh {{ARGS}}
 
 # Start XCube inference server
+# Requires nix develop .#cuda shell for CUDA libraries
 xcube-server:
     @echo "Starting XCube inference server on http://0.0.0.0:8000..."
     @echo "API docs: http://localhost:8000/docs"
     @echo ""
-    cd crates/xcube/server && uv run server.py
+    # Run within nix CUDA shell for proper CUDA_HOME and library paths
+    # LD_LIBRARY_PATH includes NVIDIA driver for GPU detection
+    # TORCH_CUDA_ARCH_LIST for PTX fallback on unsupported GPUs (RTX 50 series)
+    nix develop .#cuda --command bash -c 'export LD_LIBRARY_PATH=/run/opengl-driver/lib:$$LD_LIBRARY_PATH; export TORCH_CUDA_ARCH_LIST=8.9+PTX; cd crates/xcube/server && uv run server.py'
 
 # Generate 3D object from text prompt using XCube
 xcube-generate PROMPT:

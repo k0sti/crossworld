@@ -19,12 +19,68 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+
+def test_cuda_works() -> tuple[bool, str | None]:
+    """
+    Test if CUDA actually works (not just available).
+    PyTorch may report CUDA available but kernels may fail on unsupported GPUs.
+    Returns (works: bool, error_message: str | None)
+    """
+    if not torch.cuda.is_available():
+        return False, "CUDA not available"
+
+    try:
+        # Try a simple tensor operation to verify kernels work
+        x = torch.randn(10, 10, device="cuda")
+        y = torch.matmul(x, x)
+        _ = y.sum().item()  # Force synchronization
+        return True, None
+    except RuntimeError as e:
+        error_msg = str(e)
+        if "no kernel image" in error_msg:
+            gpu_name = torch.cuda.get_device_name(0)
+            return False, f"GPU {gpu_name} not supported by this PyTorch build (missing CUDA kernels)"
+        return False, error_msg
+
+
+# Global CUDA state - tested once at startup
+CUDA_WORKS = False
+CUDA_ERROR = None
+
+
 # XCube imports
 # These assume XCube is installed or available in PYTHONPATH
 try:
-    from xcube.models.model import create_model_from_args
-    from xcube.utils.clip_utils import clip_preprocess, padding_text_emb
-    from transformers import CLIPTextModel
+    import importlib
+    from xcube.utils import exp
+    from transformers import CLIPTextModel, AutoProcessor
+
+    def create_model_from_args(config_path, ckpt_path, strict=True):
+        """Load XCube model from config and checkpoint."""
+        model_yaml_path = Path(config_path)
+        model_args = exp.parse_config_yaml(model_yaml_path)
+        net_module = importlib.import_module("xcube.models." + model_args.model).Model
+        args_ckpt = Path(ckpt_path)
+        assert args_ckpt.exists(), f"Checkpoint does not exist: {args_ckpt}"
+        net_model = net_module.load_from_checkpoint(args_ckpt, hparams=model_args, strict=strict)
+        return net_model.eval()
+
+    def padding_text_emb(text_emb, max_text_len=77):
+        """Pad text embedding to fixed length."""
+        padded_text_emb = torch.zeros(max_text_len, text_emb.shape[1])
+        padded_text_emb[:text_emb.shape[0]] = text_emb
+        mask = torch.zeros(max_text_len)
+        mask[:text_emb.shape[0]] = 1
+        return padded_text_emb, mask.bool()
+
+    def clip_preprocess(clip_tag='l14'):
+        """Get CLIP preprocessor."""
+        clip_names = {
+            'l14': 'openai/clip-vit-large-patch14',
+            'h14': 'laion/CLIP-ViT-H-14-laion2B-s32B-b79K'
+        }
+        return AutoProcessor.from_pretrained(clip_names[clip_tag])
+
     XCUBE_AVAILABLE = True
 except ImportError as e:
     XCUBE_AVAILABLE = False
@@ -92,6 +148,8 @@ app = FastAPI(
 # Model loading
 async def load_models():
     """Load XCube models and CLIP text encoder"""
+    global CUDA_WORKS, CUDA_ERROR
+
     if state.loading or state.models_loaded:
         return
 
@@ -102,7 +160,14 @@ async def load_models():
         if not XCUBE_AVAILABLE:
             raise RuntimeError(f"XCube not available: {IMPORT_ERROR}")
 
-        if not torch.cuda.is_available():
+        # Test if CUDA actually works (not just available)
+        CUDA_WORKS, CUDA_ERROR = test_cuda_works()
+        if CUDA_WORKS:
+            logger.info(f"CUDA working - using GPU: {torch.cuda.get_device_name(0)}")
+        elif torch.cuda.is_available():
+            logger.warning(f"CUDA detected but not working: {CUDA_ERROR}")
+            logger.warning("Falling back to CPU - inference will be slow")
+        else:
             logger.warning("CUDA not available - inference will be slow")
 
         # Model paths (configurable via environment variables)
@@ -119,14 +184,14 @@ async def load_models():
 
         logger.info(f"Loading coarse model from {ckpt_coarse}")
         state.coarse_model = create_model_from_args(str(config_coarse), str(ckpt_coarse))
-        state.coarse_model = state.coarse_model.cuda() if torch.cuda.is_available() else state.coarse_model
+        state.coarse_model = state.coarse_model.cuda() if CUDA_WORKS else state.coarse_model
         state.coarse_model.eval()
 
         # Fine model is optional
         if config_fine.exists() and ckpt_fine.exists():
             logger.info(f"Loading fine model from {ckpt_fine}")
             state.fine_model = create_model_from_args(str(config_fine), str(ckpt_fine))
-            state.fine_model = state.fine_model.cuda() if torch.cuda.is_available() else state.fine_model
+            state.fine_model = state.fine_model.cuda() if CUDA_WORKS else state.fine_model
             state.fine_model.eval()
         else:
             logger.warning("Fine model checkpoints not found - fine generation disabled")
@@ -135,10 +200,10 @@ async def load_models():
         logger.info("Loading CLIP text encoder")
         clip_model_name = "openai/clip-vit-large-patch14"
         state.text_encoder = CLIPTextModel.from_pretrained(clip_model_name)
-        state.text_encoder = state.text_encoder.cuda() if torch.cuda.is_available() else state.text_encoder
+        state.text_encoder = state.text_encoder.cuda() if CUDA_WORKS else state.text_encoder
         state.text_encoder.eval()
 
-        state.clip_preprocess_fn = clip_preprocess
+        state.clip_preprocess_fn = clip_preprocess()  # Call to get AutoProcessor instance
 
         logger.info("Model loading complete")
         state.error = None
@@ -164,8 +229,8 @@ def encode_text(prompt: str, max_text_len: int = 77):
         truncation=True
     )
 
-    # Move to GPU if available
-    if torch.cuda.is_available():
+    # Move to GPU if CUDA works
+    if CUDA_WORKS:
         inputs = {k: v.cuda() for k, v in inputs.items()}
 
     with torch.no_grad():
@@ -279,18 +344,23 @@ async def health():
     """
     Health check endpoint - returns server status and GPU info
     """
-    gpu_available = torch.cuda.is_available()
-    gpu_name = torch.cuda.get_device_name(0) if gpu_available else None
+    gpu_detected = torch.cuda.is_available()
+    gpu_name = torch.cuda.get_device_name(0) if gpu_detected else None
 
+    # gpu_available means CUDA actually works (kernels compatible)
+    # If CUDA is detected but doesn't work, include the error
     status = "ready" if state.models_loaded else ("loading" if state.loading else "error")
+    error = state.error
+    if CUDA_ERROR and not error:
+        error = CUDA_ERROR
 
     return HealthResponse(
         status=status,
         xcube_available=XCUBE_AVAILABLE,
-        gpu_available=gpu_available,
-        gpu_name=gpu_name,
+        gpu_available=CUDA_WORKS,
+        gpu_name=gpu_name if CUDA_WORKS else f"{gpu_name} (unsupported)" if gpu_name else None,
         model_loaded=state.models_loaded,
-        error=state.error
+        error=error
     )
 
 
