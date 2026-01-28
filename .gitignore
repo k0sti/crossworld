@@ -22,8 +22,6 @@ output/
 assets/scratch/
 .direnv/
 
-.auto-claude
-.worktrees
 crates/trellis/server/.env
 external
 
