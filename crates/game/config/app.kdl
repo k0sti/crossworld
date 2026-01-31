@@ -1,0 +1,23 @@
+app {
+  ui layout=free {
+    renderer layout=expand // renderes scene to background
+    widgets layout=vertical {
+      title {
+        nostr_button align=right icon=$nostr_button
+      }
+      sides {
+        debug description="debug info panel"
+      }
+    }
+  }
+  scene {
+    // Loaded from config file and live event
+    ground {
+      csm ...
+    }
+    objects {
+      model chr_some.vox
+      model chr_other.vox
+    }
+  }
+}
