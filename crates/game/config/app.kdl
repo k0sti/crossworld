@@ -1,23 +1,77 @@
+// Crossworld Game Configuration (KDL format)
+// This file defines the static configuration; dynamic generation uses Lua scripts
+
 app {
-  ui layout=free {
-    renderer layout=expand // renderes scene to background
-    widgets layout=vertical {
-      title {
-        nostr_button align=right icon=$nostr_button
-      }
-      sides {
-        debug description="debug info panel"
-      }
+    ui layout="free" {
+        renderer layout="expand"
+        widgets layout="vertical" {
+            title {
+                nostr_button align="right" icon="$nostr_button"
+            }
+            sides {
+                debug description="debug info panel"
+            }
+        }
     }
-  }
-  scene {
-    // Loaded from config file and live event
-    ground {
-      csm ...
+
+    scene {
+        // World generation parameters
+        world {
+            // Octree depth configuration
+            // Macro depth: procedurally generated terrain (0-3)
+            // Micro depth: user edits (4-7)
+            // Border depth: transition/blending layers
+            macro_depth 3
+            micro_depth 5
+            border_depth 1
+            seed 12345
+        }
+
+        // Material palette (index to material mapping)
+        materials {
+            empty 0
+            bedrock 1
+            grass 32
+            stone 64
+        }
+
+        // 2D map configuration
+        map {
+            // Character mapping for 2D map layout
+            // Each char maps to a material and optional flags
+            chars {
+                " " mat="empty"
+                "#" mat="bedrock"
+                "^" mat="empty" is_spawn=#true
+            }
+
+            // 2D map layout (inserted into ground cube centered on XZ plane, y=0)
+            // Uses characters: ' '=empty, '#'=wall, '^'=spawn
+            layout """
+                #####
+                ###
+                #   ^#
+                ##  ###
+                ######
+            """
+        }
+
+        // Model generation configuration
+        // Procedural placement is handled by Lua script
+        models {
+            pattern "scene_*"
+            count 10
+            radius_x 50
+            radius_z 50
+            y 0
+            align 0.5 0 0.5
+            scale -3
+        }
+
+        // Static objects (loaded from files)
+        objects {
+            // model "chr_some.vox"
+            // model "chr_other.vox"
+        }
     }
-    objects {
-      model chr_some.vox
-      model chr_other.vox
-    }
-  }
 }

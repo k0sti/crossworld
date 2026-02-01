@@ -481,9 +481,7 @@ impl EditorApp {
         // Debug logging
         println!(
             "[place_voxel] pos=({},{},{}), scale={}, material={}",
-            pos.x, pos.y, pos.z,
-            old_scale,
-            material
+            pos.x, pos.y, pos.z, old_scale, material
         );
 
         // CubeGrid.set_cube takes origin-centric coordinates
@@ -1025,11 +1023,8 @@ impl App for EditorApp {
                 // Use the new coord selection logic that handles far/near based on boundary detection
                 // Select at cursor's scale, not EDIT_DEPTH
                 let far_mode = self.cursor.focus_mode == FocusMode::Far;
-                let (selected_coord, is_boundary) = hit.select_coord_at_scale(
-                    cursor_scale,
-                    far_mode,
-                    self.effective_cube_scale(),
-                );
+                let (selected_coord, is_boundary) =
+                    hit.select_coord_at_scale(cursor_scale, far_mode, self.effective_cube_scale());
 
                 // Debug logging for selected coordinate
                 if self.test_config.is_some() {
@@ -1042,10 +1037,7 @@ impl App for EditorApp {
                         hit.voxel_coord.x, hit.voxel_coord.y, hit.voxel_coord.z
                     );
                     // Also log the voxel_at_scale result before far/near adjustment
-                    let base_voxel = hit.voxel_at_scale(
-                        cursor_scale,
-                        self.effective_cube_scale(),
-                    );
+                    let base_voxel = hit.voxel_at_scale(cursor_scale, self.effective_cube_scale());
                     println!(
                         "[DEBUG Frame {}] voxel_at_scale({})=({}, {}, {}), Selected=({}, {}, {}), mode={}, face_type={}",
                         ctx.frame, cursor_scale, base_voxel.x, base_voxel.y, base_voxel.z,

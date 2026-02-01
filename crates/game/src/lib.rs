@@ -70,31 +70,60 @@ impl VoxelGame {
         }
     }
 
-    /// Load world configuration from Lua file
+    /// Load world configuration from KDL file (with Lua fallback)
     fn load_config(&mut self) {
-        let mut config_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        config_path.push("config");
-        config_path.push("world.lua");
+        let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let kdl_path = base_path.join("config").join("app.kdl");
+        let lua_path = base_path.join("config").join("world.lua");
 
-        match GameConfig::from_file(&config_path) {
-            Ok(config) => {
-                println!("[Game] Loaded config from: {}", config_path.display());
-                println!(
-                    "[Game] World config: macro_depth={}, micro_depth={}, border_depth={}, seed={}",
-                    config.world.macro_depth,
-                    config.world.micro_depth,
-                    config.world.border_depth,
-                    config.world.seed
-                );
-                println!("[Game] Map layout: {} rows", config.map.layout.len());
-                self.config = config;
-            }
-            Err(e) => {
-                eprintln!("[Game] Failed to load config: {}", e);
-                eprintln!("[Game] Using default configuration");
-                self.config = GameConfig::default();
+        // Try KDL first (preferred)
+        if kdl_path.exists() {
+            match GameConfig::from_kdl_file(&kdl_path) {
+                Ok(config) => {
+                    println!("[Game] Loaded config from KDL: {}", kdl_path.display());
+                    println!(
+                        "[Game] World config: macro_depth={}, micro_depth={}, border_depth={}, seed={}",
+                        config.world.macro_depth,
+                        config.world.micro_depth,
+                        config.world.border_depth,
+                        config.world.seed
+                    );
+                    println!("[Game] Map layout: {} rows", config.map.layout.len());
+                    println!("[Game] Models to generate: {}", config.models.len());
+                    self.config = config;
+                    return;
+                }
+                Err(e) => {
+                    eprintln!("[Game] Failed to load KDL config: {}", e);
+                    eprintln!("[Game] Falling back to Lua config...");
+                }
             }
         }
+
+        // Fallback to Lua
+        if lua_path.exists() {
+            match GameConfig::from_lua_file(&lua_path) {
+                Ok(config) => {
+                    println!("[Game] Loaded config from Lua: {}", lua_path.display());
+                    println!(
+                        "[Game] World config: macro_depth={}, micro_depth={}, border_depth={}, seed={}",
+                        config.world.macro_depth,
+                        config.world.micro_depth,
+                        config.world.border_depth,
+                        config.world.seed
+                    );
+                    println!("[Game] Map layout: {} rows", config.map.layout.len());
+                    self.config = config;
+                    return;
+                }
+                Err(e) => {
+                    eprintln!("[Game] Failed to load Lua config: {}", e);
+                }
+            }
+        }
+
+        eprintln!("[Game] No valid config found, using defaults");
+        self.config = GameConfig::default();
     }
 
     /// Initialize the voxel world from config

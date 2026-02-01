@@ -1,0 +1,26 @@
+[package]
+name = "scripting"
+version = "0.1.0"
+edition = "2021"
+description = "Lua scripting and KDL configuration for Crossworld"
+
+[lib]
+name = "scripting"
+path = "src/lib.rs"
+
+[dependencies]
+# Lua scripting
+mlua = { version = "0.11", features = ["lua54", "vendored"] }
+
+# KDL configuration parsing
+kdl = "6"
+
+# Math types for Lua bindings
+glam = "0.30"
+
+# Error handling
+thiserror = "2"
+
+[dev-dependencies]
+# Testing
+tempfile = "3"

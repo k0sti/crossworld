@@ -15,6 +15,9 @@ crate-type = ["cdylib", "rlib"]
 # Core app framework with runtime feature for egui integration
 app = { path = "../app", features = ["runtime"] }
 
+# Scripting and configuration
+scripting = { path = "../scripting" }
+
 # Rendering
 renderer = { path = "../renderer" }
 cube = { path = "../cube" }

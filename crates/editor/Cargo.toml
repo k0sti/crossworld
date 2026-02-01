@@ -40,6 +40,9 @@ serde = { version = "1.0", features = ["derive"] }
 toml = "0.8"
 dirs = "6.0"
 
+# Scripting (Lua configuration)
+scripting = { path = "../scripting" }
+
 # Image processing
 image = "0.25"
 

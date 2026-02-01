@@ -1,7 +1,12 @@
-use app::lua_config::{extract_u32, mlua, LuaConfig};
+//! Game configuration loading from KDL and Lua files
+//!
+//! Configuration is loaded in two phases:
+//! 1. KDL (app.kdl) - Static configuration (world params, materials, map layout)
+//! 2. Lua (world.lua) - Dynamic/procedural configuration (model generation)
+
 use cube::{io::vox::load_vox_to_cubebox, CubeBox};
 use glam::{IVec3, Vec3};
-use mlua::prelude::*;
+use scripting::{extract_u32, KdlReader, LuaEngine, StateTree};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -9,7 +14,7 @@ use std::path::{Path, PathBuf};
 /// Negative value makes models smaller: -3 means 2^3 = 8x smaller.
 const DEFAULT_MODEL_DEPTH_SCALE: i32 = -3;
 
-/// World configuration from Lua
+/// World configuration
 #[derive(Debug, Clone)]
 pub struct WorldConfig {
     pub macro_depth: u32,
@@ -56,66 +61,158 @@ pub struct WorldModelConfig {
     pub scale: i32,
 }
 
+/// Model generation configuration (from KDL)
+#[derive(Debug, Clone)]
+pub struct ModelGenerationConfig {
+    pub pattern: String,
+    pub count: u32,
+    pub radius_x: f32,
+    pub radius_z: f32,
+    pub y: f32,
+    pub align: Vec3,
+    pub scale: i32,
+}
+
+impl Default for ModelGenerationConfig {
+    fn default() -> Self {
+        Self {
+            pattern: "scene_*".to_string(),
+            count: 10,
+            radius_x: 50.0,
+            radius_z: 50.0,
+            y: 0.0,
+            align: Vec3::new(0.5, 0.0, 0.5),
+            scale: DEFAULT_MODEL_DEPTH_SCALE,
+        }
+    }
+}
+
 /// Combined game configuration
 #[derive(Debug, Clone, Default)]
 pub struct GameConfig {
     pub world: WorldConfig,
     pub map: MapConfig,
+    /// Model generation config (used during construction to generate models)
+    #[allow(dead_code)]
+    pub model_gen: ModelGenerationConfig,
     pub models: Vec<WorldModelConfig>,
 }
 
 impl GameConfig {
-    /// Load configuration from Lua file
-    pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, String> {
-        let mut lua_config =
-            LuaConfig::new().map_err(|e| format!("Failed to create Lua config: {}", e))?;
+    /// Load configuration from KDL file, then optionally execute Lua for procedural generation
+    pub fn from_kdl_file<P: AsRef<Path>>(path: P) -> Result<Self, String> {
+        let tree = KdlReader::from_file(path.as_ref())
+            .map_err(|e| format!("Failed to load KDL config: {}", e))?;
 
-        lua_config
-            .load_file(path.as_ref())
-            .map_err(|e| format!("Failed to load config file: {}", e))?;
+        Self::from_state_tree(&tree, path.as_ref().parent())
+    }
 
-        let world_config = Self::extract_world_config(lua_config.lua())?;
-        let map_config = Self::extract_map_config(lua_config.lua())?;
-        let model_configs = Self::extract_model_configs(lua_config.lua())?;
+    /// Load configuration from a StateTree (parsed KDL)
+    pub fn from_state_tree(tree: &StateTree, _config_dir: Option<&Path>) -> Result<Self, String> {
+        let world_config = Self::extract_world_config(tree)?;
+        let map_config = Self::extract_map_config(tree)?;
+        let model_gen = Self::extract_model_gen_config(tree)?;
+
+        // Generate models using LCG PRNG (same algorithm as Lua version)
+        let models = Self::generate_models(&model_gen, world_config.seed);
 
         Ok(Self {
             world: world_config,
             map: map_config,
-            models: model_configs,
+            model_gen,
+            models,
         })
     }
 
-    /// Extract world configuration from Lua globals
-    fn extract_world_config(lua: &Lua) -> Result<WorldConfig, String> {
-        let globals = lua.globals();
-        let world_table: mlua::Table = globals
-            .get("world_config")
-            .map_err(|e| format!("Missing world_config table: {}", e))?;
+    /// Load configuration from Lua file (legacy support)
+    pub fn from_lua_file<P: AsRef<Path>>(path: P) -> Result<Self, String> {
+        let engine = LuaEngine::new().map_err(|e| format!("Failed to create Lua: {}", e))?;
 
-        let macro_depth = extract_u32(
-            &world_table
-                .get("macro_depth")
-                .map_err(|e| format!("Missing macro_depth: {}", e))?,
-        )
-        .map_err(|e| format!("Invalid macro_depth: {}", e))?;
-        let micro_depth = extract_u32(
-            &world_table
-                .get("micro_depth")
-                .map_err(|e| format!("Missing micro_depth: {}", e))?,
-        )
-        .map_err(|e| format!("Invalid micro_depth: {}", e))?;
-        let border_depth = extract_u32(
-            &world_table
-                .get("border_depth")
-                .map_err(|e| format!("Missing border_depth: {}", e))?,
-        )
-        .map_err(|e| format!("Invalid border_depth: {}", e))?;
-        let seed = extract_u32(
-            &world_table
-                .get("seed")
-                .map_err(|e| format!("Missing seed: {}", e))?,
-        )
-        .map_err(|e| format!("Invalid seed: {}", e))?;
+        engine
+            .exec_file(path.as_ref())
+            .map_err(|e| format!("Failed to load Lua config: {}", e))?;
+
+        Self::from_lua_engine(&engine)
+    }
+
+    /// Extract configuration from Lua engine globals
+    fn from_lua_engine(engine: &LuaEngine) -> Result<Self, String> {
+        use scripting::mlua::prelude::*;
+
+        let lua = engine.lua();
+        let globals = lua.globals();
+
+        // Extract world_config
+        let world_table: LuaTable = globals
+            .get("world_config")
+            .map_err(|e| format!("Missing world_config: {}", e))?;
+
+        let world_config = WorldConfig {
+            macro_depth: extract_u32(
+                &world_table
+                    .get("macro_depth")
+                    .map_err(|e| format!("Missing macro_depth: {}", e))?,
+            )
+            .map_err(|e| format!("Invalid macro_depth: {}", e))?,
+            micro_depth: extract_u32(
+                &world_table
+                    .get("micro_depth")
+                    .map_err(|e| format!("Missing micro_depth: {}", e))?,
+            )
+            .map_err(|e| format!("Invalid micro_depth: {}", e))?,
+            border_depth: extract_u32(
+                &world_table
+                    .get("border_depth")
+                    .map_err(|e| format!("Missing border_depth: {}", e))?,
+            )
+            .map_err(|e| format!("Invalid border_depth: {}", e))?,
+            seed: extract_u32(
+                &world_table
+                    .get("seed")
+                    .map_err(|e| format!("Missing seed: {}", e))?,
+            )
+            .map_err(|e| format!("Invalid seed: {}", e))?,
+        };
+
+        // Extract map config
+        let map_config = Self::extract_map_config_from_lua(lua)?;
+
+        // Extract world_models (generated by Lua)
+        let models = Self::extract_model_configs_from_lua(lua)?;
+
+        Ok(Self {
+            world: world_config,
+            map: map_config,
+            model_gen: ModelGenerationConfig::default(),
+            models,
+        })
+    }
+
+    /// Extract world configuration from StateTree
+    fn extract_world_config(tree: &StateTree) -> Result<WorldConfig, String> {
+        let world_node = tree
+            .get_node("app.scene.world")
+            .ok_or("Missing app.scene.world node")?;
+
+        let macro_depth = world_node
+            .child("macro_depth")
+            .and_then(|n| n.value.as_u32().ok())
+            .unwrap_or(3);
+
+        let micro_depth = world_node
+            .child("micro_depth")
+            .and_then(|n| n.value.as_u32().ok())
+            .unwrap_or(5);
+
+        let border_depth = world_node
+            .child("border_depth")
+            .and_then(|n| n.value.as_u32().ok())
+            .unwrap_or(1);
+
+        let seed = world_node
+            .child("seed")
+            .and_then(|n| n.value.as_u32().ok())
+            .unwrap_or(12345);
 
         Ok(WorldConfig {
             macro_depth,
@@ -125,24 +222,169 @@ impl GameConfig {
         })
     }
 
-    /// Extract map configuration from Lua globals
-    fn extract_map_config(lua: &Lua) -> Result<MapConfig, String> {
+    /// Extract map configuration from StateTree
+    fn extract_map_config(tree: &StateTree) -> Result<MapConfig, String> {
+        let mut chars = HashMap::new();
+        let mut materials = HashMap::new();
+        let mut layout = Vec::new();
+
+        // Extract materials
+        if let Some(materials_node) = tree.get_node("app.scene.materials") {
+            for name in materials_node.child_names() {
+                if let Some(child) = materials_node.child(name) {
+                    if let Ok(id) = child.value.as_u32() {
+                        materials.insert(name.to_string(), id as u8);
+                    }
+                }
+            }
+        }
+
+        // Extract character mappings
+        if let Some(chars_node) = tree.get_node("app.scene.map.chars") {
+            for name in chars_node.child_names() {
+                if let Some(child) = chars_node.child(name) {
+                    let mat = child
+                        .attr("mat")
+                        .and_then(|v| v.as_str().ok())
+                        .unwrap_or("empty")
+                        .to_string();
+
+                    let is_spawn = child
+                        .attr("is_spawn")
+                        .and_then(|v| v.as_bool().ok())
+                        .unwrap_or(false);
+
+                    // Map character name to actual char
+                    let ch = match name {
+                        "space" => ' ',
+                        "wall" => '#',
+                        "spawn" => '^',
+                        _ => continue,
+                    };
+
+                    chars.insert(
+                        ch,
+                        MapChar {
+                            material: mat,
+                            is_spawn,
+                        },
+                    );
+                }
+            }
+        }
+
+        // Extract layout
+        if let Some(layout_node) = tree.get_node("app.scene.map.layout") {
+            if let Ok(layout_str) = layout_node.value.as_str() {
+                layout = layout_str
+                    .lines()
+                    .filter(|line| !line.trim().is_empty())
+                    .map(|s| s.to_string())
+                    .collect();
+            }
+        }
+
+        Ok(MapConfig {
+            chars,
+            layout,
+            materials,
+        })
+    }
+
+    /// Extract model generation config from StateTree
+    fn extract_model_gen_config(tree: &StateTree) -> Result<ModelGenerationConfig, String> {
+        let models_node = match tree.get_node("app.scene.models") {
+            Some(node) => node,
+            None => return Ok(ModelGenerationConfig::default()),
+        };
+
+        let pattern = models_node
+            .child("pattern")
+            .and_then(|n| n.value.as_str().ok())
+            .unwrap_or("scene_*")
+            .to_string();
+
+        let count = models_node
+            .child("count")
+            .and_then(|n| n.value.as_u32().ok())
+            .unwrap_or(10);
+
+        let radius_x = models_node
+            .child("radius_x")
+            .and_then(|n| n.value.as_f32().ok())
+            .unwrap_or(50.0);
+
+        let radius_z = models_node
+            .child("radius_z")
+            .and_then(|n| n.value.as_f32().ok())
+            .unwrap_or(50.0);
+
+        let y = models_node
+            .child("y")
+            .and_then(|n| n.value.as_f32().ok())
+            .unwrap_or(0.0);
+
+        let align = models_node
+            .child("align")
+            .and_then(|n| n.value.as_vec3().ok())
+            .unwrap_or(Vec3::new(0.5, 0.0, 0.5));
+
+        let scale = models_node
+            .child("scale")
+            .and_then(|n| n.value.as_i64().ok())
+            .unwrap_or(DEFAULT_MODEL_DEPTH_SCALE as i64) as i32;
+
+        Ok(ModelGenerationConfig {
+            pattern,
+            count,
+            radius_x,
+            radius_z,
+            y,
+            align,
+            scale,
+        })
+    }
+
+    /// Generate models using LCG PRNG (same algorithm as Lua version)
+    fn generate_models(config: &ModelGenerationConfig, seed: u32) -> Vec<WorldModelConfig> {
+        let mut models = Vec::new();
+        let mut rng = LcgRng::new(seed as u64);
+
+        for i in 0..config.count {
+            let x = (rng.next_f32() * 2.0 - 1.0) * config.radius_x;
+            let z = (rng.next_f32() * 2.0 - 1.0) * config.radius_z;
+
+            models.push(WorldModelConfig {
+                pattern: config.pattern.clone(),
+                index: i as usize,
+                align: config.align,
+                position: Vec3::new(x, config.y, z),
+                scale: config.scale,
+            });
+        }
+
+        models
+    }
+
+    /// Extract map config from Lua globals
+    fn extract_map_config_from_lua(lua: &scripting::mlua::Lua) -> Result<MapConfig, String> {
+        use scripting::mlua::prelude::*;
+
         let globals = lua.globals();
 
         // Extract map characters
-        let map_chars_table: mlua::Table = globals
+        let map_chars_table: LuaTable = globals
             .get("map_chars")
-            .map_err(|e| format!("Missing map_chars table: {}", e))?;
+            .map_err(|e| format!("Missing map_chars: {}", e))?;
 
         let mut chars = HashMap::new();
-        for pair in map_chars_table.pairs::<String, mlua::Table>() {
-            let (key, value): (String, mlua::Table) =
-                pair.map_err(|e: mlua::Error| format!("Failed to parse map_chars: {}", e))?;
+        for pair in map_chars_table.pairs::<String, LuaTable>() {
+            let (key, value) = pair.map_err(|e| format!("Failed to parse map_chars: {}", e))?;
             if key.len() == 1 {
                 let ch = key.chars().next().unwrap();
                 let mat: String = value
                     .get("mat")
-                    .map_err(|e: mlua::Error| format!("Missing mat for char '{}': {}", ch, e))?;
+                    .map_err(|e| format!("Missing mat: {}", e))?;
                 let is_spawn: bool = value.get("spawn").unwrap_or(false);
                 chars.insert(
                     ch,
@@ -154,28 +396,27 @@ impl GameConfig {
             }
         }
 
-        // Extract map layout
+        // Extract layout
         let layout_str: String = globals
             .get("map_layout")
             .map_err(|e| format!("Missing map_layout: {}", e))?;
         let layout: Vec<String> = layout_str
             .lines()
-            .filter(|line: &&str| !line.trim().is_empty())
-            .map(|s: &str| s.to_string())
+            .filter(|line| !line.trim().is_empty())
+            .map(|s| s.to_string())
             .collect();
 
         // Extract materials
-        let materials_table: mlua::Table = globals
+        let materials_table: LuaTable = globals
             .get("materials")
-            .map_err(|e| format!("Missing materials table: {}", e))?;
+            .map_err(|e| format!("Missing materials: {}", e))?;
 
         let mut materials = HashMap::new();
-        for pair in materials_table.pairs::<String, mlua::Value>() {
-            let (name, value): (String, mlua::Value) =
-                pair.map_err(|e: mlua::Error| format!("Failed to parse materials: {}", e))?;
+        for pair in materials_table.pairs::<String, LuaValue>() {
+            let (name, value) = pair.map_err(|e| format!("Failed to parse materials: {}", e))?;
             let material_id = match value {
-                mlua::Value::Integer(i) => i as u8,
-                mlua::Value::Number(n) => n as u8,
+                LuaValue::Integer(i) => i as u8,
+                LuaValue::Number(n) => n as u8,
                 _ => return Err(format!("Invalid material value for '{}'", name)),
             };
             materials.insert(name, material_id);
@@ -188,47 +429,51 @@ impl GameConfig {
         })
     }
 
-    /// Extract world model configurations from Lua globals
-    fn extract_model_configs(lua: &Lua) -> Result<Vec<WorldModelConfig>, String> {
-        let globals = lua.globals();
+    /// Extract world model configs from Lua globals
+    fn extract_model_configs_from_lua(
+        lua: &scripting::mlua::Lua,
+    ) -> Result<Vec<WorldModelConfig>, String> {
+        use scripting::mlua::prelude::*;
 
-        // Get world_models table (optional)
-        let models_table: Option<mlua::Table> = globals.get("world_models").ok();
+        let globals = lua.globals();
+        let models_table: Option<LuaTable> = globals.get("world_models").ok();
 
         let mut models = Vec::new();
 
         if let Some(table) = models_table {
-            for pair in table.pairs::<mlua::Value, mlua::Table>() {
-                let (_, model_table): (mlua::Value, mlua::Table) =
-                    pair.map_err(|e: mlua::Error| format!("Failed to parse world_models: {}", e))?;
+            for pair in table.pairs::<LuaValue, LuaTable>() {
+                let (_, model_table) =
+                    pair.map_err(|e| format!("Failed to parse world_models: {}", e))?;
 
                 let pattern: String = model_table
                     .get("pattern")
-                    .map_err(|e| format!("Missing pattern in world_models: {}", e))?;
+                    .map_err(|e| format!("Missing pattern: {}", e))?;
 
                 let index = extract_u32(
                     &model_table
                         .get("index")
-                        .map_err(|e| format!("Missing index in world_models: {}", e))?,
+                        .map_err(|e| format!("Missing index: {}", e))?,
                 )
                 .map_err(|e| format!("Invalid index: {}", e))? as usize;
 
-                // Extract Vec3 values using LuaConfig's vec3 support
-                let align: mlua::Table = model_table
+                let align: LuaTable = model_table
                     .get("align")
-                    .map_err(|e| format!("Missing align in world_models: {}", e))?;
-                let align_x: f32 = align.get(1).unwrap_or(0.5);
-                let align_y: f32 = align.get(2).unwrap_or(0.0);
-                let align_z: f32 = align.get(3).unwrap_or(0.5);
+                    .map_err(|e| format!("Missing align: {}", e))?;
+                let align_vec = Vec3::new(
+                    align.get(1).unwrap_or(0.5),
+                    align.get(2).unwrap_or(0.0),
+                    align.get(3).unwrap_or(0.5),
+                );
 
-                let position: mlua::Table = model_table
+                let position: LuaTable = model_table
                     .get("position")
-                    .map_err(|e| format!("Missing position in world_models: {}", e))?;
-                let pos_x: f32 = position.get(1).unwrap_or(0.0);
-                let pos_y: f32 = position.get(2).unwrap_or(0.0);
-                let pos_z: f32 = position.get(3).unwrap_or(0.0);
+                    .map_err(|e| format!("Missing position: {}", e))?;
+                let pos_vec = Vec3::new(
+                    position.get(1).unwrap_or(0.0),
+                    position.get(2).unwrap_or(0.0),
+                    position.get(3).unwrap_or(0.0),
+                );
 
-                // Extract scale (optional, defaults to DEFAULT_MODEL_DEPTH_SCALE)
                 let scale: i32 = model_table
                     .get("scale")
                     .unwrap_or(DEFAULT_MODEL_DEPTH_SCALE);
@@ -236,8 +481,8 @@ impl GameConfig {
                 models.push(WorldModelConfig {
                     pattern,
                     index,
-                    align: Vec3::new(align_x, align_y, align_z),
-                    position: Vec3::new(pos_x, pos_y, pos_z),
+                    align: align_vec,
+                    position: pos_vec,
                     scale,
                 });
             }
@@ -247,13 +492,6 @@ impl GameConfig {
     }
 
     /// Apply 2D map to world cube
-    /// Maps the 2D layout onto the XZ plane at y=0, centered at origin
-    /// At macro_depth, each voxel = 1 world unit (1 meter)
-    ///
-    /// The map modifies the terrain:
-    /// - '#' (bedrock): Places solid bedrock column from y=-1 to y=1
-    /// - ' ' (empty): Carves out the terrain at y=0 (creates walkable floor)
-    /// - '^' (spawn): Same as empty but marks spawn point
     pub fn apply_map_to_world(
         &self,
         world: &mut crossworld_world::NativeWorldCube,
@@ -269,12 +507,9 @@ impl GameConfig {
             return spawn_pos;
         }
 
-        // At macro_depth, coordinates map directly to world units (1 voxel = 1 meter)
-        // Calculate map dimensions
         let height = layout.len() as i32;
         let width = layout.iter().map(|s| s.len()).max().unwrap_or(0) as i32;
 
-        // Center offset to place map centered on origin
         let offset_x = -width / 2;
         let offset_z = -height / 2;
 
@@ -286,51 +521,30 @@ impl GameConfig {
             );
             println!("[Game]   Center offset: ({}, {})", offset_x, offset_z);
             println!("[Game]   Macro depth: {}", self.world.macro_depth);
-            println!("[Game]   Materials: {:?}", self.map.materials);
-            println!("[Game]   Character mappings: {:?}", self.map.chars);
-            println!("[Game]   Layout:");
-            for (i, row) in layout.iter().enumerate() {
-                println!("[Game]     Row {}: \"{}\"", i, row);
-            }
         }
 
         let mut voxels_placed = 0;
         let mut voxels_cleared = 0;
 
-        // Iterate through map and place/clear voxels at macro_depth
         for (z_idx, row) in layout.iter().enumerate() {
             for (x_idx, ch) in row.chars().enumerate() {
                 if let Some(map_char) = self.map.chars.get(&ch) {
-                    // Position in voxel coordinates at macro_depth
-                    // Each coordinate = 1 world unit
-                    // We need to convert to octree coordinates which are [0, 2^depth)
                     let map_x = x_idx as i32 + offset_x;
                     let map_z = z_idx as i32 + offset_z;
 
-                    // Convert world coords to octree coords
-                    // At macro_depth, the world spans [-half_size, half_size) in world units
-                    // Octree coords are [0, 2^depth)
                     let half_size = (1 << self.world.macro_depth) / 2;
                     let octree_x = map_x + half_size;
                     let octree_z = map_z + half_size;
-                    let octree_y = half_size; // y=0 in world coords = half_size in octree coords
+                    let octree_y = half_size;
 
-                    // Validate coordinates are within bounds
                     let max_coord = (1 << self.world.macro_depth) - 1;
                     if octree_x < 0 || octree_x > max_coord || octree_z < 0 || octree_z > max_coord
                     {
-                        if debug {
-                            println!("[Game]   Skipping out-of-bounds: world ({}, 0, {}) -> octree ({}, {}, {})",
-                                map_x, map_z, octree_x, octree_y, octree_z);
-                        }
                         continue;
                     }
 
-                    // Get material ID
                     if let Some(&material_id) = self.map.materials.get(&map_char.material) {
                         if material_id > 0 {
-                            // Place solid voxel - create a column for walls
-                            // Place at y=-1, y=0, y=1 (relative to world origin)
                             for dy in -1..=1 {
                                 let y = octree_y + dy;
                                 if y >= 0 && y <= max_coord {
@@ -344,12 +558,7 @@ impl GameConfig {
                                     voxels_placed += 1;
                                 }
                             }
-                            if debug {
-                                println!("[Game]   Placed wall at world ({}, 0, {}) -> octree ({}, {}, {}) mat={}",
-                                    map_x, map_z, octree_x, octree_y, octree_z, material_id);
-                            }
                         } else {
-                            // Empty material (air) - clear the voxel at y=0 for walkable floor
                             world.set_voxel_at_depth(
                                 octree_x,
                                 octree_y,
@@ -357,7 +566,6 @@ impl GameConfig {
                                 self.world.macro_depth,
                                 0,
                             );
-                            // Also clear above for headroom
                             if octree_y < max_coord {
                                 world.set_voxel_at_depth(
                                     octree_x,
@@ -368,14 +576,9 @@ impl GameConfig {
                                 );
                             }
                             voxels_cleared += 1;
-                            if debug {
-                                println!("[Game]   Cleared floor at world ({}, 0, {}) -> octree ({}, {}, {})",
-                                    map_x, map_z, octree_x, octree_y, octree_z);
-                            }
                         }
                     }
 
-                    // Track spawn position (in world coordinates)
                     if map_char.is_spawn {
                         spawn_pos = Some(Vec3::new(map_x as f32 + 0.5, 1.0, map_z as f32 + 0.5));
                         if debug {
@@ -399,7 +602,6 @@ impl GameConfig {
     }
 
     /// Load and apply world models from configuration
-    /// Returns a World struct with all models merged
     pub fn apply_models_to_world(
         &self,
         base_cube: cube::Cube<u8>,
@@ -410,7 +612,6 @@ impl GameConfig {
 
         let total_start = Instant::now();
 
-        // Start with the base world from macro_depth
         let world_create_start = Instant::now();
         let mut world = World::new(base_cube, self.world.macro_depth);
         if debug {
@@ -421,15 +622,13 @@ impl GameConfig {
             println!("[Game] Loading {} world models", self.models.len());
         }
 
-        // Resolve asset directory
         let mut assets_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        assets_path.pop(); // Go from crates/game to crates
-        assets_path.pop(); // Go from crates to workspace root
+        assets_path.pop();
+        assets_path.pop();
         assets_path.push("assets");
         assets_path.push("models");
         assets_path.push("vox");
 
-        // Get list of available scene models
         let find_start = Instant::now();
         let scene_models = Self::find_scene_models(&assets_path)?;
         if debug {
@@ -444,7 +643,6 @@ impl GameConfig {
         let mut total_load_time = std::time::Duration::ZERO;
         let mut total_merge_time = std::time::Duration::ZERO;
 
-        // Load and merge each configured model
         for (i, model_config) in self.models.iter().enumerate() {
             let model_path = Self::resolve_model_pattern(
                 &assets_path,
@@ -460,36 +658,22 @@ impl GameConfig {
                     self.models.len(),
                     model_path.display()
                 );
-                println!("[Game]   Position: {:?}", model_config.position);
-                println!("[Game]   Align: {:?}", model_config.align);
-                println!("[Game]   Scale: {}", model_config.scale);
             }
 
-            // Load the vox model with configured scale
             let load_start = Instant::now();
             let model = Self::load_vox_model(&model_path, model_config.scale)?;
             let load_duration = load_start.elapsed();
             total_load_time += load_duration;
 
-            // Calculate aligned position
             let aligned_pos =
                 Self::calculate_aligned_position(&model, model_config.position, model_config.align);
 
-            if debug {
-                println!("[Game]   Model size: {:?}", model.size);
-                println!("[Game]   Model depth: {} (after scale)", model.depth);
-                println!("[Game]   Aligned position: {:?}", aligned_pos);
-                println!("[Game]   Load time: {:?}", load_duration);
-            }
-
-            // Merge into world at macro_depth
             let merge_start = Instant::now();
             world.merge_model(&model, aligned_pos, self.world.macro_depth);
             let merge_duration = merge_start.elapsed();
             total_merge_time += merge_duration;
 
             if debug {
-                println!("[Game]   Merge time: {:?}", merge_duration);
                 println!(
                     "[Game]   World scale after merge: 2^{} = {} units",
                     world.scale(),
@@ -517,7 +701,6 @@ impl GameConfig {
         Ok(world)
     }
 
-    /// Find all scene_*.vox models in the assets directory
     fn find_scene_models(assets_path: &Path) -> Result<Vec<String>, String> {
         let entries = std::fs::read_dir(assets_path)
             .map_err(|e| format!("Failed to read assets directory: {}", e))?;
@@ -535,7 +718,6 @@ impl GameConfig {
         Ok(models)
     }
 
-    /// Resolve a model pattern to an actual file path
     fn resolve_model_pattern(
         assets_path: &Path,
         pattern: &str,
@@ -543,7 +725,6 @@ impl GameConfig {
         index: usize,
     ) -> Result<PathBuf, String> {
         if pattern.contains('*') {
-            // Wildcard pattern - use index to select from matching models
             let prefix = pattern.trim_end_matches('*');
             let matching: Vec<_> = scene_models
                 .iter()
@@ -558,7 +739,6 @@ impl GameConfig {
             let selected_model = matching[selected_index];
             Ok(assets_path.join(selected_model))
         } else {
-            // Direct filename
             let filename = if pattern.ends_with(".vox") {
                 pattern.to_string()
             } else {
@@ -568,31 +748,18 @@ impl GameConfig {
         }
     }
 
-    /// Load a vox model from file with depth scaling applied.
-    ///
-    /// The model depth is adjusted by the scale parameter to control
-    /// the rendered size relative to the world.
-    ///
-    /// # Arguments
-    /// * `path` - Path to the .vox file
-    /// * `scale` - Depth scale offset (negative = smaller, positive = larger)
     fn load_vox_model(path: &Path, scale: i32) -> Result<CubeBox<u8>, String> {
         let bytes = std::fs::read(path)
             .map_err(|e| format!("Failed to read model file {}: {}", path.display(), e))?;
 
         let mut model = load_vox_to_cubebox(&bytes)?;
 
-        // Apply depth scale offset (negative = smaller models)
-        // The depth determines how many world units the model occupies: 2^depth
-        // Reducing depth by 3 makes the model 8x smaller (2^3 = 8)
         let scaled_depth = (model.depth as i32 + scale).max(0) as u32;
         model.depth = scaled_depth;
 
         Ok(model)
     }
 
-    /// Calculate aligned position for a model
-    /// align: (0,0,0) = bottom-left corner, (0.5,0,0.5) = bottom center, (1,1,1) = top-right corner
     fn calculate_aligned_position(model: &CubeBox<u8>, world_pos: Vec3, align: Vec3) -> IVec3 {
         let offset_x = -(model.size.x as f32 * align.x);
         let offset_y = -(model.size.y as f32 * align.y);
@@ -603,5 +770,28 @@ impl GameConfig {
             (world_pos.y + offset_y) as i32,
             (world_pos.z + offset_z) as i32,
         )
+    }
+}
+
+/// Simple LCG PRNG (same algorithm as Lua version for reproducibility)
+struct LcgRng {
+    seed: u64,
+}
+
+impl LcgRng {
+    fn new(seed: u64) -> Self {
+        Self { seed }
+    }
+
+    fn next(&mut self) -> u64 {
+        const A: u64 = 1664525;
+        const C: u64 = 1013904223;
+        const M: u64 = 1 << 32;
+        self.seed = (A.wrapping_mul(self.seed).wrapping_add(C)) % M;
+        self.seed
+    }
+
+    fn next_f32(&mut self) -> f32 {
+        self.next() as f32 / (1u64 << 32) as f32
     }
 }

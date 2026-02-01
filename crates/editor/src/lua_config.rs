@@ -23,10 +23,10 @@
 //! }
 //! ```
 
-use app::lua_config::mlua::prelude::*;
-use app::lua_config::{extract_u32, LuaConfig};
 use app::MouseButtonType;
 use glam::Vec2;
+use scripting::mlua::prelude::*;
+use scripting::{extract_u32, LuaEngine};
 use std::path::{Path, PathBuf};
 
 /// A mouse event to inject at a specific frame
@@ -75,18 +75,19 @@ pub struct EditorTestConfig {
 impl EditorTestConfig {
     /// Load configuration from a Lua file
     pub fn from_file(path: &Path) -> Result<Self, String> {
-        let mut lua_config =
-            LuaConfig::new().map_err(|e| format!("Failed to create Lua: {}", e))?;
+        let engine = LuaEngine::new().map_err(|e| format!("Failed to create Lua engine: {}", e))?;
 
         // Load the file
-        lua_config.load_file(path)?;
+        engine
+            .exec_file(path)
+            .map_err(|e| format!("Failed to load config: {}", e))?;
 
-        Self::from_lua_config(&lua_config, path.parent())
+        Self::from_lua_engine(&engine, path.parent())
     }
 
-    /// Parse configuration from a LuaConfig instance
-    fn from_lua_config(lua_config: &LuaConfig, base_dir: Option<&Path>) -> Result<Self, String> {
-        let lua = lua_config.lua();
+    /// Parse configuration from a LuaEngine instance
+    fn from_lua_engine(engine: &LuaEngine, base_dir: Option<&Path>) -> Result<Self, String> {
+        let lua = engine.lua();
         let globals = lua.globals();
 
         // Parse debug_frames
@@ -265,10 +266,10 @@ mod tests {
 
     #[test]
     fn test_parse_empty_config() {
-        let mut lua_config = LuaConfig::new().unwrap();
-        lua_config.load_string("-- empty config").unwrap();
+        let engine = LuaEngine::new().unwrap();
+        engine.exec_string("-- empty config").unwrap();
 
-        let config = EditorTestConfig::from_lua_config(&lua_config, None).unwrap();
+        let config = EditorTestConfig::from_lua_engine(&engine, None).unwrap();
         assert!(config.debug_frames.is_none());
         assert!(config.events.is_empty());
         assert!(config.captures.is_empty());
@@ -276,18 +277,18 @@ mod tests {
 
     #[test]
     fn test_parse_debug_frames() {
-        let mut lua_config = LuaConfig::new().unwrap();
-        lua_config.load_string("debug_frames = 100").unwrap();
+        let engine = LuaEngine::new().unwrap();
+        engine.exec_string("debug_frames = 100").unwrap();
 
-        let config = EditorTestConfig::from_lua_config(&lua_config, None).unwrap();
+        let config = EditorTestConfig::from_lua_engine(&engine, None).unwrap();
         assert_eq!(config.debug_frames, Some(100));
     }
 
     #[test]
     fn test_parse_mouse_events() {
-        let mut lua_config = LuaConfig::new().unwrap();
-        lua_config
-            .load_string(
+        let engine = LuaEngine::new().unwrap();
+        engine
+            .exec_string(
                 r#"
             events = {
                 { frame = 10, type = "mouse_move", x = 100.0, y = 200.0 },
@@ -297,7 +298,7 @@ mod tests {
             )
             .unwrap();
 
-        let config = EditorTestConfig::from_lua_config(&lua_config, None).unwrap();
+        let config = EditorTestConfig::from_lua_engine(&engine, None).unwrap();
         assert_eq!(config.events.len(), 2);
 
         assert_eq!(config.events[0].frame, 10);
@@ -321,9 +322,9 @@ mod tests {
 
     #[test]
     fn test_parse_captures() {
-        let mut lua_config = LuaConfig::new().unwrap();
-        lua_config
-            .load_string(
+        let engine = LuaEngine::new().unwrap();
+        engine
+            .exec_string(
                 r#"
             captures = {
                 { frame = 50, path = "output/test.png" },
@@ -332,7 +333,7 @@ mod tests {
             )
             .unwrap();
 
-        let config = EditorTestConfig::from_lua_config(&lua_config, None).unwrap();
+        let config = EditorTestConfig::from_lua_engine(&engine, None).unwrap();
         assert_eq!(config.captures.len(), 1);
         assert_eq!(config.captures[0].frame, 50);
         assert_eq!(config.captures[0].path, PathBuf::from("output/test.png"));

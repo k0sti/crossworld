@@ -1,14 +1,24 @@
 //! Testbed-specific Lua configuration for scene setup
 //!
-//! Extends the base Lua configuration from `app` with physics and scene types.
+//! Extends the base Lua configuration from `scripting` with physics and scene types.
 
-use app::lua_config::{
-    extract_u32, extract_u8, lua_val_to_f64, parse_quat, parse_vec3, LuaConfig, QuatConfig,
-    Vec3Config,
-};
-// Re-export from app's lua re-exports
-use app::lua_config::mlua::prelude::*;
+use glam::{Quat, Vec3};
+use scripting::mlua::prelude::*;
+use scripting::{extract_u32, extract_u8, parse_quat, parse_vec3, LuaEngine};
 use std::path::Path;
+
+/// Convert a Lua value to f64, handling both integers and numbers
+fn lua_val_to_f64(val: &LuaValue) -> LuaResult<f64> {
+    match val {
+        LuaValue::Number(n) => Ok(*n),
+        LuaValue::Integer(i) => Ok(*i as f64),
+        _ => Err(LuaError::FromLuaConversionError {
+            from: val.type_name(),
+            to: "f64".to_string(),
+            message: Some("expected number or integer".to_string()),
+        }),
+    }
+}
 
 /// Ground type configuration
 #[derive(Debug, Clone)]
@@ -17,22 +27,22 @@ pub enum GroundConfig {
     SolidCube {
         material: u8,
         size_shift: u32,
-        center: Vec3Config,
+        center: Vec3,
     },
     /// Ground loaded from CSM file
     CsmFile {
         path: String,
         size_shift: u32,
-        center: Vec3Config,
+        center: Vec3,
     },
 }
 
 /// Object configuration in the scene
 #[derive(Debug, Clone)]
 pub struct ObjectConfig {
-    pub position: Vec3Config,
-    pub rotation: QuatConfig,
-    pub size: Vec3Config,
+    pub position: Vec3,
+    pub rotation: Quat,
+    pub size: Vec3,
     pub mass: f32,
     pub material: u8,
 }
@@ -40,31 +50,31 @@ pub struct ObjectConfig {
 /// Camera configuration
 #[derive(Debug, Clone)]
 pub struct CameraConfig {
-    pub position: Vec3Config,
-    pub look_at: Vec3Config,
+    pub position: Vec3,
+    pub look_at: Vec3,
 }
 
 /// Testbed Lua configuration with scene-specific functions
 pub struct TestbedConfig {
-    config: LuaConfig,
+    engine: LuaEngine,
 }
 
 impl TestbedConfig {
     /// Create a new testbed configuration engine
     ///
-    /// Registers base types from `app::lua_config` plus:
+    /// Registers base types from scripting plus:
     /// - `camera` - Camera configuration
     /// - `ground_cube` - Solid cube ground
-    /// - `ground_cuboid` - Cuboid ground
+    /// - `ground_csm` - CSM file ground
     /// - `object` - Scene object
     /// - `scene` - Complete scene
     /// - `quat` - Raw quaternion constructor
-    /// - `rand_lcg` - LCG random seed generator
+    /// - `rand_seed` - Initialize random seed
     /// - `rand_01` - Normalized random (0.0-1.0)
     /// - `rand_range` - Ranged random (min-max)
     pub fn new() -> LuaResult<Self> {
-        let mut config = LuaConfig::new()?;
-        let lua = config.lua_mut();
+        let mut engine = LuaEngine::new().map_err(|e| LuaError::RuntimeError(e.to_string()))?;
+        let lua = engine.lua_mut();
 
         // Register quat (raw quaternion constructor)
         let quat_fn = lua.create_function(
@@ -197,35 +207,48 @@ impl TestbedConfig {
         })?;
         lua.globals().set("rand_range", rand_range_fn)?;
 
-        Ok(Self { config })
+        Ok(Self { engine })
     }
 
     /// Load and evaluate a Lua configuration file
-    pub fn load_file(&mut self, path: &Path) -> Result<(), String> {
-        self.config.load_file(path)
+    pub fn load_file(&self, path: &Path) -> Result<(), String> {
+        self.engine
+            .exec_file(path)
+            .map_err(|e| format!("Failed to load config: {}", e))
     }
 
     /// Load configuration from a string
     #[cfg(test)]
-    pub fn load_string(&mut self, content: &str) -> Result<(), String> {
-        self.config.load_string(content)
+    pub fn load_string(&self, content: &str) -> Result<(), String> {
+        self.engine
+            .exec_string(content)
+            .map_err(|e| format!("Failed to evaluate config: {}", e))
     }
 
     /// Extract camera configuration
     pub fn extract_camera(&self, name: &str) -> Result<CameraConfig, String> {
-        let table: LuaTable = self.config.extract_value(name)?;
+        let table: LuaTable = self
+            .engine
+            .get_global(name)
+            .map_err(|e| format!("Failed to get '{}': {}", name, e))?;
         parse_camera_config(&table)
     }
 
     /// Extract ground configuration
     pub fn extract_ground(&self, name: &str) -> Result<GroundConfig, String> {
-        let table: LuaTable = self.config.extract_value(name)?;
+        let table: LuaTable = self
+            .engine
+            .get_global(name)
+            .map_err(|e| format!("Failed to get '{}': {}", name, e))?;
         parse_ground_config(&table)
     }
 
     /// Extract objects configuration
     pub fn extract_objects(&self, name: &str) -> Result<Vec<ObjectConfig>, String> {
-        let table: LuaTable = self.config.extract_value(name)?;
+        let table: LuaTable = self
+            .engine
+            .get_global(name)
+            .map_err(|e| format!("Failed to get '{}': {}", name, e))?;
         parse_objects_config(&table)
     }
 }
@@ -370,7 +393,7 @@ mod tests {
 
     #[test]
     fn test_camera_config() {
-        let mut config = TestbedConfig::new().unwrap();
+        let config = TestbedConfig::new().unwrap();
         config
             .load_string(
                 r#"
@@ -393,7 +416,7 @@ mod tests {
 
     #[test]
     fn test_ground_cube_config() {
-        let mut config = TestbedConfig::new().unwrap();
+        let config = TestbedConfig::new().unwrap();
         config
             .load_string("test_ground = ground_cube(32, 3, vec3(0, -4, 0))")
             .unwrap();
@@ -415,7 +438,7 @@ mod tests {
 
     #[test]
     fn test_ground_csm_config() {
-        let mut config = TestbedConfig::new().unwrap();
+        let config = TestbedConfig::new().unwrap();
         config
             .load_string(r#"test_ground = ground_csm("terrain.csm", 3, vec3(0, -4, 0))"#)
             .unwrap();
@@ -437,7 +460,7 @@ mod tests {
 
     #[test]
     fn test_object_config() {
-        let mut config = TestbedConfig::new().unwrap();
+        let config = TestbedConfig::new().unwrap();
         config
             .load_string(
                 r#"
@@ -452,7 +475,7 @@ mod tests {
             )
             .unwrap();
 
-        let objects_table: LuaTable = config.config.extract_value("test_object").unwrap();
+        let objects_table: LuaTable = config.engine.get_global("test_object").unwrap();
         let obj = parse_object_config(&objects_table).unwrap();
         assert_eq!(obj.position.x, 1.0);
         assert_eq!(obj.mass, 1.0);
@@ -461,7 +484,7 @@ mod tests {
 
     #[test]
     fn test_objects_list() {
-        let mut config = TestbedConfig::new().unwrap();
+        let config = TestbedConfig::new().unwrap();
         config
             .load_string(
                 r#"
@@ -481,7 +504,7 @@ mod tests {
 
     #[test]
     fn test_rand_seed_and_01() {
-        let mut config = TestbedConfig::new().unwrap();
+        let config = TestbedConfig::new().unwrap();
         config
             .load_string(
                 r#"
@@ -493,9 +516,9 @@ mod tests {
             )
             .unwrap();
 
-        let val1: f64 = config.config.extract_value("val1").unwrap();
-        let val2: f64 = config.config.extract_value("val2").unwrap();
-        let val3: f64 = config.config.extract_value("val3").unwrap();
+        let val1: f64 = config.engine.get_global("val1").unwrap();
+        let val2: f64 = config.engine.get_global("val2").unwrap();
+        let val3: f64 = config.engine.get_global("val3").unwrap();
 
         // Should produce deterministic sequence between 0 and 1
         assert!(val1 >= 0.0 && val1 < 1.0);
@@ -507,7 +530,7 @@ mod tests {
 
     #[test]
     fn test_rand_range() {
-        let mut config = TestbedConfig::new().unwrap();
+        let config = TestbedConfig::new().unwrap();
         config
             .load_string(
                 r#"
@@ -519,9 +542,9 @@ mod tests {
             )
             .unwrap();
 
-        let val1: f64 = config.config.extract_value("val1").unwrap();
-        let val2: f64 = config.config.extract_value("val2").unwrap();
-        let val3: f64 = config.config.extract_value("val3").unwrap();
+        let val1: f64 = config.engine.get_global("val1").unwrap();
+        let val2: f64 = config.engine.get_global("val2").unwrap();
+        let val3: f64 = config.engine.get_global("val3").unwrap();
 
         // All values should be in range
         assert!(val1 >= -5.0 && val1 < 5.0);
@@ -534,12 +557,12 @@ mod tests {
 
     #[test]
     fn test_quat() {
-        let mut config = TestbedConfig::new().unwrap();
+        let config = TestbedConfig::new().unwrap();
         config
             .load_string("test_quat = quat(0.1, 0.2, 0.3, 0.4)")
             .unwrap();
 
-        let table: LuaTable = config.config.extract_value("test_quat").unwrap();
+        let table: LuaTable = config.engine.get_global("test_quat").unwrap();
         let quat = parse_quat(&table).unwrap();
         assert!((quat.x - 0.1).abs() < 0.001);
         assert!((quat.y - 0.2).abs() < 0.001);

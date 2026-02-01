@@ -146,12 +146,7 @@ impl CubeGrid {
     pub fn in_bounds(&self, pos: IVec3) -> bool {
         let min = self.min_coord();
         let max = self.max_coord();
-        pos.x >= min
-            && pos.x < max
-            && pos.y >= min
-            && pos.y < max
-            && pos.z >= min
-            && pos.z < max
+        pos.x >= min && pos.x < max && pos.y >= min && pos.y < max && pos.z >= min && pos.z < max
     }
 
     /// Convert origin-centric coordinates to internal octree coordinates.
@@ -194,9 +189,13 @@ impl CubeGrid {
 
         // Convert to octree coordinates and set
         let octree_pos = self.to_octree_coord(pos);
-        let new_root = self
-            .root
-            .set_voxel(octree_pos.x, octree_pos.y, octree_pos.z, self.scale, material);
+        let new_root = self.root.set_voxel(
+            octree_pos.x,
+            octree_pos.y,
+            octree_pos.z,
+            self.scale,
+            material,
+        );
 
         Self {
             root: Rc::new(new_root),

@@ -12,8 +12,11 @@ name = "testbed"
 path = "src/lib.rs"
 
 [dependencies]
-# Core app framework with runtime and Lua support
+# Core app framework with runtime support
 app = { path = "../app", features = ["runtime"] }
+
+# Scripting (Lua configuration)
+scripting = { path = "../scripting" }
 
 # CLI argument processing
 clap = { version = "4", features = ["derive"] }

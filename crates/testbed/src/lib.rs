@@ -248,7 +248,7 @@ impl PhysicsTestbed {
 
     /// Try to load configuration from a Lua file
     pub fn try_from_config_file(path: &Path) -> Result<Self, String> {
-        let mut config =
+        let config =
             TestbedConfig::new().map_err(|e| format!("Failed to create Lua config: {}", e))?;
         config.load_file(path)?;
 
@@ -280,7 +280,7 @@ impl PhysicsTestbed {
             } => GroundSettings {
                 size: (1 << size_shift) as f32,
                 material: *material,
-                center: center.to_vec3(),
+                center: *center,
                 csm_cube: None,
             },
             GroundConfig::CsmFile {
@@ -313,7 +313,7 @@ impl PhysicsTestbed {
                 GroundSettings {
                     size: (1 << size_shift) as f32,
                     material: 32, // Default material if CSM loading fails
-                    center: center.to_vec3(),
+                    center: *center,
                     csm_cube,
                 }
             }
@@ -323,9 +323,9 @@ impl PhysicsTestbed {
     /// Convert an ObjectConfig to ObjectSettings (Lua version)
     fn object_config_to_settings(object_config: &lua_scene::ObjectConfig) -> ObjectSettings {
         ObjectSettings {
-            position: object_config.position.to_vec3(),
-            rotation: object_config.rotation.to_quat(),
-            size: object_config.size.to_vec3(),
+            position: object_config.position,
+            rotation: object_config.rotation,
+            size: object_config.size,
             mass: object_config.mass,
             material: object_config.material,
         }
@@ -338,8 +338,8 @@ impl PhysicsTestbed {
         ground_config: &GroundConfig,
         object_configs: &[lua_scene::ObjectConfig],
     ) -> Result<Self, String> {
-        let camera_position = camera_config.position.to_vec3();
-        let camera_target = camera_config.look_at.to_vec3();
+        let camera_position = camera_config.position;
+        let camera_target = camera_config.look_at;
 
         // Get config directory for resolving relative paths
         let config_dir = path.parent();

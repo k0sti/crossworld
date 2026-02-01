@@ -23,9 +23,6 @@ pub mod camera;
 pub mod cli;
 pub mod controller;
 
-// Lua configuration module
-pub mod lua_config;
-
 // Re-export input types from core
 pub use core::input::{
     ControllerInfo, ControllerInput, CursorMode, GamepadState, MouseButtonType, MouseButtons,
