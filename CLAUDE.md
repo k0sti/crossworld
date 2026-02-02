@@ -2,6 +2,59 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Git Workflow
+
+**Local development only** - Do NOT create pull requests or push to remote.
+
+### Workflow
+
+1. **Worktree Creation**: Cyrus creates worktree from local `main` branch
+2. **Development**: Work in the worktree branch, make commits with clear messages
+3. **Review**: Use the review workflow below for approval
+4. **Merge**: On `MERGE` command, merge worktree branch into local `main`
+
+### Branch Commands
+
+When you receive these commands from the review workflow:
+
+**REBASE** - Rebase current branch onto main:
+```bash
+git fetch origin main
+git rebase main
+```
+
+**MERGE** - Merge worktree branch into local main:
+```bash
+# From the worktree directory
+BRANCH=$(git branch --show-current)
+git checkout main
+git merge --ff-only "$BRANCH" || git merge "$BRANCH" -m "Merge $BRANCH"
+git checkout "$BRANCH"
+```
+
+### Label-Triggered Merge
+
+When the Linear issue has the **"merge"** label, immediately perform the merge:
+
+1. Ensure all changes are committed
+2. Run checks: `just check` (if available)
+3. Merge into main:
+   ```bash
+   BRANCH=$(git branch --show-current)
+   REPO_ROOT=$(git rev-parse --show-toplevel)
+   cd "$REPO_ROOT"
+   git checkout main
+   git merge --ff-only "$BRANCH" || git merge "$BRANCH" -m "Merge $BRANCH"
+   ```
+4. On success: Update Linear issue status to **Done**
+5. On failure: Comment the error on the Linear issue, keep status unchanged
+
+### Rules
+
+- Do NOT run `gh pr create` or create PRs
+- Do NOT push to remote unless explicitly requested
+- Always use the review workflow for approval before merging
+
 ## Vibe-Kanban Review Workflow
 
 **IMPORTANT**: When working on vibe-kanban tasks in this Rust crate, ALWAYS use the review workflow to get user approval. Never ask for feedback in chat - always launch the review application.
