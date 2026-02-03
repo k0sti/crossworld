@@ -2921,6 +2921,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "crossworld-map"
+version = "0.1.0"
+dependencies = [
+ "glam 0.30.10",
+ "js-sys",
+ "serde",
+ "tracing",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "crossworld-nostr"
 version = "0.1.0"
 dependencies = [

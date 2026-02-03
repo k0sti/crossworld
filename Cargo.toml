@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/core", "crates/world", "crates/worldtool", "crates/cube", "crates/assets", "crates/physics", "crates/renderer", "crates/server", "crates/test-client", "crates/editor", "crates/proto-gl", "crates/app", "crates/game", "crates/testbed", "crates/app-bevy", "crates/proto-bevy", "crates/editor-bevy", "crates/nostr", "crates/xcube", "crates/trellis", "crates/robocube", "crates/scripting"]
+members = ["crates/core", "crates/world", "crates/worldtool", "crates/cube", "crates/assets", "crates/physics", "crates/renderer", "crates/server", "crates/test-client", "crates/editor", "crates/proto-gl", "crates/app", "crates/game", "crates/testbed", "crates/app-bevy", "crates/proto-bevy", "crates/editor-bevy", "crates/nostr", "crates/xcube", "crates/trellis", "crates/robocube", "crates/scripting", "crates/map"]
 resolver = "2"
 
 [profile.release]
