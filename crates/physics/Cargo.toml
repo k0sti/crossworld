@@ -23,30 +23,30 @@ fabric = []  # Future: SDF collision for fabric-generated cubes
 rapier3d = { git = "https://github.com/dimforge/rapier.git" }
 
 # Voxel model integration
-cube = { path = "../cube" }
+cube.workspace = true
 
 # Math library (shared with rest of project)
-glam = { version = "0.30", features = ["serde"] }
+glam.workspace = true
 
 # WASM bindings (optional)
-wasm-bindgen = { version = "0.2", optional = true }
-serde = { version = "1.0", features = ["derive"], optional = true }
-serde-wasm-bindgen = { version = "0.6", optional = true }
+wasm-bindgen = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
+serde-wasm-bindgen = { workspace = true, optional = true }
 
 # Logging
-tracing = "0.1"
+tracing.workspace = true
 
 # App framework (for Object trait) - native only, not for WASM
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-app = { path = "../app", default-features = false }
+app.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-getrandom = { version = "0.3", features = ["wasm_js"] }
-tracing-wasm = "0.2"
+getrandom.workspace = true
+tracing-wasm.workspace = true
 
 [dev-dependencies]
-wasm-bindgen-test = "0.3"
-criterion = "0.8"
+wasm-bindgen-test.workspace = true
+criterion.workspace = true
 
 [[bench]]
 name = "collision"

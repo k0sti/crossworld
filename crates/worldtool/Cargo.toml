@@ -9,19 +9,19 @@ path = "src/main.rs"
 
 [dependencies]
 # Nostr
-nostr-sdk = "0.44"
+nostr-sdk.workspace = true
 
 # CLI
-clap = { version = "4", features = ["derive"] }
+clap.workspace = true
 
 # Async runtime
-tokio = { version = "1.49", features = ["full"] }
+tokio.workspace = true
 
 # Environment
-dotenvy = "0.15"
+dotenvy.workspace = true
 
 # Utilities
-anyhow = "1.0"
+anyhow.workspace = true
 
 # Logging
-tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+tracing-subscriber = { workspace = true, features = ["fmt"] }

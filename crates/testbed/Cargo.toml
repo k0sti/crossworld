@@ -13,25 +13,25 @@ path = "src/lib.rs"
 
 [dependencies]
 # Core app framework with runtime support
-app = { path = "../app", features = ["runtime"] }
+app = { workspace = true, features = ["runtime"] }
 
 # Scripting (Lua configuration)
-scripting = { path = "../scripting" }
+scripting.workspace = true
 
 # CLI argument processing
-clap = { version = "4", features = ["derive"] }
+clap.workspace = true
 
 # Physics and rendering
-renderer = { path = "../renderer" }
-cube = { path = "../cube" }
-crossworld-physics = { path = "../physics" }
+renderer.workspace = true
+cube.workspace = true
+crossworld-physics.workspace = true
 
 # Core graphics (needed for App trait implementation)
-glow = "0.16"
-glam = "0.30"
-winit = "0.30"
-egui = "0.33"
-egui_glow = "0.33"
+glow.workspace = true
+glam.workspace = true
+winit.workspace = true
+egui.workspace = true
+egui_glow.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]
-winit = { version = "0.30", features = ["x11"] }
+winit = { workspace = true, features = ["x11"] }
