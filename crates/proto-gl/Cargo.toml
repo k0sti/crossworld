@@ -9,31 +9,31 @@ path = "src/main.rs"
 
 [dependencies]
 # GL rendering
-glow = "0.16"
-glutin = "0.32"
-glutin-winit = "0.5"
-winit = "0.30"
-raw-window-handle = "0.6"
+glow.workspace = true
+glutin.workspace = true
+glutin-winit.workspace = true
+winit.workspace = true
+raw-window-handle.workspace = true
 
 # egui integration
-egui = "0.33"
-egui_glow = "0.33"
-egui-winit = "0.33"
+egui.workspace = true
+egui_glow.workspace = true
+egui-winit.workspace = true
 
 # Math and utilities
-glam = "0.30"
-rand = "0.9"
+glam.workspace = true
+rand.workspace = true
 
 # Image output
-image = "0.25"
+image.workspace = true
 
 # Configuration
-toml = "0.9"
-serde = { version = "1.0", features = ["derive"] }
-clap = { version = "4.5", features = ["derive"] }
-csv = "1.4"
+toml.workspace = true
+serde.workspace = true
+clap.workspace = true
+csv.workspace = true
 
 # Crossworld crates
-cube = { path = "../cube" }
-crossworld-physics = { path = "../physics" }
-renderer = { path = "../renderer" }
+cube.workspace = true
+crossworld-physics.workspace = true
+renderer.workspace = true

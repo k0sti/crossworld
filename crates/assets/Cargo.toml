@@ -8,13 +8,13 @@ name = "assets"
 path = "src/main.rs"
 
 [dependencies]
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-csv = "1.4"
-chrono = "0.4"
-clap = { version = "4.5", features = ["derive"] }
-dot_vox = "5.1"
-reqwest = { version = "0.13", features = ["json", "blocking"] }
-tokio = { version = "1", features = ["full"] }
-base64 = "0.22"
-dotenv = "0.15"
+serde.workspace = true
+serde_json.workspace = true
+csv.workspace = true
+chrono.workspace = true
+clap.workspace = true
+dot_vox.workspace = true
+reqwest = { workspace = true, features = ["blocking"] }
+tokio.workspace = true
+base64.workspace = true
+dotenv.workspace = true

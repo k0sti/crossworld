@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+# Bevy with custom feature set (not using workspace inheritance to disable default features)
 bevy = { version = "0.17", default-features = false, features = [
     "dynamic_linking",
     "bevy_asset",
@@ -28,5 +29,5 @@ bevy = { version = "0.17", default-features = false, features = [
     "x11",
     "zstd_rust",
 ] }
-bevy_rapier3d = { version = "0.32", features = ["debug-render-3d"] }
-clap = { version = "4", features = ["derive"] }
+bevy_rapier3d.workspace = true
+clap.workspace = true

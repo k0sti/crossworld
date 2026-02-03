@@ -16,46 +16,46 @@ path = "src/lib.rs"
 
 [dependencies]
 # Core app framework with runtime support
-app = { path = "../app", features = ["runtime"] }
+app = { workspace = true, features = ["runtime"] }
 
 # CLI argument processing
-clap = { version = "4", features = ["derive"] }
+clap.workspace = true
 
 # Rendering and voxel core
-renderer = { path = "../renderer" }
-cube = { path = "../cube" }
+renderer.workspace = true
+cube.workspace = true
 
 # Core graphics (needed for App trait implementation)
-glow = "0.16"
-glam = "0.30"
-winit = "0.30"
-egui = "0.33"
-egui_glow = "0.33"
+glow.workspace = true
+glam.workspace = true
+winit.workspace = true
+egui.workspace = true
+egui_glow.workspace = true
 
 # Native file dialogs
-rfd = "0.15"
+rfd.workspace = true
 
 # Configuration
-serde = { version = "1.0", features = ["derive"] }
-toml = "0.8"
-dirs = "6.0"
+serde.workspace = true
+toml.workspace = true
+dirs.workspace = true
 
 # Scripting (Lua configuration)
-scripting = { path = "../scripting" }
+scripting.workspace = true
 
 # Image processing
-image = "0.25"
+image.workspace = true
 
 # Nostr integration
-crossworld-nostr = { path = "../nostr", features = ["nip46"] }
+crossworld-nostr = { workspace = true, features = ["nip46"] }
 
 # QR code generation for login dialog
-qrcode = "0.14"
+qrcode.workspace = true
 
 # Async runtime for NIP-46
-tokio = { version = "1", features = ["rt-multi-thread", "sync"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "sync"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-winit = { version = "0.30", features = ["x11"] }
+winit = { workspace = true, features = ["x11"] }
 
 [dev-dependencies]
