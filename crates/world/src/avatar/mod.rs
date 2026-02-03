@@ -5,10 +5,6 @@ use crate::identity::Identity;
 use crossworld_physics::Object;
 use glam::{Quat, Vec3};
 
-pub mod manager;
-#[allow(unused_imports)]
-pub use manager::AvatarManager;
-
 /// Avatar: an Entity with Nostr identity
 ///
 /// Represents a player in the world with both physical presence
