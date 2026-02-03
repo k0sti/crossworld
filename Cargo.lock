@@ -2933,6 +2933,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "crossworld-network"
+version = "0.1.0"
+dependencies = [
+ "bincode",
+ "futures",
+ "glam 0.30.10",
+ "parking_lot",
+ "serde",
+ "thiserror 2.0.17",
+ "tokio",
+ "tracing",
+ "wtransport",
+]
+
+[[package]]
 name = "crossworld-nostr"
 version = "0.1.0"
 dependencies = [
@@ -2973,6 +2988,7 @@ dependencies = [
  "anyhow",
  "bincode",
  "clap",
+ "crossworld-network",
  "dashmap",
  "futures",
  "glam 0.30.10",
@@ -2994,6 +3010,7 @@ dependencies = [
  "anyhow",
  "bincode",
  "clap",
+ "crossworld-network",
  "crossworld-server",
  "glam 0.30.10",
  "rand 0.9.2",

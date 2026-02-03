@@ -8,6 +8,9 @@ name = "server"
 path = "src/main.rs"
 
 [dependencies]
+# Network abstractions
+crossworld-network = { path = "../network", features = ["webtransport"] }
+
 # WebTransport (using wtransport for simplicity)
 wtransport.workspace = true
 
