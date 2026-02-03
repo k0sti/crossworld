@@ -13,6 +13,7 @@ members = [
     "crates/llm",
     "crates/logic",
     "crates/map",
+    "crates/network",
     "crates/nostr",
     "crates/physics",
     "crates/proto-bevy",

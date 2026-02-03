@@ -1,0 +1,36 @@
+[package]
+name = "crossworld-network"
+version = "0.1.0"
+edition = "2021"
+description = "Network transport abstractions for Crossworld"
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+# Async runtime
+tokio = { version = "1", features = ["sync", "time", "rt"] }
+futures = "0.3"
+
+# Serialization
+bincode = "1.3"
+serde = { version = "1.0", features = ["derive"] }
+
+# Math
+glam = { version = "0.30", features = ["serde"] }
+
+# Error handling
+thiserror = "2"
+
+# Logging
+tracing = "0.1"
+
+# Synchronization
+parking_lot = "0.12"
+
+# Optional WebTransport implementation
+wtransport = { version = "0.6", optional = true, features = ["dangerous-configuration"] }
+
+[features]
+default = []
+webtransport = ["dep:wtransport"]
