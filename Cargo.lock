@@ -3167,6 +3167,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "devices"
+version = "0.1.0"
+dependencies = [
+ "gilrs",
+ "glam 0.30.10",
+ "serde",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "digest"
 version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"

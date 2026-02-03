@@ -1,0 +1,20 @@
+[package]
+name = "devices"
+version = "0.1.0"
+edition = "2021"
+description = "Input device abstractions for Crossworld (gamepad, keyboard, mouse, touch, sensors)"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = []
+gilrs = ["dep:gilrs"]
+
+[dependencies]
+glam = { version = "0.30", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }
+gilrs = { version = "0.11", optional = true }
+
+# WASM support
+wasm-bindgen = "0.2"
