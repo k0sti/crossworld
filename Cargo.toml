@@ -3,6 +3,7 @@ members = [
     "crates/app",
     "crates/app-bevy",
     "crates/assets",
+    "crates/audio",
     "crates/core",
     "crates/cube",
     "crates/editor",
