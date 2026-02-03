@@ -5,6 +5,7 @@ members = [
     "crates/assets",
     "crates/core",
     "crates/cube",
+    "crates/devices",
     "crates/editor",
     "crates/editor-bevy",
     "crates/game",
