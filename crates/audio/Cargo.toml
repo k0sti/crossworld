@@ -1,0 +1,56 @@
+[package]
+name = "crossworld-audio"
+version = "0.1.0"
+edition = "2021"
+authors = ["Crossworld Contributors"]
+description = "Audio engine for Crossworld - sound effects, music, spatial audio, and voice chat integration"
+license = "MIT OR Apache-2.0"
+
+[lib]
+name = "crossworld_audio"
+path = "src/lib.rs"
+
+[features]
+default = []
+# Native audio backend using rodio
+native = ["dep:rodio"]
+# WASM audio backend using web-sys
+wasm = ["dep:wasm-bindgen", "dep:web-sys", "dep:js-sys"]
+# Voice chat integration (MoQ)
+voice = []
+
+[dependencies]
+# Math library (shared with rest of project)
+glam = { version = "0.30", features = ["serde"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+
+# Error handling
+thiserror = "2.0"
+
+# Logging
+tracing = "0.1"
+
+# Native audio backend (optional)
+rodio = { version = "0.20", optional = true }
+
+# WASM bindings (optional)
+wasm-bindgen = { version = "0.2", optional = true }
+web-sys = { version = "0.3", features = [
+    "AudioContext",
+    "AudioContextState",
+    "AudioBuffer",
+    "AudioBufferSourceNode",
+    "AudioDestinationNode",
+    "GainNode",
+    "PannerNode",
+    "DistanceModelType",
+    "PanningModelType",
+    "OscillatorNode",
+    "OscillatorType",
+], optional = true }
+js-sys = { version = "0.3", optional = true }
+
+[dev-dependencies]
+# Testing utilities
