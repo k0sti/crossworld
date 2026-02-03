@@ -1,0 +1,33 @@
+[package]
+name = "crossworld-llm"
+version = "0.1.0"
+edition = "2021"
+authors = ["Crossworld Contributors"]
+description = "LLM inference client abstraction for Crossworld"
+license = "MIT OR Apache-2.0"
+keywords = ["llm", "ai", "inference", "agent", "tool-calling"]
+
+[lib]
+name = "crossworld_llm"
+path = "src/lib.rs"
+
+[features]
+default = []
+
+[dependencies]
+# Async runtime
+tokio = { version = "1", features = ["sync", "time", "rt"] }
+futures = "0.3"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Error handling
+thiserror = "2.0"
+
+# Async trait support
+async-trait = "0.1"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }

@@ -2910,6 +2910,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "crossworld-llm"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "futures",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.17",
+ "tokio",
+]
+
+[[package]]
 name = "crossworld-nostr"
 version = "0.1.0"
 dependencies = [
