@@ -9,6 +9,7 @@ members = [
     "crates/editor",
     "crates/editor-bevy",
     "crates/game",
+    "crates/llm",
     "crates/nostr",
     "crates/physics",
     "crates/proto-bevy",
