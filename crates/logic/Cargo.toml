@@ -1,0 +1,33 @@
+[package]
+name = "logic"
+version = "0.1.0"
+edition = "2021"
+description = "Rule-based transformation system for Crossworld voxel operations"
+
+[lib]
+name = "logic"
+path = "src/lib.rs"
+
+[features]
+default = []
+cube = ["dep:cube"]
+
+[dependencies]
+# Math types
+glam = { version = "0.30", features = ["serde"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+
+# Error handling
+thiserror = "2"
+
+# Optional cube crate integration
+cube = { path = "../cube", optional = true }
+
+[dev-dependencies]
+# Testing
+serde_json = "1"
+
+# Cube crate for integration tests
+cube = { path = "../cube" }
