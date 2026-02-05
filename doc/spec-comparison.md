@@ -1,0 +1,350 @@
+# Design Specification vs. Implementation Comparison
+
+This document compares the authoritative design specifications in `obsidian/` against the current crate implementations. The Obsidian specs define the intended architecture - this report identifies where implementation needs to catch up.
+
+## Executive Summary
+
+The Obsidian design specs define the target architecture for Crossworld. This analysis identifies implementation gaps that need to be addressed to align the codebase with the design vision.
+
+**Key Findings:**
+- 16 design specs reviewed
+- 4 components not yet implemented (System, Audio, Map, Logic, LLM)
+- 5 implementations diverged from spec and need refactoring
+- 3 implementations need additional features per spec
+- 4 implementations are well-aligned with spec
+
+---
+
+## 1. Implementation Gaps (Spec Features Not Yet Built)
+
+### 1.1 System Component - NOT IMPLEMENTED
+**Spec:** System.md (design-proposal)
+**Priority:** HIGH
+
+The spec defines a unified platform abstraction layer that should consolidate:
+- Window management abstraction
+- Event loop abstraction
+- Timer and timing utilities
+- Platform detection (Native vs Web)
+- File system path handling
+- Environment variable access
+- Camera controllers (orbit, first-person)
+- Lua configuration support
+
+**Current State:** Features scattered across `crates/app`, `crates/core`, `crates/scripting`
+
+**Action Required:**
+- Create `crates/system` to consolidate platform abstractions per spec
+- Refactor app/core to use System as foundation
+- Integrate App into System as specified
+
+---
+
+### 1.2 Audio Component - NOT IMPLEMENTED
+**Spec:** Audio.md (design-proposal)
+**Priority:** MEDIUM
+
+The spec defines:
+- AudioEngine - Main audio system
+- Sound - Loaded audio asset
+- Player - Playing sound handle
+- Features: sound playback, music crossfade, 3D spatial audio, MoQ voice chat
+
+**Current State:** No `crates/audio` exists
+
+**Action Required:**
+- Create `crates/audio` implementing spec types
+- Integrate with MoQ for voice chat
+- Support WAV/OGG/MP3 loading
+
+---
+
+### 1.3 Map Component - NOT IMPLEMENTED
+**Spec:** Map.md (draft)
+**Priority:** LOW
+
+The spec defines:
+- Area type for lat/long coordinates
+- `get_height(Area)` - Height map data
+- `get_image(Area)` - Map as image
+- OpenStreetMap integration
+
+**Current State:** No `crates/map` exists
+
+**Action Required:**
+- Create `crates/map` when geospatial features needed
+- Implement OpenStreetMap tile fetching
+- Height map data integration
+
+---
+
+### 1.4 Logic Component - NOT IMPLEMENTED
+**Spec:** Logic.md (draft)
+**Priority:** LOW
+
+The spec defines:
+- Rule type with match/set patterns
+- RuleTx for 3D transforms
+- Action type with execute callbacks
+- Declarative rule systems for Cube transformations
+
+**Current State:** No `crates/logic` exists. `cube::function` provides procedural generation but not rule-based transformations.
+
+**Action Required:**
+- Create `crates/logic` for rule-based transformers
+- Integrate with Cube for pattern matching
+
+---
+
+### 1.5 LLM Component - NOT IMPLEMENTED
+**Spec:** LLM.md (draft)
+**Priority:** LOW
+
+The spec defines:
+- Background LLM task interface
+- Tool call interface
+- Text input/output
+
+**Current State:** No LLM integration exists
+
+**Action Required:**
+- Create LLM client crate when AI features needed
+
+---
+
+### 1.6 Devices Component - PARTIALLY IMPLEMENTED
+**Spec:** Devices.md (draft)
+**Priority:** MEDIUM
+
+**Spec Defines:**
+- GamepadState, MouseButtons types ✓ (implemented in core)
+- Accelerometer interface ✗
+- Compass interface ✗
+- Touch interface ✗
+
+**Current State:** Basic input types exist but sensor support missing
+
+**Action Required:**
+- Add accelerometer support
+- Add compass support
+- Add touch input support
+
+---
+
+## 2. Implementation Divergences (Code Differs from Spec)
+
+### 2.1 App Component - SPEC VIOLATION
+**Spec:** App.md states "integrated into System" (deprecated status)
+**Current:** App crate is actively used standalone
+
+**Issue:** Spec says App should be deprecated and integrated into System, but System doesn't exist and App is the active framework.
+
+**Action Required:**
+- Implement System crate per spec
+- Migrate App functionality into System
+- Update App crate to be thin wrapper or remove
+
+---
+
+### 2.2 Scripting Component - IMPLEMENTATION DRIFT
+**Spec:** Scripting.md defines Lua-first with StateTree
+
+**Spec Defines:**
+- LuaEngine with globals HashMap
+- StateTree with KDL integration
+- load_lua, load_kdl functions
+- Hot-reload script changes
+
+**Current Divergence:**
+- KDL is primary (spec says Lua primary)
+- Hot-reload not implemented
+
+**Action Required:**
+- Implement hot-reload per spec
+- Clarify if KDL-first is intentional (update spec) or should revert to Lua-first
+
+---
+
+### 2.3 Network Component - NAMING MISMATCH
+**Spec:** Network.md defines transport abstractions
+**Current:** `crates/server` implements server-side only
+
+**Issue:** Spec defines unified Network component for client/server transport. Implementation is server-only in differently-named crate.
+
+**Action Required:**
+- Create `crates/network` with shared transport abstractions
+- Client WebTransport support
+- Refactor server to use network crate
+
+---
+
+## 3. Implementations Needing Spec Features
+
+### 3.1 Cube Component - MOSTLY ALIGNED
+**Spec:** Cube.md
+
+**Implemented per spec:**
+- Cube enum (Empty, Solid, Octree) ✓
+- CubeCoord, CubeBox, CubeGrid ✓
+- Hit, Face types ✓
+- CubeFunction for procedural generation ✓
+- raycast, parse_csm, serialize_csm ✓
+- visit_* traversals ✓
+
+**Extra features not in spec (need spec update or removal):**
+- BCF binary format
+- Fabric surface extraction system
+- Color mappers (HsvColorMapper, PaletteColorMapper, VoxColorMapper)
+- Function CPU/GPU backends
+
+**Action Required:**
+- Decide: expand spec to cover extras, or remove undocumented features
+
+---
+
+### 3.2 Renderer Component - SPEC INCOMPLETE
+**Spec:** Renderer.md (implemented status)
+
+**Spec defines:**
+- Camera type
+- OrbitController, FirstPersonController
+- Generic Renderer interface (marked TODO)
+
+**Implementation has undocumented features:**
+- CpuTracer, BcfTracer, GlTracer, ComputeTracer
+- MeshRenderer, SkyboxRenderer
+- CrtPostProcess
+
+**Action Required:**
+- Document all renderer types in spec
+- Define Renderer trait interface per spec TODO
+
+---
+
+### 3.3 Nostr Component - EXTRA FEATURES
+**Spec:** Nostr.md (prototype)
+
+**Spec defines:**
+- Identity type with Keys, PublicKey
+- LiveEvent for NIP-53
+- Key management (web extension, NIP-46, guest)
+
+**Implementation extras:**
+- NostrAccount, AccountState (UI state)
+- AvatarState, PositionUpdate, WorldModel events
+- QR code login flow
+
+**Action Required:**
+- Add event types to spec
+- Document AccountState UI pattern
+
+---
+
+### 3.4 Physics Component - MINOR EXTRAS
+**Spec:** Physics.md
+
+**Well aligned.** All spec types implemented:
+- PhysicsWorld, CubeObject, CharacterController ✓
+- VoxelColliderBuilder, VoxelTerrainCollider ✓
+- Collider builders ✓
+
+**Undocumented extras:**
+- Object trait
+- Terrain active region system
+- Native Bevy helpers
+
+**Action Required:**
+- Add terrain region system to spec
+
+---
+
+## 4. Well-Aligned Implementations
+
+These implementations match their specs well:
+
+| Component | Spec | Status |
+|-----------|------|--------|
+| World | World.md | ✓ Aligned |
+| Game | Game.md | ✓ Aligned |
+| Editor | Editor.md | ✓ Aligned |
+| Testbed | Testbed.md | ✓ Aligned |
+
+---
+
+## 5. Priority Action Items
+
+### Immediate (Architectural)
+
+1. **Create System crate** - Core platform abstraction per spec
+   - Consolidate from app/core/scripting
+   - Deprecate App per spec intent
+
+2. **Create Network crate** - Shared transport abstractions
+   - WebTransport client/server
+   - Refactor server to use it
+
+### Short-term (Feature Gaps)
+
+3. **Implement Scripting hot-reload** - Per spec requirement
+
+4. **Implement Devices sensors** - Accelerometer, compass, touch
+
+5. **Document Renderer types** - Complete spec TODO for Renderer trait
+
+### Medium-term (New Components)
+
+6. **Create Audio crate** - Sound system per spec
+
+7. **Create Logic crate** - Rule-based transformations
+
+### Long-term (Future Features)
+
+8. **Create Map crate** - When geospatial features needed
+
+9. **Create LLM crate** - When AI features needed
+
+---
+
+## 6. Undocumented Crates
+
+These crates exist but have no spec. Action needed:
+
+| Crate | Recommendation |
+|-------|----------------|
+| `test-client` | Utility - no spec needed |
+| `trellis` | Needs investigation and spec if production |
+| `robocube` | Needs investigation and spec if production |
+| `xcube` | Needs investigation and spec if production |
+| `proto-gl` | Prototype - no spec needed |
+| `proto-bevy` | Prototype - no spec needed |
+| `app-bevy` | Needs spec if production use planned |
+| `editor-bevy` | Needs spec if production use planned |
+| `worldtool` | Utility - no spec needed |
+
+---
+
+## Appendix: Spec Compliance Summary
+
+| Spec | Status | Implementation | Compliance |
+|------|--------|----------------|------------|
+| Crossworld.md | - | - | Reference |
+| **System.md** | design-proposal | **Not implemented** | **GAP** |
+| Devices.md | draft | Partial | Partial |
+| **Network.md** | design-proposal | Wrong structure | **DIVERGENT** |
+| **Audio.md** | design-proposal | **Not implemented** | **GAP** |
+| Scripting.md | draft | Missing hot-reload | Partial |
+| Cube.md | - | Extra features | Exceeds |
+| Renderer.md | implemented | Incomplete spec | Partial |
+| Nostr.md | prototype | Extra features | Exceeds |
+| Physics.md | - | Extra features | Aligned+ |
+| World.md | - | Aligned | ✓ |
+| Server.md | draft | Needs Network refactor | Partial |
+| Game.md | - | Aligned | ✓ |
+| Editor.md | - | Aligned | ✓ |
+| Testbed.md | - | Aligned | ✓ |
+| App.md | deprecated | Should integrate to System | **VIOLATION** |
+| Assets.md | - | Aligned | ✓ |
+| **Map.md** | draft | **Not implemented** | **GAP** |
+| **Logic.md** | draft | **Not implemented** | **GAP** |
+| **LLM.md** | draft | **Not implemented** | **GAP** |
+| Core.md | - | Needs System integration | Partial |
