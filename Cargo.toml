@@ -22,6 +22,7 @@ members = [
     "crates/robocube",
     "crates/scripting",
     "crates/server",
+    "crates/system",
     "crates/test-client",
     "crates/testbed",
     "crates/trellis",
@@ -38,6 +39,7 @@ resolver = "2"
 app = { path = "crates/app", default-features = true }
 core = { path = "crates/core" }
 cube = { path = "crates/cube" }
+system = { path = "crates/system", default-features = true }
 crossworld-nostr = { path = "crates/nostr" }
 crossworld-physics = { path = "crates/physics" }
 crossworld-server = { path = "crates/server" }
