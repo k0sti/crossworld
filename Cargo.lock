@@ -7142,6 +7142,7 @@ name = "renderer"
 version = "0.1.0"
 dependencies = [
  "app",
+ "bevy",
  "bytemuck",
  "core",
  "crossworld-physics",
