@@ -4,9 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Vibe-Kanban Review Workflow
 
-**IMPORTANT**: When working on vibe-kanban tasks in this Rust crate, ALWAYS use the review workflow to get user approval. Never ask for feedback in chat - always launch the review application.
-
-When completing a vibe-kanban task, use the review workflow to get user approval before marking work as done.
+When completing a vibe-kanban task, update the task status to trigger user review.
 
 ### Review Process
 
@@ -14,9 +12,10 @@ When completing a vibe-kanban task, use the review workflow to get user approval
    - Ensure all changes are committed
    - Run checks: `just check`
    - Update task status: `mcp__vibe_kanban__update_task(task_id, status: "inreview")`
+   - Provide a brief summary of changes in the task description or as a comment
 
-2. **Launch Review**
-   Pass a concise summary message directly as an argument:
+2. **Optional: Launch Review App (only on user request)**
+   If the user explicitly requests a visual review, launch the review application:
    ```bash
    cargo run -p `<crate>` -- --review "Brief summary of changes (1-3 sentences)"
    ```
@@ -27,8 +26,10 @@ When completing a vibe-kanban task, use the review workflow to get user approval
    cargo run -p `<crate>` -- --review-file doc/review/current.md
    ```
 
+   **Note**: Do NOT automatically launch the review app. Only do this when explicitly requested by the user.
+
 3. **Parse and Execute Response**
-   The response contains one or more commands (one per line). You MUST execute ALL commands.
+   If the review app was launched, the response contains one or more commands (one per line). You MUST execute ALL commands.
 
 ### Response Commands
 
@@ -143,10 +144,13 @@ $ just check
 # 2. Update task status to inreview
 mcp__vibe_kanban__update_task(task_id="abc123", status="inreview")
 
-# 3. Launch review with brief summary
-$ cargo run -p testbed -- --review "Added string-based review option. Renamed --review to --review-file and added new --review for inline messages."
+# 3. Wait for user to review via vibe-kanban UI
+# User will review changes and provide commands
 
-# 4. User reviews and responds with commands
+# 4. (Optional) If user requests visual review, launch review app:
+$ cargo run -p testbed -- --review "Added string-based review option."
+
+# 5. User reviews and responds with commands
 
 # 5. Agent parses response and executes all commands
 ```
