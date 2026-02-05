@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+# Bevy with custom feature set (not using workspace inheritance to disable default features)
 bevy = { version = "0.17", default-features = false, features = [
     "dynamic_linking",
     "bevy_asset",

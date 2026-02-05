@@ -1,6 +1,168 @@
 [workspace]
-members = ["crates/core", "crates/world", "crates/worldtool", "crates/cube", "crates/assets", "crates/physics", "crates/renderer", "crates/server", "crates/test-client", "crates/editor", "crates/proto-gl", "crates/app", "crates/game", "crates/testbed", "crates/app-bevy", "crates/proto-bevy", "crates/editor-bevy", "crates/nostr", "crates/xcube", "crates/trellis", "crates/robocube", "crates/scripting"]
+members = [
+    "crates/app",
+    "crates/app-bevy",
+    "crates/assets",
+    "crates/audio",
+    "crates/core",
+    "crates/cube",
+    "crates/devices",
+    "crates/editor",
+    "crates/editor-bevy",
+    "crates/game",
+    "crates/llm",
+    "crates/logic",
+    "crates/map",
+    "crates/network",
+    "crates/nostr",
+    "crates/physics",
+    "crates/proto-bevy",
+    "crates/proto-gl",
+    "crates/renderer",
+    "crates/robocube",
+    "crates/scripting",
+    "crates/server",
+    "crates/test-client",
+    "crates/testbed",
+    "crates/trellis",
+    "crates/world",
+    "crates/worldtool",
+    "crates/xcube",
+]
 resolver = "2"
+
+[workspace.dependencies]
+# ============================================================================
+# Internal Crates
+# ============================================================================
+app = { path = "crates/app", default-features = true }
+core = { path = "crates/core" }
+cube = { path = "crates/cube" }
+crossworld-nostr = { path = "crates/nostr" }
+crossworld-physics = { path = "crates/physics" }
+crossworld-server = { path = "crates/server" }
+crossworld-world = { path = "crates/world" }
+renderer = { path = "crates/renderer" }
+scripting = { path = "crates/scripting" }
+
+# ============================================================================
+# Core Math & Serialization
+# ============================================================================
+glam = { version = "0.30", default-features = true, features = ["serde"] }
+serde = { version = "1.0", default-features = true, features = ["derive"] }
+serde_json = "1.0"
+bincode = "1.3"
+ron = "0.12"
+toml = "0.8"
+
+# ============================================================================
+# Graphics Stack (OpenGL / egui / winit)
+# ============================================================================
+glow = "0.16"
+winit = "0.30"
+glutin = "0.32"
+glutin-winit = "0.5"
+raw-window-handle = "0.6"
+egui = "0.33"
+egui_glow = "0.33"
+egui-winit = "0.33"
+image = "0.25"
+
+# ============================================================================
+# Bevy Engine
+# ============================================================================
+bevy = "0.17"
+bevy_egui = "0.38"
+bevy_mesh = "0.17"
+bevy_rapier3d = { version = "0.32", features = ["debug-render-3d"] }
+
+# ============================================================================
+# CLI & Error Handling
+# ============================================================================
+clap = { version = "4.5", default-features = true, features = ["derive"] }
+anyhow = "1.0"
+thiserror = "2.0"
+
+# ============================================================================
+# Async Runtime & Networking
+# ============================================================================
+tokio = { version = "1", features = ["full"] }
+futures = "0.3"
+reqwest = { version = "0.12", features = ["json"] }
+wtransport = "0.6"
+
+# ============================================================================
+# Logging & Tracing
+# ============================================================================
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# ============================================================================
+# Nostr Protocol
+# ============================================================================
+nostr = "0.44"
+nostr-sdk = "0.44"
+nostr-connect = "0.44"
+
+# ============================================================================
+# Voxel & Domain-Specific
+# ============================================================================
+dot_vox = "5.1"
+noise = "0.9"
+
+# ============================================================================
+# WASM Bindings
+# ============================================================================
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+wasm-bindgen-test = "0.3"
+serde-wasm-bindgen = "0.6"
+js-sys = "0.3"
+getrandom = { version = "0.3", features = ["wasm_js"] }
+console_error_panic_hook = "0.1"
+tracing-wasm = "0.2"
+
+# ============================================================================
+# Utilities
+# ============================================================================
+base64 = "0.22"
+bytemuck = "1.24"
+chrono = "0.4"
+csv = "1.4"
+dashmap = "6.1"
+dirs = "6.0"
+dotenvy = "0.15"
+dotenv = "0.15"
+indicatif = "0.17"
+libloading = "0.9"
+nom = "8.0"
+notify = "8.2"
+notify-debouncer-mini = "0.7"
+prometheus = { version = "0.14", default-features = false }
+qr2term = "0.3"
+qrcode = "0.14"
+rand = "0.9"
+rfd = "0.15"
+tempfile = "3"
+tobj = "4.0"
+tokio-util = "0.7"
+
+# ============================================================================
+# Scripting
+# ============================================================================
+mlua = { version = "0.11", features = ["lua54", "vendored"] }
+kdl = "6"
+fasteval = "0.2"
+
+# ============================================================================
+# Criterion (Benchmarking)
+# ============================================================================
+criterion = "0.8"
+
+# ============================================================================
+# Gamepad Support
+# ============================================================================
+gilrs = "0.11"
 
 [profile.release]
 opt-level = 3

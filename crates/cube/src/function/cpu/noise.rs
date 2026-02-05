@@ -3,26 +3,6 @@
 //! Implements deterministic 3D noise functions that can be used in expressions.
 //! These implementations match the GPU (WGSL) versions for consistency.
 
-/// Permutation table for gradient noise (deterministic, based on seed)
-#[allow(dead_code)]
-fn perm(seed: u32) -> [u8; 256] {
-    let mut table = [0u8; 256];
-    for (i, item) in table.iter_mut().enumerate() {
-        *item = i as u8;
-    }
-
-    // Fisher-Yates shuffle with deterministic random
-    let mut state = seed.wrapping_mul(0x9E3779B9);
-    for i in (1..256).rev() {
-        state = state.wrapping_mul(0x5BD1E995);
-        state ^= state >> 15;
-        let j = (state as usize) % (i + 1);
-        table.swap(i, j);
-    }
-
-    table
-}
-
 /// Hash function for gradient lookup
 fn grad_hash(x: i32, y: i32, z: i32, seed: u32) -> f64 {
     let h = x
@@ -32,30 +12,6 @@ fn grad_hash(x: i32, y: i32, z: i32, seed: u32) -> f64 {
     let h = (h as u32).wrapping_mul(0x27d4eb2d);
     let h = h ^ (h >> 15);
     (h & 0x7FFFFFFF) as f64 / 0x7FFFFFFF as f64
-}
-
-/// Gradient vectors for 3D noise
-#[allow(dead_code)]
-const GRADIENTS: [[f64; 3]; 12] = [
-    [1.0, 1.0, 0.0],
-    [-1.0, 1.0, 0.0],
-    [1.0, -1.0, 0.0],
-    [-1.0, -1.0, 0.0],
-    [1.0, 0.0, 1.0],
-    [-1.0, 0.0, 1.0],
-    [1.0, 0.0, -1.0],
-    [-1.0, 0.0, -1.0],
-    [0.0, 1.0, 1.0],
-    [0.0, -1.0, 1.0],
-    [0.0, 1.0, -1.0],
-    [0.0, -1.0, -1.0],
-];
-
-/// Dot product of gradient and distance vector
-#[allow(dead_code)]
-fn grad_dot(hash: i32, x: f64, y: f64, z: f64) -> f64 {
-    let g = &GRADIENTS[(hash as usize) % 12];
-    g[0] * x + g[1] * y + g[2] * z
 }
 
 /// Fade function for smooth interpolation: 6t^5 - 15t^4 + 10t^3
@@ -114,69 +70,6 @@ pub fn noise3(x: f64, y: f64, z: f64, seed: u32) -> f64 {
     result * 2.0 - 1.0
 }
 
-/// Perlin gradient noise 3D (higher quality, slightly slower)
-///
-/// Returns values in the range approximately [-1, 1]
-#[allow(dead_code)]
-pub fn perlin3(x: f64, y: f64, z: f64, seed: u32) -> f64 {
-    let perm_table = perm(seed);
-
-    // Integer coordinates
-    let xi = x.floor() as i32 & 255;
-    let yi = y.floor() as i32 & 255;
-    let zi = z.floor() as i32 & 255;
-
-    // Fractional coordinates
-    let xf = x - x.floor();
-    let yf = y - y.floor();
-    let zf = z - z.floor();
-
-    // Fade curves
-    let u = fade(xf);
-    let v = fade(yf);
-    let w = fade(zf);
-
-    // Hash cube corners
-    let aa = perm_table[(perm_table[(perm_table[xi as usize] as i32 + yi) as usize & 255] as i32
-        + zi) as usize
-        & 255] as i32;
-    let ab = perm_table[(perm_table[(perm_table[xi as usize] as i32 + yi + 1) as usize & 255]
-        as i32
-        + zi) as usize
-        & 255] as i32;
-    let ba = perm_table[(perm_table
-        [(perm_table[(xi + 1) as usize & 255] as i32 + yi) as usize & 255]
-        as i32
-        + zi) as usize
-        & 255] as i32;
-    let bb = perm_table[(perm_table
-        [(perm_table[(xi + 1) as usize & 255] as i32 + yi + 1) as usize & 255]
-        as i32
-        + zi) as usize
-        & 255] as i32;
-
-    // Gradient dot products
-    let g000 = grad_dot(aa, xf, yf, zf);
-    let g001 = grad_dot(aa + 1, xf, yf, zf - 1.0);
-    let g010 = grad_dot(ab, xf, yf - 1.0, zf);
-    let g011 = grad_dot(ab + 1, xf, yf - 1.0, zf - 1.0);
-    let g100 = grad_dot(ba, xf - 1.0, yf, zf);
-    let g101 = grad_dot(ba + 1, xf - 1.0, yf, zf - 1.0);
-    let g110 = grad_dot(bb, xf - 1.0, yf - 1.0, zf);
-    let g111 = grad_dot(bb + 1, xf - 1.0, yf - 1.0, zf - 1.0);
-
-    // Trilinear interpolation
-    let x00 = lerp(g000, g100, u);
-    let x01 = lerp(g001, g101, u);
-    let x10 = lerp(g010, g110, u);
-    let x11 = lerp(g011, g111, u);
-
-    let y0 = lerp(x00, x10, v);
-    let y1 = lerp(x01, x11, v);
-
-    lerp(y0, y1, w)
-}
-
 /// Fractal Brownian Motion (FBM) - layered noise
 ///
 /// Combines multiple octaves of noise with decreasing amplitude and increasing frequency.
@@ -217,30 +110,6 @@ pub fn turbulence(x: f64, y: f64, z: f64, octaves: u32, seed: u32) -> f64 {
     }
 
     value / max_value
-}
-
-/// Ridged noise - inverted absolute FBM for ridge-like patterns
-///
-/// Creates mountain ridge-like patterns.
-/// Returns values in the range [0, 1].
-#[allow(dead_code)]
-pub fn ridged(x: f64, y: f64, z: f64, octaves: u32, seed: u32) -> f64 {
-    let mut value = 0.0;
-    let mut amplitude = 0.5;
-    let mut frequency = 1.0;
-    let mut weight = 1.0;
-
-    for i in 0..octaves.min(8) {
-        let octave_seed = seed.wrapping_add(i);
-        let signal = 1.0 - noise3(x * frequency, y * frequency, z * frequency, octave_seed).abs();
-        let signal = signal * signal * weight;
-        weight = (signal * 2.0).clamp(0.0, 1.0);
-        value += signal * amplitude;
-        amplitude *= 0.5;
-        frequency *= 2.0;
-    }
-
-    value.clamp(0.0, 1.0)
 }
 
 #[cfg(test)]

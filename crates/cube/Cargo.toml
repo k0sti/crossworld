@@ -19,33 +19,33 @@ image = ["dep:image"]
 
 [dependencies]
 # WASM bindings
-wasm-bindgen = "0.2"
+wasm-bindgen.workspace = true
 
 # Serialization
-serde = { version = "1.0", features = ["derive"] }
-serde-wasm-bindgen = "0.6"
+serde.workspace = true
+serde-wasm-bindgen.workspace = true
 
 # Error handling
-thiserror = "2.0"
+thiserror.workspace = true
 
 # Parsing
-nom = "8.0"
+nom.workspace = true
 
 # Expression evaluation (CPU backend)
-fasteval = "0.2"
+fasteval.workspace = true
 
 # Image loading (optional)
-image = { version = "0.25", optional = true }
+image = { workspace = true, optional = true }
 
 # Math library
-glam = { version = "0.30", features = ["serde"] }
+glam.workspace = true
 
 # Voxel model loading
-dot_vox = "5.1"
+dot_vox.workspace = true
 
 # Fix for WASM builds - getrandom is a transitive dependency that needs this feature
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-getrandom = { version = "0.3", features = ["wasm_js"] }
+getrandom.workspace = true
 
 [dev-dependencies]
-wasm-bindgen-test = "0.3"
+wasm-bindgen-test.workspace = true

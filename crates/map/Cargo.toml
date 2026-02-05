@@ -1,0 +1,32 @@
+[package]
+name = "crossworld-map"
+version = "0.1.0"
+edition = "2021"
+description = "Geospatial services for Crossworld - height maps, imagery, and OSM integration"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = []
+wasm = ["dep:wasm-bindgen", "dep:js-sys"]
+
+[dependencies]
+# Math library (shared with rest of project)
+glam = { version = "0.30", features = ["serde"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+
+# WASM bindings (optional)
+wasm-bindgen = { version = "0.2", optional = true }
+js-sys = { version = "0.3", optional = true }
+
+# Logging
+tracing = "0.1"
+
+# Async runtime for HTTP requests (future: OSM integration)
+# reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"], optional = true }
+# tokio = { version = "1", features = ["rt"], optional = true }
+
+[dev-dependencies]

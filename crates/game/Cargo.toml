@@ -13,32 +13,32 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 # Core app framework with runtime feature for egui integration
-app = { path = "../app", features = ["runtime"] }
+app = { workspace = true, features = ["runtime"] }
 
 # Scripting and configuration
-scripting = { path = "../scripting" }
+scripting.workspace = true
 
 # Rendering
-renderer = { path = "../renderer" }
-cube = { path = "../cube" }
+renderer.workspace = true
+cube.workspace = true
 
 # World generation
-crossworld-world = { path = "../world" }
+crossworld-world.workspace = true
 
 # Core graphics (needed for App trait implementation in lib)
-glow = "0.16"
-glam = "0.30"
-winit = "0.30"
-egui = "0.33"
-egui_glow = "0.33"
+glow.workspace = true
+glam.workspace = true
+winit.workspace = true
+egui.workspace = true
+egui_glow.workspace = true
 
 # Hot-reload runtime dependencies (only used by binary)
-glutin = "0.32"
-glutin-winit = "0.5"
-raw-window-handle = "0.6"
-libloading = "0.9"
-notify = "8.2"
-notify-debouncer-mini = "0.7"
+glutin.workspace = true
+glutin-winit.workspace = true
+raw-window-handle.workspace = true
+libloading.workspace = true
+notify.workspace = true
+notify-debouncer-mini.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]
-winit = { version = "0.30", features = ["x11"] }
+winit = { workspace = true, features = ["x11"] }
