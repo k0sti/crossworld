@@ -5,15 +5,15 @@ mod messages;
 mod metrics;
 mod server;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use clap::Parser;
+use crossworld_network::transport::{TransportConfig, TransportListener};
+use crossworld_network::webtransport::{WebTransportConnection, WebTransportListener};
 use dashmap::DashMap;
 use server::{GameServer, ServerConfig};
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-use wtransport::{Endpoint, Identity, ServerConfig as WtServerConfig};
 
 #[derive(Parser, Debug)]
 #[command(name = "crossworld-server")]
@@ -127,8 +127,8 @@ async fn main() -> Result<()> {
     // Create game server
     let server = Arc::new(GameServer::new(config));
 
-    // Track active connections
-    let connections: Arc<DashMap<String, Arc<wtransport::Connection>>> = Arc::new(DashMap::new());
+    // Track active connections (using the network crate's WebTransportConnection)
+    let connections: Arc<DashMap<String, Arc<WebTransportConnection>>> = Arc::new(DashMap::new());
 
     // Start position broadcaster
     let broadcaster_server = server.clone();
@@ -169,48 +169,47 @@ async fn main() -> Result<()> {
         }
     }
 
-    // Load TLS certificate and key
-    let cert_path = PathBuf::from(&args.cert);
-    let key_path = PathBuf::from(&args.key);
+    // Create transport configuration using network crate
+    let transport_config = TransportConfig {
+        address: args.bind.clone(),
+        cert_path: Some(args.cert.clone()),
+        key_path: Some(args.key.clone()),
+        connect_timeout_ms: 10_000,
+        keepalive_interval_ms: 5_000,
+        idle_timeout_ms: 30_000,
+        allow_insecure: false,
+    };
 
-    if !cert_path.exists() {
-        tracing::error!("Certificate file not found: {}", args.cert);
+    // Create WebTransport listener using network crate abstraction
+    let listener = WebTransportListener::bind(transport_config).await.map_err(|e| {
+        tracing::error!("Failed to bind server: {}", e);
         tracing::info!("Generate a self-signed certificate with:");
         tracing::info!("  openssl req -x509 -newkey rsa:4096 -keyout localhost-key.pem -out localhost.pem -days 365 -nodes -subj '/CN=localhost'");
-        return Err(anyhow::anyhow!("Certificate file not found"));
-    }
+        anyhow::anyhow!("Failed to bind server: {}", e)
+    })?;
 
-    if !key_path.exists() {
-        tracing::error!("Private key file not found: {}", args.key);
-        return Err(anyhow::anyhow!("Private key file not found"));
-    }
-
-    let identity = Identity::load_pemfiles(&cert_path, &key_path)
-        .await
-        .context("Failed to load certificate and key")?;
-
-    // Configure WebTransport endpoint
-    let wt_config = WtServerConfig::builder()
-        .with_bind_address(args.bind.parse()?)
-        .with_identity(identity)
-        .build();
-
-    let endpoint = Endpoint::server(wt_config)?;
-
-    tracing::info!("Server listening on {}", args.bind);
+    let local_addr = listener
+        .local_address()
+        .unwrap_or_else(|_| args.bind.clone());
+    tracing::info!("Server listening on {}", local_addr);
     tracing::info!("Waiting for connections...");
 
-    // Accept connections
+    // Accept connections using the TransportListener trait
     loop {
-        let session = endpoint.accept().await;
+        match listener.accept().await {
+            Ok(transport) => {
+                let server = server.clone();
+                let conns = connections.clone();
 
-        let server = server.clone();
-        let _connections = connections.clone();
-
-        tokio::spawn(async move {
-            if let Err(e) = GameServer::handle_connection(server, session).await {
-                tracing::error!("Connection error: {}", e);
+                tokio::spawn(async move {
+                    if let Err(e) = GameServer::handle_transport(server, transport, conns).await {
+                        tracing::error!("Connection error: {}", e);
+                    }
+                });
             }
-        });
+            Err(e) => {
+                tracing::error!("Failed to accept connection: {}", e);
+            }
+        }
     }
 }

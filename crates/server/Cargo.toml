@@ -8,11 +8,8 @@ name = "server"
 path = "src/main.rs"
 
 [dependencies]
-# Network abstractions
+# Network abstractions (provides WebTransport via feature flag)
 crossworld-network = { path = "../network", features = ["webtransport"] }
-
-# WebTransport (using wtransport for simplicity)
-wtransport.workspace = true
 
 # Async runtime
 tokio.workspace = true
