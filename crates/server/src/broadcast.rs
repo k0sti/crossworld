@@ -1,15 +1,17 @@
 use crate::messages::{CompactPosition, UnreliableMessage};
 use crate::server::GameServer;
 use anyhow::Result;
+use crossworld_network::transport::{Transport, UnreliableChannel};
+use crossworld_network::webtransport::WebTransportConnection;
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use wtransport::Connection;
 
 impl GameServer {
     /// Start position broadcasting loop
     pub async fn start_position_broadcaster(
         server: Arc<GameServer>,
-        connections: Arc<dashmap::DashMap<String, Arc<Connection>>>,
+        connections: Arc<dashmap::DashMap<String, Arc<WebTransportConnection>>>,
     ) {
         let mut interval = tokio::time::interval(Duration::from_millis(
             1000 / server.config.position_broadcast_rate as u64,
@@ -26,10 +28,10 @@ impl GameServer {
         }
     }
 
-    /// Broadcast positions once
+    /// Broadcast positions once using the network crate's UnreliableChannel
     async fn broadcast_positions_once(
         server: Arc<GameServer>,
-        connections: Arc<dashmap::DashMap<String, Arc<Connection>>>,
+        connections: Arc<dashmap::DashMap<String, Arc<WebTransportConnection>>>,
     ) -> Result<()> {
         // Collect all player positions
         let positions: Vec<CompactPosition> = server
@@ -70,9 +72,14 @@ impl GameServer {
             .unwrap()
             .as_millis() as u64;
 
-        // Broadcast to each connected player
+        // Broadcast to each connected player using the Transport abstraction
         for entry in connections.iter() {
-            let (player_id, connection) = entry.pair();
+            let (player_id, transport) = entry.pair();
+
+            // Skip if transport is not connected
+            if !transport.is_connected() {
+                continue;
+            }
 
             // Apply interest management if enabled
             let relevant_positions = if server.config.interest_radius > 0.0 {
@@ -92,22 +99,15 @@ impl GameServer {
                 timestamp,
             };
 
-            // Serialize and send
-            if let Ok(data) = bincode::serialize(&msg) {
-                match connection.send_datagram(&data) {
-                    Ok(_) => {
-                        server
-                            .metrics
-                            .messages_sent
-                            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                        server
-                            .metrics
-                            .bytes_sent
-                            .fetch_add(data.len() as u64, std::sync::atomic::Ordering::Relaxed);
-                    }
-                    Err(e) => {
-                        tracing::warn!("Failed to send datagram to {}: {}", player_id, e);
-                    }
+            // Send using the UnreliableChannel trait
+            let unreliable = transport.unreliable();
+            match unreliable.send(msg).await {
+                Ok(_) => {
+                    server.metrics.messages_sent.fetch_add(1, Ordering::Relaxed);
+                    // Note: byte counting is now handled by the network crate's ConnectionManager
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to send batch to {}: {}", player_id, e);
                 }
             }
         }
