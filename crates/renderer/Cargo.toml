@@ -33,3 +33,11 @@ app = { workspace = true, features = ["runtime"] }
 bytemuck.workspace = true
 serde.workspace = true
 ron.workspace = true
+
+
+[[example]]
+name = "bevy_glb_viewer"
+path = "examples/bevy_glb_viewer.rs"
+
+[dev-dependencies]
+bevy = { version = "0.17", default-features = true }
