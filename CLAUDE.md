@@ -34,7 +34,7 @@ git checkout "$BRANCH"
 
 ### Label-Triggered Merge
 
-When the Linear issue has the **"merge"** label, immediately perform the merge:
+When the vibe-kanban task has the **"merge"** label, immediately perform the merge:
 
 1. Ensure all changes are committed
 2. Run checks: `just check` (if available)
@@ -46,8 +46,8 @@ When the Linear issue has the **"merge"** label, immediately perform the merge:
    git checkout main
    git merge --ff-only "$BRANCH" || git merge "$BRANCH" -m "Merge $BRANCH"
    ```
-4. On success: Update Linear issue status to **Done**
-5. On failure: Comment the error on the Linear issue, keep status unchanged
+4. On success: Update vibe-kanban task status to **done**
+5. On failure: Comment the error on the vibe-kanban task, keep status unchanged
 
 ### Rules
 
