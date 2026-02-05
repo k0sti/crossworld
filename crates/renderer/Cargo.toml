@@ -35,8 +35,8 @@ serde = { version = "1.0", features = ["derive"] }
 ron = "0.12"
 
 [[example]]
-name = "glb_viewer"
-path = "examples/glb_viewer.rs"
+name = "bevy_glb_viewer"
+path = "examples/bevy_glb_viewer.rs"
 
 [dev-dependencies]
 bevy = { version = "0.17", default-features = true }
