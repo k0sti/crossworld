@@ -1,0 +1,63 @@
+[package]
+name = "system"
+version = "0.1.0"
+edition = "2021"
+description = "Unified platform abstraction layer for Crossworld"
+
+[lib]
+name = "system"
+path = "src/lib.rs"
+
+[features]
+default = ["gilrs"]
+gilrs = ["dep:gilrs"]
+
+# Runtime feature enables the AppRunner and EguiIntegration
+# This brings in system library dependencies (glutin, winit, etc.)
+runtime = [
+    "dep:glutin",
+    "dep:glutin-winit",
+    "dep:raw-window-handle",
+    "dep:egui",
+    "dep:egui-winit",
+    "dep:egui_glow",
+    "dep:image",
+    "dep:libloading",
+    "dep:notify",
+    "dep:notify-debouncer-mini",
+]
+
+[dependencies]
+# Core dependencies
+glow.workspace = true
+winit.workspace = true
+glam.workspace = true
+gilrs = { workspace = true, optional = true }
+clap.workspace = true
+serde.workspace = true
+
+# Web/WASM support
+wasm-bindgen = { workspace = true, optional = true }
+
+# Optional runtime dependencies
+glutin = { workspace = true, optional = true }
+glutin-winit = { workspace = true, optional = true }
+raw-window-handle = { workspace = true, optional = true }
+egui = { workspace = true, optional = true }
+egui-winit = { workspace = true, optional = true }
+egui_glow = { workspace = true, optional = true }
+image = { workspace = true, optional = true }
+libloading = { workspace = true, optional = true }
+notify = { workspace = true, optional = true }
+notify-debouncer-mini = { workspace = true, optional = true }
+
+# Platform-specific directories (for config/data paths)
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+dirs.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+winit = { workspace = true, features = ["x11"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen.workspace = true
+js-sys.workspace = true
