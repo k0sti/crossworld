@@ -348,3 +348,141 @@ These crates exist but have no spec. Action needed:
 | **Logic.md** | draft | **Not implemented** | **GAP** |
 | **LLM.md** | draft | **Not implemented** | **GAP** |
 | Core.md | - | Needs System integration | Partial |
+
+---
+
+## 7. Alignment Procedures
+
+### Phase 1: Architectural Foundation (High Priority)
+
+#### 1.1 Create System Crate
+**Spec:** System.md requires unified platform abstraction
+
+**Procedure:**
+1. Create `crates/system/` with modules:
+   - `platform.rs` - Platform enum (Native/Web), detection
+   - `timer.rs` - High-resolution timing utilities
+   - `path.rs` - PathResolver for cross-platform paths
+   - `window.rs` - WindowHandle abstraction
+   - `app.rs` - App trait (migrate from crates/app)
+   - `input.rs` - InputState (consolidate from core)
+   - `camera.rs` - Camera controllers (consolidate from core/app)
+
+2. Refactor dependencies:
+   ```
+   system depends on: core, renderer, devices, audio, scripting
+   app becomes: thin re-export layer or deprecated
+   ```
+
+3. Migration steps:
+   - Move `App` trait from `crates/app` to `crates/system`
+   - Move `FrameContext` to system
+   - Move camera controllers to system
+   - Update game/editor/testbed to use system
+
+#### 1.2 Refactor Network Architecture
+**Spec:** Network.md requires shared transport abstractions
+
+**Procedure:**
+1. Verify `crates/network` provides:
+   - Transport trait for WebTransport/WebSocket
+   - Reliable/unreliable message channels
+   - Connection state management
+   - Automatic reconnection
+
+2. Refactor `crates/server` to use network crate:
+   ```toml
+   # server/Cargo.toml
+   network = { path = "../network" }
+   ```
+
+3. Implement client-side WebTransport in network crate
+
+---
+
+### Phase 2: Missing Features (Medium Priority)
+
+#### 2.1 Implement Scripting Hot-Reload
+**Spec:** Scripting.md requires hot-reload
+
+**Procedure:**
+1. Add file watcher to `crates/scripting`:
+   ```rust
+   // scripting/src/hot_reload.rs
+   pub struct ScriptWatcher {
+       watcher: notify::RecommendedWatcher,
+       lua_engine: Arc<Mutex<LuaEngine>>,
+   }
+   ```
+
+2. Implement reload callback:
+   - Detect file changes
+   - Re-execute changed Lua scripts
+   - Emit events for state tree updates
+
+#### 2.2 Complete Devices Sensors
+**Spec:** Devices.md requires accelerometer, compass, touch
+
+**Procedure:**
+1. Verify `crates/devices` has sensor modules
+2. Implement platform-specific backends:
+   - Web: DeviceMotion/DeviceOrientation APIs
+   - Native: platform sensor libraries
+3. Add touch input support for mobile
+
+---
+
+### Phase 3: Verify Recent Implementations
+
+The merge to main added new crates. Verify each against spec:
+
+| Crate | Spec | Verification |
+|-------|------|--------------|
+| `crates/audio` | Audio.md | Check AudioEngine, Sound, Player types |
+| `crates/devices` | Devices.md | Check sensor support |
+| `crates/network` | Network.md | Check transport abstractions |
+| `crates/logic` | Logic.md | Check Rule, RuleTx, Action types |
+| `crates/map` | Map.md | Check Area, get_height, get_image |
+| `crates/llm` | LLM.md | Check task/tools interface |
+
+---
+
+### Phase 4: Spec Documentation Updates
+
+For components where implementation exceeds spec, update Obsidian:
+
+**Cube.md additions needed:**
+- BCF binary format specification
+- Fabric surface extraction system
+- Color mapper interfaces
+
+**Renderer.md additions needed:**
+- All tracer types (Cpu, Bcf, Gl, Compute)
+- MeshRenderer, SkyboxRenderer
+- CrtPostProcess effects
+- Renderer trait interface
+
+**Physics.md additions needed:**
+- Terrain active region system
+- Object trait specification
+
+**Nostr.md additions needed:**
+- AvatarState, PositionUpdate, WorldModel events
+- AccountState UI pattern
+- QR login flow
+
+---
+
+### Migration Order
+
+```
+1. Verify new crates against specs (audio, devices, network, logic, map, llm)
+   ↓
+2. Create System crate (unblocks App deprecation)
+   ↓
+3. Refactor Server to use Network crate
+   ↓
+4. Implement Scripting hot-reload
+   ↓
+5. Update Obsidian specs for implementation extras
+```

@@ -1,3 +1,7 @@
+# IDE
+.vscode/
+.idea/
+
 # Reference projects (not part of repo)
 ref
 moq-relay
