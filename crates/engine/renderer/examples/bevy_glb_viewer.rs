@@ -372,8 +372,9 @@ fn main() {
     // Get the assets directory - it should be at the repository root
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
     let assets_path = std::path::Path::new(manifest_dir)
-        .parent() // crates/
-        .and_then(|p| p.parent()) // crossworld/
+        .parent() // crates/engine/renderer -> crates/engine
+        .and_then(|p| p.parent()) // crates/engine -> crates
+        .and_then(|p| p.parent()) // crates -> crossworld/
         .map(|p| p.join("assets"))
         .expect("Could not find assets directory");
 

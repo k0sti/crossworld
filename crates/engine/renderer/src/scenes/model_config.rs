@@ -23,7 +23,7 @@ pub struct ModelEntry {
 }
 
 /// Base path for VOX model files (relative to workspace root)
-const VOX_MODELS_BASE_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets/models/vox/");
+const VOX_MODELS_BASE_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../assets/models/vox/");
 
 impl ModelEntry {
     /// Create a cube from this model entry
