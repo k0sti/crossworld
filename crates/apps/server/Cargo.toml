@@ -9,7 +9,7 @@ path = "src/main.rs"
 
 [dependencies]
 # Network abstractions (provides WebTransport via feature flag)
-crossworld-network = { path = "../network", features = ["webtransport"] }
+crossworld-network = { path = "../../engine/network", features = ["webtransport"] }
 
 # Async runtime
 tokio.workspace = true
