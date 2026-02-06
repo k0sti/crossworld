@@ -2,6 +2,7 @@
 members = [
     # Engine crates - core infrastructure documented in obsidian/[component].md
     "crates/engine/app",
+    "crates/engine/assets",
     "crates/engine/audio",
     "crates/engine/core",
     "crates/engine/cube",
@@ -30,7 +31,6 @@ members = [
     "crates/bevy/proto-bevy",
 
     # Tool crates
-    "crates/tools/assets",
     "crates/tools/proto-gl",
     "crates/tools/robocube",
     "crates/tools/trellis",
