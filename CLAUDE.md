@@ -2,6 +2,9 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Initialize rust environment with flake.nix
+This is rust project and requires the use of flake.nix to set up and run development environment.
+
 ## Git Workflow
 
 **Local development only** - Do NOT create pull requests or push to remote.
