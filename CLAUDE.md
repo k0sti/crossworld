@@ -62,11 +62,26 @@ When the vibe-kanban task has the **"merge"** label, immediately perform the mer
 
 When completing a vibe-kanban task, update the task status to trigger user review.
 
+### Before Setting Status to inreview
+
+**MANDATORY** - Complete ALL verification steps before marking task as inreview:
+
+1. `just check` passes (cargo check + clippy + fmt)
+2. `just test` passes (cargo test + TypeScript build)
+3. Build all main apps to verify no breakage:
+   ```bash
+   cargo build -p game
+   cargo build -p editor  
+   cargo build -p testbed
+   ```
+
+If ANY of these fail, fix the issues before proceeding. Do NOT set status to inreview with failing tests or builds.
+
 ### Review Process
 
 1. **Prepare for Review**
    - Ensure all changes are committed
-   - Run checks: `just check`
+   - Run ALL verification steps above (just check, just test, build apps)
    - Update task status: `mcp__vibe_kanban__update_task(task_id, status: "inreview")`
    - Provide a brief summary of changes in the task description or as a comment
 
