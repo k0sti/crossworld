@@ -39,17 +39,17 @@ default:
 
 # Build WASM module in development mode
 build-wasm-dev:
-    cd crates/core && wasm-pack build --dev --target web --out-dir ../../packages/wasm-core --out-name core
-    cd crates/world && wasm-pack build --dev --target web --out-dir ../../packages/wasm-world --out-name crossworld-world
-    cd crates/cube && wasm-pack build --dev --target web --out-dir ../../packages/wasm-cube -- --features wasm
-    cd crates/physics && wasm-pack build --dev --target web --out-dir ../../packages/wasm-physics --out-name crossworld_physics -- --features wasm
+    cd crates/engine/core && wasm-pack build --dev --target web --out-dir ../../../packages/wasm-core --out-name core
+    cd crates/engine/world && wasm-pack build --dev --target web --out-dir ../../../packages/wasm-world --out-name crossworld-world
+    cd crates/engine/cube && wasm-pack build --dev --target web --out-dir ../../../packages/wasm-cube -- --features wasm
+    cd crates/engine/physics && wasm-pack build --dev --target web --out-dir ../../../packages/wasm-physics --out-name crossworld_physics -- --features wasm
 
 # Build WASM module in release mode
 build-wasm:
-    cd crates/core && wasm-pack build --target web --out-dir ../../packages/wasm-core --out-name core
-    cd crates/world && wasm-pack build --target web --out-dir ../../packages/wasm-world --out-name crossworld-world
-    cd crates/cube && wasm-pack build --target web --out-dir ../../packages/wasm-cube -- --features wasm
-    cd crates/physics && wasm-pack build --target web --out-dir ../../packages/wasm-physics --out-name crossworld_physics -- --features wasm
+    cd crates/engine/core && wasm-pack build --target web --out-dir ../../../packages/wasm-core --out-name core
+    cd crates/engine/world && wasm-pack build --target web --out-dir ../../../packages/wasm-world --out-name crossworld-world
+    cd crates/engine/cube && wasm-pack build --target web --out-dir ../../../packages/wasm-cube -- --features wasm
+    cd crates/engine/physics && wasm-pack build --target web --out-dir ../../../packages/wasm-physics --out-name crossworld_physics -- --features wasm
 
 # Start development server (builds WASM first)
 dev: build-wasm-dev
@@ -74,7 +74,7 @@ preview:
 
 # Initialize Crossworld Nostr live event
 start-live:
-    cd crates/worldtool && cargo run -- init-live --streaming https://moq.justinmoon.com/anon
+    cd crates/tools/worldtool && cargo run -- init-live --streaming https://moq.justinmoon.com/anon
 
 # Run all tests
 test:
@@ -176,15 +176,15 @@ test-raytracing:
 
 # Run native voxel editor (Bevy) in development mode
 editor:
-    cargo run --bin editor
+    cargo run --bin editor-bevy
 
 # Run native voxel editor (Bevy) in release mode
 editor-release:
-    cargo run --release --bin editor
+    cargo run --release --bin editor-bevy
 
 # Run physics prototype (Bevy)
 proto:
-    cargo run --bin proto
+    cargo run --bin proto-bevy
 
 # Run proto-gl physics viewer (OpenGL, lightweight)
 proto-gl:
@@ -204,11 +204,11 @@ game-run:
 
 # Watch and auto-rebuild game on changes (Terminal 2)
 game-watch:
-    @echo "👀 Watching crates/game/ for changes..."
+    @echo "👀 Watching crates/apps/game/ for changes..."
     @echo "Any changes will trigger automatic rebuild"
     @echo "Press Ctrl+C to stop"
     @echo ""
-    cargo watch -x 'build --package game' -w crates/game
+    cargo watch -x 'build --package game' -w crates/apps/game
 
 # Run hot-reload demo (rotating cube) - requires tmux
 hot-reload:
@@ -219,8 +219,8 @@ hot-reload:
     if ! command -v tmux &> /dev/null; then
         echo "❌ tmux is not installed. Install it or use manual method:"
         echo ""
-        echo "Terminal 1: cargo run --bin app"
-        echo "Terminal 2: cargo watch -x 'build --package game' -w crates/game"
+        echo "Terminal 1: cargo run --bin game"
+        echo "Terminal 2: cargo watch -x 'build --package game' -w crates/apps/game"
         exit 1
     fi
 
@@ -243,7 +243,7 @@ hot-reload:
     echo "Controls:"
     echo "  - Ctrl+B, then arrow keys to switch panes"
     echo "  - Ctrl+B, then D to detach (keeps running)"
-    echo "  - Edit crates/game/src/lib.rs to see hot-reload!"
+    echo "  - Edit crates/apps/game/src/lib.rs to see hot-reload!"
     echo "  - Type 'exit' in both panes to quit"
     echo ""
     sleep 2
@@ -253,11 +253,11 @@ hot-reload:
     tmux split-window -h -t hot-reload:0
 
     # Left pane: run app
-    tmux send-keys -t hot-reload:0.0 'cargo run --bin app' C-m
+    tmux send-keys -t hot-reload:0.0 'cargo run --bin game' C-m
 
     # Right pane: watch and rebuild
-    tmux send-keys -t hot-reload:0.1 'echo "Watching for changes in crates/game/..."' C-m
-    tmux send-keys -t hot-reload:0.1 'cargo watch -x "build --package game" -w crates/game' C-m
+    tmux send-keys -t hot-reload:0.1 'echo "Watching for changes in crates/apps/game/..."' C-m
+    tmux send-keys -t hot-reload:0.1 'cargo watch -x "build --package game" -w crates/apps/game' C-m
 
     # Attach to session
     tmux attach-session -t hot-reload
@@ -265,7 +265,7 @@ hot-reload:
 # Set up XCube server environment (clone repos, install deps)
 xcube-setup *ARGS:
     @echo "Setting up XCube server environment..."
-    crates/xcube/server/setup.sh {{ARGS}}
+    crates/tools/xcube/server/setup.sh {{ARGS}}
 
 # Start XCube inference server
 # Requires nix develop .#cuda shell for CUDA libraries
@@ -276,7 +276,7 @@ xcube-server:
     # Run within nix CUDA shell for proper CUDA_HOME and library paths
     # LD_LIBRARY_PATH includes NVIDIA driver for GPU detection
     # TORCH_CUDA_ARCH_LIST for PTX fallback on unsupported GPUs (RTX 50 series)
-    nix develop .#cuda --command bash -c 'export LD_LIBRARY_PATH=/run/opengl-driver/lib:$$LD_LIBRARY_PATH; export TORCH_CUDA_ARCH_LIST=8.9+PTX; cd crates/xcube/server && uv run server.py'
+    nix develop .#cuda --command bash -c 'export LD_LIBRARY_PATH=/run/opengl-driver/lib:$$LD_LIBRARY_PATH; export TORCH_CUDA_ARCH_LIST=8.9+PTX; cd crates/tools/xcube/server && uv run server.py'
 
 # Generate 3D object from text prompt using XCube
 xcube-generate PROMPT:
@@ -296,7 +296,7 @@ xcube-generate PROMPT:
 #   just xcube-train --dry-run                 # Show command without running
 xcube-train *ARGS:
     @echo "Starting XCube training..."
-    crates/xcube/server/train.sh {{ARGS}}
+    crates/tools/xcube/server/train.sh {{ARGS}}
 
 # Set up Trellis.2 inference server environment
 # Requires CUDA environment (use: nix develop .#cuda)
@@ -304,7 +304,7 @@ trellis-setup *ARGS:
     @echo "Setting up Trellis.2 server environment..."
     @echo "Note: This requires CUDA toolkit. Make sure you're in 'nix develop .#cuda' shell"
     @echo ""
-    crates/trellis/server/setup.sh {{ARGS}}
+    crates/tools/trellis/server/setup.sh {{ARGS}}
 
 # Start Trellis.2 inference server
 trellis-server:
@@ -315,12 +315,12 @@ trellis-server:
     ATTN_BACKEND=xformers \
     PYTHONPATH=external/TRELLIS:${PYTHONPATH:-} \
     TRELLIS_MODEL_PATH=microsoft/TRELLIS-image-large \
-    conda run -n trellis --no-capture-output python crates/trellis/server/server.py
+    conda run -n trellis --no-capture-output python crates/tools/trellis/server/server.py
 
 # Set up Robocube (Cube3D) server environment
 robocube-setup:
     @echo "Setting up Robocube (Cube3D) server environment..."
-    crates/robocube/server/setup.sh
+    crates/tools/robocube/server/setup.sh
 
 # Start Robocube (Cube3D) inference server
 robocube-server:
@@ -331,7 +331,7 @@ robocube-server:
     export PYTHONPATH="$(pwd)/external/cube:${PYTHONPATH:-}"
     export CUBE3D_MODEL_PATH="$(pwd)/external/cube/model_weights"
     export CUBE3D_CONFIG_PATH="$(pwd)/external/cube/cube3d/configs/open_model_v0.5.yaml"
-    cd crates/robocube/server && uv run server.py
+    cd crates/tools/robocube/server && uv run server.py
 
 # Run hot-reload demo (manual two-terminal method)
 hot-reload-manual:
@@ -340,17 +340,17 @@ hot-reload-manual:
     @echo "Terminal 1 (this one): Run the app"
     @echo "Terminal 2 (open another): Auto-rebuild on changes"
     @echo ""
-    @echo "After both are running, edit crates/game/src/lib.rs"
+    @echo "After both are running, edit crates/apps/game/src/lib.rs"
     @echo "and save - you'll see hot-reload happen!"
     @echo ""
     @echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     @echo ""
     @echo "Terminal 2 command (copy and run in another terminal):"
-    @echo "  cargo watch -x 'build --package game' -w crates/game"
+    @echo "  cargo watch -x 'build --package game' -w crates/apps/game"
     @echo ""
     @echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     @echo ""
     cargo build --package game
     @echo "Press Enter to start the app..."
     @read -p ""
-    cargo run --bin app
+    cargo run --bin game

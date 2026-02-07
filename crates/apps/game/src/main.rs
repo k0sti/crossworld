@@ -156,7 +156,8 @@ fn get_lib_name() -> &'static str {
 /// Get the path to the game library
 fn get_lib_path() -> PathBuf {
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    path.pop(); // Go from crates/game to crates
+    path.pop(); // Go from crates/apps/game to crates/apps
+    path.pop(); // Go from crates/apps to crates
     path.pop(); // Go from crates to workspace root
     path.push("target");
     path.push("debug");

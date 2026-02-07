@@ -1,34 +1,41 @@
 [workspace]
 members = [
-    "crates/app",
-    "crates/app-bevy",
-    "crates/assets",
-    "crates/audio",
-    "crates/core",
-    "crates/cube",
-    "crates/devices",
-    "crates/editor",
-    "crates/editor-bevy",
-    "crates/game",
-    "crates/llm",
-    "crates/logic",
-    "crates/map",
-    "crates/network",
-    "crates/nostr",
-    "crates/physics",
-    "crates/proto-bevy",
-    "crates/proto-gl",
-    "crates/renderer",
-    "crates/robocube",
-    "crates/scripting",
-    "crates/server",
-    "crates/system",
-    "crates/test-client",
-    "crates/testbed",
-    "crates/trellis",
-    "crates/world",
-    "crates/worldtool",
-    "crates/xcube",
+    # Engine crates - core infrastructure documented in obsidian/[component].md
+    "crates/engine/app",
+    "crates/engine/assets",
+    "crates/engine/audio",
+    "crates/engine/core",
+    "crates/engine/cube",
+    "crates/engine/devices",
+    "crates/engine/llm",
+    "crates/engine/logic",
+    "crates/engine/map",
+    "crates/engine/network",
+    "crates/engine/nostr",
+    "crates/engine/physics",
+    "crates/engine/renderer",
+    "crates/engine/scripting",
+    "crates/engine/system",
+    "crates/engine/world",
+
+    # Application crates - use app/system
+    "crates/apps/editor",
+    "crates/apps/game",
+    "crates/apps/server",
+    "crates/apps/test-client",
+    "crates/apps/testbed",
+
+    # Bevy crates
+    "crates/bevy/app-bevy",
+    "crates/bevy/editor-bevy",
+    "crates/bevy/proto-bevy",
+
+    # Tool crates
+    "crates/tools/proto-gl",
+    "crates/tools/robocube",
+    "crates/tools/trellis",
+    "crates/tools/worldtool",
+    "crates/tools/xcube",
 ]
 resolver = "2"
 
@@ -36,16 +43,16 @@ resolver = "2"
 # ============================================================================
 # Internal Crates
 # ============================================================================
-app = { path = "crates/app", default-features = true }
-core = { path = "crates/core" }
-cube = { path = "crates/cube" }
-system = { path = "crates/system", default-features = true }
-crossworld-nostr = { path = "crates/nostr" }
-crossworld-physics = { path = "crates/physics" }
-crossworld-server = { path = "crates/server" }
-crossworld-world = { path = "crates/world" }
-renderer = { path = "crates/renderer" }
-scripting = { path = "crates/scripting" }
+app = { path = "crates/engine/app", default-features = true }
+core = { path = "crates/engine/core" }
+cube = { path = "crates/engine/cube" }
+system = { path = "crates/engine/system", default-features = true }
+crossworld-nostr = { path = "crates/engine/nostr" }
+crossworld-physics = { path = "crates/engine/physics" }
+crossworld-server = { path = "crates/apps/server" }
+crossworld-world = { path = "crates/engine/world" }
+renderer = { path = "crates/engine/renderer" }
+scripting = { path = "crates/engine/scripting" }
 
 # ============================================================================
 # Core Math & Serialization

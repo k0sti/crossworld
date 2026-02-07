@@ -623,8 +623,9 @@ impl GameConfig {
         }
 
         let mut assets_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        assets_path.pop();
-        assets_path.pop();
+        assets_path.pop(); // crates/apps/game -> crates/apps
+        assets_path.pop(); // crates/apps -> crates
+        assets_path.pop(); // crates -> workspace root
         assets_path.push("assets");
         assets_path.push("models");
         assets_path.push("vox");
