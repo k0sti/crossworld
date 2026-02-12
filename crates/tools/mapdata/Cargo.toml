@@ -1,0 +1,17 @@
+[package]
+name = "mapdata"
+version = "0.1.0"
+edition = "2021"
+description = "Offline CLI tool for processing GeoTIFF, JPEG2000, and LAS data into .mapg format"
+
+[[bin]]
+name = "mapdata"
+path = "src/main.rs"
+
+[dependencies]
+tiff = "0.9"
+image = { workspace = true }
+anyhow = { workspace = true }
+clap = { workspace = true }
+jpeg2k = "0.10"
+las = { version = "0.9", features = ["laz"] }

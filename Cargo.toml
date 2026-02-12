@@ -31,6 +31,7 @@ members = [
     "crates/bevy/proto-bevy",
 
     # Tool crates
+    "crates/tools/mapdata",
     "crates/tools/proto-gl",
     "crates/tools/robocube",
     "crates/tools/trellis",

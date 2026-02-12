@@ -15,9 +15,11 @@ pub mod area;
 pub mod coords;
 pub mod height;
 pub mod imagery;
+pub mod mapg;
 pub mod osm;
 
 pub use area::Area;
 pub use coords::{GeoCoord, WorldCoord};
 pub use height::{HeightMap, HeightProvider};
 pub use imagery::{ImageProvider, TileImage};
+pub use mapg::{MapgFile, MapgHeightProvider};
