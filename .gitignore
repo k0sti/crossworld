@@ -30,3 +30,7 @@ crates/trellis/server/.env
 external
 
 __pycache__/
+
+# Test output
+test-output/
+test-results/

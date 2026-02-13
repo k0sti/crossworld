@@ -37,6 +37,8 @@ default:
     @echo "  just robocube-server  - Start Robocube (Cube3D) inference server"
     @echo "  just proto-web        - Start proto web client dev server (port 5174)"
     @echo "  just proto-web-build  - Build proto web client for production"
+    @echo "  just proto-web-test   - Run proto web e2e tests (Playwright)"
+    @echo "  just proto-web-screenshot - Take proto web screenshots"
     @echo ""
 
 # Start proto-web development server (builds WASM first)
@@ -46,6 +48,14 @@ proto-web: build-wasm-dev
 # Build proto-web for production
 proto-web-build: build-wasm
     cd packages/proto && bun install && bun run build
+
+# Run proto-web Playwright e2e tests
+proto-web-test: build-wasm-dev
+    cd packages/proto && bun install && bunx playwright test
+
+# Take proto-web screenshots only (quick visual check)
+proto-web-screenshot: build-wasm-dev
+    cd packages/proto && bun install && bunx playwright test e2e/smoke.spec.ts
 
 # Build WASM module in development mode
 build-wasm-dev:

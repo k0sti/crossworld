@@ -445,6 +445,18 @@ Real-time, low-latency voice communication without SFU servers.
 - **Local dev**: `just moq-relay` (localhost:4443, auto-generated certificates)
 - **Custom**: Any MoQ-compatible relay
 
+## Testing Proto-Web (Playwright E2E)
+
+To test the proto web client:
+```bash
+just proto-web-test          # Run all e2e tests
+just proto-web-screenshot    # Quick smoke test with screenshots
+```
+
+Screenshots are saved to `packages/proto/test-output/`. Review them with the image tool.
+
+Tests use system Chromium (`/run/current-system/sw/bin/chromium`) and auto-start the Vite dev server. WASM packages must be built first (`just build-wasm-dev`).
+
 ## Common Development Workflows
 
 ### Adding Rust Functionality
