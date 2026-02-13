@@ -35,7 +35,17 @@ default:
     @echo "  just trellis-server   - Start Trellis.2 inference server"
     @echo "  just robocube-setup   - Set up Robocube (Cube3D) server environment"
     @echo "  just robocube-server  - Start Robocube (Cube3D) inference server"
+    @echo "  just proto-web        - Start proto web client dev server (port 5174)"
+    @echo "  just proto-web-build  - Build proto web client for production"
     @echo ""
+
+# Start proto-web development server (builds WASM first)
+proto-web: build-wasm-dev
+    cd packages/proto && bun install && bun run dev
+
+# Build proto-web for production
+proto-web-build: build-wasm
+    cd packages/proto && bun install && bun run build
 
 # Build WASM module in development mode
 build-wasm-dev:

@@ -1,0 +1,23 @@
+{
+  "name": "@crossworld/proto",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "cube": "workspace:*",
+    "crossworld-world": "workspace:*",
+    "crossworld-physics": "workspace:*",
+    "nostr-tools": "^2.16.2",
+    "three": "^0.170.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.170.0",
+    "typescript": "^5.8.3",
+    "vite": "^6.0.11"
+  }
+}

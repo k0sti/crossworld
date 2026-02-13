@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Crossworld Proto</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
+      canvas { display: block; }
+      #ui {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 10;
+        font-family: system-ui, -apple-system, sans-serif;
+        color: #fff;
+      }
+      #ui > * { pointer-events: auto; }
+      #login-screen {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.85);
+      }
+      #login-screen h1 { font-size: 3rem; margin-bottom: 2rem; }
+      #login-screen button {
+        padding: 1rem 2rem;
+        font-size: 1.2rem;
+        border: 1px solid #555;
+        background: #222;
+        color: #fff;
+        border-radius: 8px;
+        cursor: pointer;
+        margin: 0.5rem;
+      }
+      #login-screen button:hover { background: #333; border-color: #888; }
+      #hud {
+        position: fixed;
+        bottom: 1rem;
+        left: 1rem;
+        font-size: 0.85rem;
+        opacity: 0.7;
+      }
+      #crosshair {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 20px;
+        height: 20px;
+        opacity: 0.5;
+      }
+      #crosshair::before, #crosshair::after {
+        content: '';
+        position: absolute;
+        background: #fff;
+      }
+      #crosshair::before { width: 2px; height: 100%; left: 50%; transform: translateX(-50%); }
+      #crosshair::after { width: 100%; height: 2px; top: 50%; transform: translateY(-50%); }
+    </style>
+  </head>
+  <body>
+    <div id="ui">
+      <div id="login-screen">
+        <h1>Crossworld</h1>
+        <button id="btn-extension">Login with Nostr Extension</button>
+        <button id="btn-guest">Continue as Guest</button>
+      </div>
+      <div id="crosshair" style="display:none;"></div>
+      <div id="hud" style="display:none;">
+        <div id="hud-pos"></div>
+        <div id="hud-fps"></div>
+        <div id="hud-players"></div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
