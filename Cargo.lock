@@ -8241,6 +8241,7 @@ dependencies = [
 name = "system"
 version = "0.2.0"
 dependencies = [
+ "app",
  "clap",
  "core",
  "dirs",

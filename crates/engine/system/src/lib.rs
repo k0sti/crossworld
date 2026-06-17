@@ -9,9 +9,9 @@
 //! - [`timer`]: High-resolution timing utilities
 //! - [`path`]: Cross-platform path resolution
 //! - [`window`]: Window handle abstraction
-//! - [`app`]: Application trait and framework context
-//! - [`input`]: Input state management (keyboard, mouse, gamepad)
-//! - [`camera`]: 3D camera system with orbit and first-person controllers
+//! - [`app`]: Application trait and frame context (re-exported from `app`)
+//! - [`input`]: Input state and controller types (re-exported from `core`)
+//! - [`camera`]: 3D camera system (re-exported from `core`)
 //!
 //! # Features
 //!

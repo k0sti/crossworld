@@ -12,11 +12,8 @@
 //! - [`AppRuntime`]: Window creation and event loop management
 //! - Integrated egui UI rendering via the `ui()` method
 
-use glam::Vec2;
 use glow::Context;
-use std::collections::HashSet;
 use winit::event::WindowEvent;
-use winit::keyboard::KeyCode;
 use winit::window::Window;
 
 pub mod camera;
@@ -25,7 +22,8 @@ pub mod controller;
 
 // Re-export input types from core
 pub use core::input::{
-    ControllerInfo, ControllerInput, CursorMode, GamepadState, MouseButtonType, MouseButtons,
+    ControllerInfo, ControllerInput, CursorMode, GamepadState, InputState, MouseButtonType,
+    MouseButtons,
 };
 
 pub use controller::{create_controller_backend, ControllerBackend};
@@ -85,85 +83,56 @@ pub struct FrameContext<'a> {
     pub size: (u32, u32),
 }
 
-/// Input state snapshot for the current frame
-///
-/// Contains all input information aggregated from events.
-#[derive(Debug, Clone, Default)]
-pub struct InputState {
-    /// Currently pressed keys
-    pub keys: HashSet<KeyCode>,
-    /// Mouse position in window coordinates
-    pub mouse_pos: Option<Vec2>,
-    /// Mouse delta since last frame (from window events)
-    pub mouse_delta: Vec2,
-    /// Raw mouse motion (for FPS camera, not constrained by window)
-    pub raw_mouse_delta: Vec2,
-    /// Scroll delta
-    pub scroll_delta: Vec2,
-    /// Mouse buttons currently held
-    pub mouse_buttons: MouseButtons,
-    /// Gamepad state (if connected)
-    pub gamepad: Option<GamepadState>,
-}
-
-impl InputState {
-    /// Check if a key is currently pressed
-    pub fn is_key_pressed(&self, key: KeyCode) -> bool {
-        self.keys.contains(&key)
-    }
-
-    /// Check if left mouse button is pressed
-    pub fn is_left_mouse_pressed(&self) -> bool {
-        self.mouse_buttons.left
-    }
-
-    /// Check if right mouse button is pressed
-    pub fn is_right_mouse_pressed(&self) -> bool {
-        self.mouse_buttons.right
-    }
-
-    /// Inject a mouse position event
-    ///
-    /// Used for automated testing and config-driven input.
-    pub fn inject_mouse_pos(&mut self, x: f32, y: f32) {
-        let new_pos = Vec2::new(x, y);
-        if let Some(old_pos) = self.mouse_pos {
-            self.mouse_delta = new_pos - old_pos;
-        }
-        self.mouse_pos = Some(new_pos);
-    }
-
-    /// Inject a mouse click event
-    ///
-    /// Used for automated testing and config-driven input.
-    pub fn inject_mouse_click(&mut self, button: MouseButtonType, pressed: bool) {
-        match button {
-            MouseButtonType::Left => self.mouse_buttons.left = pressed,
-            MouseButtonType::Right => self.mouse_buttons.right = pressed,
-            MouseButtonType::Middle => self.mouse_buttons.middle = pressed,
+impl<'a> FrameContext<'a> {
+    /// Create a new frame context
+    pub fn new(
+        gl: &'a Context,
+        window: &'a Window,
+        delta_time: f32,
+        elapsed: f32,
+        frame: u64,
+        size: (u32, u32),
+    ) -> Self {
+        Self {
+            gl,
+            window,
+            delta_time,
+            elapsed,
+            frame,
+            size,
         }
     }
 
-    /// Inject a key press event
-    ///
-    /// Used for automated testing and config-driven input.
-    pub fn inject_key(&mut self, key: KeyCode, pressed: bool) {
-        if pressed {
-            self.keys.insert(key);
+    /// Get the aspect ratio of the window
+    #[inline]
+    pub fn aspect_ratio(&self) -> f32 {
+        if self.size.1 > 0 {
+            self.size.0 as f32 / self.size.1 as f32
         } else {
-            self.keys.remove(&key);
+            1.0
         }
     }
 
-    /// Clear all input state
-    pub fn clear(&mut self) {
-        self.keys.clear();
-        self.mouse_pos = None;
-        self.mouse_delta = Vec2::ZERO;
-        self.raw_mouse_delta = Vec2::ZERO;
-        self.scroll_delta = Vec2::ZERO;
-        self.mouse_buttons = MouseButtons::default();
-        self.gamepad = None;
+    /// Get the window width
+    #[inline]
+    pub fn width(&self) -> u32 {
+        self.size.0
+    }
+
+    /// Get the window height
+    #[inline]
+    pub fn height(&self) -> u32 {
+        self.size.1
+    }
+
+    /// Get the current frames per second based on delta_time
+    #[inline]
+    pub fn fps(&self) -> f32 {
+        if self.delta_time > 0.0 {
+            1.0 / self.delta_time
+        } else {
+            0.0
+        }
     }
 }
 

@@ -6,7 +6,7 @@
 //! # Modules
 //!
 //! - [`camera`]: 3D camera system with orbit and first-person controllers
-//! - [`input`]: Input types for controllers, mouse, and cursor handling
+//! - [`input`]: Input types for controllers, mouse, keyboard, and per-frame state
 
 pub mod camera;
 pub mod input;
