@@ -285,7 +285,7 @@ checksum = "a23eb6b1614318a8071c9b2521f36b424b2c83db5eb3a0fead4a6c0809af6e61"
 
 [[package]]
 name = "app"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "clap",
  "core",
@@ -307,7 +307,7 @@ dependencies = [
 
 [[package]]
 name = "app-bevy"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bevy",
 ]
@@ -468,7 +468,7 @@ dependencies = [
 
 [[package]]
 name = "assets"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "base64",
  "chrono",
@@ -2625,7 +2625,7 @@ dependencies = [
 
 [[package]]
 name = "core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "gilrs",
  "glam 0.30.10",
@@ -2897,7 +2897,7 @@ dependencies = [
 
 [[package]]
 name = "crossworld-audio"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "glam 0.30.10",
  "js-sys",
@@ -2911,7 +2911,7 @@ dependencies = [
 
 [[package]]
 name = "crossworld-llm"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "futures",
@@ -2923,7 +2923,7 @@ dependencies = [
 
 [[package]]
 name = "crossworld-map"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "glam 0.30.10",
  "js-sys",
@@ -2934,7 +2934,7 @@ dependencies = [
 
 [[package]]
 name = "crossworld-network"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bincode",
  "futures",
@@ -2949,7 +2949,7 @@ dependencies = [
 
 [[package]]
 name = "crossworld-nostr"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "dirs",
  "nostr",
@@ -2965,7 +2965,7 @@ dependencies = [
 
 [[package]]
 name = "crossworld-physics"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "app",
  "criterion",
@@ -2983,7 +2983,7 @@ dependencies = [
 
 [[package]]
 name = "crossworld-server"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "bincode",
@@ -3004,7 +3004,7 @@ dependencies = [
 
 [[package]]
 name = "crossworld-test-client"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "bincode",
@@ -3022,7 +3022,7 @@ dependencies = [
 
 [[package]]
 name = "crossworld-world"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "console_error_panic_hook",
  "crossworld-physics",
@@ -3090,7 +3090,7 @@ dependencies = [
 
 [[package]]
 name = "cube"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "dot_vox",
  "fasteval",
@@ -3185,7 +3185,7 @@ dependencies = [
 
 [[package]]
 name = "devices"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "gilrs",
  "glam 0.30.10",
@@ -3332,7 +3332,7 @@ dependencies = [
 
 [[package]]
 name = "editor"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "app",
  "clap",
@@ -3356,7 +3356,7 @@ dependencies = [
 
 [[package]]
 name = "editor-bevy"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bevy",
  "bevy_egui",
@@ -3925,7 +3925,7 @@ dependencies = [
 
 [[package]]
 name = "game"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "app",
  "crossworld-world",
@@ -5198,7 +5198,7 @@ checksum = "5e5032e24019045c762d3c0f28f5b6b8bbf38563a65908389bf7978758920897"
 
 [[package]]
 name = "logic"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cube",
  "glam 0.30.10",
@@ -5267,7 +5267,7 @@ dependencies = [
 
 [[package]]
 name = "mapdata"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -6787,7 +6787,7 @@ dependencies = [
 
 [[package]]
 name = "proto-bevy"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bevy",
  "bevy_rapier3d",
@@ -6796,7 +6796,7 @@ dependencies = [
 
 [[package]]
 name = "proto-gl"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "clap",
  "crossworld-physics",
@@ -7262,7 +7262,7 @@ checksum = "19b30a45b0cd0bcca8037f3d0dc3421eaf95327a17cad11964fb8179b4fc4832"
 
 [[package]]
 name = "renderer"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "app",
  "bevy",
@@ -7372,7 +7372,7 @@ dependencies = [
 
 [[package]]
 name = "robocube"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "clap",
  "cube",
@@ -7650,7 +7650,7 @@ checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
 name = "scripting"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "glam 0.30.10",
  "kdl",
@@ -8239,7 +8239,7 @@ dependencies = [
 
 [[package]]
 name = "system"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "clap",
  "dirs",
@@ -8319,7 +8319,7 @@ dependencies = [
 
 [[package]]
 name = "testbed"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "app",
  "clap",
@@ -8800,7 +8800,7 @@ dependencies = [
 
 [[package]]
 name = "trellis"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "base64",
  "clap",
@@ -10221,7 +10221,7 @@ checksum = "f17a85883d4e6d00e8a97c586de764dabcc06133f7f1d55dce5cdc070ad7fe59"
 
 [[package]]
 name = "worldtool"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -10325,7 +10325,7 @@ dependencies = [
 
 [[package]]
 name = "xcube"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "clap",
  "cube",
