@@ -167,9 +167,11 @@ impl Camera {
     }
 
     /// Extract yaw angle from rotation (derived, not stored)
+    ///
+    /// Must match [`Self::from_pitch_yaw`] / `EulerRot::YXZ` convention.
     pub fn yaw(&self) -> f32 {
         let fwd = self.forward();
-        fwd.x.atan2(fwd.z)
+        (-fwd.x).atan2(-fwd.z)
     }
 
     /// Get the target point the camera is looking at (1 unit forward)
@@ -179,22 +181,12 @@ impl Camera {
 
     /// Rotate camera in place (first-person style)
     ///
-    /// Applies yaw around world Y-axis, then pitch around camera's local X-axis.
-    /// Pitch is clamped to prevent flipping.
+    /// Reconstructs orientation from yaw (world Y) and pitch (local X) with roll
+    /// forced to zero, preventing horizon tilt from quaternion drift.
     pub fn rotate(&mut self, yaw_delta: f32, pitch_delta: f32) {
-        // Rotate around world Y axis (yaw)
-        let yaw_rotation = Quat::from_axis_angle(Vec3::Y, yaw_delta);
-
-        // Rotate around camera's local X axis (pitch)
-        let pitch_rotation = Quat::from_axis_angle(self.right(), pitch_delta);
-
-        // Apply rotations
-        self.rotation = yaw_rotation * self.rotation;
-        self.rotation = pitch_rotation * self.rotation;
-        self.rotation = self.rotation.normalize();
-
-        // Clamp pitch to prevent flipping
-        self.clamp_pitch();
+        let yaw = self.yaw() + yaw_delta;
+        let pitch = (self.pitch() + pitch_delta).clamp(-MAX_PITCH, MAX_PITCH);
+        self.rotation = Quat::from_euler(glam::EulerRot::YXZ, yaw, pitch, 0.0);
     }
 
     /// Orbit camera around a target point
@@ -277,19 +269,6 @@ impl Camera {
     /// Get the projection matrix for this camera
     pub fn projection_matrix(&self, aspect_ratio: f32, near: f32, far: f32) -> Mat4 {
         Mat4::perspective_rh_gl(self.vfov, aspect_ratio, near, far)
-    }
-
-    /// Clamp pitch to prevent camera flipping
-    fn clamp_pitch(&mut self) {
-        let fwd = self.forward();
-        if fwd.y.abs() > MAX_PITCH.sin() {
-            let yaw = fwd.x.atan2(fwd.z);
-            let pitch = fwd.y.asin().clamp(-MAX_PITCH, MAX_PITCH);
-
-            let yaw_quat = Quat::from_rotation_y(yaw);
-            let pitch_quat = Quat::from_rotation_x(pitch);
-            self.rotation = yaw_quat * pitch_quat;
-        }
     }
 }
 
@@ -625,6 +604,38 @@ mod tests {
         controller.mouse_captured = true;
         controller.handle_mouse_move(&mut camera, 100.0, 50.0);
         assert_ne!(camera.rotation, initial_rotation);
+    }
+
+    #[test]
+    fn test_pitch_yaw_roundtrip() {
+        for pitch in [-1.0_f32, -0.5, 0.0, 0.5, 1.0] {
+            for yaw in [-2.0, -1.0, 0.0, 1.0, 2.0] {
+                let camera = Camera::from_pitch_yaw(Vec3::ZERO, pitch, yaw);
+                let restored =
+                    Camera::from_pitch_yaw(Vec3::ZERO, camera.pitch(), camera.yaw());
+                let diff = (camera.forward() - restored.forward()).length();
+                assert!(
+                    diff < 0.001,
+                    "roundtrip failed for yaw={yaw} pitch={pitch}: diff={diff}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_first_person_rotate_no_roll() {
+        let mut camera = Camera::from_pitch_yaw(Vec3::ZERO, 0.0, 0.0);
+
+        for i in 0..100 {
+            let t = i as f32 * 0.1;
+            camera.rotate(t.sin() * 0.05, t.cos() * 0.03);
+        }
+
+        assert!(
+            camera.roll().abs() < 0.001,
+            "roll should stay near zero, got {}",
+            camera.roll()
+        );
     }
 
     #[test]
