@@ -1,6 +1,6 @@
 [package]
 name = "robocube"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 description = "Roblox cube3d text-to-3D to Crossworld voxel format converter"
 license = "MIT OR Apache-2.0"

@@ -2965,7 +2965,7 @@ dependencies = [
 
 [[package]]
 name = "crossworld-physics"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "app",
  "criterion",
@@ -3022,7 +3022,7 @@ dependencies = [
 
 [[package]]
 name = "crossworld-world"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "console_error_panic_hook",
  "crossworld-physics",
@@ -3090,7 +3090,7 @@ dependencies = [
 
 [[package]]
 name = "cube"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "dot_vox",
  "fasteval",
@@ -8800,7 +8800,7 @@ dependencies = [
 
 [[package]]
 name = "trellis"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "base64",
  "clap",
@@ -10221,7 +10221,7 @@ checksum = "f17a85883d4e6d00e8a97c586de764dabcc06133f7f1d55dce5cdc070ad7fe59"
 
 [[package]]
 name = "worldtool"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -10325,7 +10325,7 @@ dependencies = [
 
 [[package]]
 name = "xcube"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "clap",
  "cube",

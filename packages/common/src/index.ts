@@ -11,6 +11,7 @@ export type { MainMode } from './components/TopBar'
 
 // Config
 export { DEFAULT_RELAYS, DEFAULT_RELAY_STATES, WORLD_RELAYS, APP_NPUB, APP_PUBKEY } from './config'
+export { CROSSWORLD_VERSION } from './version'
 
 // Services
 export { LoginSettingsService } from './services/login-settings'

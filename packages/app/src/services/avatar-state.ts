@@ -1,4 +1,5 @@
 import * as logger from '../utils/logger';
+import { CROSSWORLD_VERSION } from '@crossworld/common'
 import { SimplePool, type Event } from 'nostr-tools'
 import { npubEncode } from 'nostr-tools/nip19'
 import { getLiveChatATag, getAvatarStateDTag, AVATAR_STATE_CONFIG } from '../config'
@@ -597,6 +598,7 @@ export class AvatarStateService {
 
       // Client info
       ['client', 'Crossworld Web'],
+      ['client_version', CROSSWORLD_VERSION],
 
       // Initial state
       ['position', JSON.stringify(position)],

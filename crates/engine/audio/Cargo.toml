@@ -1,6 +1,6 @@
 [package]
 name = "crossworld-audio"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 authors = ["Crossworld Contributors"]
 description = "Audio engine for Crossworld - sound effects, music, spatial audio, and voice chat integration"

@@ -1,6 +1,6 @@
 [package]
 name = "mapdata"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 description = "Offline CLI tool for processing GeoTIFF, JPEG2000, and LAS data into .mapg format"
 

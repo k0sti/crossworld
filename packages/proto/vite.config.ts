@@ -2,6 +2,8 @@ import { defineConfig } from 'vite'
 import path from 'path'
 import { copyFileSync, mkdirSync, existsSync, readdirSync, readFileSync, statSync } from 'fs'
 
+const crossworldVersion = readFileSync(path.resolve(__dirname, '../../VERSION'), 'utf8').trim()
+
 function copyAssetsPlugin() {
   return {
     name: 'copy-assets',
@@ -54,6 +56,9 @@ function copyAssetsPlugin() {
 
 export default defineConfig({
   base: '/crossworld/',
+  define: {
+    __CROSSWORLD_VERSION__: JSON.stringify(crossworldVersion),
+  },
   plugins: [copyAssetsPlugin()],
   worker: { format: 'es' },
   optimizeDeps: {

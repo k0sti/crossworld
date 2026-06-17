@@ -3,6 +3,8 @@ import react from '@vitejs/plugin-react'
 import path from 'path'
 import { copyFileSync, mkdirSync, existsSync, readdirSync, readFileSync } from 'fs'
 
+const crossworldVersion = readFileSync(path.resolve(__dirname, '../../VERSION'), 'utf8').trim()
+
 // Custom plugin to copy assets from project root and serve in dev
 function copyAssetsPlugin() {
   return {
@@ -90,6 +92,9 @@ function copyAssetsPlugin() {
 // https://vitejs.dev/config/
 export default defineConfig({
   base: '/crossworld/',
+  define: {
+    __CROSSWORLD_VERSION__: JSON.stringify(crossworldVersion),
+  },
   plugins: [
     react(),
     copyAssetsPlugin()

@@ -1173,6 +1173,7 @@ fn generate_csm(grid: &MapGrid, output_path: &PathBuf, depth: Option<u32>) -> Re
 
 #[derive(Parser, Debug)]
 #[command(name = "mapdata")]
+#[command(version = env!("CARGO_PKG_VERSION"))]
 #[command(about = "Process map height and color data into a grid format")]
 struct Args {
     /// Path to the height map (TIFF, LAZ/LAS, or .bin)

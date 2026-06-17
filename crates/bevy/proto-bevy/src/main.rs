@@ -39,6 +39,7 @@ use bevy_rapier3d::prelude::*;
 
 #[derive(Parser, Debug)]
 #[command(name = "proto-bevy")]
+#[command(version = env!("CARGO_PKG_VERSION"))]
 struct Args {
     #[arg(long, num_args = 0..=1, default_missing_value = "1")]
     debug: Option<u32>,

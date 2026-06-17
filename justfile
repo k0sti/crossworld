@@ -39,7 +39,13 @@ default:
     @echo "  just proto-web-build  - Build proto web client for production"
     @echo "  just proto-web-test   - Run proto web e2e tests (Playwright)"
     @echo "  just proto-web-screenshot - Take proto web screenshots"
+    @echo "  just bump-version     - Bump project SEMVER across Rust and npm packages"
     @echo ""
+
+# Bump project version (SEMVER) across Rust workspace and npm packages
+# Usage: just bump-version 0.2.0
+bump-version VERSION:
+    @scripts/bump-version.sh {{VERSION}}
 
 # Start proto-web development server (builds WASM first)
 proto-web: build-wasm-dev

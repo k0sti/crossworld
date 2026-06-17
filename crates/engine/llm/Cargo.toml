@@ -1,6 +1,6 @@
 [package]
 name = "crossworld-llm"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 authors = ["Crossworld Contributors"]
 description = "LLM inference client abstraction for Crossworld"

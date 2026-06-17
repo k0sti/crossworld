@@ -15,6 +15,7 @@ use testbed::PhysicsTestbed;
 /// Compares physics behavior between cuboid and terrain colliders.
 #[derive(Parser)]
 #[command(name = "testbed")]
+#[command(version = env!("CARGO_PKG_VERSION"))]
 #[command(about = "Physics testing application with cuboid vs terrain collider comparison")]
 struct Args {
     #[command(flatten)]

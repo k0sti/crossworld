@@ -8,6 +8,7 @@ use wtransport::ClientConfig;
 
 #[derive(Parser, Debug)]
 #[command(name = "test-client")]
+#[command(version = env!("CARGO_PKG_VERSION"))]
 #[command(about = "Test client for Crossworld game server", long_about = None)]
 struct Args {
     /// Server URL

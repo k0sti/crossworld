@@ -52,6 +52,7 @@ enum ServerCommands {
 
 #[derive(Parser)]
 #[command(name = "worldtool")]
+#[command(version = env!("CARGO_PKG_VERSION"))]
 #[command(about = "Crossworld Nostr management tool", long_about = None)]
 struct Cli {
     #[command(subcommand)]

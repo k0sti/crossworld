@@ -1,6 +1,6 @@
 [package]
 name = "devices"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 description = "Input device abstractions for Crossworld (gamepad, keyboard, mouse, touch, sensors)"
 

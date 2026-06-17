@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 
 #[derive(Parser)]
 #[command(name = "assets")]
+#[command(version = env!("CARGO_PKG_VERSION"))]
 #[command(about = "Asset management tools for Crossworld", long_about = None)]
 struct Cli {
     #[command(subcommand)]

@@ -2,6 +2,7 @@ import { VStack, Text, Link, Divider, Heading, UnorderedList, ListItem, Button }
 import ReactMarkdown from 'react-markdown'
 import type { Components } from 'react-markdown'
 import aboutContent from '@assets/about.md?raw'
+import { CROSSWORLD_VERSION } from '@crossworld/common'
 import { ResponsivePanel } from './ResponsivePanel'
 
 const markdownComponents: Components = {
@@ -37,6 +38,9 @@ export function InfoPanel({ isOpen, onClose }: InfoPanelProps) {
       }
     >
       <VStack align="stretch" gap={3} maxW="800px" mx="auto" color="white">
+        <Text fontSize="xs" color="gray.400" textAlign="center">
+          Crossworld v{CROSSWORLD_VERSION}
+        </Text>
         <ReactMarkdown components={markdownComponents}>{aboutContent}</ReactMarkdown>
       </VStack>
     </ResponsivePanel>

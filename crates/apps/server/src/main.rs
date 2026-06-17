@@ -17,6 +17,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[derive(Parser, Debug)]
 #[command(name = "crossworld-server")]
+#[command(version = env!("CARGO_PKG_VERSION"))]
 #[command(about = "Crossworld Game Server", long_about = None)]
 struct Args {
     /// Bind address

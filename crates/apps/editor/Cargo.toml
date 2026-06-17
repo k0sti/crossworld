@@ -1,6 +1,6 @@
 [package]
 name = "editor"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 authors = ["Crossworld Contributors"]
 description = "Native voxel editor for Crossworld using glow/egui/winit"

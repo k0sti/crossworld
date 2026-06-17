@@ -126,7 +126,12 @@ fn parse_args() -> CliConfig {
                 println!(
                     "  --review-file PATH  Display a review panel with markdown document from file"
                 );
+                println!("  --version, -V       Print version and exit");
                 println!("  --help              Show this help message");
+                std::process::exit(0);
+            }
+            "--version" | "-V" => {
+                println!("game {}", env!("CARGO_PKG_VERSION"));
                 std::process::exit(0);
             }
             _ => {

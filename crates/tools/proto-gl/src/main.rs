@@ -5,6 +5,7 @@ use winit::event_loop::EventLoop;
 
 #[derive(Parser, Debug)]
 #[command(name = "proto-gl")]
+#[command(version = env!("CARGO_PKG_VERSION"))]
 #[command(about = "Proto-GL Physics Viewer")]
 struct Args {
     /// Debug mode: run N physics iterations (default: 100), log data, and exit

@@ -30,6 +30,7 @@ use editor::EditorApp;
 /// A native OpenGL voxel editor for creating and modifying voxel models.
 #[derive(Parser)]
 #[command(name = "editor")]
+#[command(version = env!("CARGO_PKG_VERSION"))]
 #[command(about = "Voxel editor with automated testing support")]
 struct Args {
     #[command(flatten)]
