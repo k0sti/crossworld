@@ -9,7 +9,8 @@
 //! - [`OrbitController`]: Controller for orbit camera behavior
 //! - [`FirstPersonController`]: Controller for first-person camera behavior
 
-use glam::{Quat, Vec3};
+use glam::{Mat4, Quat, Vec3};
+use serde::{Deserialize, Serialize};
 
 // ============================================================================
 // Camera
@@ -55,7 +56,7 @@ const MAX_PITCH: f32 = 1.5;
 /// let pitch = camera.pitch();
 /// let yaw = camera.yaw();
 /// ```
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Camera {
     /// Camera position in world space
     pub position: Vec3,
@@ -261,6 +262,16 @@ impl Camera {
     pub fn zoom(&mut self, delta: f32) {
         self.position += self.forward() * delta;
     }
+
+    /// Get the view matrix for this camera
+    pub fn view_matrix(&self) -> Mat4 {
+        Mat4::look_at_rh(self.position, self.position + self.forward(), self.up())
+    }
+
+    /// Get the projection matrix for this camera
+    pub fn projection_matrix(&self, aspect_ratio: f32, near: f32, far: f32) -> Mat4 {
+        Mat4::perspective_rh_gl(self.vfov, aspect_ratio, near, far)
+    }
 }
 
 // ============================================================================
@@ -268,7 +279,7 @@ impl Camera {
 // ============================================================================
 
 /// Configuration for orbit camera controller
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OrbitControllerConfig {
     /// Mouse sensitivity for orbit rotation (radians per pixel)
     pub mouse_sensitivity: f32,
@@ -311,6 +322,7 @@ impl Default for OrbitControllerConfig {
 /// // On scroll:
 /// controller.zoom(scroll_delta, &mut camera);
 /// ```
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OrbitController {
     /// Target point to orbit around
     pub target: Vec3,
@@ -379,7 +391,7 @@ impl OrbitController {
 // ============================================================================
 
 /// Configuration for first-person camera controller
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FirstPersonControllerConfig {
     /// Mouse sensitivity for look rotation
     pub mouse_sensitivity: f32,
@@ -418,11 +430,18 @@ impl Default for FirstPersonControllerConfig {
 /// let velocity = controller.calculate_velocity(&camera, forward, backward, left, right, up, down);
 /// camera.position += velocity * delta_time;
 /// ```
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FirstPersonController {
     /// Configuration
     pub config: FirstPersonControllerConfig,
     /// Whether mouse is captured for look-around
     pub mouse_captured: bool,
+}
+
+impl Default for FirstPersonController {
+    fn default() -> Self {
+        Self::with_defaults()
+    }
 }
 
 impl FirstPersonController {
@@ -636,5 +655,11 @@ mod tests {
         let velocity =
             controller.calculate_velocity(&camera, false, false, false, false, true, false);
         assert!(velocity.y > 0.0);
+    }
+
+    #[test]
+    fn test_view_matrix() {
+        let camera = Camera::look_at(Vec3::new(0.0, 0.0, 5.0), Vec3::ZERO, Vec3::Y);
+        let _view = camera.view_matrix();
     }
 }
