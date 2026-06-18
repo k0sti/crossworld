@@ -1,21 +1,8 @@
 use crate::core::cube::Voxel;
 use crate::core::{Cube, CubeBox};
+use crate::material::encode_r2g3b2 as map_color_to_material;
 use dot_vox::DotVoxData;
 use glam::{IVec3, Vec3};
-
-/// Map RGB color (0-255) to material index using R2G3B2 encoding
-/// Materials 128-255 use 7-bit color encoding: r:2, g:3, b:2
-#[inline]
-fn map_color_to_material(r: u8, g: u8, b: u8) -> u8 {
-    // Extract top bits: red (2 bits), green (3 bits), blue (2 bits)
-    // R2G3B2: rrrgggbb
-    let r_bits = (r >> 6) & 0b11; // Top 2 bits of red
-    let g_bits = (g >> 5) & 0b111; // Top 3 bits of green
-    let b_bits = (b >> 6) & 0b11; // Top 2 bits of blue
-
-    // Combine into 7-bit index and add 128 offset
-    128 + ((r_bits << 5) | (g_bits << 2) | b_bits)
-}
 
 /// Load a .vox file from bytes and convert to a CubeBox with bounds preserved.
 ///

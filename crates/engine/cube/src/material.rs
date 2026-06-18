@@ -693,11 +693,25 @@ pub fn get_material_color(value: i32) -> Vec3 {
     Vec3::ZERO
 }
 
-/// Decode R2G3B2 color encoding to RGB
+/// Encode a full 8-bit RGB color into an R2G3B2 material value (128-255).
 ///
-/// Encoding: (r << 5) | (g << 2) | b
-/// where index = value - 128
-fn decode_r2g3b2(value: u8) -> Vec3 {
+/// This is the canonical inverse of [`decode_r2g3b2`]: it keeps the top
+/// 2/3/2 bits of red/green/blue, packs them as `rrgggbb`, and adds the 128
+/// offset that marks the value as an RGB-encoded material.
+#[inline]
+pub fn encode_r2g3b2(r: u8, g: u8, b: u8) -> u8 {
+    let r_bits = (r >> 6) & 0b11; // top 2 bits of red
+    let g_bits = (g >> 5) & 0b111; // top 3 bits of green
+    let b_bits = (b >> 6) & 0b11; // top 2 bits of blue
+
+    128 + ((r_bits << 5) | (g_bits << 2) | b_bits)
+}
+
+/// Decode an R2G3B2 material value (128-255) back into a normalized RGB color.
+///
+/// Encoding: `(r << 5) | (g << 2) | b` where `index = value - 128`.
+/// Inverse of [`encode_r2g3b2`].
+pub fn decode_r2g3b2(value: u8) -> Vec3 {
     let bits = value.saturating_sub(128);
     let r_bits = (bits >> 5) & 0b11;
     let g_bits = (bits >> 2) & 0b111;
