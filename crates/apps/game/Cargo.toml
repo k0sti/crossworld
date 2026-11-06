@@ -13,7 +13,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 # Core app framework with runtime feature for egui integration
-app = { workspace = true, features = ["runtime"] }
+system = { workspace = true, features = ["runtime"] }
 
 # Scripting and configuration
 scripting.workspace = true

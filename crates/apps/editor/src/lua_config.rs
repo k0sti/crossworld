@@ -23,7 +23,7 @@
 //! }
 //! ```
 
-use app::MouseButtonType;
+use system::MouseButtonType;
 use glam::Vec2;
 use scripting::mlua::prelude::*;
 use scripting::{extract_u32, LuaEngine};

@@ -284,28 +284,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a23eb6b1614318a8071c9b2521f36b424b2c83db5eb3a0fead4a6c0809af6e61"
 
 [[package]]
-name = "app"
-version = "0.2.0"
-dependencies = [
- "clap",
- "core",
- "egui",
- "egui-winit",
- "egui_glow",
- "gilrs",
- "glam 0.30.10",
- "glow",
- "glutin",
- "glutin-winit",
- "image",
- "libloading 0.9.0",
- "notify",
- "notify-debouncer-mini",
- "raw-window-handle",
- "winit",
-]
-
-[[package]]
 name = "app-bevy"
 version = "0.2.0"
 dependencies = [
@@ -2967,7 +2945,6 @@ dependencies = [
 name = "crossworld-physics"
 version = "0.2.0"
 dependencies = [
- "app",
  "criterion",
  "cube",
  "getrandom 0.3.4",
@@ -2975,6 +2952,7 @@ dependencies = [
  "rapier3d 0.31.0 (git+https://github.com/dimforge/rapier.git)",
  "serde",
  "serde-wasm-bindgen",
+ "system",
  "tracing",
  "tracing-wasm",
  "wasm-bindgen",
@@ -3334,7 +3312,6 @@ dependencies = [
 name = "editor"
 version = "0.2.0"
 dependencies = [
- "app",
  "clap",
  "crossworld-nostr",
  "cube",
@@ -3349,6 +3326,7 @@ dependencies = [
  "rfd",
  "scripting",
  "serde",
+ "system",
  "tokio",
  "toml",
  "winit",
@@ -3927,7 +3905,6 @@ dependencies = [
 name = "game"
 version = "0.2.0"
 dependencies = [
- "app",
  "crossworld-world",
  "cube",
  "egui",
@@ -3942,6 +3919,7 @@ dependencies = [
  "raw-window-handle",
  "renderer",
  "scripting",
+ "system",
  "winit",
 ]
 
@@ -7264,7 +7242,6 @@ checksum = "19b30a45b0cd0bcca8037f3d0dc3421eaf95327a17cad11964fb8179b4fc4832"
 name = "renderer"
 version = "0.2.0"
 dependencies = [
- "app",
  "bevy",
  "bytemuck",
  "core",
@@ -7281,6 +7258,7 @@ dependencies = [
  "raw-window-handle",
  "ron 0.12.0",
  "serde",
+ "system",
  "winit",
 ]
 
@@ -8241,7 +8219,6 @@ dependencies = [
 name = "system"
 version = "0.2.0"
 dependencies = [
- "app",
  "clap",
  "core",
  "dirs",
@@ -8323,7 +8300,6 @@ dependencies = [
 name = "testbed"
 version = "0.2.0"
 dependencies = [
- "app",
  "clap",
  "crossworld-physics",
  "cube",
@@ -8333,6 +8309,7 @@ dependencies = [
  "glow",
  "renderer",
  "scripting",
+ "system",
  "winit",
 ]
 

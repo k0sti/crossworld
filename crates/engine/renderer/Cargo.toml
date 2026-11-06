@@ -29,7 +29,7 @@ egui_glow.workspace = true
 egui-winit.workspace = true
 cube.workspace = true
 crossworld-physics.workspace = true
-app = { workspace = true, features = ["runtime"] }
+system = { workspace = true, features = ["runtime"] }
 bytemuck.workspace = true
 serde.workspace = true
 ron.workspace = true

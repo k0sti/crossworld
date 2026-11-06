@@ -1,7 +1,6 @@
 [workspace]
 members = [
     # Engine crates - core infrastructure documented in obsidian/[component].md
-    "crates/engine/app",
     "crates/engine/assets",
     "crates/engine/audio",
     "crates/engine/core",
@@ -18,7 +17,7 @@ members = [
     "crates/engine/system",
     "crates/engine/world",
 
-    # Application crates - use app/system
+    # Application crates - use the system platform layer
     "crates/apps/editor",
     "crates/apps/game",
     "crates/apps/server",
@@ -47,7 +46,6 @@ version = "0.2.0"
 # ============================================================================
 # Internal Crates
 # ============================================================================
-app = { path = "crates/engine/app", default-features = true }
 core = { path = "crates/engine/core" }
 cube = { path = "crates/engine/cube" }
 system = { path = "crates/engine/system", default-features = true }

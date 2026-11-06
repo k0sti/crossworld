@@ -1,6 +1,6 @@
 mod config;
 
-use app::{
+use system::{
     App, Camera, CursorMode, FirstPersonController, FirstPersonControllerConfig, FrameContext,
     InputState,
 };

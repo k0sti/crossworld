@@ -21,7 +21,7 @@
 //! editor --review-file doc/review/current.md
 //! ```
 
-use app::{cli::CommonArgs, run_app, AppConfig};
+use system::{cli::CommonArgs, run_app, AppConfig};
 use clap::Parser;
 use editor::EditorApp;
 

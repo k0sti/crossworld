@@ -29,7 +29,6 @@ runtime = [
 
 [dependencies]
 # Core dependencies
-app.workspace = true
 core.workspace = true
 glow.workspace = true
 winit.workspace = true

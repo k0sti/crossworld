@@ -5,7 +5,7 @@
 //! Scene configuration can be loaded from Lua files.
 //! Use `--config <path>` to specify a config file.
 
-use app::{cli::CommonArgs, run_app, AppConfig};
+use system::{cli::CommonArgs, run_app, AppConfig};
 use clap::Parser;
 use std::path::PathBuf;
 use testbed::PhysicsTestbed;

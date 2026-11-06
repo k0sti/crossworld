@@ -16,7 +16,7 @@ path = "src/lib.rs"
 
 [dependencies]
 # Core app framework with runtime support
-app = { workspace = true, features = ["runtime"] }
+system = { workspace = true, features = ["runtime"] }
 
 # CLI argument processing
 clap.workspace = true

@@ -8,7 +8,7 @@
 //! Applications can use [`CommonArgs`] directly or extend it with additional arguments:
 //!
 //! ```ignore
-//! use app::cli::CommonArgs;
+//! use system::cli::CommonArgs;
 //! use clap::Parser;
 //!
 //! #[derive(Parser)]

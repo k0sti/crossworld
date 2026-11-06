@@ -12,7 +12,7 @@
 
 #![allow(clippy::type_complexity)]
 
-use app::{
+use system::{
     create_controller_backend, App, ControllerBackend, CursorMode, FrameContext, InputState,
     ReviewConfig, CREATE_APP_SYMBOL,
 };
@@ -191,7 +191,7 @@ struct GameRuntime {
     controller_backend: Option<Box<dyn ControllerBackend>>,
 
     // Egui integration
-    egui: Option<app::EguiIntegration>,
+    egui: Option<system::EguiIntegration>,
 
     // File watching
     file_events: Arc<
@@ -387,7 +387,7 @@ impl GameRuntime {
 
         // Reinitialize egui after reloading app with fresh GL state
         if let (Some(window), Some(gl)) = (self.window.as_ref(), self.gl.as_ref()) {
-            self.egui = Some(app::EguiIntegration::new(window, Arc::clone(gl)));
+            self.egui = Some(system::EguiIntegration::new(window, Arc::clone(gl)));
         }
 
         let reload_time = start_time.elapsed();
@@ -487,7 +487,7 @@ impl ApplicationHandler for GameRuntime {
         println!("[GameRuntime] OpenGL context created successfully");
 
         // Initialize egui integration
-        let egui = unsafe { app::EguiIntegration::new(&window, Arc::clone(&gl)) };
+        let egui = unsafe { system::EguiIntegration::new(&window, Arc::clone(&gl)) };
 
         self.window = Some(window);
         self.gl_context = Some(gl_context);
@@ -715,7 +715,7 @@ impl ApplicationHandler for GameRuntime {
                     }
 
                     // Render egui UI and handle review overlay
-                    let mut review_action = app::ReviewAction::None;
+                    let mut review_action = system::ReviewAction::None;
 
                     if let Some(egui) = &mut self.egui {
                         unsafe {
@@ -731,7 +731,7 @@ impl ApplicationHandler for GameRuntime {
 
                             // Render review overlay if configured
                             if let Some(ref mut review) = review_config {
-                                review_action = app::render_review_overlay(egui_ctx, review);
+                                review_action = system::render_review_overlay(egui_ctx, review);
                             }
                         });
 
@@ -767,10 +767,10 @@ impl ApplicationHandler for GameRuntime {
 
                     // Handle review action - output commands to stdout
                     match review_action {
-                        app::ReviewAction::None => {
+                        system::ReviewAction::None => {
                             // Keep running
                         }
-                        app::ReviewAction::Approve => {
+                        system::ReviewAction::Approve => {
                             println!("APPROVE");
                             unsafe {
                                 self.unload_app();
@@ -778,7 +778,7 @@ impl ApplicationHandler for GameRuntime {
                             event_loop.exit();
                             return;
                         }
-                        app::ReviewAction::ContinueWithFeedback(msg) => {
+                        system::ReviewAction::ContinueWithFeedback(msg) => {
                             println!("CONTINUE: {}", msg);
                             unsafe {
                                 self.unload_app();
@@ -786,7 +786,7 @@ impl ApplicationHandler for GameRuntime {
                             event_loop.exit();
                             return;
                         }
-                        app::ReviewAction::Spawn(title) => {
+                        system::ReviewAction::Spawn(title) => {
                             println!("SPAWN: {}", title);
                             unsafe {
                                 self.unload_app();
@@ -794,7 +794,7 @@ impl ApplicationHandler for GameRuntime {
                             event_loop.exit();
                             return;
                         }
-                        app::ReviewAction::Discard => {
+                        system::ReviewAction::Discard => {
                             println!("DISCARD");
                             unsafe {
                                 self.unload_app();
@@ -802,7 +802,7 @@ impl ApplicationHandler for GameRuntime {
                             event_loop.exit();
                             return;
                         }
-                        app::ReviewAction::Rebase => {
+                        system::ReviewAction::Rebase => {
                             println!("REBASE");
                             unsafe {
                                 self.unload_app();
@@ -810,7 +810,7 @@ impl ApplicationHandler for GameRuntime {
                             event_loop.exit();
                             return;
                         }
-                        app::ReviewAction::Merge => {
+                        system::ReviewAction::Merge => {
                             println!("MERGE");
                             unsafe {
                                 self.unload_app();
@@ -818,7 +818,7 @@ impl ApplicationHandler for GameRuntime {
                             event_loop.exit();
                             return;
                         }
-                        app::ReviewAction::Complete => {
+                        system::ReviewAction::Complete => {
                             // Complete = REBASE + MERGE + APPROVE (merge first, then mark done)
                             println!("REBASE");
                             println!("MERGE");
@@ -829,7 +829,7 @@ impl ApplicationHandler for GameRuntime {
                             event_loop.exit();
                             return;
                         }
-                        app::ReviewAction::Cancel => {
+                        system::ReviewAction::Cancel => {
                             // Exit without printing any command
                             unsafe {
                                 self.unload_app();

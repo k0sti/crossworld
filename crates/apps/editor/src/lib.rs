@@ -10,7 +10,7 @@ pub mod palette;
 pub mod raycast;
 pub mod ui;
 
-use app::{App, Camera, FrameContext, InputState, OrbitController, OrbitControllerConfig};
+use system::{App, Camera, FrameContext, InputState, OrbitController, OrbitControllerConfig};
 use crossworld_nostr::{AccountState, KeyManager};
 use cube::CubeGrid;
 use glam::{IVec3, Quat, Vec2, Vec3};

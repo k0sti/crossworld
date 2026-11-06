@@ -41,7 +41,7 @@ impl HotReloadConfig {
     fn get_target_lib_path(name: &str) -> PathBuf {
         let filename = Self::platform_lib_filename(name);
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        path.pop(); // crates/engine/app -> crates/engine
+        path.pop(); // crates/engine/system -> crates/engine
         path.pop(); // crates/engine -> crates
         path.pop(); // crates -> workspace root
         path.push("target");

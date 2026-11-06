@@ -13,7 +13,7 @@ path = "src/lib.rs"
 
 [dependencies]
 # Core app framework with runtime support
-app = { workspace = true, features = ["runtime"] }
+system = { workspace = true, features = ["runtime"] }
 
 # Scripting (Lua configuration)
 scripting.workspace = true

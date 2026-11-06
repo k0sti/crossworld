@@ -11,7 +11,7 @@
 
 #![allow(clippy::too_many_arguments)]
 
-use app::{App, FrameContext, InputState};
+use system::{App, FrameContext, InputState};
 use crossworld_physics::{
     create_box_collider,
     rapier3d::{

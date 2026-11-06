@@ -1,4 +1,4 @@
-# Application Framework (`crates/app`)
+# Application Framework (`crates/engine/system`)
 
 This document describes the current application framework interface and proposes improvements.
 
@@ -6,7 +6,7 @@ This document describes the current application framework interface and proposes
 
 ### Overview
 
-The `app` crate provides abstractions for building native OpenGL applications:
+The `system` crate (formerly `app`) provides abstractions for building native OpenGL applications:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
